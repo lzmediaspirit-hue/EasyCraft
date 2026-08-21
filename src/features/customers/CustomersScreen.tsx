@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { customersRepo } from './customersRepo';
 import { NewCustomerSheet } from './NewCustomerSheet';
-import { formatPhone, normalizePhone } from './phone';
+import { normalizePhone } from './phone';
 import type { Customer } from '../../db/types';
-import { PhoneIcon, PlusIcon, SearchIcon, UsersIcon } from '../../ui/icons';
+import { ChevronIcon, PhoneIcon, PlusIcon, SearchIcon, UsersIcon } from '../../ui/icons';
+import { nav } from '../../nav/navigation';
 
 /** מעל כמה לקוחות מוצג שדה חיפוש. מתחת לזה הוא רק רעש. */
 const SEARCH_THRESHOLD = 6;
@@ -105,29 +106,35 @@ export function CustomersScreen() {
 
 function CustomerRow({ customer }: { customer: Customer }) {
   return (
-    <li className="flex items-center gap-3.5 py-3.5">
-      <span
-        aria-hidden="true"
-        className="grid size-11 shrink-0 place-items-center rounded-full bg-oak-100 text-base font-semibold text-oak-700"
-      >
-        {customer.name.trim().charAt(0)}
-      </span>
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold text-stone-900">{customer.name}</p>
-        <p className="truncate text-sm text-stone-500">{customer.city}</p>
-      </div>
-
-      {customer.phone && (
-        <a
-          href={`tel:${customer.phone}`}
-          aria-label={`חיוג ל${customer.name}`}
-          className="flex shrink-0 items-center gap-2 rounded-full border border-stone-200 bg-white py-1.5 pe-3 ps-2.5 text-sm text-stone-600 transition-colors hover:border-oak-300 hover:text-oak-700"
+    <li>
+      <div className="flex items-center gap-3.5 py-1.5">
+        <button
+          onClick={() => nav.push({ name: 'projects', customerId: customer.id })}
+          className="-mx-2 flex min-w-0 flex-1 items-center gap-3.5 rounded-xl px-2 py-2 text-start transition-colors hover:bg-stone-100 active:bg-stone-100"
         >
-          <PhoneIcon className="size-4" />
-          <span className="num">{formatPhone(customer.phone)}</span>
-        </a>
-      )}
+          <span
+            aria-hidden="true"
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-oak-100 text-base font-semibold text-oak-700"
+          >
+            {customer.name.trim().charAt(0)}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold text-stone-900">{customer.name}</span>
+            <span className="block truncate text-sm text-stone-500">{customer.city}</span>
+          </span>
+          <ChevronIcon className="size-4 shrink-0 text-stone-300" />
+        </button>
+
+        {customer.phone && (
+          <a
+            href={`tel:${customer.phone}`}
+            aria-label={`חיוג ל${customer.name}`}
+            className="shrink-0 rounded-full border border-stone-200 bg-white p-2.5 text-stone-500 transition-colors hover:border-oak-300 hover:text-oak-700"
+          >
+            <PhoneIcon className="size-4" />
+          </a>
+        )}
+      </div>
     </li>
   );
 }
