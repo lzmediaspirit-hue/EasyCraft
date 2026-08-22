@@ -11,6 +11,8 @@ export type Route =
  */
 let stack: Route[] = [{ name: 'customers' }];
 const listeners = new Set<() => void>();
+/** האם היסטוריית הדפדפן זמינה. בסביבות מוטמעות היא עלולה להיחסם. */
+let historyWorks = true;
 
 function emit() {
   listeners.forEach((l) => l());
@@ -19,11 +21,21 @@ function emit() {
 export const nav = {
   push(route: Route) {
     stack = [...stack, route];
-    history.pushState({ depth: stack.length }, '');
+    try {
+      history.pushState({ depth: stack.length }, '');
+    } catch {
+      historyWorks = false;
+    }
     emit();
   },
   back() {
-    if (stack.length > 1) history.back();
+    if (stack.length <= 1) return;
+    if (historyWorks) {
+      history.back();
+      return;
+    }
+    stack = stack.slice(0, -1);
+    emit();
   },
   current(): Route {
     return stack[stack.length - 1];

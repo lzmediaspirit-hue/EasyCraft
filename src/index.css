@@ -20,6 +20,9 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /* נצבע במפורש: כשהדף מוטמע, רקע שקוף שואל את הצבע מהמארח */
+    background-color: var(--color-stone-100);
+    color-scheme: light;
   }
   body {
     @apply bg-stone-100 text-stone-900 font-sans antialiased;
