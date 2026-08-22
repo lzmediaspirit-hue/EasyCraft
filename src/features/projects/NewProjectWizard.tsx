@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Sheet } from '../../ui/Sheet';
-import { Field, PrimaryButton, inputClass } from '../../ui/Field';
+import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { cmToMm, mmToCm } from '../../ui/units';
 import { ROOMS, roomDef } from '../../catalog/rooms';
 import { WALL_LAYOUTS, wallName } from './wallLayouts';
@@ -196,6 +196,7 @@ export function NewProjectWizard({
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onFocus={selectOnFocus}
             className={inputClass}
             enterKeyHint="next"
           />
@@ -244,6 +245,7 @@ export function NewProjectWizard({
             <input
               value={heightCm}
               onChange={(e) => setHeightCm(e.target.value)}
+              onFocus={selectOnFocus}
               type="number"
               inputMode="numeric"
               className={`${inputClass} num text-end`}
@@ -262,6 +264,7 @@ export function NewProjectWizard({
                       return next;
                     })
                   }
+                  onFocus={selectOnFocus}
                   type="number"
                   inputMode="numeric"
                   className={`${inputClass} num text-end`}
@@ -367,6 +370,7 @@ function MiniNumber({
       <input
         value={value}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
+        onFocus={selectOnFocus}
         type="number"
         inputMode="numeric"
         className="num w-full min-w-0 bg-transparent text-end text-sm text-stone-800 focus:outline-none"

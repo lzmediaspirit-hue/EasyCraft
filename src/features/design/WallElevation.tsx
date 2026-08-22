@@ -6,22 +6,34 @@ import type { PlacedUnit, Wall } from '../../db/types';
 
 /** מרחק הצמדה בין ארגזים ולקצות הקיר (מ"מ). */
 const SNAP = 60;
+/** גרירה חופשית נוחתת על סנטימטרים שלמים, לא על מידות שבורות. */
+const STEP = 10;
 
 type Props = {
   wall: Wall;
   units: PlacedUnit[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onMove: (id: string, xMm: number) => void;
+  onMove: (id: string, xMm: number, yMm: number) => void;
+  /** הסתרת חזיתות — תצוגת פנים הארונות */
+  inside: boolean;
 };
 
 /**
  * הדמיית חזית של קיר אחד — ציור 2D פשוט של ארגזים.
- * גרירה אופקית מזיזה ארגז, עם הצמדה לשכן ולקצה הקיר.
+ * גרירה מזיזה ארגז לרוחב, ואם הוא לא נעול לרצפה גם לגובה,
+ * עם הצמדה לשכנים, לרצפה ולתקרה.
  */
-export function WallElevation({ wall, units, selectedId, onSelect, onMove }: Props) {
+export function WallElevation({ wall, units, selectedId, onSelect, onMove, inside }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ id: string; startX: number; originX: number; scale: number } | null>(null);
+  const drag = useRef<{
+    id: string;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    scale: number;
+  } | null>(null);
 
   const padX = 120;
   const padTop = 140;
@@ -41,7 +53,9 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove }: Pro
     drag.current = {
       id: unit.id,
       startX: e.clientX,
+      startY: e.clientY,
       originX: unit.xMm,
+      originY: unit.yMm,
       scale: vbW / rect.width,
     };
   }
@@ -51,8 +65,14 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove }: Pro
     if (!d) return;
     const unit = units.find((u) => u.id === d.id);
     if (!unit) return;
-    const raw = d.originX + (e.clientX - d.startX) * d.scale;
-    onMove(d.id, snap(raw, unit, units, wall.lengthMm));
+
+    const rawX = d.originX + (e.clientX - d.startX) * d.scale;
+    // מסך גדל כלפי מטה, הקיר נמדד כלפי מעלה — ולכן הסימן הפוך
+    const rawY = d.originY - (e.clientY - d.startY) * d.scale;
+
+    const x = snapX(rawX, unit, units, wall.lengthMm);
+    const y = unit.floorLocked ? unit.yMm : snapY(rawY, unit, units, wall.heightMm);
+    onMove(d.id, x, y);
   }
 
   function endDrag(e: React.PointerEvent) {
@@ -87,19 +107,18 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove }: Pro
         const w = Math.max(f.widthMm, 90);
         const h = Math.max(f.heightMm, 90);
         return (
-          <g key={f.id}>
-            <rect
-              x={f.xMm}
-              y={flip(f.yMm + h)}
-              width={w}
-              height={h}
-              fill={def.tone}
-              fillOpacity={0.5}
-              stroke={def.tone}
-              strokeWidth={stroke}
-              strokeDasharray={`${stroke * 4} ${stroke * 3}`}
-            />
-          </g>
+          <rect
+            key={f.id}
+            x={f.xMm}
+            y={flip(f.yMm + h)}
+            width={w}
+            height={h}
+            fill={def.tone}
+            fillOpacity={0.5}
+            stroke={def.tone}
+            strokeWidth={stroke}
+            strokeDasharray={`${stroke * 4} ${stroke * 3}`}
+          />
         );
       })}
 
@@ -117,10 +136,10 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove }: Pro
       {/* סוקלים ומשטחי עבודה — נגזרים מהארגז, לא נבחרים בנפרד */}
       {units.map((u) => (
         <g key={`trim-${u.id}`}>
-          {!!u.socleMm && (
+          {!!u.socleMm && u.yMm >= u.socleMm && (
             <rect
               x={u.xMm + u.widthMm * 0.03}
-              y={flip(u.socleMm)}
+              y={flip(u.yMm)}
               width={u.widthMm * 0.94}
               height={u.socleMm}
               fill="#e7e5e4"
@@ -166,7 +185,10 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove }: Pro
                 h={u.heightMm}
                 doors={u.doors}
                 drawers={u.drawers}
+                drawerCols={u.drawerCols}
+                shelves={u.shelves}
                 stroke={selected ? stroke * 1.7 : stroke}
+                inside={inside}
               />
             </g>
             {selected && (
@@ -236,21 +258,40 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove }: Pro
 
 /* ------------------------------------------------------------------ */
 
-/** מצמיד ארגז לקצות הקיר ולשכנים באותו מפלס. */
-function snap(x: number, unit: PlacedUnit, units: PlacedUnit[], wallLength: number): number {
-  const targets = [0, wallLength - unit.widthMm];
-  for (const other of units) {
-    if (other.id === unit.id || other.level !== unit.level) continue;
-    targets.push(other.xMm + other.widthMm, other.xMm - unit.widthMm);
-  }
-  let best = x;
-  let bestDist = SNAP;
+function nearest(value: number, targets: number[], limit: number): number {
+  // ברירת המחדל היא הערך המעוגל; יעד הצמדה קרוב מנצח אותה
+  let best = Math.round(value / STEP) * STEP;
+  let bestDist = limit;
   for (const t of targets) {
-    const d = Math.abs(t - x);
+    const d = Math.abs(t - value);
     if (d < bestDist) {
       bestDist = d;
       best = t;
     }
   }
-  return Math.round(Math.min(Math.max(best, 0), Math.max(wallLength - unit.widthMm, 0)));
+  return best;
+}
+
+/** מצמיד ארגז לקצות הקיר ולשכנים באותו מפלס. */
+function snapX(x: number, unit: PlacedUnit, units: PlacedUnit[], wallLength: number): number {
+  const targets = [0, wallLength - unit.widthMm];
+  for (const other of units) {
+    if (other.id === unit.id || other.level !== unit.level) continue;
+    targets.push(other.xMm + other.widthMm, other.xMm - unit.widthMm);
+  }
+  const snapped = nearest(x, targets, SNAP);
+  return Math.round(Math.min(Math.max(snapped, 0), Math.max(wallLength - unit.widthMm, 0)));
+}
+
+/** מצמיד גובה לרצפה, לתקרה, ולקצוות של ארגזים אחרים. */
+function snapY(y: number, unit: PlacedUnit, units: PlacedUnit[], wallHeight: number): number {
+  const ceiling = wallHeight - unit.heightMm;
+  const targets = [0, unit.socleMm ?? 0, ceiling];
+  for (const other of units) {
+    if (other.id === unit.id) continue;
+    // ליישר תחתיות, להניח מעל, או לתלות מתחת
+    targets.push(other.yMm, other.yMm + other.heightMm, other.yMm - unit.heightMm);
+  }
+  const snapped = nearest(y, targets, SNAP);
+  return Math.round(Math.min(Math.max(snapped, 0), Math.max(ceiling, 0)));
 }

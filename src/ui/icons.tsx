@@ -113,3 +113,21 @@ export const CustomRoomIcon = ({ className = 'size-7' }: P) => (
     <path d="M16 17v7M12.5 20.5h7" />
   </svg>
 );
+
+/** חזיתות גלויות. */
+export const FrontsIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="3.5" y="4" width="17" height="16" rx="1.5" />
+    <path d="M12 4v16M9.5 11.2v1.6M14.5 11.2v1.6" />
+  </svg>
+);
+
+/** חזיתות מוסתרות — רואים את פנים הארון. */
+export const InsideIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="3.5" y="4" width="17" height="16" rx="1.5" strokeDasharray="2.5 2.2" />
+    <path d="M6 9.5h12M6 14.5h12" />
+  </svg>
+);

@@ -69,6 +69,8 @@ export const catalogRepo = {
     glyph: string;
     doors?: number;
     drawers?: number;
+    drawerCols?: number;
+    shelves?: number;
     level: CatalogItem['level'];
     defaultWidthMm: number;
     widthOptionsMm: number[];

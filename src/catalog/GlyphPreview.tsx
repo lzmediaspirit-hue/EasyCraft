@@ -1,24 +1,21 @@
-import { CabinetGlyph } from './CabinetGlyph';
+import { CabinetGlyph, type GlyphProps } from './CabinetGlyph';
+
+type Props = Omit<GlyphProps, 'w' | 'h' | 'stroke'> & {
+  widthMm: number;
+  heightMm: number;
+  className?: string;
+};
 
 /**
  * תצוגה מוקטנת של ארגז, בפרופורציה האמיתית שלו —
  * כך שהאייקון בספרייה כבר מספר איך הארגז ייראה על הקיר.
  */
 export function GlyphPreview({
-  glyph,
   widthMm,
   heightMm,
-  doors,
-  drawers,
   className = 'h-14 w-full',
-}: {
-  glyph: string;
-  widthMm: number;
-  heightMm: number;
-  doors?: number;
-  drawers?: number;
-  className?: string;
-}) {
+  ...glyph
+}: Props) {
   const pad = Math.max(widthMm, heightMm) * 0.06;
   const stroke = Math.max(widthMm, heightMm) / 55;
 
@@ -29,14 +26,7 @@ export function GlyphPreview({
       className={className}
       aria-hidden="true"
     >
-      <CabinetGlyph
-        glyph={glyph}
-        w={widthMm}
-        h={heightMm}
-        doors={doors}
-        drawers={drawers}
-        stroke={stroke}
-      />
+      <CabinetGlyph {...glyph} w={widthMm} h={heightMm} stroke={stroke} />
     </svg>
   );
 }

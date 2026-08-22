@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { customersRepo } from './customersRepo';
 import { isValidPhone, normalizePhone } from './phone';
 import { Sheet } from '../../ui/Sheet';
-import { Field, PrimaryButton, inputClass } from '../../ui/Field';
+import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 
 type Props = {
   onClose: () => void;
@@ -60,6 +60,7 @@ export function NewCustomerSheet({ onClose, onCreated }: Props) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoComplete="off"
+            onFocus={selectOnFocus}
             enterKeyHint="next"
             className={inputClass}
           />
@@ -70,6 +71,7 @@ export function NewCustomerSheet({ onClose, onCreated }: Props) {
             value={city}
             onChange={(e) => setCity(e.target.value)}
             autoComplete="off"
+            onFocus={selectOnFocus}
             enterKeyHint="next"
             className={inputClass}
           />
@@ -85,6 +87,7 @@ export function NewCustomerSheet({ onClose, onCreated }: Props) {
             type="tel"
             inputMode="tel"
             autoComplete="off"
+            onFocus={selectOnFocus}
             enterKeyHint="done"
             placeholder="050-1234567"
             className={`${inputClass} num text-end placeholder:text-stone-300`}

@@ -5,10 +5,11 @@ import { wallName } from '../projects/wallLayouts';
 import { WallElevation } from './WallElevation';
 import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
+import { UnitEditSheet } from './UnitEditSheet';
 import { analyzeWall, nextFreeX } from './analysis';
 import { roomDef } from '../../catalog/rooms';
 import { ScreenHeader } from '../../ui/ScreenHeader';
-import { PlusIcon } from '../../ui/icons';
+import { FrontsIcon, InsideIcon, PlusIcon } from '../../ui/icons';
 import { cm, meters } from '../../ui/units';
 import type { CatalogItem, PlacedUnit, Project } from '../../db/types';
 
@@ -20,6 +21,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [wallIndex, setWallIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [inside, setInside] = useState(false);
 
   const project = useLiveQuery(() => projectsRepo.get(projectId), [projectId]);
   const walls = useLiveQuery(() => wallsRepo.listForProject(projectId), [projectId]);
@@ -41,6 +44,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
     if (!wall) return;
     const x = nextFreeX(units, item.level);
     const unit = await unitsRepo.add(projectId, wall.id, item, Math.min(x, wall.lengthMm));
+    setLibraryOpen(false);
     setSelectedId(unit.id);
   }
 
@@ -52,7 +56,24 @@ export function DesignScreen({ projectId }: { projectId: string }) {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
-      <ScreenHeader title={project.name} subtitle={subtitle(project.name, project.roomKind, walls.length)}>
+      <ScreenHeader
+        title={project.name}
+        subtitle={subtitle(project.name, project.roomKind, walls.length)}
+        action={
+          <button
+            onClick={() => setInside((v) => !v)}
+            aria-pressed={inside}
+            aria-label={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
+            title={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-colors ${
+              inside ? 'bg-stone-900 text-white' : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            {inside ? <InsideIcon className="size-4" /> : <FrontsIcon className="size-4" />}
+            {inside ? 'פנים' : 'חזית'}
+          </button>
+        }
+      >
         {walls.length > 1 && (
           <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
             {walls.map((w, i) => (
@@ -79,7 +100,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             units={units}
             selectedId={selectedId}
             onSelect={setSelectedId}
-            onMove={(id, xMm) => patchUnit(id, { xMm })}
+            inside={inside}
+            onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
           />
         </div>
 
@@ -119,8 +141,9 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         {selected ? (
           <UnitEditor
             unit={selected}
-            maxWidthMm={wall.lengthMm}
+            wallLengthMm={wall.lengthMm}
             onChange={(patch) => patchUnit(selected.id, patch)}
+            onEdit={() => setEditOpen(true)}
             onRemove={async () => {
               await unitsRepo.remove(selected.id);
               setSelectedId(null);
@@ -139,6 +162,10 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           </div>
         )}
       </div>
+
+      {editOpen && selected && (
+        <UnitEditSheet unit={selected} onClose={() => setEditOpen(false)} />
+      )}
 
       {libraryOpen && (
         <LibrarySheet

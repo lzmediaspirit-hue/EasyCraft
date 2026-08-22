@@ -1,5 +1,17 @@
+import { cmToMm, mmToCm } from './units';
+
 export const inputClass =
   'w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-base text-stone-900 transition-colors focus:border-oak-500 focus:outline-none';
+
+/**
+ * בוחר את כל הטקסט בכניסה לשדה.
+ * בנייד הסמן נוחת בצד הלא נכון בשדות מעורבי כיוון, ובחירה מלאה
+ * מאפשרת פשוט להקליד את הערך החדש מחדש.
+ */
+export function selectOnFocus(e: React.FocusEvent<HTMLInputElement>) {
+  const input = e.currentTarget;
+  requestAnimationFrame(() => input.select());
+}
 
 export function Field({
   label,
@@ -45,5 +57,56 @@ export function PrimaryButton({
     >
       {children}
     </button>
+  );
+}
+
+/** בחירה בודדת מתוך כמה אפשרויות קצרות. */
+export function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+        active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** שדה מידה. נשמר במ"מ, מוצג ונערך בסנטימטרים. */
+export function NumField({
+  label,
+  value,
+  onChange,
+  hint = 'ס״מ',
+}: {
+  label: string;
+  /** במ"מ */
+  value: number;
+  /** במ"מ */
+  onChange: (mm: number) => void;
+  hint?: string;
+}) {
+  return (
+    <Field label={label} hint={hint}>
+      <input
+        value={mmToCm(value)}
+        onChange={(e) => onChange(cmToMm(Number(e.target.value) || 0))}
+        onFocus={selectOnFocus}
+        type="number"
+        inputMode="decimal"
+        className={`${inputClass} num text-end`}
+      />
+    </Field>
   );
 }

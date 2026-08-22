@@ -5,8 +5,7 @@ import { GLYPH_GROUPS_FALLBACK, GROUP_LABELS, roomDef } from '../../catalog/room
 import { GlyphPreview } from '../../catalog/GlyphPreview';
 import { CustomItemSheet } from './CustomItemSheet';
 import { Sheet } from '../../ui/Sheet';
-import { PrimaryButton } from '../../ui/Field';
-import { cm, count } from '../../ui/units';
+import { cm } from '../../ui/units';
 import { PencilIcon, PlusIcon } from '../../ui/icons';
 import type { CatalogGroup, CatalogItem, RoomKind } from '../../db/types';
 
@@ -25,7 +24,6 @@ export function LibrarySheet({
 }) {
   const items = useLiveQuery(() => catalogRepo.forRoom(roomKind), [roomKind]);
   const [group, setGroup] = useState<CatalogGroup | null>(null);
-  const [added, setAdded] = useState(0);
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
 
   const groups = useMemo(() => {
@@ -44,11 +42,6 @@ export function LibrarySheet({
         title="ספריית המוצרים"
         onClose={onClose}
         tall
-        footer={
-          <PrimaryButton onClick={onClose}>
-            {added > 0 ? `סיום · נוספו ${count(added, 'ארגז אחד', 'ארגזים')}` : 'סיום'}
-          </PrimaryButton>
-        }
       >
         {groups.length > 1 && (
           <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
@@ -72,10 +65,7 @@ export function LibrarySheet({
           {visible.map((item) => (
             <div key={item.id} className="relative">
               <button
-                onClick={() => {
-                  onAdd(item);
-                  setAdded((n) => n + 1);
-                }}
+                onClick={() => onAdd(item)}
                 className="flex h-full w-full flex-col items-center gap-1.5 rounded-2xl border border-stone-200 bg-white p-2.5 text-center transition-colors hover:border-oak-400 hover:bg-oak-50 active:bg-oak-100"
               >
                 <span className="text-stone-500">

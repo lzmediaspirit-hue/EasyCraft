@@ -74,7 +74,12 @@ export interface PlacedUnit extends Entity {
   name: string;
   glyph: string;
   doors?: number;
+  /** שורות מגירות */
   drawers?: number;
+  /** עמודות מגירות — שידה עם מגירות זו לצד זו */
+  drawerCols?: number;
+  /** מספר מדפים פנימיים */
+  shelves?: number;
   level: UnitLevel;
   /** מרחק מתחילת הקיר, במ"מ */
   xMm: number;
@@ -87,6 +92,10 @@ export interface PlacedUnit extends Entity {
   socleMm?: number;
   /** משטח עבודה מעל הארגז */
   counterMm?: number;
+  /** כשדולק, תחתית הארגז נעולה לרצפה. כשכבוי אפשר לגרור אותו לגובה חופשי */
+  floorLocked?: boolean;
+  /** מאיזה קצה של הקיר נמדד המיקום בתצוגה */
+  anchorEnd?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -105,6 +114,8 @@ export interface CatalogItem extends Entity {
   glyph: string;
   doors?: number;
   drawers?: number;
+  drawerCols?: number;
+  shelves?: number;
   level: UnitLevel;
   defaultWidthMm: number;
   /** רוחבי תקן נפוצים למוצר הזה */

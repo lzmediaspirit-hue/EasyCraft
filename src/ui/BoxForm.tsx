@@ -1,0 +1,189 @@
+import { GLYPHS, glyphDef } from '../catalog/glyphList';
+import { GlyphPreview } from '../catalog/GlyphPreview';
+import { Field, Chip, NumField, inputClass, selectOnFocus } from './Field';
+
+/** תיאור מלא של ארגז — משותף לפריט בספרייה ולארגז שכבר מונח על הקיר. */
+export interface BoxSpec {
+  name: string;
+  glyph: string;
+  doors: number;
+  /** שורות מגירות */
+  drawers: number;
+  /** עמודות מגירות — מגירות זו לצד זו ברוחב אחיד */
+  drawerCols: number;
+  shelves: number;
+  widthMm: number;
+  heightMm: number;
+  depthMm: number;
+  yMm: number;
+  socleMm: number;
+  counterMm: number;
+}
+
+const COUNTS = [0, 1, 2, 3, 4, 5, 6];
+const COLS = [1, 2, 3, 4];
+const SHELF_COUNTS = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+/**
+ * טופס בניית ארגז. מציג רק את ההגדרות שהאיור שנבחר באמת תומך בהן,
+ * ומראה תצוגה מקדימה חיה של התוצאה.
+ */
+export function BoxForm({
+  value,
+  onChange,
+  namePlaceholder,
+}: {
+  value: BoxSpec;
+  onChange: (patch: Partial<BoxSpec>) => void;
+  namePlaceholder?: string;
+}) {
+  const caps = glyphDef(value.glyph);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-4 rounded-2xl bg-stone-50 p-4">
+        <span className="shrink-0 text-stone-500">
+          <GlyphPreview
+            glyph={value.glyph}
+            widthMm={value.widthMm || 600}
+            heightMm={value.heightMm || 720}
+            doors={value.doors}
+            drawers={value.drawers}
+            drawerCols={value.drawerCols}
+            shelves={value.shelves}
+            className="h-20 w-20"
+          />
+        </span>
+        <span className="shrink-0 text-stone-400">
+          <GlyphPreview
+            glyph={value.glyph}
+            widthMm={value.widthMm || 600}
+            heightMm={value.heightMm || 720}
+            doors={value.doors}
+            drawers={value.drawers}
+            drawerCols={value.drawerCols}
+            shelves={value.shelves}
+            inside
+            className="h-20 w-20"
+          />
+        </span>
+        <p className="text-sm leading-snug text-stone-500">
+          חזית ופנים הארון, בפרופורציה של המידות שהזנת.
+        </p>
+      </div>
+
+      <Field label="שם הארגז">
+        <input
+          value={value.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          onFocus={selectOnFocus}
+          className={inputClass}
+          placeholder={namePlaceholder}
+        />
+      </Field>
+
+      <Field label="איור">
+        <div className="grid grid-cols-5 gap-1.5">
+          {GLYPHS.map((g) => (
+            <button
+              key={g.key}
+              onClick={() => onChange({ glyph: g.key })}
+              title={g.label}
+              className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 transition-colors ${
+                g.key === value.glyph
+                  ? 'border-oak-500 bg-oak-50 text-oak-700'
+                  : 'border-stone-200 bg-white text-stone-400 hover:border-oak-300'
+              }`}
+            >
+              <GlyphPreview
+                glyph={g.key}
+                widthMm={600}
+                heightMm={720}
+                doors={2}
+                drawers={3}
+                shelves={2}
+                className="h-8 w-full"
+              />
+              <span className="w-full truncate text-[9px] leading-none">{g.label}</span>
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      {caps.doors && (
+        <Field label="דלתות" hint="0 = בלי חזית">
+          <div className="flex flex-wrap gap-1.5">
+            {COUNTS.map((n) => (
+              <Chip key={n} active={n === value.doors} onClick={() => onChange({ doors: n })}>
+                <span className="num">{n}</span>
+              </Chip>
+            ))}
+          </div>
+        </Field>
+      )}
+
+      {caps.drawers && (
+        <>
+          <Field label="שורות מגירות">
+            <div className="flex flex-wrap gap-1.5">
+              {COUNTS.map((n) => (
+                <Chip
+                  key={n}
+                  active={n === value.drawers}
+                  onClick={() => onChange({ drawers: n })}
+                >
+                  <span className="num">{n}</span>
+                </Chip>
+              ))}
+            </div>
+          </Field>
+
+          {value.drawers > 0 && (
+            <Field label="מגירות לרוחב" hint="מגירות זו לצד זו בגובה אחיד">
+              <div className="flex flex-wrap gap-1.5">
+                {COLS.map((n) => (
+                  <Chip
+                    key={n}
+                    active={n === value.drawerCols}
+                    onClick={() => onChange({ drawerCols: n })}
+                  >
+                    <span className="num">{n}</span>
+                  </Chip>
+                ))}
+              </div>
+            </Field>
+          )}
+        </>
+      )}
+
+      {caps.shelves && (
+        <Field label="מדפים" hint="נראים בתצוגת פנים הארון">
+          <div className="flex flex-wrap gap-1.5">
+            {SHELF_COUNTS.map((n) => (
+              <Chip key={n} active={n === value.shelves} onClick={() => onChange({ shelves: n })}>
+                <span className="num">{n}</span>
+              </Chip>
+            ))}
+          </div>
+        </Field>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 border-t border-stone-100 pt-5">
+        <NumField label="רוחב" value={value.widthMm} onChange={(v) => onChange({ widthMm: v })} />
+        <NumField label="גובה" value={value.heightMm} onChange={(v) => onChange({ heightMm: v })} />
+        <NumField label="עומק" value={value.depthMm} onChange={(v) => onChange({ depthMm: v })} />
+        <NumField
+          label="גובה מהרצפה"
+          value={value.yMm}
+          onChange={(v) => onChange({ yMm: v })}
+        />
+        <NumField label="סוקל" value={value.socleMm} onChange={(v) => onChange({ socleMm: v })} />
+        <NumField
+          label="משטח עבודה"
+          value={value.counterMm}
+          onChange={(v) => onChange({ counterMm: v })}
+        />
+      </div>
+    </div>
+  );
+}

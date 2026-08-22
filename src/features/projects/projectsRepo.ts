@@ -113,6 +113,8 @@ export const unitsRepo = {
       glyph: item.glyph,
       doors: item.doors,
       drawers: item.drawers,
+      drawerCols: item.drawerCols,
+      shelves: item.shelves,
       level: item.level,
       xMm,
       yMm: item.defaultYMm,
@@ -121,6 +123,8 @@ export const unitsRepo = {
       depthMm: item.defaultDepthMm,
       socleMm: item.socleMm,
       counterMm: item.counterMm,
+      // ארגז שעומד על הרצפה נעול אליה כברירת מחדל; ארון תלוי חופשי לגובה
+      floorLocked: item.level !== 'wall',
       createdAt: now,
       updatedAt: now,
     };

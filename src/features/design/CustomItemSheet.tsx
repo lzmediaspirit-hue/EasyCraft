@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { catalogRepo } from '../../catalog/catalogRepo';
-import { GLYPHS } from '../../catalog/glyphList';
-import { GlyphPreview } from '../../catalog/GlyphPreview';
+import { glyphDef } from '../../catalog/glyphList';
+import { autoShelves } from '../../catalog/CabinetGlyph';
 import { GROUP_LABELS } from '../../catalog/rooms';
 import { KITCHEN } from '../../catalog/standards';
 import { Sheet } from '../../ui/Sheet';
-import { Field, PrimaryButton, inputClass } from '../../ui/Field';
-import { cmToMm, mmToCm } from '../../ui/units';
+import { Chip, Field, PrimaryButton } from '../../ui/Field';
+import { BoxForm, type BoxSpec } from '../../ui/BoxForm';
 import { TrashIcon } from '../../ui/icons';
 import type { CatalogGroup, CatalogItem, RoomKind, UnitLevel } from '../../db/types';
 
@@ -33,9 +33,6 @@ const Y_BY_GROUP: Record<CatalogGroup, number> = {
   storage: 80,
 };
 
-const NEEDS_DOORS = new Set(['doors', 'doorDrawer', 'glass', 'corner']);
-const NEEDS_DRAWERS = new Set(['drawers', 'doorDrawer', 'hob', 'nightstand']);
-
 /** בניית ארגז חדש לספרייה, או עריכת ארגז קיים. */
 export function CustomItemSheet({
   item,
@@ -48,47 +45,52 @@ export function CustomItemSheet({
   defaultGroup: CatalogGroup;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(item?.name ?? '');
-  const [glyph, setGlyph] = useState(item?.glyph ?? 'doors');
   const [group, setGroup] = useState<CatalogGroup>(item?.group ?? defaultGroup);
-  const [doors, setDoors] = useState(item?.doors ?? 2);
-  const [drawers, setDrawers] = useState(item?.drawers ?? 3);
   const [rooms, setRooms] = useState<RoomKind[]>(
     item?.rooms ?? (roomKind === 'custom' ? ['kitchen', 'living', 'bedroom'] : [roomKind]),
   );
-  const [widthCm, setWidthCm] = useState(String(mmToCm(item?.defaultWidthMm ?? 600)));
-  const [heightCm, setHeightCm] = useState(String(mmToCm(item?.defaultHeightMm ?? 720)));
-  const [depthCm, setDepthCm] = useState(String(mmToCm(item?.defaultDepthMm ?? 580)));
-  const [yCm, setYCm] = useState(String(mmToCm(item?.defaultYMm ?? Y_BY_GROUP[defaultGroup])));
-  const [socleCm, setSocleCm] = useState(String(mmToCm(item?.socleMm ?? 0)));
-  const [counterCm, setCounterCm] = useState(String(mmToCm(item?.counterMm ?? 0)));
+  const [spec, setSpec] = useState<BoxSpec>({
+    name: item?.name ?? '',
+    glyph: item?.glyph ?? 'doors',
+    doors: item?.doors ?? 2,
+    drawers: item?.drawers ?? 3,
+    drawerCols: item?.drawerCols ?? 1,
+    shelves: item?.shelves ?? autoShelves(item?.defaultHeightMm ?? 720),
+    widthMm: item?.defaultWidthMm ?? 600,
+    heightMm: item?.defaultHeightMm ?? 720,
+    depthMm: item?.defaultDepthMm ?? 580,
+    yMm: item?.defaultYMm ?? Y_BY_GROUP[defaultGroup],
+    socleMm: item?.socleMm ?? 0,
+    counterMm: item?.counterMm ?? 0,
+  });
 
-  const widthMm = cmToMm(Number(widthCm) || 0);
-  const heightMm = cmToMm(Number(heightCm) || 0);
-  const canSave = name.trim().length > 0 && widthMm > 0 && heightMm > 0 && rooms.length > 0;
+  const canSave = spec.name.trim().length > 0 && spec.widthMm > 0 && spec.heightMm > 0 && rooms.length > 0;
 
   function changeGroup(g: CatalogGroup) {
     setGroup(g);
-    if (!item) setYCm(String(mmToCm(Y_BY_GROUP[g])));
+    if (!item) setSpec((s) => ({ ...s, yMm: Y_BY_GROUP[g] }));
   }
 
   async function save() {
+    const caps = glyphDef(spec.glyph);
     await catalogRepo.saveCustom({
       id: item?.id,
       rooms,
       group,
-      name: name.trim(),
-      glyph,
-      doors: NEEDS_DOORS.has(glyph) ? doors : undefined,
-      drawers: NEEDS_DRAWERS.has(glyph) ? drawers : undefined,
+      name: spec.name.trim(),
+      glyph: spec.glyph,
+      doors: caps.doors ? spec.doors : undefined,
+      drawers: caps.drawers ? spec.drawers : undefined,
+      drawerCols: caps.drawers ? spec.drawerCols : undefined,
+      shelves: caps.shelves ? spec.shelves : undefined,
       level: LEVEL_BY_GROUP[group],
-      defaultWidthMm: widthMm,
-      widthOptionsMm: widthLadder(widthMm),
-      defaultHeightMm: heightMm,
-      defaultDepthMm: cmToMm(Number(depthCm) || 0),
-      defaultYMm: cmToMm(Number(yCm) || 0),
-      socleMm: cmToMm(Number(socleCm) || 0) || undefined,
-      counterMm: cmToMm(Number(counterCm) || 0) || undefined,
+      defaultWidthMm: spec.widthMm,
+      widthOptionsMm: widthLadder(spec.widthMm),
+      defaultHeightMm: spec.heightMm,
+      defaultDepthMm: spec.depthMm,
+      defaultYMm: spec.yMm,
+      socleMm: spec.socleMm || undefined,
+      counterMm: spec.counterMm || undefined,
       note: item?.note,
     });
     onClose();
@@ -126,169 +128,43 @@ export function CustomItemSheet({
       }
     >
       <div className="space-y-5">
-        <div className="flex items-center gap-4 rounded-2xl bg-stone-50 p-4">
-          <span className="text-stone-500">
-            <GlyphPreview
-              glyph={glyph}
-              widthMm={widthMm || 600}
-              heightMm={heightMm || 720}
-              doors={doors}
-              drawers={drawers}
-              className="h-20 w-20"
-            />
-          </span>
-          <p className="text-sm leading-snug text-stone-500">
-            כך הארגז ייראה על הקיר, בפרופורציה של המידות שהזנת.
-          </p>
-        </div>
+        <BoxForm
+          value={spec}
+          onChange={(patch) => setSpec((s) => ({ ...s, ...patch }))}
+          namePlaceholder="למשל: שידה עם שש מגירות"
+        />
 
-        <Field label="שם הארגז">
-          <input
-            autoFocus={!item}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={inputClass}
-            placeholder="למשל: ארגז תבלינים צר"
-          />
-        </Field>
+        <div className="space-y-5 border-t border-stone-100 pt-5">
+          <Field label="קבוצה בספרייה">
+            <div className="flex flex-wrap gap-1.5">
+              {GROUPS.map((g) => (
+                <Chip key={g} active={g === group} onClick={() => changeGroup(g)}>
+                  {GROUP_LABELS[g]}
+                </Chip>
+              ))}
+            </div>
+          </Field>
 
-        <Field label="קבוצה בספרייה">
-          <div className="flex flex-wrap gap-1.5">
-            {GROUPS.map((g) => (
-              <Chip key={g} active={g === group} onClick={() => changeGroup(g)}>
-                {GROUP_LABELS[g]}
-              </Chip>
-            ))}
-          </div>
-        </Field>
-
-        <Field label="באילו חדרים יופיע">
-          <div className="flex flex-wrap gap-1.5">
-            {ROOM_CHIPS.map((r) => (
-              <Chip
-                key={r.kind}
-                active={rooms.includes(r.kind)}
-                onClick={() =>
-                  setRooms((prev) =>
-                    prev.includes(r.kind) ? prev.filter((k) => k !== r.kind) : [...prev, r.kind],
-                  )
-                }
-              >
-                {r.label}
-              </Chip>
-            ))}
-          </div>
-        </Field>
-
-        <Field label="איור">
-          <div className="grid grid-cols-5 gap-1.5">
-            {GLYPHS.map((g) => (
-              <button
-                key={g.key}
-                onClick={() => setGlyph(g.key)}
-                title={g.label}
-                className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 transition-colors ${
-                  g.key === glyph
-                    ? 'border-oak-500 bg-oak-50 text-oak-700'
-                    : 'border-stone-200 bg-white text-stone-400 hover:border-oak-300'
-                }`}
-              >
-                <GlyphPreview
-                  glyph={g.key}
-                  widthMm={600}
-                  heightMm={720}
-                  doors={2}
-                  drawers={3}
-                  className="h-8 w-full"
-                />
-                <span className="w-full truncate text-[9px] leading-none">{g.label}</span>
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        {(NEEDS_DOORS.has(glyph) || NEEDS_DRAWERS.has(glyph)) && (
-          <div className="grid grid-cols-2 gap-3">
-            {NEEDS_DOORS.has(glyph) && (
-              <Field label="דלתות">
-                <div className="flex gap-1.5">
-                  {[1, 2, 3].map((n) => (
-                    <Chip key={n} active={n === doors} onClick={() => setDoors(n)}>
-                      <span className="num">{n}</span>
-                    </Chip>
-                  ))}
-                </div>
-              </Field>
-            )}
-            {NEEDS_DRAWERS.has(glyph) && (
-              <Field label="מגירות">
-                <div className="flex gap-1.5">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <Chip key={n} active={n === drawers} onClick={() => setDrawers(n)}>
-                      <span className="num">{n}</span>
-                    </Chip>
-                  ))}
-                </div>
-              </Field>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 border-t border-stone-100 pt-5">
-          <NumField label="רוחב" value={widthCm} onChange={setWidthCm} />
-          <NumField label="גובה" value={heightCm} onChange={setHeightCm} />
-          <NumField label="עומק" value={depthCm} onChange={setDepthCm} />
-          <NumField label="גובה מהרצפה" value={yCm} onChange={setYCm} />
-          <NumField label="סוקל" value={socleCm} onChange={setSocleCm} />
-          <NumField label="משטח עבודה" value={counterCm} onChange={setCounterCm} />
+          <Field label="באילו חדרים יופיע">
+            <div className="flex flex-wrap gap-1.5">
+              {ROOM_CHIPS.map((r) => (
+                <Chip
+                  key={r.kind}
+                  active={rooms.includes(r.kind)}
+                  onClick={() =>
+                    setRooms((prev) =>
+                      prev.includes(r.kind) ? prev.filter((k) => k !== r.kind) : [...prev, r.kind],
+                    )
+                  }
+                >
+                  {r.label}
+                </Chip>
+              ))}
+            </div>
+          </Field>
         </div>
       </div>
     </Sheet>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-        active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function NumField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <Field label={label} hint='ס"מ'>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        type="number"
-        inputMode="numeric"
-        className={`${inputClass} num text-end`}
-      />
-    </Field>
   );
 }
 
