@@ -10,7 +10,7 @@ import { BoxForm, type BoxSpec } from '../../ui/BoxForm';
 import { TrashIcon } from '../../ui/icons';
 import type { CatalogGroup, CatalogItem, RoomKind, UnitLevel } from '../../db/types';
 
-const GROUPS: CatalogGroup[] = ['base', 'upper', 'tall', 'storage'];
+const GROUPS: CatalogGroup[] = ['base', 'upper', 'tall', 'storage', 'panel'];
 const ROOM_CHIPS: { kind: RoomKind; label: string }[] = [
   { kind: 'kitchen', label: 'מטבח' },
   { kind: 'living', label: 'סלון' },
@@ -23,6 +23,7 @@ const LEVEL_BY_GROUP: Record<CatalogGroup, UnitLevel> = {
   upper: 'wall',
   tall: 'tall',
   storage: 'floor',
+  panel: 'floor',
 };
 
 /** גובה תחתית ברירת מחדל לפי קבוצה. */
@@ -31,6 +32,7 @@ const Y_BY_GROUP: Record<CatalogGroup, number> = {
   upper: KITCHEN.upperBottom,
   tall: KITCHEN.socleH,
   storage: 80,
+  panel: 0,
 };
 
 /** בניית ארגז חדש לספרייה, או עריכת ארגז קיים. */

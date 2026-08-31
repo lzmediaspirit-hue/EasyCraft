@@ -136,6 +136,11 @@ export const unitsRepo = {
       drawers: item.drawers,
       drawerCols: item.drawerCols,
       shelves: item.shelves,
+      zones: item.zones,
+      opening: item.opening,
+      corner: item.corner,
+      blindMm: item.blindMm,
+      panelThicknessMm: item.panelThicknessMm,
       level: item.level,
       xMm,
       yMm: item.defaultYMm,
@@ -159,5 +164,16 @@ export const unitsRepo = {
 
   async remove(id: string): Promise<void> {
     await db.units.delete(id);
+  },
+
+  /** קובע עומק אחיד לכל הארונות בפרויקט. */
+  async setDepthForProject(projectId: string, depthMm: number, onlyFloor: boolean): Promise<void> {
+    const rows = await db.units.where('projectId').equals(projectId).toArray();
+    const now = Date.now();
+    await db.units.bulkPut(
+      rows
+        .filter((u) => (onlyFloor ? u.level !== 'wall' : true))
+        .map((u) => ({ ...u, depthMm, updatedAt: now })),
+    );
   },
 };

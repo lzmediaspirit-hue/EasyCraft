@@ -1,19 +1,29 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
-import { GLYPH_GROUPS_FALLBACK, GROUP_LABELS, roomDef } from '../../catalog/rooms';
+import { GLYPH_GROUPS_FALLBACK, GROUP_LABELS, ROOMS, roomDef } from '../../catalog/rooms';
 import { GlyphPreview } from '../../catalog/GlyphPreview';
 import { CustomItemSheet } from './CustomItemSheet';
 import { Sheet } from '../../ui/Sheet';
 import { cm } from '../../ui/units';
-import { PencilIcon, PlusIcon } from '../../ui/icons';
+import { BedroomIcon, KitchenIcon, LivingIcon, PencilIcon, PlusIcon } from '../../ui/icons';
 import type { CatalogGroup, CatalogItem, RoomKind } from '../../db/types';
 
+/** תצוגות הספרייה: הקלאסית, ספרייה לכל חדר, ותיקיית הדפנות. */
+type View = 'classic' | RoomKind | 'panel';
+
+const ROOM_ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
+  kitchen: KitchenIcon,
+  living: LivingIcon,
+  bedroom: BedroomIcon,
+};
+
 /**
- * ספריית המוצרים — מסוננת לחדר שבו עובדים כרגע.
+ * ספריית המוצרים.
  *
- * המסך הראשון מציג רק את הארגזים הנפוצים, כדי שהבחירה תהיה מהירה.
- * כל השאר יושבים מאחורי "ארגזים נוספים".
+ * המסך הראשון הוא הספרייה הקלאסית: ארגזי הבסיס שמתאימים לכל חדר,
+ * ושמהם אפשר לגזור כל שינוי. משם נכנסים לספרייה של חדר מסוים,
+ * או לתיקיית הדפנות והלוחות הבודדים.
  */
 export function LibrarySheet({
   roomKind,
@@ -24,31 +34,49 @@ export function LibrarySheet({
   onAdd: (item: CatalogItem) => void;
   onClose: () => void;
 }) {
-  const items = useLiveQuery(() => catalogRepo.forRoom(roomKind), [roomKind]);
+  const items = useLiveQuery(() => catalogRepo.all(), []);
+  const [view, setView] = useState<View>('classic');
   const [group, setGroup] = useState<CatalogGroup | null>(null);
-  const [showRest, setShowRest] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
 
-  const groups = useMemo(() => {
+  const pool = useMemo(() => {
     if (!items) return [];
-    const pool = showRest ? items.filter((i) => !i.common) : items.filter((i) => i.common);
+    if (view === 'classic') return items.filter((i) => i.common && i.group !== 'panel');
+    if (view === 'panel') return items.filter((i) => i.group === 'panel');
+    return items.filter((i) => i.group !== 'panel' && !i.common && i.rooms.includes(view));
+  }, [items, view]);
+
+  const groups = useMemo(() => {
     const present = new Set(pool.map((i) => i.group));
-    const ordered = roomDef(roomKind).groups.filter((g) => present.has(g));
-    return ordered.length ? ordered : GLYPH_GROUPS_FALLBACK.filter((g) => present.has(g));
-  }, [items, roomKind, showRest]);
+    const order = view === 'classic' || view === 'panel'
+      ? GLYPH_GROUPS_FALLBACK
+      : roomDef(view).groups;
+    return order.filter((g) => present.has(g));
+  }, [pool, view]);
 
   const activeGroup = group && groups.includes(group) ? group : groups[0];
-  const visible = (items ?? []).filter(
-    (i) => i.group === activeGroup && (showRest ? !i.common : !!i.common),
-  );
-  const restCount = (items ?? []).filter((i) => !i.common).length;
+  const visible = groups.length > 1 ? pool.filter((i) => i.group === activeGroup) : pool;
+
+  const titles: Record<View, string> = {
+    classic: 'ספרייה קלאסית',
+    kitchen: 'מטבח',
+    living: 'סלון',
+    bedroom: 'חדר שינה',
+    custom: 'הכול',
+    panel: 'דפנות ולוחות',
+  };
+
+  function goTo(next: View) {
+    setView(next);
+    setGroup(null);
+  }
 
   return (
     <>
       <Sheet
-        title={showRest ? 'ארגזים נוספים' : 'ספריית המוצרים'}
+        title={titles[view]}
         onClose={onClose}
-        onBack={showRest ? () => setShowRest(false) : undefined}
+        onBack={view === 'classic' ? undefined : () => goTo('classic')}
         tall
       >
         {groups.length > 1 && (
@@ -85,13 +113,19 @@ export function LibrarySheet({
                     drawers={item.drawers}
                     drawerCols={item.drawerCols}
                     shelves={item.shelves}
+                    zones={item.zones}
+                    corner={item.corner}
+                    blindMm={item.blindMm}
                     className="h-14 w-full"
                   />
                 </span>
                 <span className="text-[11px] leading-tight font-medium text-stone-800">
                   {item.name}
                 </span>
-                <span className="num text-[10px] text-stone-400">{cm(item.defaultWidthMm)}</span>
+                <span className="num text-[10px] text-stone-400">
+                  {cm(item.defaultWidthMm)}
+                  {item.panelThicknessMm && <> · {item.panelThicknessMm} מ״מ</>}
+                </span>
               </button>
               <button
                 onClick={() => setEditing(item)}
@@ -103,19 +137,6 @@ export function LibrarySheet({
             </div>
           ))}
 
-          {!showRest && restCount > 0 && (
-            <button
-              onClick={() => {
-                setShowRest(true);
-                setGroup(null);
-              }}
-              className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-2.5 text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
-            >
-              <span className="num text-lg font-semibold">{restCount}</span>
-              <span className="text-[11px] leading-tight font-medium">ארגזים נוספים</span>
-            </button>
-          )}
-
           <button
             onClick={() => setEditing('new')}
             className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-2.5 text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
@@ -124,6 +145,60 @@ export function LibrarySheet({
             <span className="text-[11px] leading-tight font-medium">ארגז משלי</span>
           </button>
         </div>
+
+        {/* מהספרייה הקלאסית נכנסים לספריות המפורטות */}
+        {view === 'classic' && (
+          <section className="mt-6 border-t border-stone-100 pt-5">
+            <h3 className="mb-2.5 text-sm font-semibold text-stone-700">ספריות לפי חדר</h3>
+            <div className="grid grid-cols-2 gap-2.5">
+              {ROOMS.filter((r) => r.kind !== 'custom').map((room) => {
+                const Icon = ROOM_ICONS[room.icon];
+                const n = (items ?? []).filter(
+                  (i) => i.group !== 'panel' && !i.common && i.rooms.includes(room.kind),
+                ).length;
+                return (
+                  <button
+                    key={room.kind}
+                    onClick={() => goTo(room.kind)}
+                    className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-3 text-start transition-colors hover:border-oak-400 hover:bg-oak-50"
+                  >
+                    <span className="text-oak-600">
+                      <Icon className="size-7" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-stone-900">
+                        {room.label}
+                      </span>
+                      <span className="num block text-[11px] text-stone-400">{n} ארגזים</span>
+                    </span>
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={() => goTo('panel')}
+                className="col-span-2 flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-3 text-start transition-colors hover:border-oak-400 hover:bg-oak-50"
+              >
+                <span className="grid size-7 place-items-center text-oak-600">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+                    className="size-6" aria-hidden="true">
+                    <rect x="3" y="5" width="5" height="14" rx="1" />
+                    <rect x="10" y="5" width="4" height="14" rx="1" />
+                    <rect x="16" y="5" width="5" height="14" rx="1" />
+                  </svg>
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-stone-900">
+                    דפנות ולוחות בודדים
+                  </span>
+                  <span className="block text-[11px] text-stone-400">
+                    מידות ועובי משלהם
+                  </span>
+                </span>
+              </button>
+            </div>
+          </section>
+        )}
 
         {visible.some((i) => i.note) && (
           <ul className="mt-5 space-y-1.5 border-t border-stone-100 pt-4">
@@ -142,7 +217,7 @@ export function LibrarySheet({
       {editing && (
         <CustomItemSheet
           item={editing === 'new' ? null : editing}
-          roomKind={roomKind}
+          roomKind={view === 'classic' || view === 'panel' ? roomKind : view}
           defaultGroup={activeGroup ?? 'base'}
           onClose={() => setEditing(null)}
         />

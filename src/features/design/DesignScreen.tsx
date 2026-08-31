@@ -7,11 +7,24 @@ import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
 import { UnitEditSheet } from './UnitEditSheet';
 import { MaterialsSheet } from './MaterialsSheet';
+import { DepthSheet } from './DepthSheet';
+import { PlanView } from './PlanView';
+import { cornerZones } from './plan';
+import { unitZones } from '../../catalog/zones';
 import { analyzeWall, nextFreeX } from './analysis';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { roomDef } from '../../catalog/rooms';
 import { ScreenHeader } from '../../ui/ScreenHeader';
-import { CalcIcon, FrontsIcon, InsideIcon, PlusIcon, RulerIcon } from '../../ui/icons';
+import { Sheet } from '../../ui/Sheet';
+import {
+  CalcIcon,
+  DepthIcon,
+  FrontsIcon,
+  InsideIcon,
+  PlanIcon,
+  PlusIcon,
+  RulerIcon,
+} from '../../ui/icons';
 import { cm, meters } from '../../ui/units';
 import type { CatalogItem, PlacedUnit, Project } from '../../db/types';
 
@@ -28,6 +41,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [depthOpen, setDepthOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const [inside, setInside] = useState(false);
   const [measure, setMeasure] = useState<MeasureAxis | null>(null);
 
@@ -49,7 +64,10 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   // מעבר לקיר אחר מבטל בחירה, כדי שלא נערוך ארגז שלא רואים
   useEffect(() => setSelectedId(null), [wallIndex]);
 
-  const analysis = wall ? analyzeWall(wall, units) : null;
+  const corners = wall && walls && walls.length > 1
+    ? cornerZones(walls, wall, allUnits ?? [])
+    : undefined;
+  const analysis = wall ? analyzeWall(wall, units, corners) : null;
 
   async function addItem(item: CatalogItem) {
     if (!wall) return;
@@ -77,6 +95,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             onClick={() => setInside((v) => !v)}
             icon={inside ? <InsideIcon className="size-4" /> : <FrontsIcon className="size-4" />}
             label={inside ? 'פנים' : 'חזית'}
+            title={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
           />
           <Tool
             active={measure !== null}
@@ -90,30 +109,47 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             icon={<CalcIcon className="size-4" />}
             label="חומרים"
           />
-
-          {measure !== null && (
-            <div className="ms-1 flex shrink-0 gap-1 rounded-full bg-stone-200/70 p-0.5">
-              {(
-                [
-                  ['w', 'רוחב'],
-                  ['h', 'גובה'],
-                  ['d', 'עומק'],
-                ] as const
-              ).map(([axis, label]) => (
-                <button
-                  key={axis}
-                  onClick={() => setMeasure(axis)}
-                  className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                    measure === axis ? 'bg-teal-700 text-white' : 'text-stone-600'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <Tool
+            active={depthOpen}
+            onClick={() => setDepthOpen(true)}
+            icon={<DepthIcon className="size-4" />}
+            label="עומק אחיד"
+          />
+          {walls.length > 1 && (
+            <Tool
+              active={planOpen}
+              onClick={() => setPlanOpen((v) => !v)}
+              icon={<PlanIcon className="size-4" />}
+              label="מבט על"
+            />
           )}
+
         </div>
 
+        {/* בורר הציר יושב בשורה משלו — בשורת הכלים העומק נחתך */}
+        {measure !== null && (
+          <div className="mt-2 flex gap-1">
+            {(
+              [
+                ['w', 'רוחב'],
+                ['h', 'גובה'],
+                ['d', 'עומק'],
+              ] as const
+            ).map(([ax, label]) => (
+              <button
+                key={ax}
+                onClick={() => setMeasure(ax)}
+                className={`flex-1 rounded-full py-1.5 text-xs font-medium transition-colors ${
+                  measure === ax
+                    ? 'bg-teal-700 text-white'
+                    : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         {walls.length > 1 && (
           <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
             {walls.map((w, i) => (
@@ -143,8 +179,17 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             onSelect={setSelectedId}
             inside={inside}
             measure={measure}
+            corners={corners}
             finishHex={finishHex ?? {}}
             onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
+            onMoveShelf={(unitId, zoneId, gapsMm) => {
+              const u = units.find((x) => x.id === unitId);
+              if (!u) return;
+              const zones = unitZones(u).map((z) =>
+                z.id === zoneId ? { ...z, shelfGapsMm: gapsMm } : z,
+              );
+              patchUnit(unitId, { zones });
+            }}
           />
         </div>
       </div>
@@ -152,6 +197,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
       {selected ? (
         <UnitEditor
           unit={selected}
+          inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
           onEdit={() => setEditOpen(true)}
           onRemove={async () => {
@@ -207,6 +253,32 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         </>
       )}
 
+      {planOpen && (
+        <Sheet title="מבט על החדר" onClose={() => setPlanOpen(false)} tall>
+          <PlanView
+            walls={walls}
+            units={allUnits ?? []}
+            activeWallId={wall.id}
+            onSelectWall={(id) => {
+              const i = walls.findIndex((w) => w.id === id);
+              if (i >= 0) setWallIndex(i);
+            }}
+            onChangeWall={(id, patch) => wallsRepo.update(id, patch)}
+          />
+        </Sheet>
+      )}
+
+      {depthOpen && (
+        <DepthSheet
+          currentMm={selected?.depthMm ?? units[0]?.depthMm ?? 580}
+          onClose={() => setDepthOpen(false)}
+          onApply={async (mm, onlyFloor) => {
+            await unitsRepo.setDepthForProject(projectId, mm, onlyFloor);
+            setDepthOpen(false);
+          }}
+        />
+      )}
+
       {editOpen && selected && (
         <UnitEditSheet unit={selected} onClose={() => setEditOpen(false)} />
       )}
@@ -233,16 +305,21 @@ function Tool({
   onClick,
   icon,
   label,
+  title,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  /** תיאור הפעולה, כשהתווית לבדה לא מספרת מה תקרה */
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
+      aria-label={title}
+      title={title}
       className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
         active ? 'bg-stone-900 text-white' : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
       }`}

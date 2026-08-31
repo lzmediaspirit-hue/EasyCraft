@@ -101,18 +101,59 @@ export function MaterialsSheet({
 
           <section>
             <h3 className="mb-2 text-sm font-semibold text-stone-700">אביזרים</h3>
+
+            {costing.accessories.length > 0 && (
+              <ul className="mb-2 space-y-1.5">
+                {costing.accessories.map((a) => (
+                  <li
+                    key={a.label}
+                    className="flex items-baseline gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm text-stone-800">
+                      {a.label}
+                    </span>
+                    <span className="num text-sm font-semibold text-stone-900">
+                      {Number.isInteger(a.qty) ? a.qty : a.qty.toFixed(1)}
+                    </span>
+                    <span className="text-[11px] text-stone-400">{a.unit}</span>
+                    <span className="num w-16 text-end text-sm text-stone-600">
+                      {a.consumerTotal > 0 ? shekels(a.consumerTotal) : '—'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             <div className="grid grid-cols-2 gap-2">
-              <Stat label="מגירות" value={costing.drawers} />
               <Stat label="דלתות" value={costing.doors} />
               <Stat label="דפנות זרות" value={costing.exposedPanels} />
-              <Stat label="פס לד" value={costing.ledMeters.toFixed(1)} unit="מ׳" />
             </div>
+
+            {costing.accessories.every((a) => a.consumerPrice === 0) && (
+              <p className="mt-2 text-[11px] leading-snug text-stone-400">
+                מחירי אביזרים נקבעים בהגדרות — מגירה, מטר לד ומנגנון קלאפה.
+              </p>
+            )}
           </section>
 
           <section className="rounded-2xl bg-stone-900 p-4 text-white">
             <div className="flex items-baseline justify-between">
               <span className="text-sm text-white/70">סה״כ פלטות</span>
               <span className="num text-lg font-semibold">{costing.totalSheets}</span>
+            </div>
+            <div className="mt-2 flex items-baseline justify-between border-t border-white/15 pt-2">
+              <span className="text-sm text-white/70">לוחות</span>
+              <span className="num text-sm">
+                {hasPrices ? shekels(costing.boardsConsumerTotal) : '—'}
+              </span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between">
+              <span className="text-sm text-white/70">אביזרים</span>
+              <span className="num text-sm">
+                {hasPrices
+                  ? shekels(costing.consumerTotal - costing.boardsConsumerTotal)
+                  : '—'}
+              </span>
             </div>
             <div className="mt-2 flex items-baseline justify-between border-t border-white/15 pt-2">
               <span className="text-sm text-white/70">עלות במפעל</span>

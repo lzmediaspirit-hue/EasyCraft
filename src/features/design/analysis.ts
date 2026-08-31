@@ -15,7 +15,11 @@ export interface WallAnalysis {
  * בדיקות שהנגר היה עושה בראש: חריגה מהקיר, ארגזים שנוגעים זה בזה,
  * ושקעים או נקודות מים שנעלמים מאחורי ארגז.
  */
-export function analyzeWall(wall: Wall, units: PlacedUnit[]): WallAnalysis {
+export function analyzeWall(
+  wall: Wall,
+  units: PlacedUnit[],
+  corners?: { startMm: number; endMm: number },
+): WallAnalysis {
   const floor = units.filter((u) => u.level !== 'wall');
   const upper = units.filter((u) => u.level === 'wall');
 
@@ -55,6 +59,21 @@ export function analyzeWall(wall: Wall, units: PlacedUnit[]): WallAnalysis {
     // חלון, דלת או נישה שארגז נכנס לתוכם — גם חפיפה חלקית היא בעיה
     const blocking = units.find((u) => overlaps(u, f));
     if (blocking) warnings.push(`${blocking.name} חוסם את ה${label}`);
+  }
+
+  // ארון רגיל שנכנס לאזור הפינה יתנגש בארון של הקיר השכן
+  if (corners) {
+    for (const u of units) {
+      if (u.level === 'wall' || u.corner) continue;
+      if (corners.startMm > 0 && u.xMm < corners.startMm) {
+        warnings.push(`${u.name} נכנס לפינה — שם יושבים ארונות הקיר הקודם`);
+        break;
+      }
+      if (corners.endMm > 0 && u.xMm + u.widthMm > wall.lengthMm - corners.endMm) {
+        warnings.push(`${u.name} נכנס לפינה — שם יושבים ארונות הקיר הבא`);
+        break;
+      }
+    }
   }
 
   return { floorUsedMm, wallUsedMm, freeMm: wall.lengthMm - floorUsedMm, warnings };

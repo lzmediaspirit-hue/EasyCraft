@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { boardsRepo, finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { BoardSheet } from './BoardSheet';
 import { ScreenHeader } from '../../ui/ScreenHeader';
-import { NumField } from '../../ui/Field';
+import { NumField, selectOnFocus } from '../../ui/Field';
 import { ChevronIcon, PlusIcon } from '../../ui/icons';
 import type { Board } from '../../db/types';
 
@@ -106,6 +106,18 @@ export function SettingsScreen() {
               value={settings.carcassThicknessMm}
               onChange={(v) => settingsRepo.save({ carcassThicknessMm: v })}
             />
+            <NumField
+              label="שקע הגב בחריץ"
+              inMm
+              value={settings.backGrooveMm}
+              onChange={(v) => settingsRepo.save({ backGrooveMm: v })}
+            />
+            <NumField
+              label="מרווח סביב חזית"
+              inMm
+              value={settings.frontGapMm}
+              onChange={(v) => settingsRepo.save({ frontGapMm: v })}
+            />
           </div>
 
           <label className="mt-3 block rounded-2xl border border-stone-200 bg-white p-4">
@@ -133,6 +145,56 @@ export function SettingsScreen() {
             מול הלוח הפיזי. העובי כאן משמש רק לגזירת רוחב התחתית והתקרה.
           </p>
         </section>
+        <section>
+          <SectionTitle>מחירי אביזרים</SectionTitle>
+          <div className="space-y-2">
+            <AccessoryRow
+              label="מגירה"
+              unit="ליחידה"
+              factory={settings.accessories.drawerFactory}
+              consumer={settings.accessories.drawerConsumer}
+              onChange={(factory, consumer) =>
+                settingsRepo.save({
+                  accessories: {
+                    ...settings.accessories,
+                    drawerFactory: factory,
+                    drawerConsumer: consumer,
+                  },
+                })
+              }
+            />
+            <AccessoryRow
+              label="פס לד"
+              unit="למטר רץ"
+              factory={settings.accessories.ledFactory}
+              consumer={settings.accessories.ledConsumer}
+              onChange={(factory, consumer) =>
+                settingsRepo.save({
+                  accessories: {
+                    ...settings.accessories,
+                    ledFactory: factory,
+                    ledConsumer: consumer,
+                  },
+                })
+              }
+            />
+            <AccessoryRow
+              label="מנגנון קלאפה"
+              unit="ליחידה"
+              factory={settings.accessories.liftFactory}
+              consumer={settings.accessories.liftConsumer}
+              onChange={(factory, consumer) =>
+                settingsRepo.save({
+                  accessories: {
+                    ...settings.accessories,
+                    liftFactory: factory,
+                    liftConsumer: consumer,
+                  },
+                })
+              }
+            />
+          </div>
+        </section>
       </main>
 
       {editing && (
@@ -147,4 +209,57 @@ export function SettingsScreen() {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-2 text-sm font-semibold text-stone-500">{children}</h2>;
+}
+
+/** מחיר אביזר: במפעל ולצרכן, באותה שורה. */
+function AccessoryRow({
+  label,
+  unit,
+  factory,
+  consumer,
+  onChange,
+}: {
+  label: string;
+  unit: string;
+  factory: number;
+  consumer: number;
+  onChange: (factory: number, consumer: number) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-3">
+      <div className="flex items-baseline gap-2">
+        <span className="text-sm font-medium text-stone-800">{label}</span>
+        <span className="text-[11px] text-stone-400">{unit}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <PriceBox label="מפעל" value={factory} onChange={(v) => onChange(v, consumer)} />
+        <PriceBox label="צרכן" value={consumer} onChange={(v) => onChange(factory, v)} />
+      </div>
+    </div>
+  );
+}
+
+function PriceBox({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block rounded-xl bg-stone-100 px-3 py-2">
+      <span className="block text-[11px] text-stone-500">{label}</span>
+      <input
+        value={value || ''}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        onFocus={selectOnFocus}
+        type="number"
+        inputMode="decimal"
+        placeholder="₪"
+        className="num w-full bg-transparent text-base font-medium text-stone-900 placeholder:text-stone-300 focus:outline-none"
+      />
+    </label>
+  );
 }

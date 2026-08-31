@@ -1,6 +1,6 @@
 import { glyphDef } from '../catalog/glyphList';
-import { autoShelves } from '../catalog/CabinetGlyph';
 import { MATERIAL } from '../catalog/standards';
+import { countDrawers, countShelves, unitZones } from '../catalog/zones';
 import type { Board, BoardRole, PlacedUnit, ProjectPrice, Settings } from '../db/types';
 
 /**
@@ -36,50 +36,66 @@ export interface BoardLine {
   overridden: boolean;
 }
 
+/** שורת אביזר בתמחור. */
+export interface AccessoryLine {
+  label: string;
+  qty: number;
+  unit: string;
+  factoryPrice: number;
+  consumerPrice: number;
+  factoryTotal: number;
+  consumerTotal: number;
+}
+
 export interface ProjectCosting {
   lines: BoardLine[];
+  accessories: AccessoryLine[];
   units: number;
   drawers: number;
   doors: number;
   exposedPanels: number;
   /** מטרים רצים של פס לד */
   ledMeters: number;
+  /** מנגנוני קלאפה */
+  lifts: number;
   totalSheets: number;
+  boardsFactoryTotal: number;
+  boardsConsumerTotal: number;
   factoryTotal: number;
   consumerTotal: number;
 }
 
 /* ------------------------------------------------------------------ */
 
-/** אזור החזית שמכוסה במגירות חיצוניות. */
-function outerDrawerZone(u: PlacedUnit): number {
-  const rows = u.drawers ?? 0;
-  if (rows < 1 || u.drawerStyle === 'inner') return 0;
-  if (u.glyph === 'doorDrawer') {
-    return Math.min(u.heightMm * 0.22, u.heightMm / (rows + 1)) * rows;
-  }
-  return u.heightMm;
-}
-
 /** מגירה פנימית מוסתרת מאחורי דלת, ולכן יש חזית גם בלי שהוגדרו דלתות. */
 function effectiveDoors(u: PlacedUnit): number {
-  const inner = u.drawerStyle === 'inner' && (u.drawers ?? 0) > 0;
-  return inner ? Math.max(u.doors ?? 0, 1) : (u.doors ?? 0);
+  const hasInner = unitZones(u).some((z) => z.kind === 'drawers' && z.drawerStyle === 'inner');
+  return hasInner ? Math.max(u.doors ?? 0, 1) : (u.doors ?? 0);
 }
 
-/** פירוק ארגז אחד לחלקים עם מידות. */
-export function unitParts(u: PlacedUnit, carcassThicknessMm: number): Part[] {
+/** מנגנוני קלאפה בארגז — אחד לכל דלת שנפתחת כלפי מעלה. */
+function liftCount(u: PlacedUnit): number {
+  return u.opening === 'lift' ? effectiveDoors(u) : 0;
+}
+
+/**
+ * פירוק ארגז אחד לחלקים עם מידות, אחרי כל ההפחתות:
+ * דופן זרה בולעת את עובי הלוח מהגוף, הגב יושב בחריץ ולכן קטן מהגוף,
+ * והחזית קטנה מהפתח במרווח סביבה.
+ */
+export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   const w = u.widthMm;
   const h = u.heightMm;
   const d = u.depthMm;
-  const parts: Part[] = [];
+  const t = s.carcassThicknessMm;
+  const ft = MATERIAL.frontMm;
 
-  // לוח בודד ולא ארון — נספר לפי המישור שבו הוא מונח
+  // לוח בודד — נספר לפי המישור שבו הוא מונח
   const flat = glyphDef(u.glyph).noCarcass;
   if (flat) {
     return [
       {
-        role: 'front',
+        role: u.panelThicknessMm && u.panelThicknessMm < 10 ? 'back' : 'front',
         label: u.name,
         widthMm: w,
         heightMm: flat === 'horizontal' ? d : h,
@@ -88,50 +104,82 @@ export function unitParts(u: PlacedUnit, carcassThicknessMm: number): Part[] {
     ];
   }
 
-  const inner = Math.max(w - 2 * carcassThicknessMm, 0);
-  const shelves = u.shelves ?? autoShelves(h);
+  const parts: Part[] = [];
+  const e = u.exposed ?? {};
 
-  parts.push({ role: 'carcass', label: 'צד', widthMm: d, heightMm: h, qty: 2 });
-  parts.push({ role: 'carcass', label: 'תחתית ותקרה', widthMm: inner, heightMm: d, qty: 2 });
+  // דופן זרה היא חלק מהמעטפת החיצונית, ולכן הגוף מתכווץ בעוביה
+  const carcassW = w - (e.start ? ft : 0) - (e.end ? ft : 0);
+  const carcassH = h - (e.top ? ft : 0) - (e.bottom ? ft : 0);
+  const innerW = Math.max(carcassW - 2 * t, 0);
+
+  parts.push({ role: 'carcass', label: 'צד', widthMm: d, heightMm: carcassH, qty: 2 });
+  parts.push({ role: 'carcass', label: 'תחתית ותקרה', widthMm: innerW, heightMm: d, qty: 2 });
+
+  // מדפים מכל האזורים
+  const zones = unitZones(u);
+  const shelves = zones.reduce((n, z) => n + (z.kind === 'shelves' ? (z.shelves ?? 0) : 0), 0);
   if (shelves > 0) {
     parts.push({
       role: 'carcass',
       label: 'מדף',
-      widthMm: inner,
+      widthMm: innerW,
       heightMm: Math.max(d - 20, 0),
       qty: shelves,
     });
   }
+  // כל אזור מעל הראשון מופרד בלוח חוצץ
+  if (zones.length > 1) {
+    parts.push({
+      role: 'carcass',
+      label: 'חוצץ בין אזורים',
+      widthMm: innerW,
+      heightMm: d,
+      qty: zones.length - 1,
+    });
+  }
 
-  parts.push({ role: 'back', label: 'גב', widthMm: w, heightMm: h, qty: 1 });
+  // הגב יושב בחריץ: קטן בעובי הצדדים, וחוזר בעומק החריץ
+  const groove = s.backGrooveMm;
+  parts.push({
+    role: 'back',
+    label: 'גב',
+    widthMm: Math.max(carcassW - 2 * t + 2 * groove, 0),
+    heightMm: Math.max(carcassH - 2 * t + 2 * groove, 0),
+    qty: 1,
+  });
 
-  const drawerZone = outerDrawerZone(u);
-  const rows = u.drawers ?? 0;
-  const cols = Math.max(u.drawerCols ?? 1, 1);
-  if (drawerZone > 0) {
+  // חזיתות מגירה, אזור אחר אזור
+  const gap = s.frontGapMm;
+  for (const z of zones) {
+    if (z.kind !== 'drawers' || z.drawerStyle === 'inner') continue;
+    const rows = z.drawers ?? 1;
+    const cols = Math.max(z.drawerCols ?? 1, 1);
     parts.push({
       role: 'front',
       label: 'חזית מגירה',
-      widthMm: w / cols,
-      heightMm: drawerZone / rows,
+      widthMm: Math.max(carcassW / cols - gap, 0),
+      heightMm: Math.max(z.heightMm / rows - gap, 0),
       qty: rows * cols,
     });
   }
 
+  // דלתות מכסות את כל מה שאינו מגירה חיצונית
   const doors = effectiveDoors(u);
-  const doorZone = doors > 0 ? Math.max(h - drawerZone, 0) : 0;
-  if (doorZone > 0) {
-    // דלת זכוכית היא מסגרת דקה בלבד, ולכן צורכת חלק קטן משטח לוח מלא
+  const coveredMm = zones
+    .filter((z) => !(z.kind === 'drawers' && z.drawerStyle !== 'inner'))
+    .reduce((n, z) => n + z.heightMm, 0);
+  if (doors > 0 && coveredMm > 0) {
     parts.push({
       role: 'front',
       label: u.glassDoors ? 'מסגרת דלת זכוכית' : 'דלת',
-      widthMm: w / doors,
-      heightMm: doorZone * (u.glassDoors ? 0.25 : 1),
+      widthMm: Math.max(carcassW / doors - gap, 0),
+      // דלת זכוכית היא מסגרת בלבד וצורכת חלק קטן משטח לוח מלא
+      heightMm: Math.max(coveredMm - gap, 0) * (u.glassDoors ? 0.25 : 1),
       qty: doors,
     });
   }
 
-  const e = u.exposed ?? {};
+  // דפנות זרות במידה החיצונית המלאה, ועמוקות מהארגז
   const panelDepth = d + MATERIAL.exposedExtraMm;
   const panel = (heightMm: number): Part => ({
     role: 'front',
@@ -148,10 +196,17 @@ export function unitParts(u: PlacedUnit, carcassThicknessMm: number): Part[] {
   return parts;
 }
 
+/** ההגדרות שנחוצות לפירוק לחלקים. */
+export interface PartSettings {
+  carcassThicknessMm: number;
+  backGrooveMm: number;
+  frontGapMm: number;
+}
+
 /** מטרים רצים של פס לד בארגז. */
 export function unitLedMeters(u: PlacedUnit): number {
   if (!u.led?.length) return 0;
-  const shelves = u.shelves ?? autoShelves(u.heightMm);
+  const shelves = countShelves(u);
   let mm = 0;
   for (const spot of u.led) {
     if (spot === 'start' || spot === 'end') mm += u.heightMm;
@@ -179,14 +234,17 @@ export function projectCosting(
   let exposedPanels = 0;
   let ledMeters = 0;
 
+  let lifts = 0;
+
   for (const u of units) {
-    for (const part of unitParts(u, settings.carcassThicknessMm)) {
+    for (const part of unitParts(u, settings)) {
       // הכרסום נאכל סביב כל חלק בנפרד
       const area = ((part.widthMm + kerf) * (part.heightMm + kerf)) / 1_000_000;
       areaByRole[part.role] += area * part.qty;
     }
-    drawers += (u.drawers ?? 0) * Math.max(u.drawerCols ?? 1, 1);
+    drawers += countDrawers(u);
     doors += effectiveDoors(u);
+    lifts += liftCount(u);
     const e = u.exposed ?? {};
     exposedPanels += [e.start, e.end, e.top, e.bottom].filter(Boolean).length;
     ledMeters += unitLedMeters(u);
@@ -219,15 +277,49 @@ export function projectCosting(
     });
   }
 
+  const a = settings.accessories;
+  const accessories: AccessoryLine[] = [
+    accessory('מגירות', drawers, 'יח׳', a.drawerFactory, a.drawerConsumer),
+    accessory('פס לד', ledMeters, 'מ׳', a.ledFactory, a.ledConsumer),
+    accessory('מנגנוני קלאפה', lifts, 'יח׳', a.liftFactory, a.liftConsumer),
+  ].filter((l) => l.qty > 0);
+
+  const boardsFactoryTotal = lines.reduce((n, l) => n + l.factoryTotal, 0);
+  const boardsConsumerTotal = lines.reduce((n, l) => n + l.consumerTotal, 0);
+  const accFactory = accessories.reduce((n, l) => n + l.factoryTotal, 0);
+  const accConsumer = accessories.reduce((n, l) => n + l.consumerTotal, 0);
+
   return {
     lines,
+    accessories,
     units: units.length,
     drawers,
     doors,
     exposedPanels,
     ledMeters,
+    lifts,
     totalSheets: lines.reduce((n, l) => n + l.sheets, 0),
-    factoryTotal: lines.reduce((n, l) => n + l.factoryTotal, 0),
-    consumerTotal: lines.reduce((n, l) => n + l.consumerTotal, 0),
+    boardsFactoryTotal,
+    boardsConsumerTotal,
+    factoryTotal: boardsFactoryTotal + accFactory,
+    consumerTotal: boardsConsumerTotal + accConsumer,
+  };
+}
+
+function accessory(
+  label: string,
+  qty: number,
+  unit: string,
+  factoryPrice: number,
+  consumerPrice: number,
+): AccessoryLine {
+  return {
+    label,
+    qty,
+    unit,
+    factoryPrice,
+    consumerPrice,
+    factoryTotal: qty * factoryPrice,
+    consumerTotal: qty * consumerPrice,
   };
 }

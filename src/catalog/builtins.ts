@@ -11,6 +11,8 @@ export interface SeedItem {
   glyph: string;
   doors?: number;
   drawers?: number;
+  drawerCols?: number;
+  shelves?: number;
   level: UnitLevel;
   /** רוחב ברירת מחדל ורוחבי תקן נוספים */
   w: number;
@@ -20,6 +22,9 @@ export interface SeedItem {
   y: number;
   socle?: number;
   counter?: number;
+  corner?: 'blindStart' | 'blindEnd' | 'lShape';
+  blind?: number;
+  panelThickness?: number;
   /** פריט נפוץ — מופיע בספרייה הראשית */
   common?: boolean;
   note?: string;
@@ -102,17 +107,39 @@ const kitchenTall = (
   ...extra,
 });
 
+/** דופן או לוח בודד — נמדד ברוחב, בגובה ובעובי משלו. */
+const panel = (
+  key: string,
+  name: string,
+  w: number,
+  widths: number[],
+  h: number,
+  thickness: number,
+): SeedItem => ({
+  key,
+  rooms: ['kitchen', 'living', 'bedroom'],
+  group: 'panel',
+  name,
+  glyph: 'plain',
+  level: 'floor',
+  w,
+  widths,
+  h,
+  d: thickness,
+  y: 0,
+  panelThickness: thickness,
+});
+
 export const SEED_CATALOG: SeedItem[] = [
   /* ---------------- מטבח — תחתונים ---------------- */
   kitchenBase('k-base-door1', 'ארגז דלת אחת', 'doors', 450, NARROW, {
-    common: true, doors: 1 }),
+    doors: 1 }),
   kitchenBase('k-base-door2', 'ארגז שתי דלתות', 'doors', 800, WIDE, {
-    common: true, doors: 2 }),
+    doors: 2 }),
   kitchenBase('k-base-dr2', 'ארגז 2 מגירות', 'drawers', 600, [400, 450, 500, 600, 800, 900], {
     drawers: 2,
   }),
   kitchenBase('k-base-dr3', 'ארגז 3 מגירות', 'drawers', 600, [400, 450, 500, 600, 800, 900], {
-    common: true,
     drawers: 3,
   }),
   kitchenBase('k-base-dr4', 'ארגז 4 מגירות', 'drawers', 600, [400, 450, 500, 600, 800], {
@@ -123,17 +150,14 @@ export const SEED_CATALOG: SeedItem[] = [
     drawers: 1,
   }),
   kitchenBase('k-base-sink', 'ארגז כיור', 'sink', 800, [600, 800, 900, 1000, 1200], {
-    common: true,
     doors: 2,
     note: 'ארגז כיור נבנה בלי מדף ועם חזית מגירה עיוורת מעל',
   }),
   kitchenBase('k-base-hob', 'ארגז כיריים', 'hob', 600, [600, 700, 800, 900], {
-    common: true,
     drawers: 2,
     note: 'חיתוך כיריים סטנדרטי בשיש — כ-560×490 מ"מ',
   }),
   kitchenBase('k-base-dw', 'ארגז מדיח', 'dishwasher', 600, [450, 600], {
-    common: true,
     note: 'נישת מדיח: רוחב 600, גובה 820 מ"מ',
   }),
   kitchenBase('k-base-oven', 'ארגז תנור', 'oven', 600, [600], {
@@ -148,11 +172,10 @@ export const SEED_CATALOG: SeedItem[] = [
 
   /* ---------------- מטבח — עליונים ---------------- */
   kitchenUpper('k-up-door1', 'עליון דלת אחת', 'doors', 450, NARROW, {
-    common: true, doors: 1 }),
+    doors: 1 }),
   kitchenUpper('k-up-door2', 'עליון שתי דלתות', 'doors', 800, WIDE, {
-    common: true, doors: 2 }),
+    doors: 2 }),
   kitchenUpper('k-up-lift', 'עליון קלאפה', 'lift', 600, [500, 600, 800, 900, 1000], {
-    common: true,
     doors: 1,
     h: 450,
     note: 'מנגנון הרמה — נוח מעל אזור עבודה',
@@ -160,7 +183,6 @@ export const SEED_CATALOG: SeedItem[] = [
   kitchenUpper('k-up-glass', 'עליון ויטרינה', 'glass', 600, [400, 500, 600, 800], { doors: 2 }),
   kitchenUpper('k-up-micro', 'ארון מיקרוגל עליון', 'oven', 600, [600], { h: 450 }),
   kitchenUpper('k-up-hood', 'ארון קולט אדים', 'hood', 600, [600, 900], {
-    common: true,
     h: 450,
     note: 'תחתית קולט אדים 650–750 מ"מ מעל הכיריים',
   }),
@@ -169,16 +191,13 @@ export const SEED_CATALOG: SeedItem[] = [
 
   /* ---------------- מטבח — עמודות ---------------- */
   kitchenTall('k-tall-ovenmicro', 'עמודת תנור ומיקרוגל', 'ovenMicro', 600, [600], {
-    common: true,
   }),
   kitchenTall('k-tall-oven', 'עמודת תנור', 'oven', 600, [600]),
   kitchenTall('k-tall-fridge', 'עמודת מקרר', 'fridge', 700, [600, 700, 800, 900], {
-    common: true,
     d: 650,
     note: 'לבדוק עומק המקרר בפועל — לרוב 650–700 מ"מ',
   }),
   kitchenTall('k-tall-pantry', 'עמודת מזווה', 'pantry', 500, [400, 450, 500, 600], {
-    common: true,
     doors: 1,
   }),
   kitchenTall('k-tall-door', 'עמודת דלתות', 'doors', 600, [400, 500, 600], { doors: 1 }),
@@ -203,7 +222,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-door2',
-    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'ארון בגדים שתי דלתות',
@@ -234,7 +252,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-sliding',
-    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'ארון הזזה',
@@ -251,7 +268,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-hang',
-    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'יחידת תלייה ארוכה',
@@ -267,7 +283,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-hang2',
-    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'יחידת תלייה כפולה',
@@ -283,7 +298,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-shelves',
-    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'יחידת מדפים',
@@ -299,7 +313,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-drawers',
-    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'יחידת מגירות פנימיות',
@@ -361,7 +374,6 @@ export const SEED_CATALOG: SeedItem[] = [
   /* ---------------- חדר שינה — רהיטים ---------------- */
   {
     key: 'b-nightstand',
-    common: true,
     rooms: ['bedroom'],
     group: 'base',
     name: 'שידת לילה',
@@ -376,7 +388,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-dresser',
-    common: true,
     rooms: ['bedroom'],
     group: 'base',
     name: 'שידת מגירות',
@@ -406,7 +417,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-bridge',
-    common: true,
     rooms: ['bedroom'],
     group: 'upper',
     name: 'גשר עליון',
@@ -438,7 +448,6 @@ export const SEED_CATALOG: SeedItem[] = [
   /* ---------------- סלון ---------------- */
   {
     key: 'v-tv-drawers',
-    common: true,
     rooms: ['living'],
     group: 'base',
     name: 'מזנון טלוויזיה מגירות',
@@ -453,7 +462,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-tv-doors',
-    common: true,
     rooms: ['living'],
     group: 'base',
     name: 'מזנון טלוויזיה דלתות',
@@ -482,7 +490,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-storage',
-    common: true,
     rooms: ['living'],
     group: 'base',
     name: 'ארון אחסון',
@@ -498,7 +505,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-float-shelf',
-    common: true,
     rooms: ['living'],
     group: 'upper',
     name: 'מדף צף',
@@ -512,7 +518,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-wall-unit',
-    common: true,
     rooms: ['living'],
     group: 'upper',
     name: 'יחידת קיר תלויה',
@@ -541,7 +546,6 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-library',
-    common: true,
     rooms: ['living'],
     group: 'storage',
     name: 'ספרייה',
@@ -586,7 +590,6 @@ export const SEED_CATALOG: SeedItem[] = [
   /* ---------------- זמין בכל חדר ---------------- */
   {
     key: 'any-spacer',
-    common: true,
     rooms: ['kitchen', 'living', 'bedroom'],
     group: 'base',
     name: 'מרווח / מילוי',
@@ -600,4 +603,107 @@ export const SEED_CATALOG: SeedItem[] = [
     socle: K.socleH,
     note: 'מילוי בין ארגז לקיר או בין ארגז לעמודה',
   },
+
+  /* ---------------- הספרייה הקלאסית — בסיס לכל חדר ---------------- */
+  {
+    key: 'basic-door1',
+    rooms: ['kitchen', 'living', 'bedroom'],
+    group: 'base',
+    name: 'ארגז דלת אחת',
+    glyph: 'doors',
+    doors: 1,
+    level: 'floor',
+    w: 450,
+    widths: [300, 350, 400, 450, 500, 600],
+    h: K.baseCarcassH,
+    d: K.baseDepth,
+    y: K.socleH,
+    socle: K.socleH,
+    common: true,
+    note: 'ארגז בסיס. אפשר לשנות ממנו הכול — מידות, מדפים, מגירות וחזית',
+  },
+  {
+    key: 'basic-door2',
+    rooms: ['kitchen', 'living', 'bedroom'],
+    group: 'base',
+    name: 'ארגז שתי דלתות',
+    glyph: 'doors',
+    doors: 2,
+    level: 'floor',
+    w: 800,
+    widths: [600, 700, 800, 900, 1000, 1200],
+    h: K.baseCarcassH,
+    d: K.baseDepth,
+    y: K.socleH,
+    socle: K.socleH,
+    common: true,
+  },
+  {
+    key: 'basic-open',
+    rooms: ['kitchen', 'living', 'bedroom'],
+    group: 'base',
+    name: 'ארגז פתוח',
+    glyph: 'open',
+    level: 'floor',
+    w: 600,
+    widths: [300, 400, 500, 600, 800, 1000],
+    h: K.baseCarcassH,
+    d: K.baseDepth,
+    y: K.socleH,
+    socle: K.socleH,
+    common: true,
+  },
+  {
+    key: 'basic-drawers',
+    rooms: ['kitchen', 'living', 'bedroom'],
+    group: 'base',
+    name: 'ארגז מגירות',
+    glyph: 'drawers',
+    drawers: 3,
+    drawerCols: 1,
+    level: 'floor',
+    w: 600,
+    widths: [400, 450, 500, 600, 800, 900],
+    h: K.baseCarcassH,
+    d: K.baseDepth,
+    y: K.socleH,
+    socle: K.socleH,
+    common: true,
+  },
+
+  /* ---------------- פינות ---------------- */
+  kitchenBase('k-base-blind-start', 'פינה מתה שמאל', 'blindStart', 900, [800, 900, 1000, 1100], {
+    doors: 1,
+    corner: 'blindStart',
+    blind: 300,
+    note: 'החלק החסום נשאר לא נגיש — לרוב 25 עד 35 ס״מ',
+  }),
+  kitchenBase('k-base-blind-end', 'פינה מתה ימין', 'blindEnd', 900, [800, 900, 1000, 1100], {
+    doors: 1,
+    corner: 'blindEnd',
+    blind: 300,
+  }),
+  kitchenBase('k-base-lcorner', 'ארגז פינתי במפגש', 'lShape', 900, [800, 900, 1000], {
+    doors: 1,
+    corner: 'lShape',
+    note: 'יושב בפינה שבין שני הקירות, עם חזית באלכסון',
+  }),
+  kitchenUpper('k-up-blind-start', 'עליון פינה מתה שמאל', 'blindStart', 800, [600, 800, 900], {
+    doors: 1,
+    corner: 'blindStart',
+    blind: 300,
+  }),
+  kitchenUpper('k-up-blind-end', 'עליון פינה מתה ימין', 'blindEnd', 800, [600, 800, 900], {
+    doors: 1,
+    corner: 'blindEnd',
+    blind: 300,
+  }),
+
+  /* ---------------- דפנות ולוחות בודדים ---------------- */
+  panel('panel-side', 'דופן צד', 580, [400, 450, 500, 560, 580, 600, 650], 720, 18),
+  panel('panel-shelf', 'מדף בודד', 800, [300, 400, 500, 600, 800, 1000, 1200], 300, 18),
+  panel('panel-back', 'לוח גב', 600, [400, 500, 600, 800, 900, 1200], 720, 5),
+  panel('panel-cover', 'חיפוי קיר', 1200, [600, 900, 1200, 1500, 1800, 2400], 2400, 18),
+  panel('panel-cornice', 'קרניז', 2000, [1000, 1500, 2000, 2500, 3000], 60, 18),
+  panel('panel-plinth', 'סוקל', 2000, [1000, 1500, 2000, 2500, 3000], 150, 18),
 ];

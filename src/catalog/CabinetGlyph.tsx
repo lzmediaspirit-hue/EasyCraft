@@ -1,3 +1,6 @@
+import { zoneBands, isContainer } from './zones';
+import type { CornerKind, OpeningMech, Zone } from '../db/types';
+
 /**
  * מנוע האיורים של הארגזים.
  *
@@ -34,6 +37,14 @@ export type GlyphProps = {
    * ריק = מרווחים שווים.
    */
   shelfGapsMm?: number[];
+  /** חלוקת הפנים לאזורים — מגירות, מדפים ומוט תלייה באותו ארון */
+  zones?: Zone[];
+  /** מנגנון פתיחה, מסומן על החזית */
+  opening?: OpeningMech;
+  /** פינה מתה או ארגז פינתי */
+  corner?: CornerKind;
+  /** רוחב החלק החסום בפינה מתה */
+  blindMm?: number;
 };
 
 export function CabinetGlyph({
@@ -49,6 +60,10 @@ export function CabinetGlyph({
   drawerStyle = 'outer',
   glassDoors = false,
   shelfGapsMm,
+  zones,
+  opening = 'hinge',
+  corner,
+  blindMm = 0,
 }: GlyphProps) {
   // ארגזי נגרות הם מלבנים; עיגול קל בלבד, שלא ייראה כמו רהיט מצויר
   const r = Math.min(8, Math.min(w, h) * 0.015);
@@ -75,6 +90,10 @@ export function CabinetGlyph({
         innerDrawers: drawerStyle === 'inner',
         glass: glassDoors,
         gaps: shelfGapsMm,
+        zones,
+        opening,
+        corner,
+        blindMm,
       })}
     </g>
   );
@@ -100,6 +119,10 @@ type Ctx = {
   innerDrawers: boolean;
   glass: boolean;
   gaps?: number[];
+  zones?: Zone[];
+  opening: OpeningMech;
+  corner?: CornerKind;
+  blindMm: number;
 };
 
 function details(c: Ctx) {
@@ -121,7 +144,17 @@ function details(c: Ctx) {
       ? doorPanels(c, top, bottom, Math.max(c.doors, 1), key)
       : drawerGrid(c, top, bottom, rows, c.cols);
 
+  // ארון שחולק לאזורים מצויר מהאזורים, ולא מהשדות הפשוטים
+  if (c.zones?.length && isContainer(c.glyph)) return zonedContainer(c);
+
   switch (c.glyph) {
+    case 'blindStart':
+    case 'blindEnd':
+      return blindCorner(c);
+
+    case 'lShape':
+      return lShapeCorner(c);
+
     case 'doors':
       return front(0, h, c.doors);
 
@@ -346,6 +379,160 @@ function details(c: Ctx) {
 }
 
 /* ------------------------------------------------------------------ */
+
+/**
+ * ארון מחולק לאזורים.
+ * הפנים מצויר אזור-אזור; החזית מכסה את כל מה שאינו מגירה חיצונית,
+ * בדיוק כמו בארון אמיתי.
+ */
+function zonedContainer(c: Ctx) {
+  const { w, h, t, inside } = c;
+  const bands = zoneBands(c.zones!, h);
+  const out: React.ReactNode[] = [];
+
+  for (const { zone, top, bottom } of bands) {
+    if (zone.kind === 'drawers') {
+      const rows = zone.drawers ?? 1;
+      const cols = Math.max(zone.drawerCols ?? 1, 1);
+      const hidden = zone.drawerStyle === 'inner';
+      // מגירה פנימית נראית רק כשמסתכלים פנימה
+      if (!hidden || inside) {
+        out.push(
+          <g key={`dz-${zone.id}`}>{drawerGrid(c, top, bottom, rows, cols, hidden && inside)}</g>,
+        );
+      }
+    } else if (zone.kind === 'shelves' && (inside || !c.doors)) {
+      out.push(
+        <g key={`sz-${zone.id}`}>
+          {shelfLines({ ...c, shelves: zone.shelves ?? 0, gaps: zone.shelfGapsMm }, top, bottom)}
+        </g>,
+      );
+    } else if (zone.kind === 'rod' && (inside || !c.doors)) {
+      const rodY = top + (bottom - top) * 0.14;
+      out.push(
+        <g key={`rz-${zone.id}`}>
+          <line x1={w * 0.08} y1={rodY} x2={w * 0.92} y2={rodY} strokeWidth={t} />
+          {hangersAt(w, rodY, (bottom - top) * 0.5, t, zone.id)}
+        </g>,
+      );
+    }
+
+    // קו הפרדה בין אזורים
+    if (top > 0 && (inside || !c.doors)) {
+      out.push(
+        <line key={`sep-${zone.id}`} x1={0} y1={top} x2={w} y2={top} strokeWidth={t} />,
+      );
+    }
+  }
+
+  // החזית מכסה את כל מה שאינו מגירה חיצונית
+  if (!inside && c.doors > 0) {
+    const covered = bands.filter(
+      (b) => !(b.zone.kind === 'drawers' && b.zone.drawerStyle !== 'inner'),
+    );
+    if (covered.length) {
+      const top = Math.min(...covered.map((b) => b.top));
+      const bottom = Math.max(...covered.map((b) => b.bottom));
+      out.push(<g key="front">{doorPanels(c, top, bottom, c.doors)}</g>);
+      out.push(<g key="mech">{openingMark(c, top, bottom)}</g>);
+    }
+  }
+
+  return out;
+}
+
+/**
+ * פינה מתה: החלק שנחסם על ידי הארון שעל הקיר הסמוך מסומן
+ * בקווקוו, והחזית יושבת רק על החלק הנגיש.
+ */
+function blindCorner(c: Ctx) {
+  const { w, h, t } = c;
+  const blind = Math.min(Math.max(c.blindMm, w * 0.1), w * 0.7);
+  const atStart = c.glyph === 'blindStart';
+  const blindX = atStart ? 0 : w - blind;
+  const openX = atStart ? blind : 0;
+  const openW = w - blind;
+
+  return [
+    <rect
+      key="blind"
+      x={blindX}
+      y={0}
+      width={blind}
+      height={h}
+      strokeWidth={t}
+      strokeDasharray={`${t * 3} ${t * 2}`}
+      fill="currentColor"
+      fillOpacity={0.08}
+    />,
+    <line key="split" x1={atStart ? blind : openW} y1={0} x2={atStart ? blind : openW} y2={h}
+      strokeWidth={t} />,
+    ...(c.inside
+      ? shelfLines(c, 0, h)
+      : doorPanelsIn(c, openX, openW, 0, h, Math.max(c.doors, 1))),
+  ];
+}
+
+/** ארגז פינתי במפגש קירות — פינה קטומה וחזית באלכסון. */
+function lShapeCorner(c: Ctx) {
+  const { w, h, t } = c;
+  const cut = Math.min(w * 0.28, h * 0.28);
+  return [
+    <path key="cut" d={`M 0 ${cut} L ${cut} 0`} strokeWidth={t} />,
+    <line key="v" x1={cut} y1={0} x2={cut} y2={h} strokeWidth={t} strokeDasharray={`${t * 3} ${t * 2}`} />,
+    ...(c.inside
+      ? shelfLines(c, cut, h)
+      : doorPanelsIn(c, cut, w - cut, 0, h, Math.max(c.doors, 1))),
+  ];
+}
+
+/** סימון מנגנון הפתיחה על החזית. */
+function openingMark(c: Ctx, top: number, bottom: number) {
+  const { w, t } = c;
+  if (c.opening === 'lift') {
+    const mid = (top + bottom) / 2;
+    return [
+      <path key="lift" d={`M ${w * 0.36} ${mid + (bottom - top) * 0.1} A ${w * 0.16} ${(bottom - top) * 0.2} 0 0 1 ${w * 0.64} ${mid + (bottom - top) * 0.1}`}
+        strokeWidth={t} />,
+      <path key="arrow" d={`M ${w * 0.58} ${mid} L ${w * 0.64} ${mid + (bottom - top) * 0.1} L ${w * 0.52} ${mid + (bottom - top) * 0.14}`}
+        strokeWidth={t} />,
+    ];
+  }
+  if (c.opening === 'sliding') {
+    return [
+      <line key="track" x1={0} y1={bottom - t * 2} x2={w} y2={bottom - t * 2} strokeWidth={t} />,
+    ];
+  }
+  return [];
+}
+
+/** דלתות בתוך תת-רוחב של הארגז, לצורך פינות. */
+function doorPanelsIn(
+  c: Ctx,
+  x: number,
+  width: number,
+  top: number,
+  bottom: number,
+  n: number,
+) {
+  const sub: Ctx = { ...c, w: width };
+  return [
+    <g key="doors" transform={`translate(${x} 0)`}>
+      {doorPanels(sub, top, bottom, n)}
+    </g>,
+  ];
+}
+
+/** קולבים מתחת למוט, בגובה נתון. */
+function hangersAt(w: number, rodY: number, drop: number, t: number, key: string) {
+  return [0.28, 0.5, 0.72].map((f, i) => (
+    <path
+      key={`hg${key}${i}`}
+      d={`M ${w * f} ${rodY} l 0 ${drop * 0.2} m ${-w * 0.09} ${drop * 0.4} L ${w * f} ${rodY + drop * 0.2} l ${w * 0.09} ${drop * 0.4} Z`}
+      strokeWidth={t}
+    />
+  ));
+}
 
 /** דלתות: קווי הפרדה אנכיים וידיות בצד הפתיחה. */
 function doorPanels(c: Ctx, top: number, bottom: number, n: number, key = '') {

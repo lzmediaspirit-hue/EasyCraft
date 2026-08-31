@@ -56,6 +56,12 @@ export interface Wall extends Entity {
   lengthMm: number;
   heightMm: number;
   features: WallFeature[];
+  /**
+   * הפנייה בתחילת הקיר ביחס לקיר הקודם, במעלות.
+   * 90 היא פינה ישרה; ערך אחר מתאר חדר שאינו מלבן.
+   * לקיר הראשון אין משמעות.
+   */
+  turnDeg?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -112,10 +118,54 @@ export interface PlacedUnit extends Entity {
    * אורך המערך הוא מספר המדפים ועוד אחד. ריק = מרווחים שווים.
    */
   shelfGapsMm?: number[];
+  /**
+   * חלוקת הפנים לאזורים. כשהיא ריקה הפנים נגזר מהשדות הפשוטים
+   * (מדפים, מגירות), וכך ארגזים ישנים ממשיכים לעבוד כרגיל.
+   */
+  zones?: Zone[];
+  /** מנגנון פתיחת החזית */
+  opening?: OpeningMech;
+  /** סוג פינה, כשהארגז יושב במפגש קירות */
+  corner?: CornerKind;
+  /** רוחב החלק החסום בפינה מתה */
+  blindMm?: number;
+  /** עובי הלוח — רלוונטי לדופן בודדת שנקנית בעובי משלה */
+  panelThicknessMm?: number;
 }
 
 /** מיקום פס לד בארגז. */
 export type LedSpot = 'start' | 'end' | 'top' | 'bottom' | 'shelf';
+
+/** מנגנון פתיחת החזית. */
+export type OpeningMech = 'hinge' | 'lift' | 'sliding';
+
+/**
+ * סוג פינה.
+ * blindStart / blindEnd — פינה מתה: צד אחד של הארגז נחסם על ידי
+ * הארון שעל הקיר הסמוך, ורק החלק הנותר נגיש.
+ * lShape — ארגז פינתי שיושב במפגש שני הקירות.
+ */
+export type CornerKind = 'blindStart' | 'blindEnd' | 'lShape';
+
+/**
+ * אזור בתוך הארון, מלמטה למעלה.
+ * חלוקה לאזורים היא מה שמאפשר ארון אחד שמכיל גם מגירות, גם מדפים
+ * וגם מוט תלייה — כל אזור עם התוכן והגובה שלו.
+ */
+export interface Zone {
+  id: string;
+  kind: ZoneKind;
+  /** גובה האזור במ"מ */
+  heightMm: number;
+  shelves?: number;
+  /** מרווחים בין המדפים באזור, מלמטה למעלה */
+  shelfGapsMm?: number[];
+  drawers?: number;
+  drawerCols?: number;
+  drawerStyle?: DrawerStyle;
+}
+
+export type ZoneKind = 'shelves' | 'drawers' | 'rod' | 'empty';
 
 /** מגירה חיצונית נראית בחזית; פנימית מסתתרת מאחורי דלת. */
 export type DrawerStyle = 'outer' | 'inner';
@@ -133,7 +183,7 @@ export interface ExposedSides {
 /* ------------------------------------------------------------------ */
 
 /** קבוצה בספרייה — הכרטיסייה שבה המוצר מופיע. */
-export type CatalogGroup = 'base' | 'upper' | 'tall' | 'storage';
+export type CatalogGroup = 'base' | 'upper' | 'tall' | 'storage' | 'panel';
 
 export interface CatalogItem extends Entity {
   /** באילו חדרים המוצר רלוונטי */
@@ -146,6 +196,11 @@ export interface CatalogItem extends Entity {
   drawers?: number;
   drawerCols?: number;
   shelves?: number;
+  zones?: Zone[];
+  opening?: OpeningMech;
+  corner?: CornerKind;
+  blindMm?: number;
+  panelThicknessMm?: number;
   level: UnitLevel;
   defaultWidthMm: number;
   /** רוחבי תקן נפוצים למוצר הזה */
@@ -227,5 +282,27 @@ export interface Settings {
   carcassThicknessMm: number;
   /** אחוז ניצולת פלטה */
   yieldPct: number;
+  /**
+   * שקע הגב בתוך הגוף. הגב יושב בחריץ ולכן קטן מהארון בעובי הצדדים,
+   * ובחזרה גדל בעומק החריץ משני הצדדים.
+   */
+  backGrooveMm: number;
+  /** מרווח סביב חזית — דלת קטנה מהפתח בכל צד */
+  frontGapMm: number;
+  /** מחירי אביזרים, ליחידה */
+  accessories: AccessoryPrices;
   updatedAt: number;
+}
+
+/** מחירי אביזרים במפעל ולצרכן. */
+export interface AccessoryPrices {
+  /** למגירה */
+  drawerFactory: number;
+  drawerConsumer: number;
+  /** למטר רץ של פס לד */
+  ledFactory: number;
+  ledConsumer: number;
+  /** למנגנון קלאפה */
+  liftFactory: number;
+  liftConsumer: number;
 }

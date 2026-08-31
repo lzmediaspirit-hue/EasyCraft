@@ -1,13 +1,14 @@
+import { useState } from 'react';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
-import { EqualizeIcon } from '../../ui/icons';
+import { EqualizeIcon, LockIcon, UnlockIcon } from '../../ui/icons';
 
 /**
  * טבלת המרווחים בין המדפים.
  *
- * המרווחים תמיד מסתכמים לגובה הארגז. כששדה אחד משתנה, ההפרש מתחלק
- * שווה בשווה בין שאר המרווחים — כך שאי אפשר להגיע למצב שהמדפים לא
- * מסתדרים בתוך הארון.
+ * המרווחים תמיד מסתכמים לגובה האזור, אז שינוי באחד חייב לבוא על חשבון
+ * האחרים. נעילה על מרווח מוציאה אותו מהחלוקה הזו — כך אפשר לקבע מרווח
+ * שכבר נכון ולשנות רק את השאר.
  */
 export function ShelfGaps({
   shelves,
@@ -20,25 +21,44 @@ export function ShelfGaps({
   gaps?: number[];
   onChange: (gaps: number[] | undefined) => void;
 }) {
+  const slots = shelves + 1;
+  const [locked, setLocked] = useState<boolean[]>([]);
+
   if (shelves < 1) return null;
 
-  const slots = shelves + 1;
   const current = normalize(gaps, slots, heightMm);
+  const isLocked = (i: number) => locked[i] ?? false;
   const equal = current.every((g) => Math.abs(g - heightMm / slots) < 1);
 
-  function setGap(index: number, value: number) {
-    const clamped = Math.min(Math.max(value, 20), heightMm - 20 * (slots - 1));
-    const rest = heightMm - clamped;
-    const others = current.filter((_, i) => i !== index);
-    const othersTotal = others.reduce((a, b) => a + b, 0);
-
-    const next = current.map((g, i) => {
-      if (i === index) return clamped;
-      // שומרים על היחס בין שאר המרווחים ומחלקים ביניהם את מה שנשאר
-      const share = othersTotal > 0 ? g / othersTotal : 1 / others.length;
-      return Math.max(Math.round(rest * share), 20);
+  function toggleLock(i: number) {
+    setLocked((prev) => {
+      const next = [...prev];
+      next[i] = !(next[i] ?? false);
+      return next;
     });
-    onChange(next);
+  }
+
+  function setGap(index: number, value: number) {
+    // המרווחים הנעולים ומזה שנערך נשארים; ההפרש מתחלק בין הנותרים
+    const free = current.map((_, i) => i !== index && !isLocked(i));
+    const freeCount = free.filter(Boolean).length;
+    if (freeCount === 0) return;
+
+    const fixed = current.reduce((sum, g, i) => (free[i] ? sum : sum + (i === index ? 0 : g)), 0);
+    const maxForEdited = heightMm - fixed - 20 * freeCount;
+    const clamped = Math.min(Math.max(value, 20), Math.max(maxForEdited, 20));
+
+    const rest = heightMm - fixed - clamped;
+    const freeTotal = current.reduce((sum, g, i) => (free[i] ? sum + g : sum), 0);
+
+    onChange(
+      current.map((g, i) => {
+        if (i === index) return clamped;
+        if (!free[i]) return g;
+        const share = freeTotal > 0 ? g / freeTotal : 1 / freeCount;
+        return Math.max(Math.round(rest * share), 20);
+      }),
+    );
   }
 
   return (
@@ -46,7 +66,10 @@ export function ShelfGaps({
       <span className="mb-1.5 flex items-center gap-2">
         <span className="text-[11px] font-medium text-stone-500">מרווח בין מדפים</span>
         <button
-          onClick={() => onChange(undefined)}
+          onClick={() => {
+            setLocked([]);
+            onChange(undefined);
+          }}
           disabled={equal}
           aria-label="השוואת המרווחים"
           title="השוואת המרווחים"
@@ -58,10 +81,24 @@ export function ShelfGaps({
 
       <ul className="space-y-1">
         {current.map((gap, i) => (
-          <li key={i} className="flex items-center gap-2 rounded-lg bg-stone-100 px-3 py-1.5">
+          <li key={i} className="flex items-center gap-2 rounded-lg bg-stone-100 px-2 py-1.5">
+            <button
+              onClick={() => toggleLock(i)}
+              aria-label={isLocked(i) ? `שחרור מרווח ${i + 1}` : `נעילת מרווח ${i + 1}`}
+              aria-pressed={isLocked(i)}
+              className={`shrink-0 rounded-md p-1 transition-colors ${
+                isLocked(i)
+                  ? 'bg-oak-600 text-white'
+                  : 'text-stone-400 hover:bg-stone-200 hover:text-stone-700'
+              }`}
+            >
+              {isLocked(i) ? <LockIcon className="size-3.5" /> : <UnlockIcon className="size-3.5" />}
+            </button>
+
             <span className="min-w-0 flex-1 truncate text-[11px] text-stone-500">
               {i === 0 ? 'תחתית' : `מדף ${i}`} ← {i === shelves ? 'תקרה' : `מדף ${i + 1}`}
             </span>
+
             <MeasureInput
               value={gap}
               onChange={(mm) => setGap(i, mm)}

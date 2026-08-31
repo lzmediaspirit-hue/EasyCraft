@@ -1,17 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
-import { autoShelves } from '../../catalog/CabinetGlyph';
+import { isContainer } from '../../catalog/zones';
 import { MATERIAL } from '../../catalog/standards';
 import { boardsRepo, finishesRepo } from '../../materials/materialsRepo';
-import { ShelfGaps } from './ShelfGaps';
+import { ZonesEditor } from './ZonesEditor';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
-import type { ExposedSides, LedSpot, PlacedUnit } from '../../db/types';
+import type { ExposedSides, LedSpot, OpeningMech, PlacedUnit } from '../../db/types';
 
-const COUNTS = [0, 1, 2, 3, 4, 5, 6];
+const DOOR_COUNTS = [0, 1, 2, 3, 4, 5, 6];
 
 const SIDES: { key: keyof ExposedSides; label: string }[] = [
   { key: 'start', label: 'שמאל' },
@@ -28,6 +28,12 @@ const LED_SPOTS: { key: LedSpot; label: string }[] = [
   { key: 'shelf', label: 'מתחת למדף' },
 ];
 
+const OPENINGS: { key: OpeningMech; label: string }[] = [
+  { key: 'hinge', label: 'צירים' },
+  { key: 'lift', label: 'קלאפה' },
+  { key: 'sliding', label: 'הזזה' },
+];
+
 /** מידות תקן לכל ציר, לבחירה מהירה. */
 const WIDTHS = [150, 200, 300, 400, 450, 500, 600, 700, 800, 900, 1000, 1200];
 const HEIGHTS = [350, 450, 600, 700, 720, 900, 1000, 1200, 1600, 2000, 2050, 2200, 2320, 2400];
@@ -37,49 +43,57 @@ type Axis = 'w' | 'h' | 'd';
 
 /**
  * הלוח שנפתח כשארגז נבחר.
- * כאן נעשים השינויים המהירים תוך כדי פגישה עם לקוח, ולכן מידות התקן
- * של שלושת המימדים נגישות מאותו מקום.
+ *
+ * מה שמוצג כאן נגזר ממצב התצוגה: כשרואים חזיתות מוצגות הגדרות החזית —
+ * דלתות, מנגנון פתיחה, גוון ודפנות זרות. כשהחזיתות מוסתרות מוצג פנים
+ * הארון — אזורים, מדפים ומגירות. כך אין על המסך הגדרות שלא רואים.
  */
 export function UnitEditor({
   unit,
+  inside,
   onChange,
   onEdit,
   onRemove,
   onClose,
 }: {
   unit: PlacedUnit;
+  /** מצב התצוגה הנוכחי — חזיתות מוסתרות */
+  inside: boolean;
   onChange: (patch: Partial<PlacedUnit>) => void;
   onEdit: () => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
   const [axis, setAxis] = useState<Axis>('w');
+  const activeChip = useRef<HTMLButtonElement>(null);
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
-  const frontBoards = useLiveQuery(
-    async () => (await boardsRepo.list()).filter((b) => b.role === 'front'),
-    [],
-  );
   const finishes = useLiveQuery(async () => {
     const boards = (await boardsRepo.list()).filter((b) => b.role === 'front');
     const lists = await Promise.all(boards.map((b) => finishesRepo.listForBoard(b.id)));
     return lists.flat();
-  }, [frontBoards?.length]);
+  }, []);
 
   const caps = glyphDef(unit.glyph);
-  // אותה ברירת מחדל כמו בציור, כדי שהמספר בלוח יתאים למה שרואים על הקיר
-  const shelves = unit.shelves ?? autoShelves(unit.heightMm);
   const locked = unit.floorLocked ?? false;
   const exposed = unit.exposed ?? {};
   const led = unit.led ?? [];
-  const innerDrawers = unit.drawerStyle === 'inner';
+  const container = isContainer(unit.glyph);
 
   const options =
     axis === 'w'
-      ? (source?.widthOptionsMm?.length ? source.widthOptionsMm : WIDTHS)
+      ? source?.widthOptionsMm?.length
+        ? source.widthOptionsMm
+        : WIDTHS
       : axis === 'h'
         ? HEIGHTS
         : DEPTHS;
   const currentValue = axis === 'w' ? unit.widthMm : axis === 'h' ? unit.heightMm : unit.depthMm;
+
+  // המידה הפעילה נגללת לתצוגה, אחרת היא נתקעת מחוץ לשורה הנגללת
+  useEffect(() => {
+    activeChip.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [axis, currentValue]);
+
   const applyStandard = (mm: number) =>
     onChange(axis === 'w' ? { widthMm: mm } : axis === 'h' ? { heightMm: mm } : { depthMm: mm });
 
@@ -129,6 +143,7 @@ export function UnitEditor({
         {options.map((mm) => (
           <button
             key={mm}
+            ref={mm === currentValue ? activeChip : undefined}
             onClick={() => applyStandard(mm)}
             className={`num shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
               mm === currentValue
@@ -147,126 +162,126 @@ export function UnitEditor({
         <NumBox label="עומק" value={unit.depthMm} minMm={50} onChange={(mm) => onChange({ depthMm: mm })} />
       </div>
 
-      {caps.shelves && (
-        <>
-          <Row label="מדפים">
-            {COUNTS.map((n) => (
-              <Pill
-                key={n}
-                active={n === shelves}
-                onClick={() => onChange({ shelves: n, shelfGapsMm: undefined })}
-              >
-                {n}
-              </Pill>
-            ))}
-          </Row>
-          <ShelfGaps
-            shelves={shelves}
-            heightMm={unit.heightMm}
-            gaps={unit.shelfGapsMm}
-            onChange={(gaps) => onChange({ shelfGapsMm: gaps })}
+      {unit.panelThicknessMm !== undefined && (
+        <div className="mt-2">
+          <NumBox
+            label="עובי הלוח"
+            value={unit.panelThicknessMm}
+            inMm
+            onChange={(mm) => onChange({ panelThicknessMm: mm })}
           />
-        </>
+        </div>
       )}
 
-      {caps.drawers && (
+      {inside ? (
+        /* ---- פנים הארון ---- */
+        container ? (
+          <ZonesEditor unit={unit} onChange={onChange} />
+        ) : (
+          <p className="mt-4 text-xs leading-snug text-stone-500">
+            לארגז הזה אין פנים שאפשר לחלק — הוא מכשיר או לוח בודד.
+          </p>
+        )
+      ) : (
+        /* ---- החזית ---- */
         <>
-          <Row label="מגירות">
-            {COUNTS.map((n) => (
-              <Pill key={n} active={n === (unit.drawers ?? 0)} onClick={() => onChange({ drawers: n })}>
-                {n}
-              </Pill>
-            ))}
-          </Row>
-
-          {(unit.drawers ?? 0) > 0 && (
+          {caps.doors && (
             <>
-              <Row label="לרוחב">
-                {[1, 2, 3, 4].map((n) => (
-                  <Pill
-                    key={n}
-                    active={n === (unit.drawerCols ?? 1)}
-                    onClick={() => onChange({ drawerCols: n })}
-                  >
+              <Row label="דלתות" hint="0 = בלי חזית">
+                {DOOR_COUNTS.map((n) => (
+                  <Pill key={n} active={n === (unit.doors ?? 0)} onClick={() => onChange({ doors: n })}>
                     {n}
                   </Pill>
                 ))}
               </Row>
 
-              <div className="mt-2 flex gap-1.5">
-                <StyleCard
-                  active={!innerDrawers}
-                  onClick={() => onChange({ drawerStyle: 'outer' })}
-                  title="חזית בולטת"
-                  hint="המגירה נראית מבחוץ"
-                />
-                <StyleCard
-                  active={innerDrawers}
-                  onClick={() => onChange({ drawerStyle: 'inner' })}
-                  title="מגירה פנימית"
-                  hint="דלתות מכסות אותה"
-                />
-              </div>
+              {(unit.doors ?? 0) > 0 && (
+                <>
+                  <Row label="מנגנון פתיחה">
+                    {OPENINGS.map((o) => (
+                      <Pill
+                        key={o.key}
+                        active={(unit.opening ?? 'hinge') === o.key}
+                        onClick={() => onChange({ opening: o.key })}
+                      >
+                        {o.label}
+                      </Pill>
+                    ))}
+                  </Row>
+
+                  <button
+                    onClick={() => onChange({ glassDoors: !unit.glassDoors })}
+                    aria-pressed={!!unit.glassDoors}
+                    className={`mt-2 self-start rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                      unit.glassDoors
+                        ? 'bg-oak-600 text-white'
+                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                  >
+                    דלתות זכוכית
+                  </button>
+                </>
+              )}
             </>
           )}
+
+          {unit.corner && (
+            <Row label="עומק הפינה המתה">
+              {[200, 250, 300, 350, 400].map((mm) => (
+                <Pill
+                  key={mm}
+                  active={mm === (unit.blindMm ?? 300)}
+                  onClick={() => onChange({ blindMm: mm })}
+                >
+                  {cm(mm)}
+                </Pill>
+              ))}
+            </Row>
+          )}
+
+          <Row label="גוון החזית">
+            <Pill active={!unit.finishId} onClick={() => onChange({ finishId: undefined })}>
+              ללא
+            </Pill>
+            {(finishes ?? []).map((f) => (
+              <button
+                key={f.id}
+                onClick={() => onChange({ finishId: f.id })}
+                title={f.code ? `${f.name} · ${f.code}` : f.name}
+                className={`flex items-center gap-1.5 rounded-lg py-1 pe-2.5 ps-1 text-sm font-medium transition-colors ${
+                  unit.finishId === f.id
+                    ? 'bg-oak-600 text-white'
+                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                }`}
+              >
+                <span
+                  className="size-5 shrink-0 rounded border border-black/10"
+                  style={{ background: f.hex }}
+                />
+                <span className="max-w-20 truncate">{f.name}</span>
+              </button>
+            ))}
+          </Row>
+
+          {(finishes?.length ?? 0) === 0 && (
+            <p className="mt-1 text-[10px] text-stone-400">
+              אין עדיין גוונים. מגדירים אותם בהגדרות, בקטלוג הגוונים של לוח החזית.
+            </p>
+          )}
+
+          <Row label="דפנות זרות" hint={`עמוקות ב-${MATERIAL.exposedExtraMm} מ״מ מהארגז`}>
+            {SIDES.map((s) => (
+              <Pill key={s.key} active={!!exposed[s.key]} onClick={() => toggleSide(s.key)}>
+                {s.label}
+              </Pill>
+            ))}
+          </Row>
         </>
-      )}
-
-      {/* גוון החזית מקטלוג הגוונים */}
-      <Row label="גוון החזית">
-        <Pill active={!unit.finishId} onClick={() => onChange({ finishId: undefined })}>
-          ללא
-        </Pill>
-        {(finishes ?? []).map((f) => (
-          <button
-            key={f.id}
-            onClick={() => onChange({ finishId: f.id })}
-            title={f.code ? `${f.name} · ${f.code}` : f.name}
-            className={`flex items-center gap-1.5 rounded-lg py-1 pe-2.5 ps-1 text-sm font-medium transition-colors ${
-              unit.finishId === f.id
-                ? 'bg-oak-600 text-white'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
-          >
-            <span
-              className="size-5 shrink-0 rounded border border-black/10"
-              style={{ background: f.hex }}
-            />
-            <span className="max-w-20 truncate">{f.name}</span>
-          </button>
-        ))}
-      </Row>
-
-      {(finishes?.length ?? 0) === 0 && (
-        <p className="mt-1 text-[10px] text-stone-400">
-          אין עדיין גוונים. מגדירים אותם בהגדרות, בקטלוג הגוונים של לוח החזית.
-        </p>
-      )}
-
-      {/* גם ארגז מגירות פנימיות מקבל דלת, ולכן אפשר לעשות אותה זכוכית */}
-      {(caps.doors || innerDrawers) && (
-        <button
-          onClick={() => onChange({ glassDoors: !unit.glassDoors })}
-          aria-pressed={!!unit.glassDoors}
-          className={`mt-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-            unit.glassDoors ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-          }`}
-        >
-          דלתות זכוכית
-        </button>
       )}
 
       <Row label="פס לד">
         {LED_SPOTS.map((s) => (
           <Pill key={s.key} active={led.includes(s.key)} onClick={() => toggleLed(s.key)}>
-            {s.label}
-          </Pill>
-        ))}
-      </Row>
-
-      <Row label="דפנות זרות" hint={`עמוקות ב-${MATERIAL.exposedExtraMm} מ״מ מהארגז`}>
-        {SIDES.map((s) => (
-          <Pill key={s.key} active={!!exposed[s.key]} onClick={() => toggleSide(s.key)}>
             {s.label}
           </Pill>
         ))}
@@ -307,11 +322,7 @@ export function UnitEditor({
               onChange={(mm) => onChange({ socleMm: mm || undefined, yMm: mm })}
             />
           ) : (
-            <NumBox
-              label="גובה מהרצפה"
-              value={unit.yMm}
-              onChange={(mm) => onChange({ yMm: mm })}
-            />
+            <NumBox label="גובה מהרצפה" value={unit.yMm} onChange={(mm) => onChange({ yMm: mm })} />
           )}
         </div>
       </div>
@@ -386,50 +397,30 @@ function Pill({
   );
 }
 
-function StyleCard({
-  active,
-  onClick,
-  title,
-  hint,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  hint: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 rounded-xl px-3 py-2 text-start transition-colors ${
-        active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-      }`}
-    >
-      <span className="block text-sm font-medium">{title}</span>
-      <span className={`block text-[11px] ${active ? 'text-white/70' : 'text-stone-400'}`}>
-        {hint}
-      </span>
-    </button>
-  );
-}
-
 function NumBox({
   label,
   value,
   minMm,
+  inMm,
   onChange,
 }: {
   label: string;
   value: number;
   minMm?: number;
+  inMm?: boolean;
   onChange: (mm: number) => void;
 }) {
   return (
     <label className="block rounded-xl bg-stone-100 px-3 py-2">
-      <span className="block text-[11px] text-stone-500">{label}</span>
+      <span className="block text-[11px] text-stone-500">
+        {label}
+        {inMm && <span className="text-stone-400"> מ״מ</span>}
+      </span>
       <MeasureInput
         value={value}
         onChange={onChange}
         minMm={minMm}
+        inMm={inMm}
         ariaLabel={label}
         className="num w-full bg-transparent text-base font-medium text-stone-900 focus:outline-none"
       />

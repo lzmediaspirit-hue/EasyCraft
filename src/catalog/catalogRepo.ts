@@ -33,6 +33,8 @@ function toCatalogItem(s: SeedItem, now: number, order: number): CatalogItem {
     glyph: s.glyph,
     doors: s.doors,
     drawers: s.drawers,
+    drawerCols: s.drawerCols,
+    shelves: s.shelves,
     level: s.level,
     defaultWidthMm: s.w,
     widthOptionsMm: s.widths,
@@ -41,6 +43,9 @@ function toCatalogItem(s: SeedItem, now: number, order: number): CatalogItem {
     defaultYMm: s.y,
     socleMm: s.socle,
     counterMm: s.counter,
+    corner: s.corner,
+    blindMm: s.blind,
+    panelThicknessMm: s.panelThickness,
     common: s.common,
     isBuiltin: true,
     sortOrder: order,
@@ -58,6 +63,12 @@ export const catalogRepo = {
     return relevant.sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
+  /** כל הפריטים, ממוינים לפי הסדר בספרייה. */
+  async all(): Promise<CatalogItem[]> {
+    const rows = await db.catalog.toArray();
+    return rows.sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+
   async get(id: string): Promise<CatalogItem | undefined> {
     return db.catalog.get(id);
   },
@@ -72,6 +83,11 @@ export const catalogRepo = {
     drawers?: number;
     drawerCols?: number;
     shelves?: number;
+    zones?: CatalogItem['zones'];
+    opening?: CatalogItem['opening'];
+    corner?: CatalogItem['corner'];
+    blindMm?: number;
+    panelThicknessMm?: number;
     common?: boolean;
     level: CatalogItem['level'];
     defaultWidthMm: number;

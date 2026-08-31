@@ -9,6 +9,16 @@ export const DEFAULT_SETTINGS: Settings = {
   kerfMm: 4,
   carcassThicknessMm: 18,
   yieldPct: 85,
+  backGrooveMm: 8,
+  frontGapMm: 3,
+  accessories: {
+    drawerFactory: 0,
+    drawerConsumer: 0,
+    ledFactory: 0,
+    ledConsumer: 0,
+    liftFactory: 0,
+    liftConsumer: 0,
+  },
   updatedAt: 0,
 };
 
@@ -62,7 +72,15 @@ async function runSeed(): Promise<void> {
 
 export const settingsRepo = {
   async get(): Promise<Settings> {
-    return (await db.settings.get('app')) ?? DEFAULT_SETTINGS;
+    const stored = await db.settings.get('app');
+    // מיזוג עם ברירות המחדל, כדי שהגדרות שנוספו בגרסה חדשה לא יחזרו ריקות
+    return stored
+      ? {
+          ...DEFAULT_SETTINGS,
+          ...stored,
+          accessories: { ...DEFAULT_SETTINGS.accessories, ...stored.accessories },
+        }
+      : DEFAULT_SETTINGS;
   },
   async save(patch: Partial<Omit<Settings, 'id'>>): Promise<void> {
     const current = await settingsRepo.get();

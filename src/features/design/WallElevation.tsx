@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
+import { unitZones, zoneBands } from '../../catalog/zones';
 import { featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
@@ -24,6 +25,10 @@ type Props = {
   finishHex: Record<string, string>;
   /** מצב מדידה פעיל, והציר שנמדד */
   measure?: MeasureAxis | null;
+  /** רוחב אזורי הפינה בשני קצות הקיר, שנתפסים בידי הקיר השכן */
+  corners?: { startMm: number; endMm: number };
+  /** גרירת מדף בתוך הארון, במצב תצוגת פנים */
+  onMoveShelf?: (unitId: string, zoneId: string, gapsMm: number[]) => void;
 };
 
 /**
@@ -40,8 +45,11 @@ export function WallElevation({
   inside,
   finishHex,
   measure,
+  corners,
+  onMoveShelf,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const shelfDrag = useRef<{ unitId: string; zoneId: string; index: number } | null>(null);
   const drag = useRef<{
     id: string;
     startX: number;
@@ -118,6 +126,23 @@ export function WallElevation({
         stroke="#d6d3d1"
         strokeWidth={stroke}
       />
+
+      {/* אזורי הפינה — שם הארונות של הקיר השכן תופסים מקום */}
+      {corners && (
+        <g pointerEvents="none">
+          {corners.startMm > 0 && (
+            <CornerBand x={0} width={corners.startMm} height={wall.heightMm} stroke={stroke} />
+          )}
+          {corners.endMm > 0 && (
+            <CornerBand
+              x={wall.lengthMm - corners.endMm}
+              width={corners.endMm}
+              height={wall.heightMm}
+              stroke={stroke}
+            />
+          )}
+        </g>
+      )}
 
       {/* סימונים על הקיר — מצוירים מתחת לארגזים */}
       {wall.features.map((f) => {
@@ -214,6 +239,10 @@ export function WallElevation({
                 drawerStyle={u.drawerStyle}
                 glassDoors={u.glassDoors}
                 shelfGapsMm={u.shelfGapsMm}
+                zones={u.zones}
+                opening={u.opening}
+                corner={u.corner}
+                blindMm={u.blindMm}
                 stroke={selected ? stroke * 1.7 : stroke}
                 inside={inside}
               />
@@ -259,6 +288,20 @@ export function WallElevation({
         );
       })}
 
+      {/* מדפים נגררים — רק כשרואים את פנים הארון ורק בארגז הנבחר */}
+      {inside && onMoveShelf && selectedId
+        ? shelfHandles({
+            u: units.find((u) => u.id === selectedId),
+            wallHeight: wall.heightMm,
+            padTop,
+            vbW,
+            stroke,
+            svgRef,
+            dragRef: shelfDrag,
+            onMoveShelf,
+          })
+        : null}
+
       {/* מדידה של הארגז שנבחר */}
       {measure && selectedId
         ? measureOverlay(
@@ -296,6 +339,139 @@ export function WallElevation({
 }
 
 /* ------------------------------------------------------------------ */
+
+/**
+ * ידיות גרירה למדפים.
+ * במצב תצוגת פנים כל מדף בארגז הנבחר הופך לפס שאפשר לגרור, והמרווחים
+ * באזור מחושבים מחדש מהמיקומים — כך שגובה המדף נקבע ישירות על הציור.
+ */
+function shelfHandles({
+  u,
+  wallHeight,
+  padTop,
+  vbW,
+  stroke,
+  svgRef,
+  dragRef,
+  onMoveShelf,
+}: {
+  u: PlacedUnit | undefined;
+  wallHeight: number;
+  padTop: number;
+  vbW: number;
+  stroke: number;
+  svgRef: React.RefObject<SVGSVGElement | null>;
+  dragRef: React.RefObject<{ unitId: string; zoneId: string; index: number } | null>;
+  onMoveShelf: (unitId: string, zoneId: string, gapsMm: number[]) => void;
+}) {
+  if (!u) return null;
+  const flip = (yFromFloor: number) => wallHeight - yFromFloor;
+  const handles: React.ReactNode[] = [];
+
+  for (const { zone, top, bottom } of zoneBands(unitZones(u), u.heightMm)) {
+    if (zone.kind !== 'shelves' || !(zone.shelves ?? 0)) continue;
+    const zoneH = bottom - top;
+    // מיקומי המדפים ביחס לתחתית האזור, מלמטה למעלה
+    const ys = shelfYs({ shelves: zone.shelves ?? 0, gaps: zone.shelfGapsMm }, top, bottom);
+    const positions = ys.map((y) => bottom - y).sort((a, b) => a - b);
+
+    positions.forEach((posFromBottom, index) => {
+      // המרה חזרה לגובה על הקיר: תחתית האזור נמדדת מתחתית הארגז
+      const zoneBottomFromUnitBottom = u.heightMm - bottom;
+      const yOnWall = u.yMm + zoneBottomFromUnitBottom + posFromBottom;
+
+      const move = (clientY: number) => {
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        // מסך → קואורדינטות הציור → גובה מהרצפה → גובה בתוך האזור
+        const scale = vbW / rect.width;
+        const drawY = (clientY - rect.top) * scale - padTop;
+        const fromFloor = wallHeight - drawY;
+        const raw = fromFloor - u.yMm - zoneBottomFromUnitBottom;
+        const lo = (positions[index - 1] ?? 0) + 20;
+        const hi = (positions[index + 1] ?? zoneH) - 20;
+        const clamped = Math.round(Math.min(Math.max(raw, lo), hi) / 10) * 10;
+
+        const next = [...positions];
+        next[index] = clamped;
+        onMoveShelf(u.id, zone.id, gapsFromPositions(next, zoneH));
+      };
+
+      handles.push(
+        <rect
+          key={`sh-${zone.id}-${index}`}
+          x={u.xMm}
+          y={flip(yOnWall) - stroke * 5}
+          width={u.widthMm}
+          height={stroke * 10}
+          fill="#0f766e"
+          fillOpacity={0.16}
+          stroke="#0f766e"
+          strokeWidth={stroke * 0.8}
+          className="cursor-ns-resize"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            (e.currentTarget as Element).setPointerCapture(e.pointerId);
+            dragRef.current = { unitId: u.id, zoneId: zone.id, index };
+          }}
+          onPointerMove={(e) => {
+            if (dragRef.current?.zoneId !== zone.id || dragRef.current.index !== index) return;
+            e.stopPropagation();
+            move(e.clientY);
+          }}
+          onPointerUp={(e) => {
+            (e.currentTarget as Element).releasePointerCapture(e.pointerId);
+            dragRef.current = null;
+          }}
+          onPointerCancel={() => {
+            dragRef.current = null;
+          }}
+        />,
+      );
+    });
+  }
+
+  return <g>{handles}</g>;
+}
+
+/** ממיר מיקומי מדפים למרווחים בין מדפים. */
+function gapsFromPositions(positions: number[], zoneH: number): number[] {
+  const gaps: number[] = [];
+  let prev = 0;
+  for (const p of positions) {
+    gaps.push(Math.max(Math.round(p - prev), 20));
+    prev = p;
+  }
+  gaps.push(Math.max(Math.round(zoneH - prev), 20));
+  return gaps;
+}
+
+/** סימון אזור פינה — רצועה מקווקוות שבה יושבים ארונות הקיר השכן. */
+function CornerBand({
+  x,
+  width,
+  height,
+  stroke,
+}: {
+  x: number;
+  width: number;
+  height: number;
+  stroke: number;
+}) {
+  return (
+    <rect
+      x={x}
+      y={0}
+      width={width}
+      height={height}
+      fill="#a8a29e"
+      fillOpacity={0.14}
+      stroke="#a8a29e"
+      strokeWidth={stroke}
+      strokeDasharray={`${stroke * 4} ${stroke * 3}`}
+    />
+  );
+}
 
 /** פסי לד מסומנים בקו ענבר בצד שבו הם מותקנים. */
 function ledStrips(u: PlacedUnit, stroke: number) {
