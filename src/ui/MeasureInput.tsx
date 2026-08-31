@@ -13,6 +13,7 @@ export function MeasureInput({
   onChange,
   minMm = 0,
   maxMm,
+  inMm = false,
   className = '',
   ariaLabel,
 }: {
@@ -22,10 +23,14 @@ export function MeasureInput({
   onChange: (mm: number) => void;
   minMm?: number;
   maxMm?: number;
+  /** הצגה במ"מ במקום בסנטימטרים — לערכים קטנים כמו עובי כרסום */
+  inMm?: boolean;
   className?: string;
   ariaLabel?: string;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const show = (mm: number) => String(inMm ? mm : mmToCm(mm));
+  const parse = (v: number) => (inMm ? Math.round(v) : cmToMm(v));
 
   function clamp(mm: number): number {
     const lo = Math.max(mm, minMm);
@@ -34,11 +39,14 @@ export function MeasureInput({
 
   return (
     <input
-      value={draft ?? String(mmToCm(value))}
+      value={draft ?? show(value)}
       aria-label={ariaLabel}
       onFocus={(e) => {
-        setDraft(String(mmToCm(value)));
+        setDraft(show(value));
         const input = e.currentTarget;
+        // בחירה מיידית, ושוב בפריים הבא — בנייד המיקוד לפעמים מאפס
+        // את הבחירה, והקלדה מהירה הייתה מתווספת במקום להחליף
+        input.select();
         requestAnimationFrame(() => input.select());
       }}
       onChange={(e) => {
@@ -46,11 +54,11 @@ export function MeasureInput({
         setDraft(raw);
         const n = Number(raw);
         // שדה ריק או חצי מוקלד נשאר על המסך, אבל לא נשמר
-        if (raw.trim() !== '' && Number.isFinite(n)) onChange(cmToMm(n));
+        if (raw.trim() !== '' && Number.isFinite(n)) onChange(parse(n));
       }}
       onBlur={() => {
         const n = Number(draft);
-        onChange(clamp(draft?.trim() && Number.isFinite(n) ? cmToMm(n) : value));
+        onChange(clamp(draft?.trim() && Number.isFinite(n) ? parse(n) : value));
         setDraft(null);
       }}
       type="number"

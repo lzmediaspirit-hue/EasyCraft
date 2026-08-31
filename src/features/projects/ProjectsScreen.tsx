@@ -9,7 +9,8 @@ import { count } from '../../ui/units';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { BoxesIcon, ChevronIcon, PlusIcon } from '../../ui/icons';
 import type { Project } from '../../db/types';
-import type { ProjectBoards } from '../../costing/boards';
+import type { ProjectCosting } from '../../costing/boards';
+import { shekels } from '../../ui/units';
 
 /** רשימת הפרויקטים של לקוח אחד. */
 export function ProjectsScreen({ customerId }: { customerId: string }) {
@@ -18,7 +19,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
   const customer = useLiveQuery(() => db.customers.get(customerId), [customerId]);
   const projects = useLiveQuery(() => projectsRepo.listForCustomer(customerId), [customerId]);
   const summaries = useLiveQuery(
-    async (): Promise<Record<string, ProjectBoards>> =>
+    async (): Promise<Record<string, ProjectCosting>> =>
       projects ? projectsRepo.summaries(projects.map((p) => p.id)) : {},
     [projects],
   );
@@ -73,15 +74,16 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
   );
 }
 
-function ProjectRow({ project, boards }: { project: Project; boards?: ProjectBoards }) {
+function ProjectRow({ project, boards }: { project: Project; boards?: ProjectCosting }) {
   const room = roomDef(project.roomKind);
   const units = boards?.units ?? 0;
+  const price = boards?.consumerTotal ?? 0;
 
   return (
     <li>
       <button
         onClick={() => nav.push({ name: 'design', projectId: project.id })}
-        className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3.5 rounded-xl px-2 py-3.5 text-start transition-colors hover:bg-stone-100 active:bg-stone-100"
+        className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 py-3.5 text-start transition-colors hover:bg-stone-100 active:bg-stone-100"
       >
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-oak-100 text-oak-600">
           <BoxesIcon className="size-5" />
@@ -95,27 +97,28 @@ function ProjectRow({ project, boards }: { project: Project; boards?: ProjectBoa
           </span>
         </span>
 
-        <span className="shrink-0 text-end">
-          <span className="block text-sm font-semibold text-stone-700">
-            {boards && boards.totalSheets > 0 ? (
-              <>
-                <span className="num">{boards.totalSheets}</span>{' '}
-                <span className="font-normal text-stone-500">
-                  {boards.totalSheets === 1 ? 'פלטה' : 'פלטות'}
-                </span>
-              </>
-            ) : (
-              <span className="font-normal text-stone-300">—</span>
-            )}
-          </span>
-          <span className="block text-xs text-stone-400">
-            {units > 0 ? 'מחיר טרם הוגדר' : 'ריק'}
-          </span>
+        {/* שתי עמודות במרכז השורה, כדי שהמספרים לא יידחקו לפינה */}
+        <span className="flex shrink-0 items-center gap-3 rounded-xl bg-stone-100/70 px-3 py-1.5">
+          <Metric
+            value={boards && boards.totalSheets > 0 ? String(boards.totalSheets) : '—'}
+            label={boards?.totalSheets === 1 ? 'פלטה' : 'פלטות'}
+          />
+          <span className="h-7 w-px bg-stone-200" />
+          <Metric value={price > 0 ? shekels(price) : '—'} label="מחיר" />
         </span>
 
         <ChevronIcon className="size-4 shrink-0 text-stone-300" />
       </button>
     </li>
+  );
+}
+
+function Metric({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="flex min-w-11 flex-col items-center">
+      <span className="num text-sm leading-tight font-semibold text-stone-800">{value}</span>
+      <span className="text-[10px] leading-tight text-stone-400">{label}</span>
+    </span>
   );
 }
 

@@ -1,5 +1,6 @@
 import { db } from '../../db/db';
-import { projectBoards, type ProjectBoards } from '../../costing/boards';
+import { projectCosting, type ProjectCosting } from '../../costing/boards';
+import { boardsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import type {
   CatalogItem,
   PlacedUnit,
@@ -68,13 +69,28 @@ export const projectsRepo = {
   },
 
   /** סיכום כל פרויקט — ארגזים, פלטות ומחיר — לתצוגה ברשימה. */
-  async summaries(projectIds: string[]): Promise<Record<string, ProjectBoards>> {
-    const out: Record<string, ProjectBoards> = {};
+  async summaries(projectIds: string[]): Promise<Record<string, ProjectCosting>> {
+    const [boards, settings] = await Promise.all([boardsRepo.list(), settingsRepo.get()]);
+    const out: Record<string, ProjectCosting> = {};
     for (const id of projectIds) {
-      const units = await db.units.where('projectId').equals(id).toArray();
-      out[id] = projectBoards(units);
+      const [units, overrides] = await Promise.all([
+        db.units.where('projectId').equals(id).toArray(),
+        projectPricesRepo.listForProject(id),
+      ]);
+      out[id] = projectCosting(units, boards, settings, overrides);
     }
     return out;
+  },
+
+  /** תמחור פרויקט יחיד, למסך ההדמיה. */
+  async costing(projectId: string): Promise<ProjectCosting> {
+    const [units, boards, settings, overrides] = await Promise.all([
+      db.units.where('projectId').equals(projectId).toArray(),
+      boardsRepo.list(),
+      settingsRepo.get(),
+      projectPricesRepo.listForProject(projectId),
+    ]);
+    return projectCosting(units, boards, settings, overrides);
   },
 };
 
@@ -91,7 +107,10 @@ export const wallsRepo = {
 
 export const unitsRepo = {
   async listForProject(projectId: string): Promise<PlacedUnit[]> {
-    return db.units.where('projectId').equals(projectId).toArray();
+    // מיון לפי סדר ההוספה. בלעדיו הסדר נגזר מהמזהה האקראי,
+    // והציור ורשימת הניסור היו משתנים בין טעינות.
+    const rows = await db.units.where('projectId').equals(projectId).toArray();
+    return rows.sort((a, b) => a.createdAt - b.createdAt);
   },
 
   /**

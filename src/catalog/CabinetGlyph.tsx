@@ -27,6 +27,13 @@ export type GlyphProps = {
   inside?: boolean;
   /** מגירות פנימיות מסתתרות מאחורי דלתות ולא נראות בחזית */
   drawerStyle?: 'outer' | 'inner';
+  /** דלתות זכוכית — מסגרת עם מילוי שקוף במקום חזית מלאה */
+  glassDoors?: boolean;
+  /**
+   * מרווחים בין המדפים מלמטה למעלה, כולל לתחתית ולתקרה.
+   * ריק = מרווחים שווים.
+   */
+  shelfGapsMm?: number[];
 };
 
 export function CabinetGlyph({
@@ -40,6 +47,8 @@ export function CabinetGlyph({
   stroke,
   inside = false,
   drawerStyle = 'outer',
+  glassDoors = false,
+  shelfGapsMm,
 }: GlyphProps) {
   // ארגזי נגרות הם מלבנים; עיגול קל בלבד, שלא ייראה כמו רהיט מצויר
   const r = Math.min(8, Math.min(w, h) * 0.015);
@@ -64,6 +73,8 @@ export function CabinetGlyph({
         t: stroke * 0.75,
         inside,
         innerDrawers: drawerStyle === 'inner',
+        glass: glassDoors,
+        gaps: shelfGapsMm,
       })}
     </g>
   );
@@ -87,6 +98,8 @@ type Ctx = {
   t: number;
   inside: boolean;
   innerDrawers: boolean;
+  glass: boolean;
+  gaps?: number[];
 };
 
 function details(c: Ctx) {
@@ -350,6 +363,33 @@ function doorPanels(c: Ctx, top: number, bottom: number, n: number, key = '') {
         strokeWidth={t} />,
     );
   }
+
+  // דלת זכוכית: מסגרת פנימית והבזק אור, במקום חזית אטומה
+  if (c.glass) {
+    const inX = panelW * 0.14;
+    const inY = zoneH * 0.08;
+    for (let i = 0; i < n; i++) {
+      const x = panelW * i;
+      out.push(
+        <rect
+          key={`${key}g${i}`}
+          x={x + inX}
+          y={top + inY}
+          width={panelW - inX * 2}
+          height={zoneH - inY * 2}
+          strokeWidth={t}
+        />,
+        <line
+          key={`${key}gs${i}`}
+          x1={x + panelW * 0.24}
+          y1={bottom - zoneH * 0.22}
+          x2={x + panelW * 0.62}
+          y2={top + zoneH * 0.22}
+          strokeWidth={t}
+        />,
+      );
+    }
+  }
   // דלת בודדת נפתחת מצד אחד; זוג נפתח מהמפגש שבאמצע;
   // יותר מזה נבנה כזוגות, וכל זוג מקבל ידיות בצד הפנימי שלו.
   for (let i = 0; i < n; i++) {
@@ -363,21 +403,44 @@ function doorPanels(c: Ctx, top: number, bottom: number, n: number, key = '') {
   return out;
 }
 
-/** מדפים פנימיים, מרווחים באופן אחיד. */
+/**
+ * מדפים פנימיים. כברירת מחדל במרווחים שווים, ואם הוגדרו מרווחים
+ * מפורשים — לפיהם, מלמטה כלפי מעלה.
+ */
 function shelfLines(c: Ctx, top: number, bottom: number, key = '') {
   const { w, t, shelves } = c;
   if (shelves < 1) return [];
-  const step = (bottom - top) / (shelves + 1);
-  return Array.from({ length: shelves }, (_, i) => (
-    <line
-      key={`${key}sh${i}`}
-      x1={w * 0.04}
-      y1={top + step * (i + 1)}
-      x2={w * 0.96}
-      y2={top + step * (i + 1)}
-      strokeWidth={t}
-    />
+  const ys = shelfYs(c, top, bottom);
+  return ys.map((y, i) => (
+    <line key={`${key}sh${i}`} x1={w * 0.04} y1={y} x2={w * 0.96} y2={y} strokeWidth={t} />
   ));
+}
+
+/** גובה כל מדף בציור, לפי המרווחים שהוגדרו או במרווח אחיד. */
+export function shelfYs(
+  c: { shelves: number; gaps?: number[] },
+  top: number,
+  bottom: number,
+): number[] {
+  const { shelves, gaps } = c;
+  if (shelves < 1) return [];
+  const zone = bottom - top;
+
+  if (gaps && gaps.length === shelves + 1) {
+    const total = gaps.reduce((a, b) => a + b, 0);
+    if (total > 0) {
+      const ys: number[] = [];
+      let fromBottom = 0;
+      for (let i = 0; i < shelves; i++) {
+        fromBottom += gaps[i];
+        ys.push(bottom - (fromBottom / total) * zone);
+      }
+      return ys;
+    }
+  }
+
+  const step = zone / (shelves + 1);
+  return Array.from({ length: shelves }, (_, i) => top + step * (i + 1));
 }
 
 /**

@@ -3,7 +3,8 @@ import { useSyncExternalStore } from 'react';
 export type Route =
   | { name: 'customers' }
   | { name: 'projects'; customerId: string }
-  | { name: 'design'; projectId: string };
+  | { name: 'design'; projectId: string }
+  | { name: 'settings' };
 
 /**
  * ניווט מבוסס מחסנית. כל מסך נדחף למחסנית וכפתור "חזור" שולף אותו,

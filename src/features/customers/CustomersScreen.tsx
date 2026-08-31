@@ -4,7 +4,14 @@ import { customersRepo } from './customersRepo';
 import { NewCustomerSheet } from './NewCustomerSheet';
 import { normalizePhone } from './phone';
 import type { Customer } from '../../db/types';
-import { ChevronIcon, PhoneIcon, PlusIcon, SearchIcon, UsersIcon } from '../../ui/icons';
+import {
+  ChevronIcon,
+  PhoneIcon,
+  PlusIcon,
+  SearchIcon,
+  SettingsIcon,
+  UsersIcon,
+} from '../../ui/icons';
 import { nav } from '../../nav/navigation';
 
 /** מעל כמה לקוחות מוצג שדה חיפוש. מתחת לזה הוא רק רעש. */
@@ -41,11 +48,18 @@ export function CustomersScreen() {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-stone-50/95 px-5 pt-6 pb-4 backdrop-blur">
-        <div className="flex items-baseline gap-2.5">
+        <div className="flex items-center gap-2.5">
           <h1 className="text-2xl font-bold text-stone-900">לקוחות</h1>
           {!!customers?.length && (
             <span className="num text-sm font-medium text-stone-400">{customers.length}</span>
           )}
+          <button
+            onClick={() => nav.push({ name: 'settings' })}
+            aria-label="הגדרות"
+            className="-me-2 ms-auto rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
+          >
+            <SettingsIcon />
+          </button>
         </div>
 
         {showSearch && (

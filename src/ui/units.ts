@@ -21,3 +21,8 @@ export function meters(mm: number): string {
 export function count(n: number, one: string, many: string): string {
   return n === 1 ? one : `${n} ${many}`;
 }
+
+/** סכום בשקלים, בלי אגורות מיותרות. */
+export function shekels(value: number): string {
+  return '₪' + Math.round(value).toLocaleString('he-IL');
+}

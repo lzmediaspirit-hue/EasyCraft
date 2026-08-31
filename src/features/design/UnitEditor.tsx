@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
+import { autoShelves } from '../../catalog/CabinetGlyph';
 import { MATERIAL } from '../../catalog/standards';
+import { boardsRepo, finishesRepo } from '../../materials/materialsRepo';
+import { ShelfGaps } from './ShelfGaps';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
-import type { ExposedSides, PlacedUnit } from '../../db/types';
+import type { ExposedSides, LedSpot, PlacedUnit } from '../../db/types';
 
 const COUNTS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -16,10 +20,25 @@ const SIDES: { key: keyof ExposedSides; label: string }[] = [
   { key: 'bottom', label: 'תחתון' },
 ];
 
+const LED_SPOTS: { key: LedSpot; label: string }[] = [
+  { key: 'start', label: 'שמאל' },
+  { key: 'end', label: 'ימין' },
+  { key: 'top', label: 'עליון' },
+  { key: 'bottom', label: 'תחתון' },
+  { key: 'shelf', label: 'מתחת למדף' },
+];
+
+/** מידות תקן לכל ציר, לבחירה מהירה. */
+const WIDTHS = [150, 200, 300, 400, 450, 500, 600, 700, 800, 900, 1000, 1200];
+const HEIGHTS = [350, 450, 600, 700, 720, 900, 1000, 1200, 1600, 2000, 2050, 2200, 2320, 2400];
+const DEPTHS = [250, 300, 320, 350, 400, 450, 500, 560, 580, 600, 650];
+
+type Axis = 'w' | 'h' | 'd';
+
 /**
- * הלוח שנפתח כשארגז נבחר — מחליף את כפתור ההוספה.
- * כאן נעשים השינויים המהירים תוך כדי פגישה עם לקוח:
- * מידות, מדפים ומגירות, ודפנות זרות.
+ * הלוח שנפתח כשארגז נבחר.
+ * כאן נעשים השינויים המהירים תוך כדי פגישה עם לקוח, ולכן מידות התקן
+ * של שלושת המימדים נגישות מאותו מקום.
  */
 export function UnitEditor({
   unit,
@@ -34,19 +53,46 @@ export function UnitEditor({
   onRemove: () => void;
   onClose: () => void;
 }) {
+  const [axis, setAxis] = useState<Axis>('w');
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
-  const widths = source?.widthOptionsMm ?? [];
+  const frontBoards = useLiveQuery(
+    async () => (await boardsRepo.list()).filter((b) => b.role === 'front'),
+    [],
+  );
+  const finishes = useLiveQuery(async () => {
+    const boards = (await boardsRepo.list()).filter((b) => b.role === 'front');
+    const lists = await Promise.all(boards.map((b) => finishesRepo.listForBoard(b.id)));
+    return lists.flat();
+  }, [frontBoards?.length]);
+
   const caps = glyphDef(unit.glyph);
+  // אותה ברירת מחדל כמו בציור, כדי שהמספר בלוח יתאים למה שרואים על הקיר
+  const shelves = unit.shelves ?? autoShelves(unit.heightMm);
   const locked = unit.floorLocked ?? false;
   const exposed = unit.exposed ?? {};
+  const led = unit.led ?? [];
   const innerDrawers = unit.drawerStyle === 'inner';
+
+  const options =
+    axis === 'w'
+      ? (source?.widthOptionsMm?.length ? source.widthOptionsMm : WIDTHS)
+      : axis === 'h'
+        ? HEIGHTS
+        : DEPTHS;
+  const currentValue = axis === 'w' ? unit.widthMm : axis === 'h' ? unit.heightMm : unit.depthMm;
+  const applyStandard = (mm: number) =>
+    onChange(axis === 'w' ? { widthMm: mm } : axis === 'h' ? { heightMm: mm } : { depthMm: mm });
 
   function toggleSide(key: keyof ExposedSides) {
     onChange({ exposed: { ...exposed, [key]: !exposed[key] } });
   }
 
+  function toggleLed(spot: LedSpot) {
+    onChange({ led: led.includes(spot) ? led.filter((s) => s !== spot) : [...led, spot] });
+  }
+
   return (
-    <div className="max-h-[62dvh] overflow-y-auto rounded-t-3xl border-t border-stone-200 bg-white px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(28,25,23,0.08)]">
+    <div className="flex min-h-0 flex-col overflow-y-auto rounded-t-3xl border-t border-stone-200 bg-white px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(28,25,23,0.08)]">
       <div className="flex items-center gap-1">
         <h2 className="min-w-0 flex-1 truncate font-semibold text-stone-900">{unit.name}</h2>
         <button
@@ -72,64 +118,62 @@ export function UnitEditor({
         </button>
       </div>
 
-      {widths.length > 1 && (
-        <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
-          {widths.map((w) => (
-            <button
-              key={w}
-              onClick={() => onChange({ widthMm: w })}
-              className={`num shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                w === unit.widthMm
-                  ? 'bg-oak-600 text-white'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              {cm(w)}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* בחירת ציר ואז מידת תקן — אותה שורת שבבים משרתת את שלושת המימדים */}
+      <div className="mt-3 flex gap-1.5">
+        <AxisTab active={axis === 'w'} onClick={() => setAxis('w')} label="רוחב" value={unit.widthMm} />
+        <AxisTab active={axis === 'h'} onClick={() => setAxis('h')} label="גובה" value={unit.heightMm} />
+        <AxisTab active={axis === 'd'} onClick={() => setAxis('d')} label="עומק" value={unit.depthMm} />
+      </div>
+
+      <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+        {options.map((mm) => (
+          <button
+            key={mm}
+            onClick={() => applyStandard(mm)}
+            className={`num shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              mm === currentValue
+                ? 'bg-oak-600 text-white'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            {cm(mm)}
+          </button>
+        ))}
+      </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <NumBox
-          label="רוחב"
-          value={unit.widthMm}
-          minMm={50}
-          onChange={(mm) => onChange({ widthMm: mm })}
-        />
-        <NumBox
-          label="גובה"
-          value={unit.heightMm}
-          minMm={50}
-          onChange={(mm) => onChange({ heightMm: mm })}
-        />
-        <NumBox
-          label="עומק"
-          value={unit.depthMm}
-          minMm={50}
-          onChange={(mm) => onChange({ depthMm: mm })}
-        />
+        <NumBox label="רוחב" value={unit.widthMm} minMm={50} onChange={(mm) => onChange({ widthMm: mm })} />
+        <NumBox label="גובה" value={unit.heightMm} minMm={50} onChange={(mm) => onChange({ heightMm: mm })} />
+        <NumBox label="עומק" value={unit.depthMm} minMm={50} onChange={(mm) => onChange({ depthMm: mm })} />
       </div>
 
       {caps.shelves && (
-        <Row label="מדפים">
-          {COUNTS.map((n) => (
-            <Pill key={n} active={n === (unit.shelves ?? 0)} onClick={() => onChange({ shelves: n })}>
-              {n}
-            </Pill>
-          ))}
-        </Row>
+        <>
+          <Row label="מדפים">
+            {COUNTS.map((n) => (
+              <Pill
+                key={n}
+                active={n === shelves}
+                onClick={() => onChange({ shelves: n, shelfGapsMm: undefined })}
+              >
+                {n}
+              </Pill>
+            ))}
+          </Row>
+          <ShelfGaps
+            shelves={shelves}
+            heightMm={unit.heightMm}
+            gaps={unit.shelfGapsMm}
+            onChange={(gaps) => onChange({ shelfGapsMm: gaps })}
+          />
+        </>
       )}
 
       {caps.drawers && (
         <>
           <Row label="מגירות">
             {COUNTS.map((n) => (
-              <Pill
-                key={n}
-                active={n === (unit.drawers ?? 0)}
-                onClick={() => onChange({ drawers: n })}
-              >
+              <Pill key={n} active={n === (unit.drawers ?? 0)} onClick={() => onChange({ drawers: n })}>
                 {n}
               </Pill>
             ))}
@@ -168,6 +212,58 @@ export function UnitEditor({
         </>
       )}
 
+      {/* גוון החזית מקטלוג הגוונים */}
+      <Row label="גוון החזית">
+        <Pill active={!unit.finishId} onClick={() => onChange({ finishId: undefined })}>
+          ללא
+        </Pill>
+        {(finishes ?? []).map((f) => (
+          <button
+            key={f.id}
+            onClick={() => onChange({ finishId: f.id })}
+            title={f.code ? `${f.name} · ${f.code}` : f.name}
+            className={`flex items-center gap-1.5 rounded-lg py-1 pe-2.5 ps-1 text-sm font-medium transition-colors ${
+              unit.finishId === f.id
+                ? 'bg-oak-600 text-white'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            <span
+              className="size-5 shrink-0 rounded border border-black/10"
+              style={{ background: f.hex }}
+            />
+            <span className="max-w-20 truncate">{f.name}</span>
+          </button>
+        ))}
+      </Row>
+
+      {(finishes?.length ?? 0) === 0 && (
+        <p className="mt-1 text-[10px] text-stone-400">
+          אין עדיין גוונים. מגדירים אותם בהגדרות, בקטלוג הגוונים של לוח החזית.
+        </p>
+      )}
+
+      {/* גם ארגז מגירות פנימיות מקבל דלת, ולכן אפשר לעשות אותה זכוכית */}
+      {(caps.doors || innerDrawers) && (
+        <button
+          onClick={() => onChange({ glassDoors: !unit.glassDoors })}
+          aria-pressed={!!unit.glassDoors}
+          className={`mt-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            unit.glassDoors ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+          }`}
+        >
+          דלתות זכוכית
+        </button>
+      )}
+
+      <Row label="פס לד">
+        {LED_SPOTS.map((s) => (
+          <Pill key={s.key} active={led.includes(s.key)} onClick={() => toggleLed(s.key)}>
+            {s.label}
+          </Pill>
+        ))}
+      </Row>
+
       <Row label="דפנות זרות" hint={`עמוקות ב-${MATERIAL.exposedExtraMm} מ״מ מהארגז`}>
         {SIDES.map((s) => (
           <Pill key={s.key} active={!!exposed[s.key]} onClick={() => toggleSide(s.key)}>
@@ -203,21 +299,51 @@ export function UnitEditor({
           הצמדה לרצפה
         </button>
 
-        {!locked && (
-          <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
+          {locked ? (
+            <NumBox
+              label="גובה רגליים"
+              value={unit.socleMm ?? 0}
+              onChange={(mm) => onChange({ socleMm: mm || undefined, yMm: mm })}
+            />
+          ) : (
             <NumBox
               label="גובה מהרצפה"
               value={unit.yMm}
               onChange={(mm) => onChange({ yMm: mm })}
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
+
+function AxisTab({
+  active,
+  onClick,
+  label,
+  value,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  value: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 rounded-xl px-2 py-1.5 transition-colors ${
+        active ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+      }`}
+    >
+      <span className="block text-[10px] leading-tight opacity-70">{label}</span>
+      <span className="num block text-sm leading-tight font-semibold">{cm(value)}</span>
+    </button>
+  );
+}
 
 function Row({
   label,
@@ -286,7 +412,6 @@ function StyleCard({
   );
 }
 
-/** תיבת מידה קומפקטית. */
 function NumBox({
   label,
   value,

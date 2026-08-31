@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { CabinetGlyph } from '../../catalog/CabinetGlyph';
+import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
 import { featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
@@ -10,6 +10,8 @@ const SNAP = 60;
 /** גרירה חופשית נוחתת על סנטימטרים שלמים, לא על מידות שבורות. */
 const STEP = 10;
 
+export type MeasureAxis = 'w' | 'h' | 'd';
+
 type Props = {
   wall: Wall;
   units: PlacedUnit[];
@@ -18,14 +20,27 @@ type Props = {
   onMove: (id: string, xMm: number, yMm: number) => void;
   /** הסתרת חזיתות — תצוגת פנים הארונות */
   inside: boolean;
+  /** גוון לכל ארגז, לפי מזהה הגוון */
+  finishHex: Record<string, string>;
+  /** מצב מדידה פעיל, והציר שנמדד */
+  measure?: MeasureAxis | null;
 };
 
 /**
- * הדמיית חזית של קיר אחד — ציור 2D פשוט של ארגזים.
+ * הדמיית חזית של קיר אחד.
  * גרירה מזיזה ארגז לרוחב, ואם הוא לא נעול לרצפה גם לגובה,
  * עם הצמדה לשכנים, לרצפה ולתקרה.
  */
-export function WallElevation({ wall, units, selectedId, onSelect, onMove, inside }: Props) {
+export function WallElevation({
+  wall,
+  units,
+  selectedId,
+  onSelect,
+  onMove,
+  inside,
+  finishHex,
+  measure,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{
     id: string;
@@ -42,12 +57,15 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
   const vbW = wall.lengthMm + padX * 2;
   const vbH = wall.heightMm + padTop + padBottom;
   const stroke = Math.max(wall.lengthMm / 420, 4);
+  const fontSize = Math.max(wall.lengthMm / 40, 70);
 
   /** גובה המסך של נקודה שנמדדת מהרצפה. */
   const flip = (yFromFloor: number) => wall.heightMm - yFromFloor;
 
   function beginDrag(e: React.PointerEvent, unit: PlacedUnit) {
     onSelect(unit.id);
+    // במצב מדידה ההקשה רק בוחרת ארגז, בלי להזיז אותו בטעות
+    if (measure) return;
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -90,7 +108,6 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
         if (e.target === e.currentTarget) onSelect(null);
       }}
     >
-      {/* הקיר עצמו */}
       <rect x={0} y={0} width={wall.lengthMm} height={wall.heightMm} fill="#faf9f7" />
       <rect
         x={0}
@@ -123,7 +140,6 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
         );
       })}
 
-      {/* רצפה */}
       <line
         x1={-padX * 0.6}
         y1={wall.heightMm}
@@ -134,7 +150,7 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
         strokeLinecap="round"
       />
 
-      {/* סוקלים ומשטחי עבודה — נגזרים מהארגז, לא נבחרים בנפרד */}
+      {/* רגליים ומשטחי עבודה — נגזרים מהארגז, לא נבחרים בנפרד */}
       {units.map((u) => (
         <g key={`trim-${u.id}`}>
           {!!u.socleMm && u.yMm >= u.socleMm && (
@@ -163,6 +179,12 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
       {/* הארגזים */}
       {units.map((u) => {
         const selected = u.id === selectedId;
+        const hex = u.finishId ? finishHex[u.finishId] : undefined;
+        // חזית כהה מחייבת קווים בהירים, אחרת האיור נבלע בגוון
+        const dark = hex ? isDark(hex) : false;
+        const lineColor = dark ? '#f5f5f4' : selected ? '#814c2e' : '#78716c';
+        const fill = hex ?? (selected ? '#f4e9d8' : '#ffffff');
+
         return (
           <g
             key={u.id}
@@ -171,15 +193,16 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
             onPointerMove={moveDrag}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
-            className="cursor-grab active:cursor-grabbing"
+            className={measure ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
           >
             <rect
               width={u.widthMm}
               height={u.heightMm}
-              fill={selected ? '#f4e9d8' : '#ffffff'}
+              fill={fill}
+              fillOpacity={inside ? 0.3 : 1}
               stroke="transparent"
             />
-            <g className={selected ? 'text-oak-700' : 'text-stone-500'}>
+            <g color={lineColor}>
               <CabinetGlyph
                 glyph={u.glyph}
                 w={u.widthMm}
@@ -189,10 +212,13 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
                 drawerCols={u.drawerCols}
                 shelves={u.shelves}
                 drawerStyle={u.drawerStyle}
+                glassDoors={u.glassDoors}
+                shelfGapsMm={u.shelfGapsMm}
                 stroke={selected ? stroke * 1.7 : stroke}
                 inside={inside}
               />
             </g>
+            {ledStrips(u, stroke)}
             {exposedPanels(u, stroke)}
             {selected && (
               <rect
@@ -215,7 +241,6 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
         const def = featureDef(f.kind);
         const w = Math.max(f.widthMm, 90);
         const h = Math.max(f.heightMm, 90);
-        // התווית נצמדת פנימה בקצוות, כדי שלא תיחתך מחוץ לציור
         const center = f.xMm + w / 2;
         const nearStart = center < wall.lengthMm * 0.18;
         const nearEnd = center > wall.lengthMm * 0.82;
@@ -233,6 +258,17 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
           </text>
         );
       })}
+
+      {/* מדידה של הארגז שנבחר */}
+      {measure && selectedId
+        ? measureOverlay(
+            units.find((u) => u.id === selectedId),
+            measure,
+            flip,
+            stroke,
+            fontSize,
+          )
+        : null}
 
       {/* קו מידה של הקיר */}
       <g stroke="#a8a29e" strokeWidth={stroke * 0.9}>
@@ -260,6 +296,36 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
 }
 
 /* ------------------------------------------------------------------ */
+
+/** פסי לד מסומנים בקו ענבר בצד שבו הם מותקנים. */
+function ledStrips(u: PlacedUnit, stroke: number) {
+  if (!u.led?.length) return null;
+  const wide = stroke * 2.2;
+  const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+
+  for (const spot of u.led) {
+    if (spot === 'start') lines.push({ x1: wide, y1: 0, x2: wide, y2: u.heightMm });
+    else if (spot === 'end')
+      lines.push({ x1: u.widthMm - wide, y1: 0, x2: u.widthMm - wide, y2: u.heightMm });
+    else if (spot === 'top') lines.push({ x1: 0, y1: wide, x2: u.widthMm, y2: wide });
+    else if (spot === 'bottom')
+      lines.push({ x1: 0, y1: u.heightMm - wide, x2: u.widthMm, y2: u.heightMm - wide });
+    else if (spot === 'shelf') {
+      const shelves = u.shelves ?? autoShelves(u.heightMm);
+      for (const y of shelfYs({ shelves, gaps: u.shelfGapsMm }, 0, u.heightMm)) {
+        lines.push({ x1: u.widthMm * 0.08, y1: y + wide, x2: u.widthMm * 0.92, y2: y + wide });
+      }
+    }
+  }
+
+  return (
+    <g pointerEvents="none" stroke="#f59e0b" strokeWidth={wide} strokeLinecap="round">
+      {lines.map((l, i) => (
+        <line key={i} {...l} />
+      ))}
+    </g>
+  );
+}
 
 /**
  * דפנות זרות מסומנות כרצועה מלאה בצד הגלוי.
@@ -294,6 +360,103 @@ function exposedPanels(u: PlacedUnit, stroke: number) {
   );
 }
 
+/** קו מידה על הארגז שנבחר, בציר שנבחר במצב מדידה. */
+function measureOverlay(
+  u: PlacedUnit | undefined,
+  axis: MeasureAxis,
+  flip: (y: number) => number,
+  stroke: number,
+  fontSize: number,
+) {
+  if (!u) return null;
+  const tick = stroke * 12;
+  const color = '#0f766e';
+  const label = (
+    x: number,
+    y: number,
+    text: string,
+    anchor: 'start' | 'middle' | 'end' = 'middle',
+  ) => (
+    <text
+      x={x}
+      y={y}
+      textAnchor={anchor}
+      fontSize={fontSize}
+      fill={color}
+      fontWeight="600"
+      direction="ltr"
+    >
+      {text}
+    </text>
+  );
+
+  if (axis === 'w') {
+    const y = flip(u.yMm) + tick * 1.4;
+    return (
+      <g pointerEvents="none">
+        <g stroke={color} strokeWidth={stroke * 1.2}>
+          <line x1={u.xMm} y1={y} x2={u.xMm + u.widthMm} y2={y} />
+          <line x1={u.xMm} y1={y - tick / 2} x2={u.xMm} y2={y + tick / 2} />
+          <line
+            x1={u.xMm + u.widthMm}
+            y1={y - tick / 2}
+            x2={u.xMm + u.widthMm}
+            y2={y + tick / 2}
+          />
+        </g>
+        {label(u.xMm + u.widthMm / 2, y + tick * 1.6, cm(u.widthMm))}
+      </g>
+    );
+  }
+
+  if (axis === 'h') {
+    const x = u.xMm + u.widthMm + tick * 1.2;
+    const top = flip(u.yMm + u.heightMm);
+    const bottom = flip(u.yMm);
+    return (
+      <g pointerEvents="none">
+        <g stroke={color} strokeWidth={stroke * 1.2}>
+          <line x1={x} y1={top} x2={x} y2={bottom} />
+          <line x1={x - tick / 2} y1={top} x2={x + tick / 2} y2={top} />
+          <line x1={x - tick / 2} y1={bottom} x2={x + tick / 2} y2={bottom} />
+        </g>
+        {label(x + tick * 0.4, (top + bottom) / 2 + fontSize * 0.35, cm(u.heightMm), 'start')}
+      </g>
+    );
+  }
+
+  // העומק אינו נראה בחזית, ולכן מוצג כתווית על הארגז
+  const cx = u.xMm + u.widthMm / 2;
+  const cy = flip(u.yMm + u.heightMm / 2);
+  const boxW = fontSize * 4;
+  const boxH = fontSize * 1.7;
+  return (
+    <g pointerEvents="none">
+      <rect
+        x={cx - boxW / 2}
+        y={cy - boxH / 2}
+        width={boxW}
+        height={boxH}
+        rx={boxH * 0.25}
+        fill="#ffffff"
+        stroke={color}
+        strokeWidth={stroke * 1.2}
+      />
+      {label(cx, cy + fontSize * 0.35, `${cm(u.depthMm)} ↕`)}
+    </g>
+  );
+}
+
+/** האם הגוון כהה מספיק כדי שקווים כהים ייבלעו בו. */
+function isDark(hex: string): boolean {
+  const v = hex.replace('#', '');
+  if (v.length < 6) return false;
+  const r = parseInt(v.slice(0, 2), 16);
+  const g = parseInt(v.slice(2, 4), 16);
+  const b = parseInt(v.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.55;
+}
+
 function nearest(value: number, targets: number[], limit: number): number {
   // ברירת המחדל היא הערך המעוגל; יעד הצמדה קרוב מנצח אותה
   let best = Math.round(value / STEP) * STEP;
@@ -325,7 +488,6 @@ function snapY(y: number, unit: PlacedUnit, units: PlacedUnit[], wallHeight: num
   const targets = [0, unit.socleMm ?? 0, ceiling];
   for (const other of units) {
     if (other.id === unit.id) continue;
-    // ליישר תחתיות, להניח מעל, או לתלות מתחת
     targets.push(other.yMm, other.yMm + other.heightMm, other.yMm - unit.heightMm);
   }
   const snapped = nearest(y, targets, SNAP);

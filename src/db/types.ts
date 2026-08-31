@@ -101,7 +101,21 @@ export interface PlacedUnit extends Entity {
   drawerStyle?: DrawerStyle;
   /** דפנות זרות — צדדים גלויים שנבנים מלוח חזיתי ועמוקים מהארגז */
   exposed?: ExposedSides;
+  /** גוון החזית שנבחר מקטלוג הגוונים */
+  finishId?: string;
+  /** דלתות זכוכית במקום חזית מלאה */
+  glassDoors?: boolean;
+  /** פסי לד והיכן הם מותקנים */
+  led?: LedSpot[];
+  /**
+   * מרחקים בין המדפים מלמטה למעלה, כולל המרווח לתחתית ולתקרה.
+   * אורך המערך הוא מספר המדפים ועוד אחד. ריק = מרווחים שווים.
+   */
+  shelfGapsMm?: number[];
 }
+
+/** מיקום פס לד בארגז. */
+export type LedSpot = 'start' | 'end' | 'top' | 'bottom' | 'shelf';
 
 /** מגירה חיצונית נראית בחזית; פנימית מסתתרת מאחורי דלת. */
 export type DrawerStyle = 'outer' | 'inner';
@@ -149,4 +163,69 @@ export interface CatalogItem extends Entity {
   sortOrder: number;
   /** הערת תקן קצרה — למה המידות האלה */
   note?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* חומרים והגדרות                                                      */
+/* ------------------------------------------------------------------ */
+
+/** תפקיד הלוח במבנה הארון. */
+export type BoardRole = 'carcass' | 'front' | 'back';
+
+/**
+ * לוח גלם. העובי לא נשמר כאן במכוון — הוא משתנה בין פרויקטים ובין
+ * משלוחים, ונקבע מול הלוח הפיזי בשטח.
+ */
+export interface Board extends Entity {
+  name: string;
+  /** מספר קטלוגי אצל הספק */
+  catalogNumber?: string;
+  role: BoardRole;
+  /** ללוח יש כיוון סיבים שמחייב ניסור בכיוון קבוע */
+  hasGrain: boolean;
+  /** מחיר פלטה במפעל */
+  factoryPrice: number;
+  /** מחיר פלטה ללקוח */
+  consumerPrice: number;
+  sortOrder: number;
+}
+
+/** גוון מתוך קטלוג הגוונים של לוח מסוים. */
+export interface Finish extends Entity {
+  boardId: string;
+  name: string;
+  /** קוד הגוון אצל הספק */
+  code?: string;
+  /** צבע לתצוגה בהדמיה */
+  hex: string;
+  /** מחיר שונה מהמחיר הבסיסי של הלוח, אם יש */
+  factoryPrice?: number;
+  consumerPrice?: number;
+  sortOrder: number;
+}
+
+/** מחיר לוח שנקבע אחרת עבור פרויקט מסוים. */
+export interface ProjectPrice extends Entity {
+  projectId: string;
+  boardId: string;
+  factoryPrice?: number;
+  consumerPrice?: number;
+}
+
+/** הגדרות כלליות של העסק. רשומה יחידה. */
+export interface Settings {
+  id: 'app';
+  sheetWidthMm: number;
+  sheetHeightMm: number;
+  /** עובי כרסום — רוחב חתך המסור, נוסף לכל חלק בחישוב */
+  kerfMm: number;
+  /**
+   * עובי גוף נומינלי לחישוב בלבד.
+   * העובי האמיתי נקבע מול הלוח הפיזי ולכן אינו חלק מהגדרת הלוח,
+   * אבל בלי מספר כלשהו אי אפשר לגזור את רוחב התחתית והתקרה.
+   */
+  carcassThicknessMm: number;
+  /** אחוז ניצולת פלטה */
+  yieldPct: number;
+  updatedAt: number;
 }

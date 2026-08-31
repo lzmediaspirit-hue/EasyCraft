@@ -10,6 +10,7 @@ export const inputClass =
  */
 export function selectOnFocus(e: React.FocusEvent<HTMLInputElement>) {
   const input = e.currentTarget;
+  input.select();
   requestAnimationFrame(() => input.select());
 }
 
@@ -89,7 +90,8 @@ export function NumField({
   value,
   onChange,
   minMm = 0,
-  hint = 'ס״מ',
+  inMm = false,
+  hint,
 }: {
   label: string;
   /** במ"מ */
@@ -97,14 +99,17 @@ export function NumField({
   /** במ"מ */
   onChange: (mm: number) => void;
   minMm?: number;
+  /** הצגה במ"מ במקום בסנטימטרים */
+  inMm?: boolean;
   hint?: string;
 }) {
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={hint ?? (inMm ? 'מ״מ' : 'ס״מ')}>
       <MeasureInput
         value={value}
         onChange={onChange}
         minMm={minMm}
+        inMm={inMm}
         className={`${inputClass} num text-end`}
       />
     </Field>
