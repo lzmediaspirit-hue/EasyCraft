@@ -6,10 +6,11 @@ import { isContainer } from '../../catalog/zones';
 import { MATERIAL } from '../../catalog/standards';
 import { boardsRepo, finishesRepo } from '../../materials/materialsRepo';
 import { ZonesEditor } from './ZonesEditor';
+import { FinishPicker } from './FinishPicker';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
-import type { ExposedSides, LedSpot, OpeningMech, PlacedUnit } from '../../db/types';
+import type { BackKind, ExposedSides, LedSpot, OpeningMech, PlacedUnit } from '../../db/types';
 
 const DOOR_COUNTS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -34,6 +35,12 @@ const OPENINGS: { key: OpeningMech; label: string }[] = [
   { key: 'sliding', label: 'הזזה' },
 ];
 
+const BACKS: { key: BackKind; label: string }[] = [
+  { key: 'thin', label: 'גב דק' },
+  { key: 'carcass', label: 'גב בעובי גוף' },
+  { key: 'none', label: 'ללא גב' },
+];
+
 /** מידות תקן לכל ציר, לבחירה מהירה. */
 const WIDTHS = [150, 200, 300, 400, 450, 500, 600, 700, 800, 900, 1000, 1200];
 const HEIGHTS = [350, 450, 600, 700, 720, 900, 1000, 1200, 1600, 2000, 2050, 2200, 2320, 2400];
@@ -52,6 +59,7 @@ export function UnitEditor({
   unit,
   inside,
   onChange,
+  onApplyFinishAll,
   onEdit,
   onRemove,
   onClose,
@@ -60,12 +68,15 @@ export function UnitEditor({
   /** מצב התצוגה הנוכחי — חזיתות מוסתרות */
   inside: boolean;
   onChange: (patch: Partial<PlacedUnit>) => void;
+  /** החלת גוון על כל הארונות בפרויקט */
+  onApplyFinishAll: (part: 'carcass' | 'front' | 'exposed', finishId?: string) => void;
   onEdit: () => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
   const [axis, setAxis] = useState<Axis>('w');
   const activeChip = useRef<HTMLButtonElement>(null);
+  const chipRow = useRef<HTMLDivElement>(null);
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
   const finishes = useLiveQuery(async () => {
     const boards = (await boardsRepo.list()).filter((b) => b.role === 'front');
@@ -89,9 +100,19 @@ export function UnitEditor({
         : DEPTHS;
   const currentValue = axis === 'w' ? unit.widthMm : axis === 'h' ? unit.heightMm : unit.depthMm;
 
-  // המידה הפעילה נגללת לתצוגה, אחרת היא נתקעת מחוץ לשורה הנגללת
+  /*
+   * המידה הפעילה נגללת למרכז השורה.
+   * גלילה דרך scrollIntoView הזיזה גם את הגלילה האנכית של הלוח והסתירה
+   * את השורה עצמה, ולכן כאן מוזזת רק הגלילה האופקית — לפי ההפרש בין
+   * מרכז השבב למרכז השורה, מה שנכון גם בממשק מימין לשמאל.
+   */
   useEffect(() => {
-    activeChip.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    const row = chipRow.current;
+    const chip = activeChip.current;
+    if (!row || !chip) return;
+    const rowBox = row.getBoundingClientRect();
+    const chipBox = chip.getBoundingClientRect();
+    row.scrollLeft += chipBox.left + chipBox.width / 2 - (rowBox.left + rowBox.width / 2);
   }, [axis, currentValue]);
 
   const applyStandard = (mm: number) =>
@@ -139,7 +160,7 @@ export function UnitEditor({
         <AxisTab active={axis === 'd'} onClick={() => setAxis('d')} label="עומק" value={unit.depthMm} />
       </div>
 
-      <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+      <div ref={chipRow} className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
         {options.map((mm) => (
           <button
             key={mm}
@@ -176,7 +197,20 @@ export function UnitEditor({
       {inside ? (
         /* ---- פנים הארון ---- */
         container ? (
-          <ZonesEditor unit={unit} onChange={onChange} />
+          <>
+            <ZonesEditor unit={unit} onChange={onChange} />
+            <Row label="גב">
+              {BACKS.map((bk) => (
+                <Pill
+                  key={bk.key}
+                  active={(unit.backKind ?? 'thin') === bk.key}
+                  onClick={() => onChange({ backKind: bk.key })}
+                >
+                  {bk.label}
+                </Pill>
+              ))}
+            </Row>
+          </>
         ) : (
           <p className="mt-4 text-xs leading-snug text-stone-500">
             לארגז הזה אין פנים שאפשר לחלק — הוא מכשיר או לוח בודד.
@@ -209,17 +243,30 @@ export function UnitEditor({
                     ))}
                   </Row>
 
-                  <button
-                    onClick={() => onChange({ glassDoors: !unit.glassDoors })}
-                    aria-pressed={!!unit.glassDoors}
-                    className={`mt-2 self-start rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                      unit.glassDoors
-                        ? 'bg-oak-600 text-white'
-                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                    }`}
-                  >
-                    דלתות זכוכית
-                  </button>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => onChange({ glassDoors: !unit.glassDoors })}
+                      aria-pressed={!!unit.glassDoors}
+                      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                        unit.glassDoors
+                          ? 'bg-oak-600 text-white'
+                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                      }`}
+                    >
+                      דלתות זכוכית
+                    </button>
+                    <button
+                      onClick={() => onChange({ handles: !unit.handles })}
+                      aria-pressed={!!unit.handles}
+                      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                        unit.handles
+                          ? 'bg-oak-600 text-white'
+                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                      }`}
+                    >
+                      ידיות
+                    </button>
+                  </div>
                 </>
               )}
             </>
@@ -239,33 +286,33 @@ export function UnitEditor({
             </Row>
           )}
 
-          <Row label="גוון החזית">
-            <Pill active={!unit.finishId} onClick={() => onChange({ finishId: undefined })}>
-              ללא
-            </Pill>
-            {(finishes ?? []).map((f) => (
-              <button
-                key={f.id}
-                onClick={() => onChange({ finishId: f.id })}
-                title={f.code ? `${f.name} · ${f.code}` : f.name}
-                className={`flex items-center gap-1.5 rounded-lg py-1 pe-2.5 ps-1 text-sm font-medium transition-colors ${
-                  unit.finishId === f.id
-                    ? 'bg-oak-600 text-white'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                }`}
-              >
-                <span
-                  className="size-5 shrink-0 rounded border border-black/10"
-                  style={{ background: f.hex }}
-                />
-                <span className="max-w-20 truncate">{f.name}</span>
-              </button>
-            ))}
-          </Row>
+          <FinishPicker
+            label="גוון החזיתות"
+            finishes={finishes ?? []}
+            value={unit.frontFinishId ?? unit.finishId}
+            onChange={(id) => onChange({ frontFinishId: id, finishId: id })}
+            onApplyAll={(id) => onApplyFinishAll('front', id)}
+          />
+
+          <FinishPicker
+            label="גוון הגוף"
+            finishes={finishes ?? []}
+            value={unit.carcassFinishId}
+            onChange={(id) => onChange({ carcassFinishId: id })}
+            onApplyAll={(id) => onApplyFinishAll('carcass', id)}
+          />
+
+          <FinishPicker
+            label="גוון הדפנות הזרות"
+            finishes={finishes ?? []}
+            value={unit.exposedFinishId}
+            onChange={(id) => onChange({ exposedFinishId: id })}
+            onApplyAll={(id) => onApplyFinishAll('exposed', id)}
+          />
 
           {(finishes?.length ?? 0) === 0 && (
             <p className="mt-1 text-[10px] text-stone-400">
-              אין עדיין גוונים. מגדירים אותם בהגדרות, בקטלוג הגוונים של לוח החזית.
+              אין עדיין גוונים. מגדירים אותם בהגדרות, בקטלוג הגוונים של הלוח.
             </p>
           )}
 

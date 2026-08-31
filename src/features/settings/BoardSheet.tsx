@@ -92,7 +92,7 @@ export function BoardSheet({ board, onClose }: { board: Board | null; onClose: (
             />
           </Field>
 
-          <Field label="תפקיד בארון">
+          <Field group label="תפקיד בארון">
             <div className="flex flex-wrap gap-1.5">
               {ROLES.map((r) => (
                 <Chip key={r.role} active={r.role === role} onClick={() => setRole(r.role)}>

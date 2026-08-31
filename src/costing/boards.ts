@@ -47,9 +47,21 @@ export interface AccessoryLine {
   consumerTotal: number;
 }
 
+/** דלת זכוכית בגודל מסוים, וכמה כאלה יש בפרויקט. */
+export interface GlassDoorLine {
+  widthMm: number;
+  heightMm: number;
+  qty: number;
+  areaM2: number;
+  factoryTotal: number;
+  consumerTotal: number;
+}
+
 export interface ProjectCosting {
   lines: BoardLine[];
   accessories: AccessoryLine[];
+  glass: GlassDoorLine[];
+  glassAreaM2: number;
   units: number;
   drawers: number;
   doors: number;
@@ -58,6 +70,7 @@ export interface ProjectCosting {
   ledMeters: number;
   /** מנגנוני קלאפה */
   lifts: number;
+  handles: number;
   totalSheets: number;
   boardsFactoryTotal: number;
   boardsConsumerTotal: number;
@@ -85,7 +98,8 @@ function liftCount(u: PlacedUnit): number {
  */
 export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   const w = u.widthMm;
-  const h = u.heightMm;
+  // הגובה כולל את הרגליים, והגוף מתחיל מעליהן
+  const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
   const d = u.depthMm;
   const t = s.carcassThicknessMm;
   const ft = MATERIAL.frontMm;
@@ -115,8 +129,8 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   parts.push({ role: 'carcass', label: 'צד', widthMm: d, heightMm: carcassH, qty: 2 });
   parts.push({ role: 'carcass', label: 'תחתית ותקרה', widthMm: innerW, heightMm: d, qty: 2 });
 
-  // מדפים מכל האזורים
-  const zones = unitZones(u);
+  // מדפים מכל האזורים, לפי גוף הארון ולא לפי הגובה הכולל
+  const zones = unitZones({ ...u, heightMm: h });
   const shelves = zones.reduce((n, z) => n + (z.kind === 'shelves' ? (z.shelves ?? 0) : 0), 0);
   if (shelves > 0) {
     parts.push({
@@ -138,15 +152,18 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     });
   }
 
-  // הגב יושב בחריץ: קטן בעובי הצדדים, וחוזר בעומק החריץ
-  const groove = s.backGrooveMm;
-  parts.push({
-    role: 'back',
-    label: 'גב',
-    widthMm: Math.max(carcassW - 2 * t + 2 * groove, 0),
-    heightMm: Math.max(carcassH - 2 * t + 2 * groove, 0),
-    qty: 1,
-  });
+  // הגב: דק בחריץ, בעובי הגוף, או בכלל לא
+  const backKind = u.backKind ?? 'thin';
+  if (backKind !== 'none') {
+    const groove = backKind === 'thin' ? s.backGrooveMm : 0;
+    parts.push({
+      role: backKind === 'thin' ? 'back' : 'carcass',
+      label: backKind === 'thin' ? 'גב' : 'גב בעובי גוף',
+      widthMm: Math.max(carcassW - 2 * t + 2 * groove, 0),
+      heightMm: Math.max(carcassH - 2 * t + 2 * groove, 0),
+      qty: 1,
+    });
+  }
 
   // חזיתות מגירה, אזור אחר אזור
   const gap = s.frontGapMm;
@@ -168,13 +185,13 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   const coveredMm = zones
     .filter((z) => !(z.kind === 'drawers' && z.drawerStyle !== 'inner'))
     .reduce((n, z) => n + z.heightMm, 0);
-  if (doors > 0 && coveredMm > 0) {
+  // דלת זכוכית אינה לוח, ולכן היא נספרת בנפרד ולא בעמודות הפלטות
+  if (doors > 0 && coveredMm > 0 && !u.glassDoors) {
     parts.push({
       role: 'front',
-      label: u.glassDoors ? 'מסגרת דלת זכוכית' : 'דלת',
+      label: 'דלת',
       widthMm: Math.max(carcassW / doors - gap, 0),
-      // דלת זכוכית היא מסגרת בלבד וצורכת חלק קטן משטח לוח מלא
-      heightMm: Math.max(coveredMm - gap, 0) * (u.glassDoors ? 0.25 : 1),
+      heightMm: Math.max(coveredMm - gap, 0),
       qty: doors,
     });
   }
@@ -201,6 +218,49 @@ export interface PartSettings {
   carcassThicknessMm: number;
   backGrooveMm: number;
   frontGapMm: number;
+}
+
+/** דלתות הזכוכית בארגז, עם המידה שלהן. */
+export function unitGlassDoors(
+  u: PlacedUnit,
+  s: PartSettings,
+): { widthMm: number; heightMm: number; qty: number }[] {
+  if (!u.glassDoors) return [];
+  const doors = effectiveDoors(u);
+  if (doors < 1) return [];
+
+  const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+  const e = u.exposed ?? {};
+  const ft = MATERIAL.frontMm;
+  const carcassW = u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0);
+  const zones = unitZones({ ...u, heightMm: h });
+  const coveredMm = zones
+    .filter((z) => !(z.kind === 'drawers' && z.drawerStyle !== 'inner'))
+    .reduce((n, z) => n + z.heightMm, 0);
+  if (coveredMm <= 0) return [];
+
+  return [
+    {
+      widthMm: Math.round(Math.max(carcassW / doors - s.frontGapMm, 0)),
+      heightMm: Math.round(Math.max(coveredMm - s.frontGapMm, 0)),
+      qty: doors,
+    },
+  ];
+}
+
+/** ידיות בארגז — אחת לכל חזית נראית. */
+export function unitHandles(u: PlacedUnit): number {
+  if (!u.handles) return 0;
+  const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+  const outerDrawers = unitZones({ ...u, heightMm: h }).reduce(
+    (n, z) =>
+      n +
+      (z.kind === 'drawers' && z.drawerStyle !== 'inner'
+        ? (z.drawers ?? 0) * Math.max(z.drawerCols ?? 1, 1)
+        : 0),
+    0,
+  );
+  return effectiveDoors(u) + outerDrawers;
 }
 
 /** מטרים רצים של פס לד בארגז. */
@@ -235,6 +295,8 @@ export function projectCosting(
   let ledMeters = 0;
 
   let lifts = 0;
+  let handles = 0;
+  const glassMap = new Map<string, GlassDoorLine>();
 
   for (const u of units) {
     for (const part of unitParts(u, settings)) {
@@ -245,6 +307,20 @@ export function projectCosting(
     drawers += countDrawers(u);
     doors += effectiveDoors(u);
     lifts += liftCount(u);
+    handles += unitHandles(u);
+    for (const g of unitGlassDoors(u, settings)) {
+      const key = `${g.widthMm}x${g.heightMm}`;
+      const line = glassMap.get(key) ?? {
+        widthMm: g.widthMm,
+        heightMm: g.heightMm,
+        qty: 0,
+        areaM2: 0,
+        factoryTotal: 0,
+        consumerTotal: 0,
+      };
+      line.qty += g.qty;
+      glassMap.set(key, line);
+    }
     const e = u.exposed ?? {};
     exposedPanels += [e.start, e.end, e.top, e.bottom].filter(Boolean).length;
     ledMeters += unitLedMeters(u);
@@ -277,32 +353,68 @@ export function projectCosting(
     });
   }
 
+  // דלתות הזכוכית מתומחרות לפי שטח ולא לפי פלטה
+  const glass = [...glassMap.values()].map((g) => {
+    const areaM2 = (g.widthMm * g.heightMm * g.qty) / 1_000_000;
+    return {
+      ...g,
+      areaM2,
+      factoryTotal: areaM2 * settings.glassFactoryPerM2,
+      consumerTotal: areaM2 * settings.glassConsumerPerM2,
+    };
+  });
+  const glassAreaM2 = glass.reduce((n, g) => n + g.areaM2, 0);
+
   const a = settings.accessories;
+  const basis: Record<string, number> = {
+    door: doors,
+    drawer: drawers,
+    cabinet: units.length,
+    lift: lifts,
+    handle: handles,
+    ledMeter: ledMeters,
+  };
+
   const accessories: AccessoryLine[] = [
     accessory('מגירות', drawers, 'יח׳', a.drawerFactory, a.drawerConsumer),
     accessory('פס לד', ledMeters, 'מ׳', a.ledFactory, a.ledConsumer),
     accessory('מנגנוני קלאפה', lifts, 'יח׳', a.liftFactory, a.liftConsumer),
+    // תוספות שהעסק הגדיר בעצמו
+    ...settings.extras.map((x) =>
+      accessory(
+        x.name,
+        x.per === 'manual' ? (x.qty ?? 0) : (basis[x.per] ?? 0),
+        x.per === 'ledMeter' ? 'מ׳' : 'יח׳',
+        x.factoryPrice,
+        x.consumerPrice,
+      ),
+    ),
   ].filter((l) => l.qty > 0);
 
   const boardsFactoryTotal = lines.reduce((n, l) => n + l.factoryTotal, 0);
   const boardsConsumerTotal = lines.reduce((n, l) => n + l.consumerTotal, 0);
   const accFactory = accessories.reduce((n, l) => n + l.factoryTotal, 0);
   const accConsumer = accessories.reduce((n, l) => n + l.consumerTotal, 0);
+  const glassFactory = glass.reduce((n, g) => n + g.factoryTotal, 0);
+  const glassConsumer = glass.reduce((n, g) => n + g.consumerTotal, 0);
 
   return {
     lines,
     accessories,
+    glass,
+    glassAreaM2,
     units: units.length,
     drawers,
     doors,
     exposedPanels,
     ledMeters,
     lifts,
+    handles,
     totalSheets: lines.reduce((n, l) => n + l.sheets, 0),
     boardsFactoryTotal,
     boardsConsumerTotal,
-    factoryTotal: boardsFactoryTotal + accFactory,
-    consumerTotal: boardsConsumerTotal + accConsumer,
+    factoryTotal: boardsFactoryTotal + accFactory + glassFactory,
+    consumerTotal: boardsConsumerTotal + accConsumer + glassConsumer,
   };
 }
 

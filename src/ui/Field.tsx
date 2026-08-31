@@ -18,22 +18,30 @@ export function Field({
   label,
   hint,
   error,
+  group,
   children,
 }: {
   label: string;
   hint?: string;
   error?: string | null;
+  /**
+   * קבוצת כפתורים ולא שדה קלט יחיד.
+   * label שעוטף כמה כפתורים גורם לכל אחד מהם לבלוע את שם השדה,
+   * ואז מקריא המסך מכריז על כולם באותו שם ארוך.
+   */
+  group?: boolean;
   children: React.ReactNode;
 }) {
+  const Wrapper = group ? 'div' : 'label';
   return (
-    <label className="block">
+    <Wrapper className="block" role={group ? 'group' : undefined} aria-label={group ? label : undefined}>
       <span className="mb-1.5 flex items-baseline gap-2">
         <span className="text-sm font-medium text-stone-700">{label}</span>
         {hint && <span className="text-xs text-stone-400">{hint}</span>}
       </span>
       {children}
       {error && <span className="mt-1.5 block text-sm text-red-600">{error}</span>}
-    </label>
+    </Wrapper>
   );
 }
 

@@ -89,12 +89,16 @@ export interface PlacedUnit extends Entity {
   level: UnitLevel;
   /** מרחק מתחילת הקיר, במ"מ */
   xMm: number;
-  /** גובה תחתית הארגז מהרצפה, במ"מ */
+  /** גובה תחתית הארגז מהרצפה, במ"מ. ארגז שעומד על הרצפה יושב על 0 */
   yMm: number;
   widthMm: number;
+  /**
+   * הגובה הכולל של הארגז, כולל הרגליים.
+   * גוף הארון בפירוק החומרים הוא הגובה הזה פחות גובה הרגליים.
+   */
   heightMm: number;
   depthMm: number;
-  /** סוקל מתחת לארגז — מצויר אוטומטית בהדמיה */
+  /** גובה הרגליים, נכלל בתוך heightMm */
   socleMm?: number;
   /** משטח עבודה מעל הארגז */
   counterMm?: number;
@@ -107,8 +111,18 @@ export interface PlacedUnit extends Entity {
   drawerStyle?: DrawerStyle;
   /** דפנות זרות — צדדים גלויים שנבנים מלוח חזיתי ועמוקים מהארגז */
   exposed?: ExposedSides;
-  /** גוון החזית שנבחר מקטלוג הגוונים */
+  /** גוון החזית — נשמר מגרסאות קודמות, משמש כברירת מחדל ל-frontFinishId */
   finishId?: string;
+  /** גוון גוף הארון */
+  carcassFinishId?: string;
+  /** גוון החזיתות */
+  frontFinishId?: string;
+  /** גוון הדפנות הזרות */
+  exposedFinishId?: string;
+  /** סוג הגב */
+  backKind?: BackKind;
+  /** ידיות על החזיתות */
+  handles?: boolean;
   /** דלתות זכוכית במקום חזית מלאה */
   glassDoors?: boolean;
   /** פסי לד והיכן הם מותקנים */
@@ -132,6 +146,14 @@ export interface PlacedUnit extends Entity {
   /** עובי הלוח — רלוונטי לדופן בודדת שנקנית בעובי משלה */
   panelThicknessMm?: number;
 }
+
+/**
+ * סוג הגב.
+ * thin — לוח דק בחריץ, ברירת המחדל.
+ * carcass — גב בעובי הגוף, כשצריך חוזק או כשהגב גלוי.
+ * none — בלי גב.
+ */
+export type BackKind = 'thin' | 'carcass' | 'none';
 
 /** מיקום פס לד בארגז. */
 export type LedSpot = 'start' | 'end' | 'top' | 'bottom' | 'shelf';
@@ -291,8 +313,30 @@ export interface Settings {
   frontGapMm: number;
   /** מחירי אביזרים, ליחידה */
   accessories: AccessoryPrices;
+  /** תוספות שהעסק הגדיר בעצמו */
+  extras: ExtraItem[];
+  /** מחיר דלת זכוכית למ"ר — נספרת בנפרד ולא מתוך הפלטות */
+  glassFactoryPerM2: number;
+  glassConsumerPerM2: number;
   updatedAt: number;
 }
+
+/**
+ * תוספת שהעסק הגדיר: שם, לפי מה נספרת, ומחיר.
+ * כך אפשר להוסיף ידיות, קלאפות או כל דבר אחר בלי לשנות את האפליקציה.
+ */
+export interface ExtraItem {
+  id: string;
+  name: string;
+  per: ExtraBasis;
+  /** כמות קבועה, כשהספירה ידנית */
+  qty?: number;
+  factoryPrice: number;
+  consumerPrice: number;
+}
+
+/** לפי מה נספרת התוספת. */
+export type ExtraBasis = 'door' | 'drawer' | 'cabinet' | 'lift' | 'handle' | 'ledMeter' | 'manual';
 
 /** מחירי אביזרים במפעל ולצרכן. */
 export interface AccessoryPrices {

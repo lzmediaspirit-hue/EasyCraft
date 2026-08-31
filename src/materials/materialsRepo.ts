@@ -13,12 +13,16 @@ export const DEFAULT_SETTINGS: Settings = {
   frontGapMm: 3,
   accessories: {
     drawerFactory: 0,
-    drawerConsumer: 0,
+    // תוספת סטנדרטית לכל מגירה
+    drawerConsumer: 500,
     ledFactory: 0,
     ledConsumer: 0,
     liftFactory: 0,
     liftConsumer: 0,
   },
+  extras: [],
+  glassFactoryPerM2: 0,
+  glassConsumerPerM2: 0,
   updatedAt: 0,
 };
 
@@ -29,7 +33,7 @@ const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
     role: 'carcass',
     hasGrain: false,
     factoryPrice: 0,
-    consumerPrice: 0,
+    consumerPrice: 120,
     sortOrder: 0,
   },
   {
@@ -37,7 +41,7 @@ const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
     role: 'front',
     hasGrain: false,
     factoryPrice: 0,
-    consumerPrice: 0,
+    consumerPrice: 400,
     sortOrder: 1,
   },
   {
@@ -45,7 +49,7 @@ const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
     role: 'back',
     hasGrain: false,
     factoryPrice: 0,
-    consumerPrice: 0,
+    consumerPrice: 80,
     sortOrder: 2,
   },
 ];
@@ -79,6 +83,7 @@ export const settingsRepo = {
           ...DEFAULT_SETTINGS,
           ...stored,
           accessories: { ...DEFAULT_SETTINGS.accessories, ...stored.accessories },
+          extras: stored.extras ?? [],
         }
       : DEFAULT_SETTINGS;
   },

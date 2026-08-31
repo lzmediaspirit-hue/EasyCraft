@@ -166,6 +166,19 @@ export const unitsRepo = {
     await db.units.delete(id);
   },
 
+  /** קובע גוון אחיד לחלק מסוים בכל הארונות בפרויקט. */
+  async setFinishForProject(
+    projectId: string,
+    part: 'carcass' | 'front' | 'exposed',
+    finishId: string | undefined,
+  ): Promise<void> {
+    const key =
+      part === 'carcass' ? 'carcassFinishId' : part === 'front' ? 'frontFinishId' : 'exposedFinishId';
+    const rows = await db.units.where('projectId').equals(projectId).toArray();
+    const now = Date.now();
+    await db.units.bulkPut(rows.map((u) => ({ ...u, [key]: finishId, updatedAt: now })));
+  },
+
   /** קובע עומק אחיד לכל הארונות בפרויקט. */
   async setDepthForProject(projectId: string, depthMm: number, onlyFloor: boolean): Promise<void> {
     const rows = await db.units.where('projectId').equals(projectId).toArray();

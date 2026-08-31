@@ -138,7 +138,7 @@ export function CustomItemSheet({
         />
 
         <div className="space-y-5 border-t border-stone-100 pt-5">
-          <Field label="קבוצה בספרייה">
+          <Field group label="קבוצה בספרייה">
             <div className="flex flex-wrap gap-1.5">
               {GROUPS.map((g) => (
                 <Chip key={g} active={g === group} onClick={() => changeGroup(g)}>
@@ -148,7 +148,7 @@ export function CustomItemSheet({
             </div>
           </Field>
 
-          <Field label="באילו חדרים יופיע">
+          <Field group label="באילו חדרים יופיע">
             <div className="flex flex-wrap gap-1.5">
               {ROOM_CHIPS.map((r) => (
                 <Chip

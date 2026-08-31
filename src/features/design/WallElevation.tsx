@@ -97,7 +97,7 @@ export function WallElevation({
     // מסך גדל כלפי מטה, הקיר נמדד כלפי מעלה — ולכן הסימן הפוך
     const rawY = d.originY - (e.clientY - d.startY) * d.scale;
 
-    const x = snapX(rawX, unit, units, wall.lengthMm);
+    const x = snapX(rawX, unit, units, wall.lengthMm, corners);
     const y = unit.floorLocked ? unit.yMm : snapY(rawY, unit, units, wall.heightMm);
     onMove(d.id, x, y);
   }
@@ -178,10 +178,10 @@ export function WallElevation({
       {/* רגליים ומשטחי עבודה — נגזרים מהארגז, לא נבחרים בנפרד */}
       {units.map((u) => (
         <g key={`trim-${u.id}`}>
-          {!!u.socleMm && u.yMm >= u.socleMm && (
+          {!!u.socleMm && (
             <rect
               x={u.xMm + u.widthMm * 0.03}
-              y={flip(u.yMm)}
+              y={flip(u.yMm + u.socleMm)}
               width={u.widthMm * 0.94}
               height={u.socleMm}
               fill="#e7e5e4"
@@ -204,11 +204,14 @@ export function WallElevation({
       {/* הארגזים */}
       {units.map((u) => {
         const selected = u.id === selectedId;
-        const hex = u.finishId ? finishHex[u.finishId] : undefined;
+        const frontFinish = u.frontFinishId ?? u.finishId;
+        const hex = frontFinish ? finishHex[frontFinish] : undefined;
         // חזית כהה מחייבת קווים בהירים, אחרת האיור נבלע בגוון
         const dark = hex ? isDark(hex) : false;
         const lineColor = dark ? '#f5f5f4' : selected ? '#814c2e' : '#78716c';
         const fill = hex ?? (selected ? '#f4e9d8' : '#ffffff');
+        // הגובה כולל את הרגליים; הגוף עצמו מתחיל מעליהן
+        const carcassH = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
 
         return (
           <g
@@ -222,7 +225,7 @@ export function WallElevation({
           >
             <rect
               width={u.widthMm}
-              height={u.heightMm}
+              height={carcassH}
               fill={fill}
               fillOpacity={inside ? 0.3 : 1}
               stroke="transparent"
@@ -231,7 +234,7 @@ export function WallElevation({
               <CabinetGlyph
                 glyph={u.glyph}
                 w={u.widthMm}
-                h={u.heightMm}
+                h={carcassH}
                 doors={u.doors}
                 drawers={u.drawers}
                 drawerCols={u.drawerCols}
@@ -247,14 +250,14 @@ export function WallElevation({
                 inside={inside}
               />
             </g>
-            {ledStrips(u, stroke)}
-            {exposedPanels(u, stroke)}
+            {ledStrips(u, stroke, carcassH)}
+            {exposedPanels(u, stroke, carcassH)}
             {selected && (
               <rect
                 x={-stroke * 2}
                 y={-stroke * 2}
                 width={u.widthMm + stroke * 4}
-                height={u.heightMm + stroke * 4}
+                height={carcassH + stroke * 4}
                 fill="none"
                 stroke="#a06236"
                 strokeWidth={stroke * 1.4}
@@ -368,7 +371,8 @@ function shelfHandles({
   const flip = (yFromFloor: number) => wallHeight - yFromFloor;
   const handles: React.ReactNode[] = [];
 
-  for (const { zone, top, bottom } of zoneBands(unitZones(u), u.heightMm)) {
+  const bodyH = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+  for (const { zone, top, bottom } of zoneBands(unitZones({ ...u, heightMm: bodyH }), bodyH)) {
     if (zone.kind !== 'shelves' || !(zone.shelves ?? 0)) continue;
     const zoneH = bottom - top;
     // מיקומי המדפים ביחס לתחתית האזור, מלמטה למעלה
@@ -377,7 +381,7 @@ function shelfHandles({
 
     positions.forEach((posFromBottom, index) => {
       // המרה חזרה לגובה על הקיר: תחתית האזור נמדדת מתחתית הארגז
-      const zoneBottomFromUnitBottom = u.heightMm - bottom;
+      const zoneBottomFromUnitBottom = (u.socleMm ?? 0) + (bodyH - bottom);
       const yOnWall = u.yMm + zoneBottomFromUnitBottom + posFromBottom;
 
       const move = (clientY: number) => {
@@ -474,21 +478,21 @@ function CornerBand({
 }
 
 /** פסי לד מסומנים בקו ענבר בצד שבו הם מותקנים. */
-function ledStrips(u: PlacedUnit, stroke: number) {
+function ledStrips(u: PlacedUnit, stroke: number, bodyH: number) {
   if (!u.led?.length) return null;
   const wide = stroke * 2.2;
   const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
 
   for (const spot of u.led) {
-    if (spot === 'start') lines.push({ x1: wide, y1: 0, x2: wide, y2: u.heightMm });
+    if (spot === 'start') lines.push({ x1: wide, y1: 0, x2: wide, y2: bodyH });
     else if (spot === 'end')
-      lines.push({ x1: u.widthMm - wide, y1: 0, x2: u.widthMm - wide, y2: u.heightMm });
+      lines.push({ x1: u.widthMm - wide, y1: 0, x2: u.widthMm - wide, y2: bodyH });
     else if (spot === 'top') lines.push({ x1: 0, y1: wide, x2: u.widthMm, y2: wide });
     else if (spot === 'bottom')
-      lines.push({ x1: 0, y1: u.heightMm - wide, x2: u.widthMm, y2: u.heightMm - wide });
+      lines.push({ x1: 0, y1: bodyH - wide, x2: u.widthMm, y2: bodyH - wide });
     else if (spot === 'shelf') {
-      const shelves = u.shelves ?? autoShelves(u.heightMm);
-      for (const y of shelfYs({ shelves, gaps: u.shelfGapsMm }, 0, u.heightMm)) {
+      const shelves = u.shelves ?? autoShelves(bodyH);
+      for (const y of shelfYs({ shelves, gaps: u.shelfGapsMm }, 0, bodyH)) {
         lines.push({ x1: u.widthMm * 0.08, y1: y + wide, x2: u.widthMm * 0.92, y2: y + wide });
       }
     }
@@ -507,15 +511,15 @@ function ledStrips(u: PlacedUnit, stroke: number) {
  * דפנות זרות מסומנות כרצועה מלאה בצד הגלוי.
  * בחזית רואים את עובי הלוח, ולכן הרצועה ברוחב עובי החומר.
  */
-function exposedPanels(u: PlacedUnit, stroke: number) {
+function exposedPanels(u: PlacedUnit, stroke: number, bodyH: number) {
   const e = u.exposed;
   if (!e) return null;
   const t = MATERIAL.frontMm;
   const bars: { x: number; y: number; w: number; h: number }[] = [];
-  if (e.start) bars.push({ x: 0, y: 0, w: t, h: u.heightMm });
-  if (e.end) bars.push({ x: u.widthMm - t, y: 0, w: t, h: u.heightMm });
+  if (e.start) bars.push({ x: 0, y: 0, w: t, h: bodyH });
+  if (e.end) bars.push({ x: u.widthMm - t, y: 0, w: t, h: bodyH });
   if (e.top) bars.push({ x: 0, y: 0, w: u.widthMm, h: t });
-  if (e.bottom) bars.push({ x: 0, y: u.heightMm - t, w: u.widthMm, h: t });
+  if (e.bottom) bars.push({ x: 0, y: bodyH - t, w: u.widthMm, h: t });
   if (!bars.length) return null;
 
   return (
@@ -647,15 +651,29 @@ function nearest(value: number, targets: number[], limit: number): number {
   return best;
 }
 
-/** מצמיד ארגז לקצות הקיר ולשכנים באותו מפלס. */
-function snapX(x: number, unit: PlacedUnit, units: PlacedUnit[], wallLength: number): number {
-  const targets = [0, wallLength - unit.widthMm];
+/**
+ * מצמיד ארגז לקצות הקיר ולשכנים באותו מפלס.
+ * אזור הפינה תפוס על ידי ארונות הקיר השכן, ולכן ארגז רגיל נעצר לפניו —
+ * רק ארגז פינתי מורשה להיכנס לשם.
+ */
+function snapX(
+  x: number,
+  unit: PlacedUnit,
+  units: PlacedUnit[],
+  wallLength: number,
+  corners?: { startMm: number; endMm: number },
+): number {
+  const blocked = corners && unit.level !== 'wall' && !unit.corner;
+  const min = blocked ? corners.startMm : 0;
+  const max = Math.max((blocked ? wallLength - corners.endMm : wallLength) - unit.widthMm, min);
+
+  const targets = [min, max];
   for (const other of units) {
     if (other.id === unit.id || other.level !== unit.level) continue;
     targets.push(other.xMm + other.widthMm, other.xMm - unit.widthMm);
   }
   const snapped = nearest(x, targets, SNAP);
-  return Math.round(Math.min(Math.max(snapped, 0), Math.max(wallLength - unit.widthMm, 0)));
+  return Math.round(Math.min(Math.max(snapped, min), max));
 }
 
 /** מצמיד גובה לרצפה, לתקרה, ולקצוות של ארגזים אחרים. */

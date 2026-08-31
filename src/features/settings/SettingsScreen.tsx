@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { boardsRepo, finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { BoardSheet } from './BoardSheet';
+import { ExtrasSection } from './ExtrasSection';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { NumField, selectOnFocus } from '../../ui/Field';
 import { ChevronIcon, PlusIcon } from '../../ui/icons';
@@ -194,6 +195,36 @@ export function SettingsScreen() {
               }
             />
           </div>
+
+          <div className="mt-3 rounded-2xl border border-stone-200 bg-white p-3">
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-medium text-stone-800">דלת זכוכית</span>
+              <span className="text-[11px] text-stone-400">למ״ר</span>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <PriceBox
+                label="מפעל"
+                value={settings.glassFactoryPerM2}
+                onChange={(v) => settingsRepo.save({ glassFactoryPerM2: v })}
+              />
+              <PriceBox
+                label="צרכן"
+                value={settings.glassConsumerPerM2}
+                onChange={(v) => settingsRepo.save({ glassConsumerPerM2: v })}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] leading-snug text-stone-400">
+              דלתות זכוכית נספרות לפי שטח ולא נכללות בכמות הפלטות.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <SectionTitle>תוספות משלך</SectionTitle>
+          <ExtrasSection settings={settings} />
+          <p className="mt-2 text-xs leading-snug text-stone-500">
+            כל תוספת יודעת לפי מה היא נספרת, ולכן היא מתעדכנת לבד בכל פרויקט.
+          </p>
         </section>
       </main>
 

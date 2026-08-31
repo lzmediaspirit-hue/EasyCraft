@@ -86,7 +86,7 @@ export function BoxForm({
         />
       </Field>
 
-      <Field label="איור">
+      <Field group label="איור">
         <div className="grid grid-cols-5 gap-1.5">
           {GLYPHS.map((g) => (
             <button
@@ -115,7 +115,7 @@ export function BoxForm({
       </Field>
 
       {caps.doors && (
-        <Field label="דלתות" hint="0 = בלי חזית">
+        <Field group label="דלתות" hint="0 = בלי חזית">
           <div className="flex flex-wrap gap-1.5">
             {COUNTS.map((n) => (
               <Chip key={n} active={n === value.doors} onClick={() => onChange({ doors: n })}>
@@ -128,7 +128,7 @@ export function BoxForm({
 
       {caps.drawers && (
         <>
-          <Field label="שורות מגירות">
+          <Field group label="שורות מגירות">
             <div className="flex flex-wrap gap-1.5">
               {COUNTS.map((n) => (
                 <Chip
@@ -144,7 +144,7 @@ export function BoxForm({
 
           {value.drawers > 0 && (
             <>
-              <Field label="מגירות לרוחב" hint="מגירות זו לצד זו בגובה אחיד">
+              <Field group label="מגירות לרוחב" hint="מגירות זו לצד זו בגובה אחיד">
                 <div className="flex flex-wrap gap-1.5">
                   {COLS.map((n) => (
                     <Chip
@@ -158,7 +158,7 @@ export function BoxForm({
                 </div>
               </Field>
 
-              <Field label="סוג המגירה">
+              <Field group label="סוג המגירה">
                 <div className="flex flex-wrap gap-1.5">
                   <Chip
                     active={value.drawerStyle !== 'inner'}
@@ -180,7 +180,7 @@ export function BoxForm({
       )}
 
       {caps.shelves && (
-        <Field label="מדפים" hint="נראים בתצוגת פנים הארון">
+        <Field group label="מדפים" hint="נראים בתצוגת פנים הארון">
           <div className="flex flex-wrap gap-1.5">
             {SHELF_COUNTS.map((n) => (
               <Chip key={n} active={n === value.shelves} onClick={() => onChange({ shelves: n })}>

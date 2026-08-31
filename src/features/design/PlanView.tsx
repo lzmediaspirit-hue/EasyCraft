@@ -87,16 +87,19 @@ export function PlanView({
       </div>
 
       <ul className="space-y-1.5">
-        {walls.map((wall, i) => (
+        {walls.map((wall, i) => {
+          const mine = units.filter((u) => u.wallId === wall.id);
+          return (
           <li
             key={wall.id}
-            className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${
+            className={`rounded-xl border px-3 py-2 ${
               wall.id === activeWallId ? 'border-oak-400 bg-oak-50' : 'border-stone-200 bg-white'
             }`}
           >
+          <div className="flex items-center gap-2">
             <button
               onClick={() => onSelectWall(wall.id)}
-              className="min-w-0 flex-1 truncate text-start text-sm font-medium text-stone-800"
+              className="min-w-0 flex-1 text-start text-sm font-medium text-stone-800"
             >
               {wallName(i)}
             </button>
@@ -129,8 +132,24 @@ export function PlanView({
                 <span className="text-[10px] text-stone-400">°</span>
               </label>
             )}
+          </div>
+
+          {/* שמות הארונות שעל הקיר והמידה של כל אחד */}
+          {mine.length > 0 && (
+            <ul className="mt-1.5 space-y-0.5 border-t border-stone-200/70 pt-1.5">
+              {mine.map((u) => (
+                <li key={u.id} className="flex items-baseline gap-2 text-[11px]">
+                  <span className="min-w-0 flex-1 truncate text-stone-600">{u.name}</span>
+                  <span className="num shrink-0 text-stone-500">
+                    {cm(u.widthMm)}×{cm(u.heightMm)}×{cm(u.depthMm)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       <p className="text-xs leading-snug text-stone-500">

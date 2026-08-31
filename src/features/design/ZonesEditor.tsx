@@ -22,22 +22,34 @@ export function ZonesEditor({
   unit: PlacedUnit;
   onChange: (patch: Partial<PlacedUnit>) => void;
 }) {
-  const zones = unitZones(unit);
+  // האזורים ממלאים את גוף הארון, שהוא הגובה הכולל פחות הרגליים
+  const bodyH = Math.max(unit.heightMm - (unit.socleMm ?? 0), 0);
+  const zones = unitZones({ ...unit, heightMm: bodyH });
 
   function write(next: Zone[]) {
-    onChange({ zones: normalizeHeights(next, unit.heightMm) });
+    onChange({ zones: normalizeHeights(next, bodyH) });
   }
 
   function patchZone(id: string, patch: Partial<Zone>) {
     write(zones.map((z) => (z.id === id ? { ...z, ...patch } : z)));
   }
 
-  /** שינוי גובה אזור בא על חשבון האזורים האחרים, לפי היחס ביניהם. */
+  /**
+   * שינוי גובה אזור בא על חשבון האזורים האחרים.
+   * כשיש אזור יחיד אין על חשבון מי, ולכן הוא מותח את גובה הארון עצמו.
+   */
   function setHeight(id: string, mm: number) {
     const others = zones.filter((z) => z.id !== id);
-    if (!others.length) return;
-    const clamped = Math.min(Math.max(mm, 50), unit.heightMm - 50 * others.length);
-    const rest = unit.heightMm - clamped;
+    if (!others.length) {
+      const clamped = Math.max(mm, 50);
+      onChange({
+        heightMm: clamped + (unit.socleMm ?? 0),
+        zones: [{ ...zones[0], heightMm: clamped }],
+      });
+      return;
+    }
+    const clamped = Math.min(Math.max(mm, 50), bodyH - 50 * others.length);
+    const rest = bodyH - clamped;
     const othersTotal = others.reduce((a, z) => a + z.heightMm, 0);
     write(
       zones.map((z) =>
@@ -55,7 +67,7 @@ export function ZonesEditor({
   }
 
   function addZone() {
-    const share = Math.round(unit.heightMm / (zones.length + 1));
+    const share = Math.round(bodyH / (zones.length + 1));
     write([...zones.map((z) => ({ ...z })), newZone('shelves', share)]);
   }
 
@@ -218,7 +230,7 @@ export function ZonesEditor({
       </button>
 
       <p className="mt-1 text-[10px] text-stone-400">
-        סך גובה האזורים: <span className="num">{cm(unit.heightMm)}</span> ס״מ
+        סך גובה האזורים: <span className="num">{cm(bodyH)}</span> ס״מ
       </p>
     </div>
   );

@@ -9,6 +9,7 @@ import { UnitEditSheet } from './UnitEditSheet';
 import { MaterialsSheet } from './MaterialsSheet';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
+import { WallThumb } from './WallThumb';
 import { cornerZones } from './plan';
 import { unitZones } from '../../catalog/zones';
 import { analyzeWall, nextFreeX } from './analysis';
@@ -71,7 +72,10 @@ export function DesignScreen({ projectId }: { projectId: string }) {
 
   async function addItem(item: CatalogItem) {
     if (!wall) return;
-    const x = nextFreeX(units, item.level);
+    // ארגז רגיל לא מתחיל בתוך אזור הפינה של הקיר השכן
+    const floorLevel = item.level !== 'wall';
+    const from = floorLevel && !item.corner ? (corners?.startMm ?? 0) : 0;
+    const x = Math.max(nextFreeX(units, item.level), from);
     const unit = await unitsRepo.add(projectId, wall.id, item, Math.min(x, wall.lengthMm));
     setLibraryOpen(false);
     setSelectedId(unit.id);
@@ -156,12 +160,13 @@ export function DesignScreen({ projectId }: { projectId: string }) {
               <button
                 key={w.id}
                 onClick={() => setWallIndex(i)}
-                className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                className={`flex shrink-0 items-center gap-2 rounded-full ps-2.5 pe-4 py-1.5 text-sm font-medium transition-colors ${
                   i === wallIndex
                     ? 'bg-stone-900 text-white'
                     : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
                 }`}
               >
+                <WallThumb wall={w} units={allUnits ?? []} active={i === wallIndex} />
                 {wallName(i)}
               </button>
             ))}
@@ -199,6 +204,9 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           unit={selected}
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
+          onApplyFinishAll={(part, finishId) =>
+            unitsRepo.setFinishForProject(projectId, part, finishId)
+          }
           onEdit={() => setEditOpen(true)}
           onRemove={async () => {
             await unitsRepo.remove(selected.id);

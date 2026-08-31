@@ -51,7 +51,7 @@ export function DepthSheet({
           ))}
         </div>
 
-        <Field label="על מה להחיל">
+        <Field group label="על מה להחיל">
           <div className="flex gap-1.5">
             <Chip active={onlyFloor} onClick={() => setOnlyFloor(true)}>
               רק ארונות רצפה
