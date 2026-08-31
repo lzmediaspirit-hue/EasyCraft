@@ -94,8 +94,24 @@ export interface PlacedUnit extends Entity {
   counterMm?: number;
   /** כשדולק, תחתית הארגז נעולה לרצפה. כשכבוי אפשר לגרור אותו לגובה חופשי */
   floorLocked?: boolean;
-  /** מאיזה קצה של הקיר נמדד המיקום בתצוגה */
-  anchorEnd?: boolean;
+  /**
+   * מגירות חיצוניות עם חזית בולטת, או פנימיות מאחורי דלתות.
+   * ההבדל משנה גם את הציור וגם את חישוב שטח החזיתות.
+   */
+  drawerStyle?: DrawerStyle;
+  /** דפנות זרות — צדדים גלויים שנבנים מלוח חזיתי ועמוקים מהארגז */
+  exposed?: ExposedSides;
+}
+
+/** מגירה חיצונית נראית בחזית; פנימית מסתתרת מאחורי דלת. */
+export type DrawerStyle = 'outer' | 'inner';
+
+/** צדדים גלויים של הארגז שנבנים כדופן זרה. */
+export interface ExposedSides {
+  start?: boolean;
+  end?: boolean;
+  top?: boolean;
+  bottom?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -126,6 +142,8 @@ export interface CatalogItem extends Entity {
   defaultYMm: number;
   socleMm?: number;
   counterMm?: number;
+  /** פריט נפוץ — מופיע בספרייה הראשית ולא ברשימת "ארגזים נוספים" */
+  common?: boolean;
   /** פריט שהגיע עם האפליקציה, להבדיל מפריט שהמשתמש יצר */
   isBuiltin: boolean;
   sortOrder: number;

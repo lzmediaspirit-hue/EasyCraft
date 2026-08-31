@@ -141,7 +141,6 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         {selected ? (
           <UnitEditor
             unit={selected}
-            wallLengthMm={wall.lengthMm}
             onChange={(patch) => patchUnit(selected.id, patch)}
             onEdit={() => setEditOpen(true)}
             onRemove={async () => {

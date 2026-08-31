@@ -41,6 +41,7 @@ function toCatalogItem(s: SeedItem, now: number, order: number): CatalogItem {
     defaultYMm: s.y,
     socleMm: s.socle,
     counterMm: s.counter,
+    common: s.common,
     isBuiltin: true,
     sortOrder: order,
     note: s.note,
@@ -71,6 +72,7 @@ export const catalogRepo = {
     drawers?: number;
     drawerCols?: number;
     shelves?: number;
+    common?: boolean;
     level: CatalogItem['level'];
     defaultWidthMm: number;
     widthOptionsMm: number[];
@@ -84,15 +86,18 @@ export const catalogRepo = {
     const now = Date.now();
     if (input.id) {
       const { id, ...rest } = input;
-      await db.catalog.update(id, { ...rest, updatedAt: now });
+      // שדות שלא נשלחו נשארים כמו שהם, כדי שעריכה לא תמחק מאפיין קיים
+      await db.catalog.update(id, { ...defined(rest), updatedAt: now });
       return id;
     }
     const id = crypto.randomUUID();
     await db.catalog.add({
       ...input,
       id,
+      // ארגז שהמשתמש בנה הוא ארגז שהוא מתכוון להשתמש בו — מקומו בספרייה הראשית
+      common: true,
       isBuiltin: false,
-      sortOrder: 1000 + now % 1000,
+      sortOrder: 1000 + (now % 1000),
       createdAt: now,
       updatedAt: now,
     });
@@ -105,3 +110,10 @@ export const catalogRepo = {
     if (item && !item.isBuiltin) await db.catalog.delete(id);
   },
 };
+
+/** משמיט מפתחות ללא ערך, כדי ש-update לא ידרוס אותם ב-undefined. */
+function defined<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined),
+  ) as Partial<T>;
+}

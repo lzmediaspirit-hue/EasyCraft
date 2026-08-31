@@ -11,7 +11,9 @@ import type { CatalogGroup, CatalogItem, RoomKind } from '../../db/types';
 
 /**
  * ספריית המוצרים — מסוננת לחדר שבו עובדים כרגע.
- * הקשה מוסיפה ארגז לקיר; המגירה נשארת פתוחה כדי לבנות שורה שלמה ברצף.
+ *
+ * המסך הראשון מציג רק את הארגזים הנפוצים, כדי שהבחירה תהיה מהירה.
+ * כל השאר יושבים מאחורי "ארגזים נוספים".
  */
 export function LibrarySheet({
   roomKind,
@@ -24,23 +26,29 @@ export function LibrarySheet({
 }) {
   const items = useLiveQuery(() => catalogRepo.forRoom(roomKind), [roomKind]);
   const [group, setGroup] = useState<CatalogGroup | null>(null);
+  const [showRest, setShowRest] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
 
   const groups = useMemo(() => {
     if (!items) return [];
-    const present = new Set(items.map((i) => i.group));
+    const pool = showRest ? items.filter((i) => !i.common) : items.filter((i) => i.common);
+    const present = new Set(pool.map((i) => i.group));
     const ordered = roomDef(roomKind).groups.filter((g) => present.has(g));
     return ordered.length ? ordered : GLYPH_GROUPS_FALLBACK.filter((g) => present.has(g));
-  }, [items, roomKind]);
+  }, [items, roomKind, showRest]);
 
   const activeGroup = group && groups.includes(group) ? group : groups[0];
-  const visible = items?.filter((i) => i.group === activeGroup) ?? [];
+  const visible = (items ?? []).filter(
+    (i) => i.group === activeGroup && (showRest ? !i.common : !!i.common),
+  );
+  const restCount = (items ?? []).filter((i) => !i.common).length;
 
   return (
     <>
       <Sheet
-        title="ספריית המוצרים"
+        title={showRest ? 'ארגזים נוספים' : 'ספריית המוצרים'}
         onClose={onClose}
+        onBack={showRest ? () => setShowRest(false) : undefined}
         tall
       >
         {groups.length > 1 && (
@@ -75,6 +83,8 @@ export function LibrarySheet({
                     heightMm={item.defaultHeightMm}
                     doors={item.doors}
                     drawers={item.drawers}
+                    drawerCols={item.drawerCols}
+                    shelves={item.shelves}
                     className="h-14 w-full"
                   />
                 </span>
@@ -92,6 +102,19 @@ export function LibrarySheet({
               </button>
             </div>
           ))}
+
+          {!showRest && restCount > 0 && (
+            <button
+              onClick={() => {
+                setShowRest(true);
+                setGroup(null);
+              }}
+              className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-2.5 text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
+            >
+              <span className="num text-lg font-semibold">{restCount}</span>
+              <span className="text-[11px] leading-tight font-medium">ארגזים נוספים</span>
+            </button>
+          )}
 
           <button
             onClick={() => setEditing('new')}

@@ -20,6 +20,8 @@ export interface SeedItem {
   y: number;
   socle?: number;
   counter?: number;
+  /** פריט נפוץ — מופיע בספרייה הראשית */
+  common?: boolean;
   note?: string;
 }
 
@@ -102,12 +104,15 @@ const kitchenTall = (
 
 export const SEED_CATALOG: SeedItem[] = [
   /* ---------------- מטבח — תחתונים ---------------- */
-  kitchenBase('k-base-door1', 'ארגז דלת אחת', 'doors', 450, NARROW, { doors: 1 }),
-  kitchenBase('k-base-door2', 'ארגז שתי דלתות', 'doors', 800, WIDE, { doors: 2 }),
+  kitchenBase('k-base-door1', 'ארגז דלת אחת', 'doors', 450, NARROW, {
+    common: true, doors: 1 }),
+  kitchenBase('k-base-door2', 'ארגז שתי דלתות', 'doors', 800, WIDE, {
+    common: true, doors: 2 }),
   kitchenBase('k-base-dr2', 'ארגז 2 מגירות', 'drawers', 600, [400, 450, 500, 600, 800, 900], {
     drawers: 2,
   }),
   kitchenBase('k-base-dr3', 'ארגז 3 מגירות', 'drawers', 600, [400, 450, 500, 600, 800, 900], {
+    common: true,
     drawers: 3,
   }),
   kitchenBase('k-base-dr4', 'ארגז 4 מגירות', 'drawers', 600, [400, 450, 500, 600, 800], {
@@ -118,49 +123,66 @@ export const SEED_CATALOG: SeedItem[] = [
     drawers: 1,
   }),
   kitchenBase('k-base-sink', 'ארגז כיור', 'sink', 800, [600, 800, 900, 1000, 1200], {
+    common: true,
+    doors: 2,
     note: 'ארגז כיור נבנה בלי מדף ועם חזית מגירה עיוורת מעל',
   }),
   kitchenBase('k-base-hob', 'ארגז כיריים', 'hob', 600, [600, 700, 800, 900], {
+    common: true,
     drawers: 2,
     note: 'חיתוך כיריים סטנדרטי בשיש — כ-560×490 מ"מ',
   }),
   kitchenBase('k-base-dw', 'ארגז מדיח', 'dishwasher', 600, [450, 600], {
+    common: true,
     note: 'נישת מדיח: רוחב 600, גובה 820 מ"מ',
   }),
   kitchenBase('k-base-oven', 'ארגז תנור', 'oven', 600, [600], {
     note: 'נישת תנור בילד אין: כ-560×590 מ"מ',
   }),
-  kitchenBase('k-base-corner-car', 'ארגז פינתי סחרחרה', 'carousel', 900, [800, 900, 1000]),
-  kitchenBase('k-base-corner', 'ארגז פינתי דלת', 'corner', 900, [800, 900, 1000]),
+  kitchenBase('k-base-corner-car', 'ארגז פינתי סחרחרה', 'carousel', 900, [800, 900, 1000], {
+    doors: 1,
+  }),
+  kitchenBase('k-base-corner', 'ארגז פינתי דלת', 'corner', 900, [800, 900, 1000], { doors: 1 }),
   kitchenBase('k-base-open', 'ארגז פתוח', 'open', 400, NARROW),
-  kitchenBase('k-base-shutter', 'ארגז תריס', 'shutter', 600, [400, 500, 600]),
+  kitchenBase('k-base-shutter', 'ארגז תריס', 'shutter', 600, [400, 500, 600], { doors: 1 }),
 
   /* ---------------- מטבח — עליונים ---------------- */
-  kitchenUpper('k-up-door1', 'עליון דלת אחת', 'doors', 450, NARROW, { doors: 1 }),
-  kitchenUpper('k-up-door2', 'עליון שתי דלתות', 'doors', 800, WIDE, { doors: 2 }),
+  kitchenUpper('k-up-door1', 'עליון דלת אחת', 'doors', 450, NARROW, {
+    common: true, doors: 1 }),
+  kitchenUpper('k-up-door2', 'עליון שתי דלתות', 'doors', 800, WIDE, {
+    common: true, doors: 2 }),
   kitchenUpper('k-up-lift', 'עליון קלאפה', 'lift', 600, [500, 600, 800, 900, 1000], {
+    common: true,
+    doors: 1,
     h: 450,
     note: 'מנגנון הרמה — נוח מעל אזור עבודה',
   }),
   kitchenUpper('k-up-glass', 'עליון ויטרינה', 'glass', 600, [400, 500, 600, 800], { doors: 2 }),
   kitchenUpper('k-up-micro', 'ארון מיקרוגל עליון', 'oven', 600, [600], { h: 450 }),
   kitchenUpper('k-up-hood', 'ארון קולט אדים', 'hood', 600, [600, 900], {
+    common: true,
     h: 450,
     note: 'תחתית קולט אדים 650–750 מ"מ מעל הכיריים',
   }),
   kitchenUpper('k-up-open', 'מדף פתוח עליון', 'open', 800, WIDE, { h: 350 }),
-  kitchenUpper('k-up-shutter', 'עליון תריס', 'shutter', 600, [400, 500, 600]),
+  kitchenUpper('k-up-shutter', 'עליון תריס', 'shutter', 600, [400, 500, 600], { doors: 1 }),
 
   /* ---------------- מטבח — עמודות ---------------- */
-  kitchenTall('k-tall-ovenmicro', 'עמודת תנור ומיקרוגל', 'ovenMicro', 600, [600]),
+  kitchenTall('k-tall-ovenmicro', 'עמודת תנור ומיקרוגל', 'ovenMicro', 600, [600], {
+    common: true,
+  }),
   kitchenTall('k-tall-oven', 'עמודת תנור', 'oven', 600, [600]),
   kitchenTall('k-tall-fridge', 'עמודת מקרר', 'fridge', 700, [600, 700, 800, 900], {
+    common: true,
     d: 650,
     note: 'לבדוק עומק המקרר בפועל — לרוב 650–700 מ"מ',
   }),
-  kitchenTall('k-tall-pantry', 'עמודת מזווה', 'pantry', 500, [400, 450, 500, 600]),
+  kitchenTall('k-tall-pantry', 'עמודת מזווה', 'pantry', 500, [400, 450, 500, 600], {
+    common: true,
+    doors: 1,
+  }),
   kitchenTall('k-tall-door', 'עמודת דלתות', 'doors', 600, [400, 500, 600], { doors: 1 }),
-  kitchenTall('k-tall-shutter', 'עמודת תריס', 'shutter', 600, [500, 600]),
+  kitchenTall('k-tall-shutter', 'עמודת תריס', 'shutter', 600, [500, 600], { doors: 1 }),
 
   /* ---------------- חדר שינה — ארונות ---------------- */
   {
@@ -181,6 +203,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-door2',
+    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'ארון בגדים שתי דלתות',
@@ -211,10 +234,12 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-sliding',
+    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'ארון הזזה',
     glyph: 'sliding',
+    doors: 2,
     level: 'floor',
     w: 1800,
     widths: [1400, 1600, 1800, 2000, 2400, 3000],
@@ -226,6 +251,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-hang',
+    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'יחידת תלייה ארוכה',
@@ -241,6 +267,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-hang2',
+    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'יחידת תלייה כפולה',
@@ -256,6 +283,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-shelves',
+    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'יחידת מדפים',
@@ -271,6 +299,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-wd-drawers',
+    common: true,
     rooms: ['bedroom'],
     group: 'storage',
     name: 'יחידת מגירות פנימיות',
@@ -319,6 +348,7 @@ export const SEED_CATALOG: SeedItem[] = [
     group: 'storage',
     name: 'ארון עם מראה',
     glyph: 'mirror',
+    doors: 1,
     level: 'floor',
     w: 500,
     widths: [400, 450, 500, 600],
@@ -331,6 +361,7 @@ export const SEED_CATALOG: SeedItem[] = [
   /* ---------------- חדר שינה — רהיטים ---------------- */
   {
     key: 'b-nightstand',
+    common: true,
     rooms: ['bedroom'],
     group: 'base',
     name: 'שידת לילה',
@@ -345,6 +376,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-dresser',
+    common: true,
     rooms: ['bedroom'],
     group: 'base',
     name: 'שידת מגירות',
@@ -374,6 +406,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'b-bridge',
+    common: true,
     rooms: ['bedroom'],
     group: 'upper',
     name: 'גשר עליון',
@@ -405,6 +438,7 @@ export const SEED_CATALOG: SeedItem[] = [
   /* ---------------- סלון ---------------- */
   {
     key: 'v-tv-drawers',
+    common: true,
     rooms: ['living'],
     group: 'base',
     name: 'מזנון טלוויזיה מגירות',
@@ -419,6 +453,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-tv-doors',
+    common: true,
     rooms: ['living'],
     group: 'base',
     name: 'מזנון טלוויזיה דלתות',
@@ -437,6 +472,7 @@ export const SEED_CATALOG: SeedItem[] = [
     group: 'base',
     name: 'מזנון עם פאנל טלוויזיה',
     glyph: 'tv',
+    doors: 2,
     level: 'floor',
     w: 2000,
     widths: [1600, 1800, 2000, 2400, 2800],
@@ -446,6 +482,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-storage',
+    common: true,
     rooms: ['living'],
     group: 'base',
     name: 'ארון אחסון',
@@ -461,6 +498,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-float-shelf',
+    common: true,
     rooms: ['living'],
     group: 'upper',
     name: 'מדף צף',
@@ -474,6 +512,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-wall-unit',
+    common: true,
     rooms: ['living'],
     group: 'upper',
     name: 'יחידת קיר תלויה',
@@ -502,6 +541,7 @@ export const SEED_CATALOG: SeedItem[] = [
   },
   {
     key: 'v-library',
+    common: true,
     rooms: ['living'],
     group: 'storage',
     name: 'ספרייה',
@@ -546,6 +586,7 @@ export const SEED_CATALOG: SeedItem[] = [
   /* ---------------- זמין בכל חדר ---------------- */
   {
     key: 'any-spacer',
+    common: true,
     rooms: ['kitchen', 'living', 'bedroom'],
     group: 'base',
     name: 'מרווח / מילוי',

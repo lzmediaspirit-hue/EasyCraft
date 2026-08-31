@@ -9,6 +9,7 @@ import { count } from '../../ui/units';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { BoxesIcon, ChevronIcon, PlusIcon } from '../../ui/icons';
 import type { Project } from '../../db/types';
+import type { ProjectBoards } from '../../costing/boards';
 
 /** רשימת הפרויקטים של לקוח אחד. */
 export function ProjectsScreen({ customerId }: { customerId: string }) {
@@ -16,9 +17,9 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
 
   const customer = useLiveQuery(() => db.customers.get(customerId), [customerId]);
   const projects = useLiveQuery(() => projectsRepo.listForCustomer(customerId), [customerId]);
-  const counts = useLiveQuery(
-    async (): Promise<Record<string, number>> =>
-      projects ? projectsRepo.unitCounts(projects.map((p) => p.id)) : {},
+  const summaries = useLiveQuery(
+    async (): Promise<Record<string, ProjectBoards>> =>
+      projects ? projectsRepo.summaries(projects.map((p) => p.id)) : {},
     [projects],
   );
 
@@ -39,7 +40,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
               <ProjectRow
                 key={project.id}
                 project={project}
-                units={counts?.[project.id] ?? 0}
+                boards={summaries?.[project.id]}
               />
             ))}
           </ul>
@@ -72,8 +73,10 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
   );
 }
 
-function ProjectRow({ project, units }: { project: Project; units: number }) {
+function ProjectRow({ project, boards }: { project: Project; boards?: ProjectBoards }) {
   const room = roomDef(project.roomKind);
+  const units = boards?.units ?? 0;
+
   return (
     <li>
       <button
@@ -83,6 +86,7 @@ function ProjectRow({ project, units }: { project: Project; units: number }) {
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-oak-100 text-oak-600">
           <BoxesIcon className="size-5" />
         </span>
+
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold text-stone-900">{project.name}</span>
           <span className="block truncate text-sm text-stone-500">
@@ -90,6 +94,25 @@ function ProjectRow({ project, units }: { project: Project; units: number }) {
             {units > 0 && <span> · {count(units, 'ארגז אחד', 'ארגזים')}</span>}
           </span>
         </span>
+
+        <span className="shrink-0 text-end">
+          <span className="block text-sm font-semibold text-stone-700">
+            {boards && boards.totalSheets > 0 ? (
+              <>
+                <span className="num">{boards.totalSheets}</span>{' '}
+                <span className="font-normal text-stone-500">
+                  {boards.totalSheets === 1 ? 'פלטה' : 'פלטות'}
+                </span>
+              </>
+            ) : (
+              <span className="font-normal text-stone-300">—</span>
+            )}
+          </span>
+          <span className="block text-xs text-stone-400">
+            {units > 0 ? 'מחיר טרם הוגדר' : 'ריק'}
+          </span>
+        </span>
+
         <ChevronIcon className="size-4 shrink-0 text-stone-300" />
       </button>
     </li>

@@ -25,6 +25,8 @@ export type GlyphProps = {
   stroke: number;
   /** הסתרת חזיתות — תצוגת פנים הארון */
   inside?: boolean;
+  /** מגירות פנימיות מסתתרות מאחורי דלתות ולא נראות בחזית */
+  drawerStyle?: 'outer' | 'inner';
 };
 
 export function CabinetGlyph({
@@ -37,8 +39,10 @@ export function CabinetGlyph({
   shelves,
   stroke,
   inside = false,
+  drawerStyle = 'outer',
 }: GlyphProps) {
-  const r = Math.min(w, h) * 0.04;
+  // ארגזי נגרות הם מלבנים; עיגול קל בלבד, שלא ייראה כמו רהיט מצויר
+  const r = Math.min(8, Math.min(w, h) * 0.015);
 
   return (
     <g
@@ -59,6 +63,7 @@ export function CabinetGlyph({
         shelves: shelves ?? autoShelves(h),
         t: stroke * 0.75,
         inside,
+        innerDrawers: drawerStyle === 'inner',
       })}
     </g>
   );
@@ -81,6 +86,7 @@ type Ctx = {
   shelves: number;
   t: number;
   inside: boolean;
+  innerDrawers: boolean;
 };
 
 function details(c: Ctx) {
@@ -93,18 +99,27 @@ function details(c: Ctx) {
   const front = (top: number, bottom: number, n: number, key = '') =>
     inside ? shelfLines(c, top, bottom, key) : doorPanels(c, top, bottom, n, key);
 
+  /**
+   * אזור מגירות. מגירה פנימית מוסתרת מאחורי דלת, ולכן בחזית מציירים
+   * דלתות ורק בתצוגת הפנים רואים את ארגזי המגירה.
+   */
+  const drawerZone = (top: number, bottom: number, rows: number, key = '') =>
+    c.innerDrawers && !inside
+      ? doorPanels(c, top, bottom, Math.max(c.doors, 1), key)
+      : drawerGrid(c, top, bottom, rows, c.cols);
+
   switch (c.glyph) {
     case 'doors':
       return front(0, h, c.doors);
 
     case 'drawers':
-      return drawerGrid(c, 0, h, c.drawers || 3, c.cols);
+      return drawerZone(0, h, c.drawers || 3);
 
     case 'doorDrawer': {
       const rows = c.drawers || 1;
       const bandH = Math.min(h * 0.22, h / (rows + 1)) * rows;
       return [
-        ...drawerGrid(c, 0, bandH, rows, c.cols),
+        ...drawerZone(0, bandH, rows, 'dz'),
         L(0, bandH, w, bandH, 'split'),
         ...front(bandH, h, c.doors),
       ];
@@ -271,7 +286,7 @@ function details(c: Ctx) {
         L(0, unitTop, w, unitTop, 'top'),
         ...(c.doors > 0
           ? front(unitTop, h, c.doors)
-          : drawerGrid(c, unitTop, h, Math.max(c.drawers, 2), c.cols)),
+          : drawerZone(unitTop, h, Math.max(c.drawers, 2), 'tv')),
       ];
     }
 
@@ -286,7 +301,7 @@ function details(c: Ctx) {
       ];
 
     case 'nightstand':
-      return drawerGrid(c, 0, h, c.drawers || 2, c.cols);
+      return drawerZone(0, h, c.drawers || 2);
 
     case 'mirror':
       return inside

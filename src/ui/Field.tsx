@@ -1,4 +1,4 @@
-import { cmToMm, mmToCm } from './units';
+import { MeasureInput } from './MeasureInput';
 
 export const inputClass =
   'w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-base text-stone-900 transition-colors focus:border-oak-500 focus:outline-none';
@@ -88,6 +88,7 @@ export function NumField({
   label,
   value,
   onChange,
+  minMm = 0,
   hint = 'ס״מ',
 }: {
   label: string;
@@ -95,16 +96,15 @@ export function NumField({
   value: number;
   /** במ"מ */
   onChange: (mm: number) => void;
+  minMm?: number;
   hint?: string;
 }) {
   return (
     <Field label={label} hint={hint}>
-      <input
-        value={mmToCm(value)}
-        onChange={(e) => onChange(cmToMm(Number(e.target.value) || 0))}
-        onFocus={selectOnFocus}
-        type="number"
-        inputMode="decimal"
+      <MeasureInput
+        value={value}
+        onChange={onChange}
+        minMm={minMm}
         className={`${inputClass} num text-end`}
       />
     </Field>

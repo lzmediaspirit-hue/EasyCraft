@@ -13,6 +13,12 @@ export interface GlyphDef {
   drawers?: boolean;
   /** לארגז יש מדפים פנימיים */
   shelves?: boolean;
+  /**
+   * אין כאן גוף ארון אמיתי אלא לוח בודד.
+   * 'horizontal' — לוח שוכב, שטחו רוחב על עומק (מדף צף, משטח שולחן).
+   * 'vertical' — לוח עומד, שטחו רוחב על גובה (פאנל, מרווח).
+   */
+  noCarcass?: 'horizontal' | 'vertical';
 }
 
 export const GLYPHS: GlyphDef[] = [
@@ -41,11 +47,11 @@ export const GLYPHS: GlyphDef[] = [
   { key: 'innerDrawers', label: 'מגירות פנימיות', drawers: true },
   { key: 'mirror', label: 'מראה', shelves: true },
   { key: 'nightstand', label: 'שידה', drawers: true },
-  { key: 'desk', label: 'שולחן' },
+  { noCarcass: 'horizontal', key: 'desk', label: 'שולחן' },
   { key: 'tv', label: 'טלוויזיה', doors: true, drawers: true },
-  { key: 'panel', label: 'פאנל' },
-  { key: 'slab', label: 'מדף צף' },
-  { key: 'spacer', label: 'מרווח' },
+  { noCarcass: 'vertical', key: 'panel', label: 'פאנל' },
+  { noCarcass: 'horizontal', key: 'slab', label: 'מדף צף' },
+  { noCarcass: 'vertical', key: 'spacer', label: 'מרווח' },
 ];
 
 export function glyphDef(key: string): GlyphDef {

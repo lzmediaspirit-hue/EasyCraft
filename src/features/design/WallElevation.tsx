@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { CabinetGlyph } from '../../catalog/CabinetGlyph';
 import { featureDef } from '../projects/wallFeatures';
+import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
 import type { PlacedUnit, Wall } from '../../db/types';
 
@@ -187,10 +188,12 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
                 drawers={u.drawers}
                 drawerCols={u.drawerCols}
                 shelves={u.shelves}
+                drawerStyle={u.drawerStyle}
                 stroke={selected ? stroke * 1.7 : stroke}
                 inside={inside}
               />
             </g>
+            {exposedPanels(u, stroke)}
             {selected && (
               <rect
                 x={-stroke * 2}
@@ -257,6 +260,39 @@ export function WallElevation({ wall, units, selectedId, onSelect, onMove, insid
 }
 
 /* ------------------------------------------------------------------ */
+
+/**
+ * דפנות זרות מסומנות כרצועה מלאה בצד הגלוי.
+ * בחזית רואים את עובי הלוח, ולכן הרצועה ברוחב עובי החומר.
+ */
+function exposedPanels(u: PlacedUnit, stroke: number) {
+  const e = u.exposed;
+  if (!e) return null;
+  const t = MATERIAL.frontMm;
+  const bars: { x: number; y: number; w: number; h: number }[] = [];
+  if (e.start) bars.push({ x: 0, y: 0, w: t, h: u.heightMm });
+  if (e.end) bars.push({ x: u.widthMm - t, y: 0, w: t, h: u.heightMm });
+  if (e.top) bars.push({ x: 0, y: 0, w: u.widthMm, h: t });
+  if (e.bottom) bars.push({ x: 0, y: u.heightMm - t, w: u.widthMm, h: t });
+  if (!bars.length) return null;
+
+  return (
+    <g pointerEvents="none">
+      {bars.map((b, i) => (
+        <rect
+          key={i}
+          x={b.x}
+          y={b.y}
+          width={b.w}
+          height={b.h}
+          fill="#c8935a"
+          stroke="#814c2e"
+          strokeWidth={stroke * 0.6}
+        />
+      ))}
+    </g>
+  );
+}
 
 function nearest(value: number, targets: number[], limit: number): number {
   // ברירת המחדל היא הערך המעוגל; יעד הצמדה קרוב מנצח אותה

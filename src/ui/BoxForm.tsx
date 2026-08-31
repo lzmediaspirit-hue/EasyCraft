@@ -12,6 +12,8 @@ export interface BoxSpec {
   /** עמודות מגירות — מגירות זו לצד זו ברוחב אחיד */
   drawerCols: number;
   shelves: number;
+  /** מגירה חיצונית עם חזית בולטת, או פנימית מאחורי דלתות */
+  drawerStyle: 'outer' | 'inner';
   widthMm: number;
   heightMm: number;
   depthMm: number;
@@ -51,6 +53,7 @@ export function BoxForm({
             drawers={value.drawers}
             drawerCols={value.drawerCols}
             shelves={value.shelves}
+            drawerStyle={value.drawerStyle}
             className="h-20 w-20"
           />
         </span>
@@ -63,6 +66,7 @@ export function BoxForm({
             drawers={value.drawers}
             drawerCols={value.drawerCols}
             shelves={value.shelves}
+            drawerStyle={value.drawerStyle}
             inside
             className="h-20 w-20"
           />
@@ -139,19 +143,38 @@ export function BoxForm({
           </Field>
 
           {value.drawers > 0 && (
-            <Field label="מגירות לרוחב" hint="מגירות זו לצד זו בגובה אחיד">
-              <div className="flex flex-wrap gap-1.5">
-                {COLS.map((n) => (
+            <>
+              <Field label="מגירות לרוחב" hint="מגירות זו לצד זו בגובה אחיד">
+                <div className="flex flex-wrap gap-1.5">
+                  {COLS.map((n) => (
+                    <Chip
+                      key={n}
+                      active={n === value.drawerCols}
+                      onClick={() => onChange({ drawerCols: n })}
+                    >
+                      <span className="num">{n}</span>
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="סוג המגירה">
+                <div className="flex flex-wrap gap-1.5">
                   <Chip
-                    key={n}
-                    active={n === value.drawerCols}
-                    onClick={() => onChange({ drawerCols: n })}
+                    active={value.drawerStyle !== 'inner'}
+                    onClick={() => onChange({ drawerStyle: 'outer' })}
                   >
-                    <span className="num">{n}</span>
+                    חזית בולטת
                   </Chip>
-                ))}
-              </div>
-            </Field>
+                  <Chip
+                    active={value.drawerStyle === 'inner'}
+                    onClick={() => onChange({ drawerStyle: 'inner' })}
+                  >
+                    פנימית מאחורי דלתות
+                  </Chip>
+                </div>
+              </Field>
+            </>
           )}
         </>
       )}
@@ -169,9 +192,12 @@ export function BoxForm({
       )}
 
       <div className="grid grid-cols-2 gap-3 border-t border-stone-100 pt-5">
-        <NumField label="רוחב" value={value.widthMm} onChange={(v) => onChange({ widthMm: v })} />
-        <NumField label="גובה" value={value.heightMm} onChange={(v) => onChange({ heightMm: v })} />
-        <NumField label="עומק" value={value.depthMm} onChange={(v) => onChange({ depthMm: v })} />
+        <NumField label="רוחב" value={value.widthMm} minMm={50}
+          onChange={(v) => onChange({ widthMm: v })} />
+        <NumField label="גובה" value={value.heightMm} minMm={50}
+          onChange={(v) => onChange({ heightMm: v })} />
+        <NumField label="עומק" value={value.depthMm} minMm={50}
+          onChange={(v) => onChange({ depthMm: v })} />
         <NumField
           label="גובה מהרצפה"
           value={value.yMm}

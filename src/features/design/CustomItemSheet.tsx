@@ -56,6 +56,7 @@ export function CustomItemSheet({
     drawers: item?.drawers ?? 3,
     drawerCols: item?.drawerCols ?? 1,
     shelves: item?.shelves ?? autoShelves(item?.defaultHeightMm ?? 720),
+    drawerStyle: 'outer',
     widthMm: item?.defaultWidthMm ?? 600,
     heightMm: item?.defaultHeightMm ?? 720,
     depthMm: item?.defaultDepthMm ?? 580,

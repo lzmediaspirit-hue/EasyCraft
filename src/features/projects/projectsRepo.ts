@@ -1,4 +1,5 @@
 import { db } from '../../db/db';
+import { projectBoards, type ProjectBoards } from '../../costing/boards';
 import type {
   CatalogItem,
   PlacedUnit,
@@ -66,13 +67,14 @@ export const projectsRepo = {
     });
   },
 
-  /** מספר הארגזים בכל פרויקט — לתצוגה ברשימה. */
-  async unitCounts(projectIds: string[]): Promise<Record<string, number>> {
-    const counts: Record<string, number> = {};
+  /** סיכום כל פרויקט — ארגזים, פלטות ומחיר — לתצוגה ברשימה. */
+  async summaries(projectIds: string[]): Promise<Record<string, ProjectBoards>> {
+    const out: Record<string, ProjectBoards> = {};
     for (const id of projectIds) {
-      counts[id] = await db.units.where('projectId').equals(id).count();
+      const units = await db.units.where('projectId').equals(id).toArray();
+      out[id] = projectBoards(units);
     }
-    return counts;
+    return out;
   },
 };
 
