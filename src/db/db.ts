@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
+  Attachment,
   Board,
   CatalogItem,
   Customer,
@@ -7,7 +8,9 @@ import type {
   PlacedUnit,
   Project,
   ProjectPrice,
+  ProjectStage,
   Settings,
+  TeamMember,
   Wall,
 } from './types';
 
@@ -26,6 +29,9 @@ export const db = new Dexie('easycraft') as Dexie & {
   finishes: EntityTable<Finish, 'id'>;
   projectPrices: EntityTable<ProjectPrice, 'id'>;
   settings: EntityTable<Settings, 'id'>;
+  team: EntityTable<TeamMember, 'id'>;
+  stages: EntityTable<ProjectStage, 'id'>;
+  attachments: EntityTable<Attachment, 'id'>;
 };
 
 db.version(1).stores({
@@ -107,3 +113,11 @@ db.version(6)
         if (u.floorLocked && u.yMm !== 0) u.yMm = 0;
       }),
   );
+
+/** צוות, שלבי עבודה וקבצים מצורפים — תהליך העבודה של הפרויקט. */
+db.version(7).stores({
+  ...TABLES_V3,
+  team: 'id, role, active',
+  stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+  attachments: 'id, projectId, kind',
+});

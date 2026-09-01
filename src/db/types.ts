@@ -385,3 +385,83 @@ export interface AccessoryPrices {
   liftFactory: number;
   liftConsumer: number;
 }
+
+/* ------------------------------------------------------------------ */
+/* אנשי הצוות ותהליך העבודה                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * תפקיד בעסק. התפקיד קובע מה רואים ומה מותר לעשות —
+ * המנהל רואה הכול, כל שאר התפקידים רואים את מה שמחכה להם.
+ */
+export type UserRole = 'manager' | 'planner' | 'carpenter' | 'installer';
+
+export interface TeamMember extends Entity {
+  name: string;
+  role: UserRole;
+  /** טלפון בפורמט מנורמל (ספרות בלבד) — לא חובה */
+  phone?: string;
+  /** עובד שעזב נשאר במערכת, כדי שההיסטוריה של הפרויקטים לא תישבר */
+  active: boolean;
+}
+
+/**
+ * שלב בתהליך העבודה של פרויקט, לפי הסדר.
+ *
+ * brief — המנהל פותח את הפרויקט ומעביר לתכנת מידות וסגנון
+ * design — התכנת מתכנן את הקיר
+ * approval — הלקוח מאשר את ההדמיה
+ * files — התכנת מעלה פירוק לוחות, הדמיות והוראות הרכבה
+ * cutting / edging / assembly — הנגר: חיתוך, קנטים, הרכבה
+ * install — התקנה אצל הלקוח. לא כל פרויקט מותקן על ידי העסק,
+ *           ולכן השלב הזה ניתן לדילוג.
+ */
+export type StageKey =
+  | 'brief'
+  | 'design'
+  | 'approval'
+  | 'files'
+  | 'cutting'
+  | 'edging'
+  | 'assembly'
+  | 'install';
+
+/**
+ * מצב השלב.
+ * waiting — עוד לא הגיע תורו, כי השלב שלפניו לא הסתיים
+ * active — פתוח ומחכה למי שאחראי עליו
+ * done — הושלם
+ * skipped — נוסה במכוון, למשל התקנה שהלקוח מבצע בעצמו
+ */
+export type StageStatus = 'waiting' | 'active' | 'done' | 'skipped';
+
+export interface ProjectStage extends Entity {
+  projectId: string;
+  key: StageKey;
+  status: StageStatus;
+  /** איש הצוות שהשלב הועבר אליו */
+  assigneeId?: string;
+  /** מועד שנקבע — רלוונטי בעיקר להתקנה, שנכנסת ללוח השנה */
+  scheduledAt?: number;
+  startedAt?: number;
+  doneAt?: number;
+  /** הנחיה או הערה שנכתבה לשלב, למשל הסגנון שהמנהל ביקש */
+  note?: string;
+}
+
+/** סוג הקובץ שהתכנת מעלה לפרויקט. */
+export type AttachmentKind = 'cutlist' | 'render' | 'assembly';
+
+/**
+ * קובץ שמצורף לפרויקט — פירוק לוחות, הדמיה או הוראות הרכבה.
+ * התוכן נשמר כ-Blob במכשיר, כמו כל השאר, כדי שהאפליקציה תמשיך
+ * לעבוד בלי אינטרנט. סנכרון לשרת ייכנס מאחורי אותה שכבת גישה.
+ */
+export interface Attachment extends Entity {
+  projectId: string;
+  kind: AttachmentKind;
+  name: string;
+  mime: string;
+  sizeBytes: number;
+  blob: Blob;
+}

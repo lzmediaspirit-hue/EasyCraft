@@ -15,11 +15,13 @@ import { unitZones } from '../../catalog/zones';
 import { analyzeWall, nextFreeX } from './analysis';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { roomDef } from '../../catalog/rooms';
+import { nav } from '../../nav/navigation';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
   DepthIcon,
+  FlowIcon,
   FrontsIcon,
   InsideIcon,
   PlanIcon,
@@ -112,6 +114,12 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             onClick={() => setMaterialsOpen(true)}
             icon={<CalcIcon className="size-4" />}
             label="חומרים"
+          />
+          <Tool
+            active={false}
+            onClick={() => nav.push({ name: 'workflow', projectId })}
+            icon={<FlowIcon className="size-4" />}
+            label="תהליך"
           />
           <Tool
             active={depthOpen}

@@ -4,6 +4,10 @@ export type Route =
   | { name: 'customers' }
   | { name: 'projects'; customerId: string }
   | { name: 'design'; projectId: string }
+  | { name: 'workflow'; projectId: string }
+  | { name: 'tasks' }
+  | { name: 'calendar' }
+  | { name: 'team' }
   | { name: 'settings' };
 
 /**

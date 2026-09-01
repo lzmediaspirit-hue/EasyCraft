@@ -4,6 +4,7 @@ import { customersRepo } from './customersRepo';
 import { NewCustomerSheet } from './NewCustomerSheet';
 import { normalizePhone } from './phone';
 import { QuickCalcButton } from '../../ui/QuickCalc';
+import { WorkBar } from '../workflow/WorkBar';
 import type { Customer } from '../../db/types';
 import {
   ChevronIcon,
@@ -81,6 +82,9 @@ export function CustomersScreen() {
       </header>
 
       <main className="flex-1 px-5 pb-32">
+        {/* מה פתוח עכשיו — קודם לרשימת הלקוחות, כי זו השאלה של הבוקר */}
+        <WorkBar />
+
         {customers === undefined ? null : customers.length === 0 ? (
           <EmptyState onAdd={() => setSheetOpen(true)} />
         ) : visible.length === 0 ? (

@@ -1,4 +1,5 @@
 import { db } from '../../db/db';
+import { stagesRepo } from '../../workflow/workflowRepo';
 import { projectCosting, type ProjectCosting } from '../../costing/boards';
 import { boardsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import type {
@@ -19,6 +20,12 @@ export interface NewWallInput {
 export const projectsRepo = {
   async listForCustomer(customerId: string): Promise<Project[]> {
     const rows = await db.projects.where('customerId').equals(customerId).toArray();
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
+  },
+
+  /** כל הפרויקטים בעסק — מה שהמנהל רואה. */
+  async all(): Promise<Project[]> {
+    const rows = await db.projects.toArray();
     return rows.sort((a, b) => b.createdAt - a.createdAt);
   },
 
@@ -57,15 +64,29 @@ export const projectsRepo = {
       await db.projects.add(project);
       await db.walls.bulkAdd(walls);
     });
+
+    // כל פרויקט נפתח עם תהליך עבודה משלו
+    await stagesRepo.ensure(project.id);
     return project;
   },
 
   async remove(id: string): Promise<void> {
-    await db.transaction('rw', db.projects, db.walls, db.units, async () => {
-      await db.units.where('projectId').equals(id).delete();
-      await db.walls.where('projectId').equals(id).delete();
-      await db.projects.delete(id);
-    });
+    // גם תהליך העבודה והקבצים נמחקים, כדי שלא יישארו שלבים יתומים
+    await db.transaction(
+      'rw',
+      db.projects,
+      db.walls,
+      db.units,
+      db.stages,
+      db.attachments,
+      async () => {
+        await db.units.where('projectId').equals(id).delete();
+        await db.walls.where('projectId').equals(id).delete();
+        await db.stages.where('projectId').equals(id).delete();
+        await db.attachments.where('projectId').equals(id).delete();
+        await db.projects.delete(id);
+      },
+    );
   },
 
   /** סיכום כל פרויקט — ארגזים, פלטות ומחיר — לתצוגה ברשימה. */

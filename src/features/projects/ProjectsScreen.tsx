@@ -7,8 +7,10 @@ import { roomDef } from '../../catalog/rooms';
 import { nav } from '../../nav/navigation';
 import { count } from '../../ui/units';
 import { ScreenHeader } from '../../ui/ScreenHeader';
-import { BoxesIcon, ChevronIcon, PlusIcon } from '../../ui/icons';
-import type { Project } from '../../db/types';
+import { BoxesIcon, ChevronIcon, FlowIcon, PlusIcon } from '../../ui/icons';
+import { stagesRepo, currentStage } from '../../workflow/workflowRepo';
+import { stageDef } from '../../workflow/stages';
+import type { Project, ProjectStage } from '../../db/types';
 import type { ProjectCosting } from '../../costing/boards';
 import { shekels } from '../../ui/units';
 
@@ -23,6 +25,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
       projects ? projectsRepo.summaries(projects.map((p) => p.id)) : {},
     [projects],
   );
+  const stages = useLiveQuery(() => stagesRepo.all(), []);
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
@@ -42,6 +45,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
                 key={project.id}
                 project={project}
                 boards={summaries?.[project.id]}
+                stages={(stages ?? []).filter((x) => x.projectId === project.id)}
               />
             ))}
           </ul>
@@ -74,10 +78,19 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
   );
 }
 
-function ProjectRow({ project, boards }: { project: Project; boards?: ProjectCosting }) {
+function ProjectRow({
+  project,
+  boards,
+  stages,
+}: {
+  project: Project;
+  boards?: ProjectCosting;
+  stages: ProjectStage[];
+}) {
   const room = roomDef(project.roomKind);
   const units = boards?.units ?? 0;
   const price = boards?.consumerTotal ?? 0;
+  const stage = currentStage(stages);
 
   return (
     <li>
@@ -109,6 +122,23 @@ function ProjectRow({ project, boards }: { project: Project; boards?: ProjectCos
 
         <ChevronIcon className="size-4 shrink-0 text-stone-300" />
       </button>
+
+      {/* השלב שהפרויקט עומד בו — כניסה ישירה לתהליך העבודה */}
+      {stage && (
+        <button
+          onClick={() => nav.push({ name: 'workflow', projectId: project.id })}
+          className="-mx-2 mb-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-xl bg-stone-100/70 px-3 py-2 text-start transition-colors hover:bg-stone-200/70"
+        >
+          <FlowIcon className="size-4 shrink-0 text-stone-400" />
+          <span className="min-w-0 flex-1 truncate text-xs text-stone-600">
+            {stageDef(stage.key).label}
+            <span className="text-stone-400">
+              {stage.status === 'active' ? ' — פתוח' : ' — הסתיים'}
+            </span>
+          </span>
+          <ChevronIcon className="size-3.5 shrink-0 text-stone-300" />
+        </button>
+      )}
     </li>
   );
 }

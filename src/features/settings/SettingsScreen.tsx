@@ -4,8 +4,9 @@ import { boardsRepo, finishesRepo, settingsRepo } from '../../materials/material
 import { BoardSheet } from './BoardSheet';
 import { ExtrasSection } from './ExtrasSection';
 import { ScreenHeader } from '../../ui/ScreenHeader';
+import { nav } from '../../nav/navigation';
 import { NumField, selectOnFocus } from '../../ui/Field';
-import { ChevronIcon, PlusIcon } from '../../ui/icons';
+import { ChevronIcon, PlusIcon, TeamIcon } from '../../ui/icons';
 import type { Board } from '../../db/types';
 
 const ROLE_LABELS: Record<Board['role'], string> = {
@@ -34,9 +35,28 @@ export function SettingsScreen() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
-      <ScreenHeader title="הגדרות" subtitle="לוחות, גוונים וחישוב" />
+      <ScreenHeader title="הגדרות" subtitle="צוות, לוחות, גוונים וחישוב" />
 
       <main className="flex-1 space-y-8 px-5 pt-5 pb-28">
+        <section>
+          <SectionTitle>צוות</SectionTitle>
+          <button
+            onClick={() => nav.push({ name: 'team' })}
+            className="flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3.5 text-start transition-colors hover:border-oak-400"
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-oak-100 text-oak-700">
+              <TeamIcon className="size-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-stone-900">אנשי הצוות</span>
+              <span className="block text-xs leading-snug text-stone-500">
+                מנהל, תכנת ונגרים — ומי מחובר במכשיר הזה
+              </span>
+            </span>
+            <ChevronIcon className="size-4 shrink-0 rotate-180 text-stone-300" />
+          </button>
+        </section>
+
         <section>
           <SectionTitle>לוחות</SectionTitle>
           <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">

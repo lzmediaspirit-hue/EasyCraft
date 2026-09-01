@@ -12,6 +12,10 @@ export const customersRepo = {
     return all.sort((a, b) => a.name.localeCompare(b.name, 'he'));
   },
 
+  async get(id: string): Promise<Customer | undefined> {
+    return db.customers.get(id);
+  },
+
   async create(input: NewCustomer): Promise<Customer> {
     const now = Date.now();
     const customer: Customer = {

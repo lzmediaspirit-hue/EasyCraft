@@ -247,3 +247,48 @@ export const KeypadIcon = ({ className = 'size-5' }: P) => (
     <path d="M5 9h14M12 5v8M6 18h5M15.5 16.5l3 3M18.5 16.5l-3 3" />
   </svg>
 );
+
+/** וי — שלב שהושלם. */
+export const CheckIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+/** תהליך עבודה — שלבים בשרשרת. */
+export const FlowIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <circle cx="6" cy="6" r="2.5" />
+    <circle cx="18" cy="18" r="2.5" />
+    <path d="M6 8.5v6a3 3 0 003 3h6.5" />
+  </svg>
+);
+
+/** לוח שנה. */
+export const CalendarIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="3.5" y="5" width="17" height="16" rx="2" />
+    <path d="M3.5 10h17M8 3v4M16 3v4" />
+  </svg>
+);
+
+/** צוות. */
+export const TeamIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <circle cx="9" cy="8" r="3" />
+    <path d="M3.5 19a5.5 5.5 0 0111 0M16 6.2a3 3 0 010 5.6M17 19a5.5 5.5 0 00-1.6-3.9" />
+  </svg>
+);
+
+/** קובץ מצורף. */
+export const FileIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M14 3v5h5" />
+    <path d="M19 8v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2h7z" />
+  </svg>
+);
