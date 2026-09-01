@@ -38,15 +38,31 @@ export interface Project extends Entity {
 /** מכשול או נקודה על הקיר שהנגר חייב לקחת בחשבון. */
 export type WallFeatureKind = 'window' | 'door' | 'socket' | 'water' | 'pillar' | 'niche';
 
+/**
+ * מאיזה קצה של הקיר נמדד המרחק האופקי.
+ * בשטח מודדים מהקצה שנוח יותר להגיע אליו, ולכן הבחירה נשמרת.
+ */
+export type WallSide = 'start' | 'end';
+
+/** מנין נמדד הגובה — מהרצפה או מהתקרה. */
+export type HeightRef = 'floor' | 'ceiling';
+
 export interface WallFeature {
   id: string;
   kind: WallFeatureKind;
-  /** מרחק מתחילת הקיר, במ"מ */
+  /** מרחק מתחילת הקיר לקצה השמאלי של הסימון, במ"מ */
   xMm: number;
-  /** גובה מהרצפה, במ"מ */
+  /** גובה תחתית הסימון מהרצפה, במ"מ */
   yMm: number;
   widthMm: number;
   heightMm: number;
+  /**
+   * הקצה שממנו נמדד המרחק האופקי. ברירת המחדל היא תחילת הקיר;
+   * הגיאומטריה עצמה נשמרת תמיד ב-xMm, והשדה הזה הוא רק איך מציגים אותה.
+   */
+  fromSide?: WallSide;
+  /** הגובה נמדד מהרצפה או מהתקרה */
+  heightRef?: HeightRef;
 }
 
 export interface Wall extends Entity {
@@ -180,6 +196,11 @@ export interface Zone {
   /** גובה האזור במ"מ */
   heightMm: number;
   shelves?: number;
+  /**
+   * מדפי זכוכית. כמו דלת זכוכית — הם אינם לוח, ולכן יוצאים מחישוב
+   * הפלטות ונספרים לפי שטח ברשימת הזכוכית.
+   */
+  glassShelves?: boolean;
   /** מרווחים בין המדפים באזור, מלמטה למעלה */
   shelfGapsMm?: number[];
   drawers?: number;
@@ -223,6 +244,20 @@ export interface CatalogItem extends Entity {
   corner?: CornerKind;
   blindMm?: number;
   panelThicknessMm?: number;
+  /*
+   * מאפייני גימור שנשמרים עם הפריט, כדי שארגז שהנגר כבר כיוונן פעם
+   * אחת יחזור מוכן בפעם הבאה ולא ידרוש את אותה עריכה מחדש.
+   */
+  drawerStyle?: DrawerStyle;
+  exposed?: ExposedSides;
+  backKind?: BackKind;
+  handles?: boolean;
+  glassDoors?: boolean;
+  led?: LedSpot[];
+  shelfGapsMm?: number[];
+  carcassFinishId?: string;
+  frontFinishId?: string;
+  exposedFinishId?: string;
   level: UnitLevel;
   defaultWidthMm: number;
   /** רוחבי תקן נפוצים למוצר הזה */

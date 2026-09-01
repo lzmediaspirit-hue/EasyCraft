@@ -204,14 +204,24 @@ export function WallElevation({
       {/* הארגזים */}
       {units.map((u) => {
         const selected = u.id === selectedId;
+        /*
+         * בחזית רואים את גוון החזיתות; כשהחזיתות מוסתרות רואים את
+         * הגוף עצמו, ולכן הוא נצבע בגוון הגוף — וזה מה שהלקוח יראה
+         * כשייפתח הארון.
+         */
         const frontFinish = u.frontFinishId ?? u.finishId;
-        const hex = frontFinish ? finishHex[frontFinish] : undefined;
-        // חזית כהה מחייבת קווים בהירים, אחרת האיור נבלע בגוון
+        const shownFinish = inside ? u.carcassFinishId : frontFinish;
+        const hex = shownFinish ? finishHex[shownFinish] : undefined;
+        // גוון כהה מחייב קווים בהירים, אחרת האיור נבלע בו
         const dark = hex ? isDark(hex) : false;
         const lineColor = dark ? '#f5f5f4' : selected ? '#814c2e' : '#78716c';
         const fill = hex ?? (selected ? '#f4e9d8' : '#ffffff');
         // הגובה כולל את הרגליים; הגוף עצמו מתחיל מעליהן
         const carcassH = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+        // הגב יושב עמוק יותר ולכן נראה כהה מעט מהגוף; בלי גב רואים את הקיר
+        const backKind = u.backKind ?? 'thin';
+        const backFill =
+          backKind === 'none' ? null : hex ? shade(hex, backKind === 'carcass' ? 0.9 : 0.82) : '#f0ede8';
 
         return (
           <g
@@ -223,13 +233,18 @@ export function WallElevation({
             onPointerCancel={endDrag}
             className={measure ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
           >
-            <rect
-              width={u.widthMm}
-              height={carcassH}
-              fill={fill}
-              fillOpacity={inside ? 0.3 : 1}
-              stroke="transparent"
-            />
+            <rect width={u.widthMm} height={carcassH} fill={fill} stroke="transparent" />
+            {/* פנים הארון: הגב נראה מאחורי המדפים והמגירות */}
+            {inside && backFill && (
+              <rect
+                x={stroke * 2}
+                y={stroke * 2}
+                width={Math.max(u.widthMm - stroke * 4, 0)}
+                height={Math.max(carcassH - stroke * 4, 0)}
+                fill={backFill}
+                stroke="transparent"
+              />
+            )}
             <g color={lineColor}>
               <CabinetGlyph
                 glyph={u.glyph}
@@ -627,6 +642,17 @@ function measureOverlay(
   );
 }
 
+/** מכהה או מבהיר גוון, כדי להראות שהגב יושב עמוק יותר מהגוף. */
+function shade(hex: string, factor: number): string {
+  const v = hex.replace('#', '');
+  if (v.length < 6) return hex;
+  const ch = (i: number) =>
+    Math.round(Math.min(parseInt(v.slice(i, i + 2), 16) * factor, 255))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${ch(0)}${ch(2)}${ch(4)}`;
+}
+
 /** האם הגוון כהה מספיק כדי שקווים כהים ייבלעו בו. */
 function isDark(hex: string): boolean {
   const v = hex.replace('#', '');
@@ -679,7 +705,8 @@ function snapX(
 /** מצמיד גובה לרצפה, לתקרה, ולקצוות של ארגזים אחרים. */
 function snapY(y: number, unit: PlacedUnit, units: PlacedUnit[], wallHeight: number): number {
   const ceiling = wallHeight - unit.heightMm;
-  const targets = [0, unit.socleMm ?? 0, ceiling];
+  // הרצפה היא 0: תחתית הארגז כוללת את הרגליים, ולכן אין יעד נפרד להן
+  const targets = [0, ceiling];
   for (const other of units) {
     if (other.id === unit.id) continue;
     targets.push(other.yMm, other.yMm + other.heightMm, other.yMm - unit.heightMm);

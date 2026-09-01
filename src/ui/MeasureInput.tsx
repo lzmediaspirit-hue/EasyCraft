@@ -16,6 +16,7 @@ export function MeasureInput({
   inMm = false,
   className = '',
   ariaLabel,
+  onFocus,
 }: {
   /** במ"מ */
   value: number;
@@ -27,6 +28,8 @@ export function MeasureInput({
   inMm?: boolean;
   className?: string;
   ariaLabel?: string;
+  /** נקרא בנוסף לבחירת הטקסט — למשל כדי לסמן את הציר שנערך */
+  onFocus?: () => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const show = (mm: number) => String(inMm ? mm : mmToCm(mm));
@@ -42,6 +45,7 @@ export function MeasureInput({
       value={draft ?? show(value)}
       aria-label={ariaLabel}
       onFocus={(e) => {
+        onFocus?.();
         setDraft(show(value));
         const input = e.currentTarget;
         // בחירה מיידית, ושוב בפריים הבא — בנייד המיקוד לפעמים מאפס

@@ -101,15 +101,18 @@ export function MaterialsSheet({
 
           {costing.glass.length > 0 && (
             <section>
-              <h3 className="mb-2 text-sm font-semibold text-stone-700">דלתות זכוכית</h3>
+              <h3 className="mb-2 text-sm font-semibold text-stone-700">זכוכית</h3>
               <ul className="space-y-1.5">
                 {costing.glass.map((g) => (
                   <li
-                    key={`${g.widthMm}x${g.heightMm}`}
+                    key={`${g.label} ${g.widthMm}x${g.heightMm}`}
                     className="flex items-baseline gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2"
                   >
-                    <span className="num min-w-0 flex-1 text-sm text-stone-800">
-                      {cm(g.widthMm)}×{cm(g.heightMm)} ס״מ
+                    <span className="min-w-0 flex-1 truncate text-sm text-stone-800">
+                      {g.label}
+                      <span className="num ms-1.5 text-stone-500">
+                        {cm(g.widthMm)}×{cm(g.heightMm)}
+                      </span>
                     </span>
                     <span className="num text-sm font-semibold text-stone-900">{g.qty}</span>
                     <span className="text-[11px] text-stone-400">יח׳</span>
@@ -120,7 +123,7 @@ export function MaterialsSheet({
                 ))}
               </ul>
               <p className="mt-1.5 text-[11px] leading-snug text-stone-400">
-                דלתות זכוכית נספרות לפי שטח ולא נכללות בכמות הפלטות.
+                זכוכית נספרת לפי שטח ולא נכללת בכמות הפלטות.
                 המחיר למ״ר נקבע בהגדרות.
               </p>
             </section>

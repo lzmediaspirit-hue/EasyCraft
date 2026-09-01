@@ -4,7 +4,7 @@ import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field'
 import { cmToMm, mmToCm } from '../../ui/units';
 import { ROOMS, roomDef } from '../../catalog/rooms';
 import { WALL_LAYOUTS, wallName } from './wallLayouts';
-import { FEATURE_DEFS, featureDef } from './wallFeatures';
+import { WallFeaturesEditor } from './WallFeaturesEditor';
 import { projectsRepo, type NewWallInput } from './projectsRepo';
 import { DEFAULT_WALL_HEIGHT, DEFAULT_WALL_LENGTH } from '../../catalog/standards';
 import {
@@ -12,10 +12,8 @@ import {
   CustomRoomIcon,
   KitchenIcon,
   LivingIcon,
-  PlusIcon,
-  TrashIcon,
 } from '../../ui/icons';
-import type { RoomKind, WallFeature, WallFeatureKind } from '../../db/types';
+import type { RoomKind, WallFeature } from '../../db/types';
 
 type Step = 'room' | 'name' | 'layout' | 'condition' | 'dims' | 'features';
 
@@ -114,14 +112,10 @@ export function NewProjectWizard({
 
   /* ---- שינוי סימונים ---- */
 
-  function addFeature(wallIndex: number, kind: WallFeatureKind) {
-    const def = featureDef(kind);
+  function addFeature(wallIndex: number, feature: WallFeature) {
     setFeatures((prev) => {
       const next = prev.map((f) => [...f]);
-      next[wallIndex] = [
-        ...(next[wallIndex] ?? []),
-        { id: crypto.randomUUID(), kind, xMm: 0, yMm: def.y, widthMm: def.w, heightMm: def.h },
-      ];
+      next[wallIndex] = [...(next[wallIndex] ?? []), feature];
       return next;
     });
   }
@@ -281,52 +275,14 @@ export function NewProjectWizard({
             <section key={i}>
               <h3 className="mb-2 text-sm font-semibold text-stone-700">{wallName(i)}</h3>
 
-              <div className="space-y-2">
-                {(features[i] ?? []).map((f) => (
-                  <div
-                    key={f.id}
-                    className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white p-2"
-                  >
-                    <span
-                      className="size-3 shrink-0 rounded-full"
-                      style={{ background: featureDef(f.kind).tone }}
-                    />
-                    <span className="w-20 shrink-0 truncate text-sm text-stone-700">
-                      {featureDef(f.kind).label}
-                    </span>
-                    <MiniNumber
-                      label="מ-"
-                      value={mmToCm(f.xMm)}
-                      onChange={(v) => patchFeature(i, f.id, { xMm: cmToMm(v) })}
-                    />
-                    <MiniNumber
-                      label="רוחב"
-                      value={mmToCm(f.widthMm)}
-                      onChange={(v) => patchFeature(i, f.id, { widthMm: cmToMm(v) })}
-                    />
-                    <button
-                      onClick={() => removeFeature(i, f.id)}
-                      aria-label="הסרה"
-                      className="shrink-0 rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-red-600"
-                    >
-                      <TrashIcon className="size-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {FEATURE_DEFS.map((def) => (
-                  <button
-                    key={def.kind}
-                    onClick={() => addFeature(i, def.kind)}
-                    className="flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:border-oak-400 hover:text-oak-700"
-                  >
-                    <PlusIcon className="size-3" />
-                    {def.label}
-                  </button>
-                ))}
-              </div>
+              <WallFeaturesEditor
+                features={features[i] ?? []}
+                wallLengthMm={cmToMm(Number(lengthsCm[i]) || 0)}
+                wallHeightMm={heightMm}
+                onAdd={(f) => addFeature(i, f)}
+                onPatch={(id, patch) => patchFeature(i, id, patch)}
+                onRemove={(id) => removeFeature(i, id)}
+              />
             </section>
           ))}
         </div>
@@ -352,29 +308,5 @@ function ConditionCard({
       <span className="block font-semibold text-stone-900">{title}</span>
       <span className="mt-0.5 block text-sm leading-snug text-stone-500">{hint}</span>
     </button>
-  );
-}
-
-function MiniNumber({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="flex min-w-0 flex-1 items-center gap-1 rounded-lg bg-stone-100 px-2 py-1">
-      <span className="shrink-0 text-[11px] text-stone-500">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
-        onFocus={selectOnFocus}
-        type="number"
-        inputMode="numeric"
-        className="num w-full min-w-0 bg-transparent text-end text-sm text-stone-800 focus:outline-none"
-      />
-    </label>
   );
 }

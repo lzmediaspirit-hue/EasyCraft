@@ -167,6 +167,22 @@ export function ZonesEditor({
                       </MiniPill>
                     ))}
                   </div>
+                  {(zone.shelves ?? 0) > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <MiniPill
+                        active={!zone.glassShelves}
+                        onClick={() => patchZone(zone.id, { glassShelves: undefined })}
+                      >
+                        מדף לוח
+                      </MiniPill>
+                      <MiniPill
+                        active={!!zone.glassShelves}
+                        onClick={() => patchZone(zone.id, { glassShelves: true })}
+                      >
+                        מדף זכוכית
+                      </MiniPill>
+                    </div>
+                  )}
                   <ShelfGaps
                     shelves={zone.shelves ?? 0}
                     heightMm={zone.heightMm}

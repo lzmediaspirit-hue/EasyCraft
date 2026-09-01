@@ -61,4 +61,19 @@
     -webkit-appearance: none;
     appearance: none;
   }
+
+  /*
+   * חצי ההגדלה של שדה מספר גוזלים רוחב בשדות מידה צרים ומזיזים את
+   * המספר מהמרכז. המידות משתנות בהקלדה ובמידות התקן, לא בחצים.
+   */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }

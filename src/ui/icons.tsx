@@ -231,3 +231,19 @@ export const ArrowDownIcon = ({ className = 'size-5' }: P) => (
     <path d="M12 5v14M6 13l6 6 6-6" />
   </svg>
 );
+
+/** שמירה לספרייה — סימנייה. */
+export const BookmarkIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M6 4h12v16l-6-4-6 4z" />
+  </svg>
+);
+
+/** מחשבון מהיר. */
+export const KeypadIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M5 9h14M12 5v8M6 18h5M15.5 16.5l3 3M18.5 16.5l-3 3" />
+  </svg>
+);

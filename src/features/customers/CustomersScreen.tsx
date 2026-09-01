@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { customersRepo } from './customersRepo';
 import { NewCustomerSheet } from './NewCustomerSheet';
 import { normalizePhone } from './phone';
+import { QuickCalcButton } from '../../ui/QuickCalc';
 import type { Customer } from '../../db/types';
 import {
   ChevronIcon,
@@ -53,13 +54,16 @@ export function CustomersScreen() {
           {!!customers?.length && (
             <span className="num text-sm font-medium text-stone-400">{customers.length}</span>
           )}
-          <button
-            onClick={() => nav.push({ name: 'settings' })}
-            aria-label="הגדרות"
-            className="-me-2 ms-auto rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
-          >
-            <SettingsIcon />
-          </button>
+          <span className="ms-auto flex items-center">
+            <QuickCalcButton />
+            <button
+              onClick={() => nav.push({ name: 'settings' })}
+              aria-label="הגדרות"
+              className="-me-2 rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
+            >
+              <SettingsIcon />
+            </button>
+          </span>
         </div>
 
         {showSearch && (

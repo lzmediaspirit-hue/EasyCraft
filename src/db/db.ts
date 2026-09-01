@@ -73,3 +73,37 @@ db.version(4)
         }
       }),
   );
+
+/**
+ * מידת הפלטה הסטנדרטית היא 244×122 ס"מ.
+ * מי שכבר עבד עם ברירת המחדל הישנה מקבל את החדשה; מי שקבע מידה
+ * משלו — נשאר איתה, כי זו החלטה עסקית ולא ברירת מחדל.
+ */
+db.version(5)
+  .stores(TABLES_V3)
+  .upgrade((tx) =>
+    tx
+      .table('settings')
+      .toCollection()
+      .modify((s: { sheetWidthMm?: number; sheetHeightMm?: number }) => {
+        if (s.sheetWidthMm === 2800 && s.sheetHeightMm === 2070) {
+          s.sheetWidthMm = 2440;
+          s.sheetHeightMm = 1220;
+        }
+      }),
+  );
+
+/**
+ * ארגז שנעול לרצפה יושב על 0. גרסה קודמת של לוח העריכה הרימה אותו
+ * בגובה הרגליים, ולכן הוא נראה מרחף — כאן הוא מוחזר לרצפה.
+ */
+db.version(6)
+  .stores(TABLES_V3)
+  .upgrade((tx) =>
+    tx
+      .table('units')
+      .toCollection()
+      .modify((u: { floorLocked?: boolean; yMm: number }) => {
+        if (u.floorLocked && u.yMm !== 0) u.yMm = 0;
+      }),
+  );

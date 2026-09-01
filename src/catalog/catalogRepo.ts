@@ -88,6 +88,16 @@ export const catalogRepo = {
     corner?: CatalogItem['corner'];
     blindMm?: number;
     panelThicknessMm?: number;
+    drawerStyle?: CatalogItem['drawerStyle'];
+    exposed?: CatalogItem['exposed'];
+    backKind?: CatalogItem['backKind'];
+    handles?: boolean;
+    glassDoors?: boolean;
+    led?: CatalogItem['led'];
+    shelfGapsMm?: number[];
+    carcassFinishId?: string;
+    frontFinishId?: string;
+    exposedFinishId?: string;
     common?: boolean;
     level: CatalogItem['level'];
     defaultWidthMm: number;

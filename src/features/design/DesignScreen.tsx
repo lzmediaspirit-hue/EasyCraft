@@ -186,7 +186,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? {}}
-            onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
+            /* ארגז שנגרר עד הרצפה נצמד אליה שוב, בלי לחזור ללוח העריכה */
+            onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm, floorLocked: yMm === 0 })}
             onMoveShelf={(unitId, zoneId, gapsMm) => {
               const u = units.find((x) => x.id === unitId);
               if (!u) return;

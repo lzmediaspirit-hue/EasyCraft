@@ -14,10 +14,22 @@ const ROLES: { role: BoardRole; label: string; hint: string }[] = [
 ];
 
 /** הגדרת לוח גלם וקטלוג הגוונים שלו. */
-export function BoardSheet({ board, onClose }: { board: Board | null; onClose: () => void }) {
+export function BoardSheet({
+  board,
+  initialRole,
+  onSaved,
+  onClose,
+}: {
+  board: Board | null;
+  /** תפקיד פותח ללוח חדש, כשפותחים אותו מתוך בחירת גוון */
+  initialRole?: BoardRole;
+  /** מזהה הלוח שנשמר — כדי שהמסך שפתח יוכל להמשיך לגוונים שלו */
+  onSaved?: (boardId: string) => void;
+  onClose: () => void;
+}) {
   const [name, setName] = useState(board?.name ?? '');
   const [catalogNumber, setCatalogNumber] = useState(board?.catalogNumber ?? '');
-  const [role, setRole] = useState<BoardRole>(board?.role ?? 'carcass');
+  const [role, setRole] = useState<BoardRole>(board?.role ?? initialRole ?? 'carcass');
   const [hasGrain, setHasGrain] = useState(board?.hasGrain ?? false);
   const [factoryPrice, setFactoryPrice] = useState(String(board?.factoryPrice ?? 0));
   const [consumerPrice, setConsumerPrice] = useState(String(board?.consumerPrice ?? 0));
@@ -31,7 +43,7 @@ export function BoardSheet({ board, onClose }: { board: Board | null; onClose: (
   const canSave = name.trim().length > 0;
 
   async function save() {
-    await boardsRepo.save({
+    const id = await boardsRepo.save({
       id: board?.id,
       name: name.trim(),
       catalogNumber: catalogNumber.trim() || undefined,
@@ -40,6 +52,7 @@ export function BoardSheet({ board, onClose }: { board: Board | null; onClose: (
       factoryPrice: Number(factoryPrice) || 0,
       consumerPrice: Number(consumerPrice) || 0,
     });
+    onSaved?.(id);
     onClose();
   }
 

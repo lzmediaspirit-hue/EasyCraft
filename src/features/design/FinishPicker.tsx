@@ -1,3 +1,4 @@
+import { PlusIcon } from '../../ui/icons';
 import type { Finish } from '../../db/types';
 
 /**
@@ -11,12 +12,15 @@ export function FinishPicker({
   value,
   onChange,
   onApplyAll,
+  onAddBoard,
 }: {
   label: string;
   finishes: Finish[];
   value?: string;
   onChange: (finishId: string | undefined) => void;
   onApplyAll: (finishId: string | undefined) => void;
+  /** פתיחת לוח חדש לתפקיד הזה, כשהגוון שצריך עוד לא קיים */
+  onAddBoard: () => void;
 }) {
   return (
     <div className="mt-3">
@@ -27,6 +31,15 @@ export function FinishPicker({
           className="rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600 transition-colors hover:bg-stone-200 hover:text-oak-700"
         >
           לכל הפרויקט
+        </button>
+        {/* גוון חדש מתחיל בלוח — ולכן אפשר להוסיף אותו בלי לצאת מהעריכה */}
+        <button
+          onClick={onAddBoard}
+          aria-label={`הוספת לוח ל${label}`}
+          className="flex items-center gap-0.5 rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600 transition-colors hover:bg-stone-200 hover:text-oak-700"
+        >
+          <PlusIcon className="size-3" />
+          לוח חדש
         </button>
       </span>
 

@@ -404,7 +404,13 @@ function zonedContainer(c: Ctx) {
     } else if (zone.kind === 'shelves' && (inside || !c.doors)) {
       out.push(
         <g key={`sz-${zone.id}`}>
-          {shelfLines({ ...c, shelves: zone.shelves ?? 0, gaps: zone.shelfGapsMm }, top, bottom)}
+          {shelfLines(
+            { ...c, shelves: zone.shelves ?? 0, gaps: zone.shelfGapsMm },
+            top,
+            bottom,
+            '',
+            !!zone.glassShelves,
+          )}
         </g>,
       );
     } else if (zone.kind === 'rod' && (inside || !c.doors)) {
@@ -594,12 +600,21 @@ function doorPanels(c: Ctx, top: number, bottom: number, n: number, key = '') {
  * מדפים פנימיים. כברירת מחדל במרווחים שווים, ואם הוגדרו מרווחים
  * מפורשים — לפיהם, מלמטה כלפי מעלה.
  */
-function shelfLines(c: Ctx, top: number, bottom: number, key = '') {
+function shelfLines(c: Ctx, top: number, bottom: number, key = '', glass = false) {
   const { w, t, shelves } = c;
   if (shelves < 1) return [];
   const ys = shelfYs(c, top, bottom);
+  // מדף זכוכית מסומן בקו מקווקו — זה מה שמבדיל אותו על הנייר בשטח
   return ys.map((y, i) => (
-    <line key={`${key}sh${i}`} x1={w * 0.04} y1={y} x2={w * 0.96} y2={y} strokeWidth={t} />
+    <line
+      key={`${key}sh${i}`}
+      x1={w * 0.04}
+      y1={y}
+      x2={w * 0.96}
+      y2={y}
+      strokeWidth={t}
+      strokeDasharray={glass ? `${t * 5} ${t * 3}` : undefined}
+    />
   ));
 }
 

@@ -7,10 +7,19 @@ import { MATERIAL } from '../../catalog/standards';
 import { boardsRepo, finishesRepo } from '../../materials/materialsRepo';
 import { ZonesEditor } from './ZonesEditor';
 import { FinishPicker } from './FinishPicker';
+import { BoardSheet } from '../settings/BoardSheet';
+import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
-import { CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
-import type { BackKind, ExposedSides, LedSpot, OpeningMech, PlacedUnit } from '../../db/types';
+import { BookmarkIcon, CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
+import type {
+  BackKind,
+  BoardRole,
+  ExposedSides,
+  LedSpot,
+  OpeningMech,
+  PlacedUnit,
+} from '../../db/types';
 
 const DOOR_COUNTS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -77,12 +86,24 @@ export function UnitEditor({
   const [axis, setAxis] = useState<Axis>('w');
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
+  const [newBoardRole, setNewBoardRole] = useState<BoardRole | null>(null);
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
-  const finishes = useLiveQuery(async () => {
-    const boards = (await boardsRepo.list()).filter((b) => b.role === 'front');
-    const lists = await Promise.all(boards.map((b) => finishesRepo.listForBoard(b.id)));
-    return lists.flat();
+  /*
+   * גוון נבחר מתוך הלוח שממנו החלק באמת נבנה: הגוף מלוחות הגוף,
+   * החזיתות והדפנות הזרות מלוחות החזית. אחרת אפשר היה לצבוע גוף
+   * בגוון שאין ממנו לוח גוף.
+   */
+  const finishesByRole = useLiveQuery(async () => {
+    const boards = await boardsRepo.list();
+    const lists = await Promise.all(
+      boards.map(async (b) => ({ role: b.role, items: await finishesRepo.listForBoard(b.id) })),
+    );
+    const pick = (role: BoardRole) => lists.filter((l) => l.role === role).flatMap((l) => l.items);
+    return { carcass: pick('carcass'), front: pick('front') };
   }, []);
+  const carcassFinishes = finishesByRole?.carcass ?? [];
+  const frontFinishes = finishesByRole?.front ?? [];
 
   const caps = glyphDef(unit.glyph);
   const locked = unit.floorLocked ?? false;
@@ -127,9 +148,22 @@ export function UnitEditor({
   }
 
   return (
-    <div className="flex min-h-0 flex-col overflow-y-auto rounded-t-3xl border-t border-stone-200 bg-white px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(28,25,23,0.08)]">
+    <>
+    {/*
+      הלוח נגלל, ולכן אף שורה בתוכו אינה מתכווצת: בלי זה עמודת הפלקס
+      דחסה את שורת מידות התקן עד שהיא נעלמה מאחורי שורת המידות.
+    */}
+    <div className="flex min-h-0 flex-col overflow-y-auto rounded-t-3xl border-t border-stone-200 bg-white px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(28,25,23,0.08)] [&>*]:shrink-0">
       <div className="flex items-center gap-1">
         <h2 className="min-w-0 flex-1 truncate font-semibold text-stone-900">{unit.name}</h2>
+        <button
+          onClick={() => setSavingToLibrary(true)}
+          aria-label="שמירה לספרייה"
+          title="שמירה לספרייה"
+          className="rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
+        >
+          <BookmarkIcon className="size-5" />
+        </button>
         <button
           onClick={onEdit}
           aria-label="עריכת הארגז"
@@ -153,11 +187,33 @@ export function UnitEditor({
         </button>
       </div>
 
-      {/* בחירת ציר ואז מידת תקן — אותה שורת שבבים משרתת את שלושת המימדים */}
+      {/*
+        שורת מידות אחת: המספר עצמו ניתן להקלדה, והקשה עליו בוחרת את
+        הציר שמידות התקן שמתחת משרתות. קודם הייתה שורה שנייה של שדות
+        הקלדה שחזרה על אותן מידות והסתירה את שורת המידות המהירות.
+      */}
       <div className="mt-3 flex gap-1.5">
-        <AxisTab active={axis === 'w'} onClick={() => setAxis('w')} label="רוחב" value={unit.widthMm} />
-        <AxisTab active={axis === 'h'} onClick={() => setAxis('h')} label="גובה" value={unit.heightMm} />
-        <AxisTab active={axis === 'd'} onClick={() => setAxis('d')} label="עומק" value={unit.depthMm} />
+        <AxisTab
+          active={axis === 'w'}
+          onSelect={() => setAxis('w')}
+          label="רוחב"
+          value={unit.widthMm}
+          onChange={(mm) => onChange({ widthMm: mm })}
+        />
+        <AxisTab
+          active={axis === 'h'}
+          onSelect={() => setAxis('h')}
+          label="גובה"
+          value={unit.heightMm}
+          onChange={(mm) => onChange({ heightMm: mm })}
+        />
+        <AxisTab
+          active={axis === 'd'}
+          onSelect={() => setAxis('d')}
+          label="עומק"
+          value={unit.depthMm}
+          onChange={(mm) => onChange({ depthMm: mm })}
+        />
       </div>
 
       <div ref={chipRow} className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
@@ -175,12 +231,6 @@ export function UnitEditor({
             {cm(mm)}
           </button>
         ))}
-      </div>
-
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <NumBox label="רוחב" value={unit.widthMm} minMm={50} onChange={(mm) => onChange({ widthMm: mm })} />
-        <NumBox label="גובה" value={unit.heightMm} minMm={50} onChange={(mm) => onChange({ heightMm: mm })} />
-        <NumBox label="עומק" value={unit.depthMm} minMm={50} onChange={(mm) => onChange({ depthMm: mm })} />
       </div>
 
       {unit.panelThicknessMm !== undefined && (
@@ -273,46 +323,67 @@ export function UnitEditor({
           )}
 
           {unit.corner && (
-            <Row label="עומק הפינה המתה">
-              {[200, 250, 300, 350, 400].map((mm) => (
-                <Pill
-                  key={mm}
-                  active={mm === (unit.blindMm ?? 300)}
-                  onClick={() => onChange({ blindMm: mm })}
-                >
-                  {cm(mm)}
-                </Pill>
-              ))}
-            </Row>
+            <>
+              <Row
+                label="עומק הפינה המתה"
+                hint="החלק שנחסם על ידי הארון שעל הקיר הסמוך"
+              >
+                {[200, 250, 300, 350, 400].map((mm) => (
+                  <Pill
+                    key={mm}
+                    active={mm === (unit.blindMm ?? 300)}
+                    onClick={() => onChange({ blindMm: mm })}
+                  >
+                    {cm(mm)}
+                  </Pill>
+                ))}
+              </Row>
+              {/* הפינה המתה נמדדת בשטח ולא תמיד נופלת על מידת תקן */}
+              <label className="mt-2 flex items-center gap-2 rounded-lg bg-stone-100 px-2.5 py-1.5">
+                <span className="flex-1 text-[11px] text-stone-500">מידה מדויקת</span>
+                <MeasureInput
+                  value={unit.blindMm ?? 300}
+                  onChange={(mm) => onChange({ blindMm: mm })}
+                  minMm={50}
+                  maxMm={Math.max(unit.widthMm - 100, 50)}
+                  ariaLabel="עומק הפינה המתה"
+                  className="num w-14 bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
+                />
+                <span className="text-[10px] text-stone-400">ס״מ</span>
+              </label>
+            </>
           )}
 
           <FinishPicker
             label="גוון החזיתות"
-            finishes={finishes ?? []}
+            finishes={frontFinishes}
             value={unit.frontFinishId ?? unit.finishId}
             onChange={(id) => onChange({ frontFinishId: id, finishId: id })}
             onApplyAll={(id) => onApplyFinishAll('front', id)}
+            onAddBoard={() => setNewBoardRole('front')}
           />
 
           <FinishPicker
             label="גוון הגוף"
-            finishes={finishes ?? []}
+            finishes={carcassFinishes}
             value={unit.carcassFinishId}
             onChange={(id) => onChange({ carcassFinishId: id })}
             onApplyAll={(id) => onApplyFinishAll('carcass', id)}
+            onAddBoard={() => setNewBoardRole('carcass')}
           />
 
           <FinishPicker
             label="גוון הדפנות הזרות"
-            finishes={finishes ?? []}
+            finishes={frontFinishes}
             value={unit.exposedFinishId}
             onChange={(id) => onChange({ exposedFinishId: id })}
             onApplyAll={(id) => onApplyFinishAll('exposed', id)}
+            onAddBoard={() => setNewBoardRole('front')}
           />
 
-          {(finishes?.length ?? 0) === 0 && (
+          {carcassFinishes.length + frontFinishes.length === 0 && (
             <p className="mt-1 text-[10px] text-stone-400">
-              אין עדיין גוונים. מגדירים אותם בהגדרות, בקטלוג הגוונים של הלוח.
+              אין עדיין גוונים. אפשר להוסיף לוח כאן, או להגדיר אותם בהגדרות.
             </p>
           )}
 
@@ -337,10 +408,9 @@ export function UnitEditor({
       <div className="mt-3 flex items-stretch gap-2">
         <button
           onClick={() =>
-            onChange({
-              floorLocked: !locked,
-              ...(locked ? {} : { yMm: unit.socleMm ?? 0 }),
-            })
+            /* תחתית הארגז היא yMm, והרגליים כלולות בגובה — ולכן ארגז
+               שנצמד לרצפה יושב על 0 ולא על גובה הרגליים */
+            onChange({ floorLocked: !locked, ...(locked ? {} : { yMm: 0 }) })
           }
           aria-pressed={locked}
           className={`flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-start text-sm font-medium transition-colors ${
@@ -366,7 +436,14 @@ export function UnitEditor({
             <NumBox
               label="גובה רגליים"
               value={unit.socleMm ?? 0}
-              onChange={(mm) => onChange({ socleMm: mm || undefined, yMm: mm })}
+              /* הרגליים מרימות את גוף הארון, ולכן הגובה הכולל גדל איתן */
+              onChange={(mm) =>
+                onChange({
+                  socleMm: mm || undefined,
+                  heightMm: Math.max(unit.heightMm + mm - (unit.socleMm ?? 0), 50),
+                  yMm: 0,
+                })
+              }
             />
           ) : (
             <NumBox label="גובה מהרצפה" value={unit.yMm} onChange={(mm) => onChange({ yMm: mm })} />
@@ -374,32 +451,59 @@ export function UnitEditor({
         </div>
       </div>
     </div>
+
+    {newBoardRole && (
+      <BoardSheet
+        board={null}
+        initialRole={newBoardRole}
+        onClose={() => setNewBoardRole(null)}
+      />
+    )}
+
+    {savingToLibrary && (
+      <SaveToLibrarySheet unit={unit} onClose={() => setSavingToLibrary(false)} />
+    )}
+    </>
   );
 }
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * ציר אחד בשורת המידות: תווית, מספר שאפשר להקליד, ובחירת הציר
+ * שמידות התקן שמתחת משרתות. מיקוד בשדה בוחר את הציר, כדי שהקלדה
+ * ומידה מהירה תמיד יעבדו על אותו מימד.
+ */
 function AxisTab({
   active,
-  onClick,
+  onSelect,
   label,
   value,
+  onChange,
 }: {
   active: boolean;
-  onClick: () => void;
+  onSelect: () => void;
   label: string;
   value: number;
+  onChange: (mm: number) => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex-1 rounded-xl px-2 py-1.5 transition-colors ${
+    <div
+      onClick={onSelect}
+      className={`min-w-0 flex-1 rounded-xl px-2 py-1.5 transition-colors ${
         active ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
       }`}
     >
-      <span className="block text-[10px] leading-tight opacity-70">{label}</span>
-      <span className="num block text-sm leading-tight font-semibold">{cm(value)}</span>
-    </button>
+      <span className="block text-center text-[10px] leading-tight opacity-70">{label}</span>
+      <MeasureInput
+        value={value}
+        onChange={onChange}
+        onFocus={onSelect}
+        minMm={50}
+        ariaLabel={label}
+        className="num block w-full bg-transparent text-center text-sm leading-tight font-semibold focus:outline-none"
+      />
+    </div>
   );
 }
 

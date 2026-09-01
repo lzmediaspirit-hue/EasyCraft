@@ -49,6 +49,8 @@ export interface AccessoryLine {
 
 /** דלת זכוכית בגודל מסוים, וכמה כאלה יש בפרויקט. */
 export interface GlassDoorLine {
+  /** דלת זכוכית או מדף זכוכית — פריטים שונים בהזמנה מהזגג */
+  label: string;
   widthMm: number;
   heightMm: number;
   qty: number;
@@ -129,9 +131,13 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   parts.push({ role: 'carcass', label: 'צד', widthMm: d, heightMm: carcassH, qty: 2 });
   parts.push({ role: 'carcass', label: 'תחתית ותקרה', widthMm: innerW, heightMm: d, qty: 2 });
 
-  // מדפים מכל האזורים, לפי גוף הארון ולא לפי הגובה הכולל
+  // מדפים מכל האזורים, לפי גוף הארון ולא לפי הגובה הכולל.
+  // מדף זכוכית אינו לוח, ולכן הוא נספר ברשימת הזכוכית ולא כאן.
   const zones = unitZones({ ...u, heightMm: h });
-  const shelves = zones.reduce((n, z) => n + (z.kind === 'shelves' ? (z.shelves ?? 0) : 0), 0);
+  const shelves = zones.reduce(
+    (n, z) => n + (z.kind === 'shelves' && !z.glassShelves ? (z.shelves ?? 0) : 0),
+    0,
+  );
   if (shelves > 0) {
     parts.push({
       role: 'carcass',
@@ -220,32 +226,52 @@ export interface PartSettings {
   frontGapMm: number;
 }
 
-/** דלתות הזכוכית בארגז, עם המידה שלהן. */
-export function unitGlassDoors(
-  u: PlacedUnit,
-  s: PartSettings,
-): { widthMm: number; heightMm: number; qty: number }[] {
-  if (!u.glassDoors) return [];
-  const doors = effectiveDoors(u);
-  if (doors < 1) return [];
+/** חלק זכוכית בארגז — דלת או מדף — עם המידה והכמות שלו. */
+export interface GlassPart {
+  label: string;
+  widthMm: number;
+  heightMm: number;
+  qty: number;
+}
 
+/** כל חלקי הזכוכית בארגז: דלתות ומדפים. */
+export function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
   const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
   const e = u.exposed ?? {};
   const ft = MATERIAL.frontMm;
   const carcassW = u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0);
+  const t = s.carcassThicknessMm;
   const zones = unitZones({ ...u, heightMm: h });
+  const out: GlassPart[] = [];
+
+  const doors = effectiveDoors(u);
   const coveredMm = zones
     .filter((z) => !(z.kind === 'drawers' && z.drawerStyle !== 'inner'))
     .reduce((n, z) => n + z.heightMm, 0);
-  if (coveredMm <= 0) return [];
-
-  return [
-    {
+  if (u.glassDoors && doors > 0 && coveredMm > 0) {
+    out.push({
+      label: 'דלת זכוכית',
       widthMm: Math.round(Math.max(carcassW / doors - s.frontGapMm, 0)),
       heightMm: Math.round(Math.max(coveredMm - s.frontGapMm, 0)),
       qty: doors,
-    },
-  ];
+    });
+  }
+
+  // מדף זכוכית נחתך למידת הפנים, כמו מדף רגיל
+  const glassShelves = zones.reduce(
+    (n, z) => n + (z.kind === 'shelves' && z.glassShelves ? (z.shelves ?? 0) : 0),
+    0,
+  );
+  if (glassShelves > 0) {
+    out.push({
+      label: 'מדף זכוכית',
+      widthMm: Math.round(Math.max(carcassW - 2 * t, 0)),
+      heightMm: Math.round(Math.max(u.depthMm - 20, 0)),
+      qty: glassShelves,
+    });
+  }
+
+  return out;
 }
 
 /** ידיות בארגז — אחת לכל חזית נראית. */
@@ -309,8 +335,9 @@ export function projectCosting(
     lifts += liftCount(u);
     handles += unitHandles(u);
     for (const g of unitGlassDoors(u, settings)) {
-      const key = `${g.widthMm}x${g.heightMm}`;
+      const key = `${g.label} ${g.widthMm}x${g.heightMm}`;
       const line = glassMap.get(key) ?? {
+        label: g.label,
         widthMm: g.widthMm,
         heightMm: g.heightMm,
         qty: 0,

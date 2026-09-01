@@ -4,8 +4,8 @@ import type { Board, BoardRole, Finish, ProjectPrice, Settings } from '../db/typ
 /** הגדרות ברירת מחדל, עד שהמשתמש משנה אותן במסך ההגדרות. */
 export const DEFAULT_SETTINGS: Settings = {
   id: 'app',
-  sheetWidthMm: 2800,
-  sheetHeightMm: 2070,
+  sheetWidthMm: 2440,
+  sheetHeightMm: 1220,
   kerfMm: 4,
   carcassThicknessMm: 18,
   yieldPct: 85,
