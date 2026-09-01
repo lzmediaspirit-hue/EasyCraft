@@ -12,6 +12,11 @@ export interface Customer extends Entity {
   city: string;
   /** טלפון בפורמט מנורמל (ספרות בלבד) — לא חובה */
   phone?: string;
+  /**
+   * לקוח שסיים. הוא יורד מהרשימה הפעילה ועובר לארכיון, אבל
+   * הפרויקטים והמחירים שלו נשמרים — זו ההיסטוריה של העסק.
+   */
+  archivedAt?: number;
 }
 
 /** מה שנדרש כדי ליצור לקוח חדש. */
@@ -29,6 +34,44 @@ export interface Project extends Entity {
   /** שם הפרויקט, למשל "מטבח" או "ארון חדר הורים" */
   name: string;
   roomKind: RoomKind;
+  /**
+   * איך הפרויקט מתומחר. ריק = לפי חישוב החומרים, כמו עד היום.
+   */
+  pricingMode?: PricingMode;
+  /** מחיר שהמנהל קבע בעצמו, בשקלים — גובר על כל חישוב */
+  manualPrice?: number;
+  /** ₪ למ"ר חזית ארגז — מחיר שגדל עם מידות הארגז */
+  perUnitRate?: number;
+  /** ₪ למטר רץ של קיר */
+  perMeterRate?: number;
+  /** מתי נמכר. עד אז תהליך העבודה סגור */
+  soldAt?: number;
+  /** תשלום אחד או בתשלומים */
+  paymentPlan?: PaymentPlan;
+  payments?: Payment[];
+}
+
+/**
+ * שיטת התמחור.
+ * materials — לפי חישוב הפלטות והאביזרים, כמו במסך החומרים
+ * perUnit  — ₪ למ"ר חזית, כך שארגז גדול עולה יותר
+ * perMeter — ₪ למטר רץ של קיר, השיטה הנפוצה במטבחים
+ * manual   — המנהל קובע מספר, והחישוב נשאר כהערכה בלבד
+ */
+export type PricingMode = 'materials' | 'perUnit' | 'perMeter' | 'manual';
+
+export type PaymentPlan = 'single' | 'installments';
+
+/** תשלום אחד בעסקה. */
+export interface Payment {
+  id: string;
+  /** בשקלים */
+  amount: number;
+  /** מתי אמור להיות משולם */
+  dueAt?: number;
+  /** מתי שולם בפועל. ריק = טרם שולם */
+  paidAt?: number;
+  label?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -141,6 +184,12 @@ export interface PlacedUnit extends Entity {
   handles?: boolean;
   /** דלתות זכוכית במקום חזית מלאה */
   glassDoors?: boolean;
+  /**
+   * צדדים שעשויים זכוכית במקום לוח — ויטרינה שרואים דרכה מהצד.
+   * הצד הזה יוצא מפירוק הלוחות ונכנס לרשימת הזכוכית, ולארון
+   * נשארים הגב, הצד השני והתחתית והתקרה.
+   */
+  glassSides?: { start?: boolean; end?: boolean };
   /** פסי לד והיכן הם מותקנים */
   led?: LedSpot[];
   /**
@@ -186,29 +235,66 @@ export type OpeningMech = 'hinge' | 'lift' | 'sliding';
 export type CornerKind = 'blindStart' | 'blindEnd' | 'lShape';
 
 /**
- * אזור בתוך הארון, מלמטה למעלה.
- * חלוקה לאזורים היא מה שמאפשר ארון אחד שמכיל גם מגירות, גם מדפים
- * וגם מוט תלייה — כל אזור עם התוכן והגובה שלו.
+ * תוכן של אזור או של עמודה בתוכו.
+ *
+ * זה החלק שחוזר בשתי הרמות: אזור בלי קושרת מחזיק תוכן אחד, ואזור
+ * עם קושרת מחזיק תוכן לכל עמודה. הפרדה בין "מה יש כאן" לבין "איפה
+ * זה יושב" היא מה שמאפשר לתאר ארון אמיתי בלי מבנה רקורסיבי.
  */
-export interface Zone {
-  id: string;
+export interface ZoneContent {
   kind: ZoneKind;
-  /** גובה האזור במ"מ */
-  heightMm: number;
   shelves?: number;
   /**
    * מדפי זכוכית. כמו דלת זכוכית — הם אינם לוח, ולכן יוצאים מחישוב
    * הפלטות ונספרים לפי שטח ברשימת הזכוכית.
    */
   glassShelves?: boolean;
-  /** מרווחים בין המדפים באזור, מלמטה למעלה */
+  /** מרווחים בין המדפים, מלמטה למעלה */
   shelfGapsMm?: number[];
   drawers?: number;
   drawerCols?: number;
   drawerStyle?: DrawerStyle;
+  /** שורות ועמודות בכוורת יין */
+  wineRows?: number;
+  wineCols?: number;
+  /**
+   * עומק שונה מעומק הארון — מדף רדוד מעל משטח, או תא עמוק יותר.
+   * ריק = עומק הארון.
+   */
+  depthMm?: number;
 }
 
-export type ZoneKind = 'shelves' | 'drawers' | 'rod' | 'empty';
+/**
+ * אזור בתוך הארון, מלמטה למעלה.
+ * חלוקה לאזורים היא מה שמאפשר ארון אחד שמכיל גם מגירות, גם מדפים
+ * וגם מוט תלייה — כל אזור עם התוכן והגובה שלו.
+ */
+export interface Zone extends ZoneContent {
+  id: string;
+  /** גובה האזור במ"מ */
+  heightMm: number;
+  /**
+   * גובה שנקבע במפורש ואינו נדחס.
+   * מתקן תלייה חייב 120 ס"מ ומגירה פנימית חייבת 90 — ולכן כשכל
+   * האזורים קבועים, הארון עצמו גדל כדי להכיל אותם.
+   */
+  fixedHeight?: boolean;
+  /**
+   * קושרות אנכיות: העמודות שהאזור מחולק אליהן.
+   * ריק או עמודה אחת = אין קושרת. רמת עומק אחת מספיקה לתאר
+   * ארון אמיתי, ולכן עמודה אינה מתחלקת שוב.
+   */
+  columns?: ZoneColumn[];
+}
+
+/** עמודה בתוך אזור, מימין לשמאל. */
+export interface ZoneColumn extends ZoneContent {
+  id: string;
+  /** חלק יחסי מרוחב האזור. הסכום מנורמל ל-1. */
+  widthShare: number;
+}
+
+export type ZoneKind = 'shelves' | 'drawers' | 'rod' | 'empty' | 'wine';
 
 /** מגירה חיצונית נראית בחזית; פנימית מסתתרת מאחורי דלת. */
 export type DrawerStyle = 'outer' | 'inner';

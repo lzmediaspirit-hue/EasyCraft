@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
-import { isContainer } from '../../catalog/zones';
+import { MAX_BODY_MM, isContainer } from '../../catalog/zones';
 import { MATERIAL } from '../../catalog/standards';
 import { boardsRepo, finishesRepo } from '../../materials/materialsRepo';
 import { ZonesEditor } from './ZonesEditor';
@@ -108,6 +108,9 @@ export function UnitEditor({
   const caps = glyphDef(unit.glyph);
   const locked = unit.floorLocked ?? false;
   const exposed = unit.exposed ?? {};
+  const glassSides = unit.glassSides ?? {};
+  // הרגליים אינן חלק מהגוף, ולכן האזהרה נמדדת בלעדיהן
+  const bodyH = unit.heightMm - (unit.socleMm ?? 0);
   const led = unit.led ?? [];
   const container = isContainer(unit.glyph);
 
@@ -215,6 +218,14 @@ export function UnitEditor({
           onChange={(mm) => onChange({ depthMm: mm })}
         />
       </div>
+
+      {bodyH > MAX_BODY_MM && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
+          גוף הארון <span className="num">{cm(bodyH)}</span> ס״מ, מעל{' '}
+          <span className="num">{cm(MAX_BODY_MM)}</span> ס״מ — קשה להוביל ולהתקין,
+          ולרוב עדיף לפצל לשניים.
+        </p>
+      )}
 
       <div ref={chipRow} className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
         {options.map((mm) => (
@@ -394,6 +405,31 @@ export function UnitEditor({
               </Pill>
             ))}
           </Row>
+
+          {/*
+            ויטרינה: צד שעשוי זכוכית במקום לוח. הצד יוצא מפירוק
+            הפלטות ונכנס לרשימת הזכוכית, ולארון נשארים הגב, הצד
+            השני, והתחתית והתקרה.
+          */}
+          <Row label="צד זכוכית" hint="ויטרינה שרואים דרכה מהצד">
+            {(['start', 'end'] as const).map((side) => (
+              <Pill
+                key={side}
+                active={!!glassSides[side]}
+                onClick={() =>
+                  onChange({ glassSides: { ...glassSides, [side]: !glassSides[side] } })
+                }
+              >
+                {side === 'start' ? 'שמאל' : 'ימין'}
+              </Pill>
+            ))}
+          </Row>
+          {(glassSides.start || glassSides.end) && (
+            <p className="mt-1 text-[10px] leading-snug text-stone-400">
+              הצד נספר במ״ר זכוכית ולא בפלטות.
+              {glassSides.start && glassSides.end && ' שני הצדדים זכוכית — הארון נשען על הגב ועל התחתית והתקרה.'}
+            </p>
+          )}
         </>
       )}
 

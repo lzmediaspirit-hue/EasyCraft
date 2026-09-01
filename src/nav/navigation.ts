@@ -5,6 +5,7 @@ export type Route =
   | { name: 'projects'; customerId: string }
   | { name: 'design'; projectId: string }
   | { name: 'workflow'; projectId: string }
+  | { name: 'archive' }
   | { name: 'tasks' }
   | { name: 'calendar' }
   | { name: 'team' }

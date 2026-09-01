@@ -3,11 +3,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { customersRepo } from './customersRepo';
 import { NewCustomerSheet } from './NewCustomerSheet';
 import { normalizePhone } from './phone';
-import { QuickCalcButton } from '../../ui/QuickCalc';
 import { WorkBar } from '../workflow/WorkBar';
 import type { Customer } from '../../db/types';
 import {
+  ArchiveIcon,
+  BackIcon,
   ChevronIcon,
+  DotsIcon,
   PhoneIcon,
   PlusIcon,
   SearchIcon,
@@ -19,8 +21,13 @@ import { nav } from '../../nav/navigation';
 /** מעל כמה לקוחות מוצג שדה חיפוש. מתחת לזה הוא רק רעש. */
 const SEARCH_THRESHOLD = 6;
 
-export function CustomersScreen() {
-  const customers = useLiveQuery(() => customersRepo.list(), []);
+/** לקוחות פעילים, או ארכיון של מי שסיים. */
+export function CustomersScreen({ archived = false }: { archived?: boolean } = {}) {
+  const customers = useLiveQuery(() => customersRepo.list(archived), [archived]);
+  const archivedCount = useLiveQuery(
+    async () => (await customersRepo.list(true)).length,
+    [],
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState<string | null>(null);
@@ -51,12 +58,37 @@ export function CustomersScreen() {
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-stone-50/95 px-5 pt-6 pb-4 backdrop-blur">
         <div className="flex items-center gap-2.5">
-          <h1 className="text-2xl font-bold text-stone-900">לקוחות</h1>
+          {archived && (
+            <button
+              onClick={() => nav.back()}
+              aria-label="חזרה"
+              className="-ms-2.5 shrink-0 rounded-full p-2 text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-stone-800"
+            >
+              <BackIcon />
+            </button>
+          )}
+          <h1 className="text-2xl font-bold text-stone-900">
+            {archived ? 'לקוחות שסיימו' : 'לקוחות'}
+          </h1>
           {!!customers?.length && (
             <span className="num text-sm font-medium text-stone-400">{customers.length}</span>
           )}
-          <span className="ms-auto flex items-center">
-            <QuickCalcButton />
+          <span className="ms-auto flex shrink-0 items-center">
+            {!archived && (
+              <button
+                onClick={() => nav.push({ name: 'archive' })}
+                aria-label="לקוחות שסיימו"
+                title="לקוחות שסיימו"
+                className="relative rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
+              >
+                <ArchiveIcon />
+                {!!archivedCount && (
+                  <span className="num absolute -top-0.5 -end-0.5 grid min-w-4 place-items-center rounded-full bg-stone-300 px-1 text-[10px] font-medium text-stone-700">
+                    {archivedCount}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={() => nav.push({ name: 'settings' })}
               aria-label="הגדרות"
@@ -92,7 +124,7 @@ export function CustomersScreen() {
         ) : (
           <ul className="divide-y divide-stone-200/80 pt-2">
             {visible.map((customer) => (
-              <CustomerRow key={customer.id} customer={customer} />
+              <CustomerRow key={customer.id} customer={customer} archived={archived} />
             ))}
           </ul>
         )}
@@ -126,7 +158,9 @@ export function CustomersScreen() {
   );
 }
 
-function CustomerRow({ customer }: { customer: Customer }) {
+function CustomerRow({ customer, archived }: { customer: Customer; archived: boolean }) {
+  const [menu, setMenu] = useState(false);
+  const [confirm, setConfirm] = useState(false);
   return (
     <li>
       <div className="flex items-center gap-3.5 py-1.5">
@@ -147,6 +181,15 @@ function CustomerRow({ customer }: { customer: Customer }) {
           <ChevronIcon className="size-4 shrink-0 text-stone-300" />
         </button>
 
+        <button
+          onClick={() => setMenu((v) => !v)}
+          aria-label={`פעולות ל${customer.name}`}
+          aria-expanded={menu}
+          className="shrink-0 rounded-full border border-stone-200 bg-white p-2.5 text-stone-400 transition-colors hover:border-oak-300 hover:text-oak-700"
+        >
+          <DotsIcon className="size-4" />
+        </button>
+
         {customer.phone && (
           <a
             href={`tel:${customer.phone}`}
@@ -157,6 +200,55 @@ function CustomerRow({ customer }: { customer: Customer }) {
           </a>
         )}
       </div>
+
+      {/* פעולות שנדרשות לעיתים רחוקות — מוסתרות עד שמבקשים אותן */}
+      {menu && (
+        <div className="mb-2 flex flex-wrap gap-1.5 rounded-xl bg-stone-100 p-2">
+          <button
+            onClick={async () => {
+              await customersRepo.setArchived(customer.id, !archived);
+              setMenu(false);
+            }}
+            className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50"
+          >
+            {archived ? 'החזרה ללקוחות פעילים' : 'סיים — העברה לארכיון'}
+          </button>
+          <button
+            onClick={() => setConfirm(true)}
+            className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
+          >
+            מחיקה
+          </button>
+        </div>
+      )}
+
+      {confirm && (
+        <div className="mb-2 rounded-xl border border-red-200 bg-red-50 p-3">
+          <p className="text-xs leading-snug text-red-900">
+            מחיקת {customer.name} תמחק גם את כל הפרויקטים, ההדמיות והמחירים
+            שלו. אי אפשר לבטל.
+          </p>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              onClick={async () => {
+                await customersRepo.remove(customer.id);
+              }}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-700"
+            >
+              כן, למחוק
+            </button>
+            <button
+              onClick={() => {
+                setConfirm(false);
+                setMenu(false);
+              }}
+              className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-stone-700"
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
     </li>
   );
 }

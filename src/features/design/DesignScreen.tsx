@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { wallName } from '../projects/wallLayouts';
@@ -15,13 +15,12 @@ import { unitZones } from '../../catalog/zones';
 import { analyzeWall, nextFreeX } from './analysis';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { roomDef } from '../../catalog/rooms';
-import { nav } from '../../nav/navigation';
 import { ScreenHeader } from '../../ui/ScreenHeader';
+import { QuickCalcButton } from '../../ui/QuickCalc';
 import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
   DepthIcon,
-  FlowIcon,
   FrontsIcon,
   InsideIcon,
   PlanIcon,
@@ -30,6 +29,11 @@ import {
 } from '../../ui/icons';
 import { cm, meters } from '../../ui/units';
 import type { CatalogItem, PlacedUnit, Project } from '../../db/types';
+
+const PANEL_KEY = 'easycraft.panelRatio';
+
+/** גובה הלוח נשאר בתחום שמשאיר את הקיר גלוי ואת הלוח שימושי. */
+const clampRatio = (r: number) => Math.min(Math.max(r, 0.2), 0.85);
 
 /**
  * מסך ההדמיה. רואים קיר אחד בכל רגע, ופעולה ראשית אחת:
@@ -48,6 +52,16 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [planOpen, setPlanOpen] = useState(false);
   const [inside, setInside] = useState(false);
   const [measure, setMeasure] = useState<MeasureAxis | null>(null);
+  /*
+   * גובה לוח העריכה, כחלק מגובה המסך.
+   * לוח הגדרות ארוך היה מכסה את הקיר, וקצר מדי מחייב גלילה בלי סוף.
+   * לכן הגובה נגרר, ונשמר כדי שהעבודה הבאה תתחיל באותה חלוקה.
+   */
+  const [panelRatio, setPanelRatio] = useState(() => {
+    const saved = Number(localStorage.getItem(PANEL_KEY));
+    return Number.isFinite(saved) && saved > 0 ? clampRatio(saved) : 0.45;
+  });
+  const dragPanel = useRef<{ startY: number; startRatio: number } | null>(null);
 
   const project = useLiveQuery(() => projectsRepo.get(projectId), [projectId]);
   const walls = useLiveQuery(() => wallsRepo.listForProject(projectId), [projectId]);
@@ -94,6 +108,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
       <ScreenHeader
         title={project.name}
         subtitle={subtitle(project.name, project.roomKind, walls.length)}
+        action={<QuickCalcButton />}
       >
         <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <Tool
@@ -114,12 +129,6 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             onClick={() => setMaterialsOpen(true)}
             icon={<CalcIcon className="size-4" />}
             label="חומרים"
-          />
-          <Tool
-            active={false}
-            onClick={() => nav.push({ name: 'workflow', projectId })}
-            icon={<FlowIcon className="size-4" />}
-            label="תהליך"
           />
           <Tool
             active={depthOpen}
@@ -182,9 +191,13 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         )}
       </ScreenHeader>
 
-      {/* ההדמיה נשארת גלויה גם כשלוח העריכה פתוח */}
-      <div className="shrink-0 px-4 pt-3 pb-2">
-        <div className="rounded-2xl border border-stone-200 bg-white p-2">
+      {/*
+        ההדמיה תופסת את מה שנשאר אחרי לוח העריכה, ולכן גרירת הלוח
+        כלפי מעלה באמת מכסה את הקיר — וזו הנקודה: לוח הגדרות ארוך
+        צריך מקום, וקיר שכבר בנוי אפשר להסתיר לרגע.
+      */}
+      <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
+        <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
           <WallElevation
             wall={wall}
             units={units}
@@ -194,8 +207,9 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? {}}
-            /* ארגז שנגרר עד הרצפה נצמד אליה שוב, בלי לחזור ללוח העריכה */
-            onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm, floorLocked: yMm === 0 })}
+            onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
+            /* ארגז שהונח על הרצפה נצמד אליה שוב, בלי לחזור ללוח העריכה */
+            onDropUnit={(id, yMm) => yMm === 0 && patchUnit(id, { floorLocked: true })}
             onMoveShelf={(unitId, zoneId, gapsMm) => {
               const u = units.find((x) => x.id === unitId);
               if (!u) return;
@@ -209,6 +223,45 @@ export function DesignScreen({ projectId }: { projectId: string }) {
       </div>
 
       {selected ? (
+        <>
+        {/* ידית גרירה שקובעת כמה מהמסך תופס לוח העריכה */}
+        <div
+          role="separator"
+          aria-label="גובה לוח העריכה"
+          aria-orientation="horizontal"
+          tabIndex={0}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            dragPanel.current = { startY: e.clientY, startRatio: panelRatio };
+          }}
+          onPointerMove={(e) => {
+            const d = dragPanel.current;
+            if (!d) return;
+            // גרירה כלפי מעלה מגדילה את הלוח
+            setPanelRatio(clampRatio(d.startRatio + (d.startY - e.clientY) / window.innerHeight));
+          }}
+          onPointerUp={(e) => {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+            dragPanel.current = null;
+            localStorage.setItem(PANEL_KEY, String(panelRatio));
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+            e.preventDefault();
+            const next = clampRatio(panelRatio + (e.key === 'ArrowUp' ? 0.05 : -0.05));
+            setPanelRatio(next);
+            localStorage.setItem(PANEL_KEY, String(next));
+          }}
+          className="flex shrink-0 cursor-ns-resize touch-none justify-center py-2"
+        >
+          <span className="h-1.5 w-12 rounded-full bg-stone-300" />
+        </div>
+
+        {/* הלוח עצמו נמתח לגובה שנבחר, ובתוכו הוא גולל */}
+        <div
+          className="flex shrink-0 flex-col [&>div:first-child]:min-h-0 [&>div:first-child]:flex-1"
+          style={{ height: `${panelRatio * 100}dvh` }}
+        >
         <UnitEditor
           unit={selected}
           inside={inside}
@@ -223,6 +276,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           }}
           onClose={() => setSelectedId(null)}
         />
+        </div>
+        </>
       ) : (
         <>
           <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">

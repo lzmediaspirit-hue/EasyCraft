@@ -1,5 +1,6 @@
 import type { PlacedUnit, Wall } from '../../db/types';
 import { featureDef } from '../projects/wallFeatures';
+import { MAX_BODY_MM } from '../../catalog/zones';
 import { cm } from '../../ui/units';
 
 export interface WallAnalysis {
@@ -59,6 +60,14 @@ export function analyzeWall(
     // חלון, דלת או נישה שארגז נכנס לתוכם — גם חפיפה חלקית היא בעיה
     const blocking = units.find((u) => overlaps(u, f));
     if (blocking) warnings.push(`${blocking.name} חוסם את ה${label}`);
+  }
+
+  // ארון גבוה מדי — קשה להרים, להוביל ולהתקין
+  for (const u of units) {
+    const bodyH = u.heightMm - (u.socleMm ?? 0);
+    if (bodyH > MAX_BODY_MM) {
+      warnings.push(`${u.name} בגובה ${cm(bodyH)} ס"מ — מעל ${cm(MAX_BODY_MM)} עדיף לפצל`);
+    }
   }
 
   // ארון רגיל שנכנס לאזור הפינה יתנגש בארון של הקיר השכן

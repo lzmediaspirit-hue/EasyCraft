@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { currentMember, teamRepo } from './workflowRepo';
+import { currentMember, managerAuth, teamRepo } from './workflowRepo';
 import type { TeamMember } from '../db/types';
 
 /** מזהה מי שמחובר במכשיר הזה, כרשום ב-localStorage. */
@@ -18,4 +18,9 @@ export function useCurrentMemberId(): string | null {
 export function useCurrentMember(): TeamMember | null | undefined {
   const id = useCurrentMemberId();
   return useLiveQuery(async () => (id ? ((await teamRepo.get(id)) ?? null) : null), [id]);
+}
+
+/** האם ניהול הצוות פתוח במכשיר הזה עכשיו. */
+export function useManagerUnlocked(): boolean {
+  return useSyncExternalStore(managerAuth.subscribe, managerAuth.unlocked, () => false);
 }

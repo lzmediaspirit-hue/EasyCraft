@@ -6,10 +6,54 @@ import type { Customer, NewCustomer } from '../../db/types';
  * כדי שנוכל להחליף אחסון או להוסיף סנכרון בלי לגעת בממשק.
  */
 export const customersRepo = {
-  /** כל הלקוחות, ממוינים לפי שם בסדר אלפביתי עברי. */
-  async list(): Promise<Customer[]> {
+  /**
+   * הלקוחות, ממוינים לפי שם בסדר אלפביתי עברי.
+   * לקוח שסיים עובר לארכיון ויורד מהרשימה הפעילה, אבל נשאר
+   * במערכת — הפרויקטים והמחירים שלו הם ההיסטוריה של העסק.
+   */
+  async list(archived = false): Promise<Customer[]> {
     const all = await db.customers.toArray();
-    return all.sort((a, b) => a.name.localeCompare(b.name, 'he'));
+    return all
+      .filter((c) => !!c.archivedAt === archived)
+      .sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  },
+
+  /** כל הלקוחות, כולל מי שבארכיון. */
+  async all(): Promise<Customer[]> {
+    return db.customers.toArray();
+  },
+
+  async setArchived(id: string, archived: boolean): Promise<void> {
+    await db.customers.update(id, {
+      archivedAt: archived ? Date.now() : undefined,
+      updatedAt: Date.now(),
+    });
+  },
+
+  /** מחיקה מוחקת גם את הפרויקטים, הקירות, הארגזים והתהליכים שלו. */
+  async remove(id: string): Promise<void> {
+    const projects = await db.projects.where('customerId').equals(id).toArray();
+    const ids = projects.map((p) => p.id);
+    const tables = [
+      db.customers,
+      db.projects,
+      db.walls,
+      db.units,
+      db.stages,
+      db.attachments,
+      db.projectPrices,
+    ];
+    await db.transaction('rw', tables, async () => {
+      for (const pid of ids) {
+        await db.units.where('projectId').equals(pid).delete();
+        await db.walls.where('projectId').equals(pid).delete();
+        await db.stages.where('projectId').equals(pid).delete();
+        await db.attachments.where('projectId').equals(pid).delete();
+        await db.projectPrices.where('projectId').equals(pid).delete();
+      }
+      await db.projects.where('customerId').equals(id).delete();
+      await db.customers.delete(id);
+    });
   },
 
   async get(id: string): Promise<Customer | undefined> {

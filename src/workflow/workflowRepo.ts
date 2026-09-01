@@ -83,6 +83,75 @@ export const currentMember = {
 const listeners = new Set<() => void>();
 
 /* ------------------------------------------------------------------ */
+/* כניסת מנהל                                                          */
+/* ------------------------------------------------------------------ */
+
+const CODE_KEY = 'easycraft.managerCode';
+const UNLOCK_KEY = 'easycraft.managerUnlocked';
+
+/**
+ * מפתח הניהול.
+ *
+ * זו אינה אבטחה מול תוקף: הכול יושב על המכשיר, וקוד ב-localStorage
+ * לא מגן על נתונים מפני מי שיש לו גישה אליהם. מה שהוא כן עושה הוא
+ * למנוע מנגר בשטח לשנות תפקידים בטעות, להוסיף משתמשים או לסגור
+ * מכירה שאינה שלו. אימות אמיתי ייכנס יחד עם השרת.
+ */
+export const managerAuth = {
+  hasCode(): boolean {
+    try {
+      return !!localStorage.getItem(CODE_KEY);
+    } catch {
+      return false;
+    }
+  },
+  setCode(code: string) {
+    try {
+      localStorage.setItem(CODE_KEY, code.trim());
+    } catch {
+      // אחסון חסום — הניהול יישאר פתוח במכשיר הזה
+    }
+    listeners.forEach((l) => l());
+  },
+  verify(code: string): boolean {
+    try {
+      const stored = localStorage.getItem(CODE_KEY);
+      return !stored || stored === code.trim();
+    } catch {
+      return true;
+    }
+  },
+  unlocked(): boolean {
+    try {
+      // הפתיחה תקפה לסשן הזה בלבד, כדי שהמכשיר לא יישאר פתוח
+      return sessionStorage.getItem(UNLOCK_KEY) === '1';
+    } catch {
+      return true;
+    }
+  },
+  unlock() {
+    try {
+      sessionStorage.setItem(UNLOCK_KEY, '1');
+    } catch {
+      // אחסון חסום — נשארים פתוחים לסשן הזה
+    }
+    listeners.forEach((l) => l());
+  },
+  lock() {
+    try {
+      sessionStorage.removeItem(UNLOCK_KEY);
+    } catch {
+      // כלום לנקות
+    }
+    listeners.forEach((l) => l());
+  },
+  subscribe(l: () => void): () => void {
+    listeners.add(l);
+    return () => listeners.delete(l);
+  },
+};
+
+/* ------------------------------------------------------------------ */
 /* שלבי הפרויקט                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -102,7 +171,7 @@ export const stagesRepo = {
    * נקרא בכל פתיחה של תהליך העבודה, כך שגם פרויקט שנוצר לפני
    * שהתהליך היה קיים מקבל אותו — בלי לגעת בשלבים שכבר התקדמו.
    */
-  async ensure(projectId: string): Promise<ProjectStage[]> {
+  async ensure(projectId: string, open = true): Promise<ProjectStage[]> {
     const existing = await stagesRepo.listForProject(projectId);
     const have = new Set(existing.map((s) => s.key));
     const now = Date.now();
@@ -110,13 +179,26 @@ export const stagesRepo = {
       id: crypto.randomUUID(),
       projectId,
       key: s.key,
-      // רק השלב הראשון נפתח; השאר מחכים לתורם
-      status: (!have.size && i === 0 ? 'active' : 'waiting') as ProjectStage['status'],
+      // התהליך נפתח במכירה; עד אז כל השלבים ממתינים
+      status: (open && !have.size && i === 0 ? 'active' : 'waiting') as ProjectStage['status'],
       createdAt: now,
       updatedAt: now,
     }));
     if (missing.length) await db.stages.bulkAdd(missing);
     return stagesRepo.listForProject(projectId);
+  },
+
+  /** פותח את התהליך: השלב הראשון שעדיין ממתין הופך לפעיל. */
+  async start(projectId: string): Promise<void> {
+    const stages = await stagesRepo.ensure(projectId, false);
+    if (stages.some((s) => s.status !== 'waiting')) return;
+    const first = stages[0];
+    if (first) await stagesRepo.update(first.id, { status: 'active', startedAt: Date.now() });
+  },
+
+  /** האם התהליך כבר התחיל. */
+  hasStarted(stages: ProjectStage[]): boolean {
+    return stages.some((s) => s.status !== 'waiting');
   },
 
   async update(id: string, patch: Partial<Omit<ProjectStage, 'id'>>): Promise<void> {

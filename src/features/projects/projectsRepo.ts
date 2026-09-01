@@ -1,7 +1,7 @@
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { projectCosting, type ProjectCosting } from '../../costing/boards';
-import { boardsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
+import { boardsRepo, finishesRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import type {
   CatalogItem,
   PlacedUnit,
@@ -65,9 +65,23 @@ export const projectsRepo = {
       await db.walls.bulkAdd(walls);
     });
 
-    // כל פרויקט נפתח עם תהליך עבודה משלו
-    await stagesRepo.ensure(project.id);
+    // השלבים נוצרים סגורים; המכירה היא מה שפותח את התהליך
+    await stagesRepo.ensure(project.id, false);
     return project;
+  },
+
+  async update(id: string, patch: Partial<Omit<Project, 'id'>>): Promise<void> {
+    await db.projects.update(id, { ...patch, updatedAt: Date.now() });
+  },
+
+  /**
+   * סימון הפרויקט כנמכר.
+   * זו הנקודה שבה עוברים מהצעת מחיר לייצור, ולכן היא גם מה שפותח
+   * את תהליך העבודה — לפניה אין מה לחתוך.
+   */
+  async markSold(id: string): Promise<void> {
+    await db.projects.update(id, { soldAt: Date.now(), updatedAt: Date.now() });
+    await stagesRepo.start(id);
   },
 
   async remove(id: string): Promise<void> {
@@ -91,27 +105,32 @@ export const projectsRepo = {
 
   /** סיכום כל פרויקט — ארגזים, פלטות ומחיר — לתצוגה ברשימה. */
   async summaries(projectIds: string[]): Promise<Record<string, ProjectCosting>> {
-    const [boards, settings] = await Promise.all([boardsRepo.list(), settingsRepo.get()]);
+    const [boards, settings, finishes] = await Promise.all([
+      boardsRepo.list(),
+      settingsRepo.get(),
+      finishesRepo.all(),
+    ]);
     const out: Record<string, ProjectCosting> = {};
     for (const id of projectIds) {
       const [units, overrides] = await Promise.all([
         db.units.where('projectId').equals(id).toArray(),
         projectPricesRepo.listForProject(id),
       ]);
-      out[id] = projectCosting(units, boards, settings, overrides);
+      out[id] = projectCosting(units, boards, settings, overrides, finishes);
     }
     return out;
   },
 
   /** תמחור פרויקט יחיד, למסך ההדמיה. */
   async costing(projectId: string): Promise<ProjectCosting> {
-    const [units, boards, settings, overrides] = await Promise.all([
+    const [units, boards, settings, overrides, finishes] = await Promise.all([
       db.units.where('projectId').equals(projectId).toArray(),
       boardsRepo.list(),
       settingsRepo.get(),
       projectPricesRepo.listForProject(projectId),
+      finishesRepo.all(),
     ]);
-    return projectCosting(units, boards, settings, overrides);
+    return projectCosting(units, boards, settings, overrides, finishes);
   },
 };
 

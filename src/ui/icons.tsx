@@ -292,3 +292,30 @@ export const FileIcon = ({ className = 'size-5' }: P) => (
     <path d="M19 8v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2h7z" />
   </svg>
 );
+
+/** מכירה — תווית מחיר. */
+export const TagIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M11 3H4v7l10 10 7-7L11 3z" />
+    <circle cx="7.5" cy="6.5" r="1.2" />
+  </svg>
+);
+
+/** ארכיון — לקוחות שסיימו. */
+export const ArchiveIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="3" y="4" width="18" height="4" rx="1" />
+    <path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8M10 12h4" />
+  </svg>
+);
+
+/** פעולות נוספות. */
+export const DotsIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <circle cx="5" cy="12" r="1.8" />
+    <circle cx="12" cy="12" r="1.8" />
+    <circle cx="19" cy="12" r="1.8" />
+  </svg>
+);

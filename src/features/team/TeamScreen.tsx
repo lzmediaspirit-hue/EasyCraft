@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { teamRepo, currentMember } from '../../workflow/workflowRepo';
-import { useCurrentMemberId } from '../../workflow/useMember';
+import { teamRepo, currentMember, managerAuth } from '../../workflow/workflowRepo';
+import { nav } from '../../nav/navigation';
+import { useCurrentMemberId, useManagerUnlocked } from '../../workflow/useMember';
+import { ManagerLogin } from './ManagerLogin';
 import { ROLE_LABEL } from '../../workflow/stages';
 import { MemberSheet } from './MemberSheet';
 import { ScreenHeader } from '../../ui/ScreenHeader';
@@ -19,6 +21,7 @@ const ROLE_ORDER: UserRole[] = ['manager', 'planner', 'carpenter', 'installer'];
 export function TeamScreen() {
   const members = useLiveQuery(() => teamRepo.list(), []);
   const currentId = useCurrentMemberId();
+  const unlocked = useManagerUnlocked();
   const [editing, setEditing] = useState<TeamMember | 'new' | null>(null);
 
   const byRole = ROLE_ORDER.map((role) => ({
@@ -26,12 +29,38 @@ export function TeamScreen() {
     people: (members ?? []).filter((m) => m.role === role),
   })).filter((g) => g.people.length > 0);
 
+  // ניהול הצוות פתוח למנהל בלבד — עד שנכנסים, אין מה להראות
+  if (!unlocked) {
+    return (
+      <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+        <ScreenHeader title="הצוות" subtitle="ניהול למנהל בלבד" />
+        <main className="flex-1 px-5 pt-10">
+          <p className="text-center text-[15px] leading-relaxed text-stone-500">
+            הוספת אנשי צוות ושינוי תפקידים פתוחים למנהל בלבד.
+          </p>
+        </main>
+        <ManagerLogin onCancel={() => nav.back()} />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
       <ScreenHeader
         title="הצוות"
         subtitle="מי עובד, ומי מחובר במכשיר הזה"
         count={members?.length}
+        action={
+          <button
+            onClick={() => {
+              managerAuth.lock();
+              nav.back();
+            }}
+            className="shrink-0 rounded-lg bg-stone-100 px-2.5 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-200"
+          >
+            נעילה
+          </button>
+        }
       />
 
       <main className="flex-1 px-5 pb-32">
@@ -92,8 +121,9 @@ export function TeamScreen() {
         ))}
 
         <p className="mt-6 text-xs leading-snug text-stone-400">
-          אין כאן סיסמאות — המכשיר הוא של מי שמחזיק בו. מה שהתפקיד קובע
-          הוא מה מוצג ומה אפשר לסגור בתהליך העבודה.
+          קוד המנהל שומר על המסך הזה בלבד, והוא שמור על המכשיר. התפקיד
+          קובע מה כל אחד רואה ומה הוא יכול לסגור בתהליך העבודה. אימות
+          אמיתי ייכנס יחד עם סנכרון לשרת.
         </p>
       </main>
 

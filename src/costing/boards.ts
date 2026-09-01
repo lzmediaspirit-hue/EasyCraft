@@ -1,7 +1,15 @@
 import { glyphDef } from '../catalog/glyphList';
 import { MATERIAL } from '../catalog/standards';
-import { countDrawers, countShelves, unitZones } from '../catalog/zones';
-import type { Board, BoardRole, PlacedUnit, ProjectPrice, Settings } from '../db/types';
+import { countDrawers, countShelves, unitZones, zoneCells } from '../catalog/zones';
+import type {
+  Board,
+  BoardRole,
+  PlacedUnit,
+  ProjectPrice,
+  Finish,
+  Settings,
+  Zone,
+} from '../db/types';
 
 /**
  * פירוק הפרויקט לחלקים וחישוב כמות פלטות ומחיר.
@@ -25,6 +33,8 @@ export interface Part {
 
 export interface BoardLine {
   board: Board;
+  /** הגוון שהחלקים האלה נצבעים בו — לוח אחד יכול לשמש בכמה גוונים */
+  finish?: Finish;
   areaM2: number;
   sheets: number;
   /** המחיר שבאמת חל, אחרי דריסה ברמת הפרויקט */
@@ -128,25 +138,76 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   const carcassH = h - (e.top ? ft : 0) - (e.bottom ? ft : 0);
   const innerW = Math.max(carcassW - 2 * t, 0);
 
-  parts.push({ role: 'carcass', label: 'צד', widthMm: d, heightMm: carcassH, qty: 2 });
+  // צד שעשוי זכוכית אינו לוח — הוא נספר ברשימת הזכוכית
+  const g = u.glassSides ?? {};
+  const boardSides = 2 - (g.start ? 1 : 0) - (g.end ? 1 : 0);
+  if (boardSides > 0) {
+    parts.push({ role: 'carcass', label: 'צד', widthMm: d, heightMm: carcassH, qty: boardSides });
+  }
   parts.push({ role: 'carcass', label: 'תחתית ותקרה', widthMm: innerW, heightMm: d, qty: 2 });
 
-  // מדפים מכל האזורים, לפי גוף הארון ולא לפי הגובה הכולל.
-  // מדף זכוכית אינו לוח, ולכן הוא נספר ברשימת הזכוכית ולא כאן.
+  /*
+   * פנים הארון, תא אחר תא.
+   *
+   * כל אזור עשוי להיות מחולק בקושרות לעמודות, ולכל עמודה יש רוחב
+   * משלה ותוכן משלו. לכן המדפים נמדדים לפי רוחב התא ולא לפי רוחב
+   * הארון — זה בדיוק ההבדל בין רשימת חיתוך שאפשר לעבוד לפיה לבין
+   * מספר שמתקרב.
+   */
   const zones = unitZones({ ...u, heightMm: h });
-  const shelves = zones.reduce(
-    (n, z) => n + (z.kind === 'shelves' && !z.glassShelves ? (z.shelves ?? 0) : 0),
-    0,
-  );
-  if (shelves > 0) {
-    parts.push({
-      role: 'carcass',
-      label: 'מדף',
-      widthMm: innerW,
-      heightMm: Math.max(d - 20, 0),
-      qty: shelves,
-    });
+  for (const zone of zones) {
+    const cells = zoneCells(zone);
+    const dividers = cells.length - 1;
+    // עומק התא — מדף רדוד מקבל את העומק שהוגדר לו
+    const zoneDepth = zone.depthMm ?? d;
+
+    if (dividers > 0) {
+      parts.push({
+        role: 'carcass',
+        label: 'קושרת',
+        widthMm: zoneDepth,
+        heightMm: zone.heightMm,
+        qty: dividers,
+      });
+    }
+
+    for (const { content, share } of cells) {
+      const cellDepth = content.depthMm ?? zoneDepth;
+      // רוחב פנים התא: רוחב הארון פחות הצדדים, פחות הקושרות שמסביבו
+      const cellW = Math.max(innerW * share - (dividers > 0 ? t : 0), 0);
+
+      if (content.kind === 'shelves' && !content.glassShelves) {
+        const n = content.shelves ?? 0;
+        if (n > 0) {
+          parts.push({
+            role: 'carcass',
+            label: 'מדף',
+            widthMm: cellW,
+            heightMm: Math.max(cellDepth - 20, 0),
+            qty: n,
+          });
+        }
+      }
+
+      if (content.kind === 'wine') {
+        /*
+         * כוורת: שתי סדרות אלכסונים מצטלבות. כל אלכסון חוצה את התא,
+         * ולכן אורכו הוא אלכסון המלבן. זו הערכה לתמחור — הנגר יחתוך
+         * לפי שרטוט — אבל היא בסדר הגודל הנכון ולא מתעלמת מהחומר.
+         */
+        const rows = Math.max(content.wineRows ?? 3, 1);
+        const cols = Math.max(content.wineCols ?? 4, 1);
+        parts.push({
+          role: 'carcass',
+          label: 'לוח כוורת',
+          widthMm: Math.round(Math.hypot(cellW, zone.heightMm)),
+          heightMm: Math.max(cellDepth - 20, 0),
+          qty: rows + cols,
+        });
+      }
+    }
   }
+
   // כל אזור מעל הראשון מופרד בלוח חוצץ
   if (zones.length > 1) {
     parts.push({
@@ -171,26 +232,26 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     });
   }
 
-  // חזיתות מגירה, אזור אחר אזור
+  // חזיתות מגירה, תא אחר תא — תא בתוך קושרת מקבל חזית צרה יותר
   const gap = s.frontGapMm;
   for (const z of zones) {
-    if (z.kind !== 'drawers' || z.drawerStyle === 'inner') continue;
-    const rows = z.drawers ?? 1;
-    const cols = Math.max(z.drawerCols ?? 1, 1);
-    parts.push({
-      role: 'front',
-      label: 'חזית מגירה',
-      widthMm: Math.max(carcassW / cols - gap, 0),
-      heightMm: Math.max(z.heightMm / rows - gap, 0),
-      qty: rows * cols,
-    });
+    for (const { content, share } of zoneCells(z)) {
+      if (content.kind !== 'drawers' || content.drawerStyle === 'inner') continue;
+      const rows = content.drawers ?? 1;
+      const cols = Math.max(content.drawerCols ?? 1, 1);
+      parts.push({
+        role: 'front',
+        label: 'חזית מגירה',
+        widthMm: Math.max((carcassW * share) / cols - gap, 0),
+        heightMm: Math.max(z.heightMm / rows - gap, 0),
+        qty: rows * cols,
+      });
+    }
   }
 
   // דלתות מכסות את כל מה שאינו מגירה חיצונית
   const doors = effectiveDoors(u);
-  const coveredMm = zones
-    .filter((z) => !(z.kind === 'drawers' && z.drawerStyle !== 'inner'))
-    .reduce((n, z) => n + z.heightMm, 0);
+  const coveredMm = coveredHeight(zones);
   // דלת זכוכית אינה לוח, ולכן היא נספרת בנפרד ולא בעמודות הפלטות
   if (doors > 0 && coveredMm > 0 && !u.glassDoors) {
     parts.push({
@@ -219,6 +280,21 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   return parts;
 }
 
+/**
+ * הגובה שהחזית מכסה.
+ * אזור שכולו מגירות חיצוניות כבר יש לו חזית משלו; אזור מעורב —
+ * למשל קושרת עם מגירות מצד אחד ומדפים מהשני — עדיין צריך דלת.
+ */
+function coveredHeight(zones: Zone[]): number {
+  return zones.reduce((n, z) => {
+    const cells = zoneCells(z);
+    const allOuterDrawers = cells.every(
+      (c) => c.content.kind === 'drawers' && c.content.drawerStyle !== 'inner',
+    );
+    return n + (allOuterDrawers ? 0 : z.heightMm);
+  }, 0);
+}
+
 /** ההגדרות שנחוצות לפירוק לחלקים. */
 export interface PartSettings {
   carcassThicknessMm: number;
@@ -245,9 +321,7 @@ export function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
   const out: GlassPart[] = [];
 
   const doors = effectiveDoors(u);
-  const coveredMm = zones
-    .filter((z) => !(z.kind === 'drawers' && z.drawerStyle !== 'inner'))
-    .reduce((n, z) => n + z.heightMm, 0);
+  const coveredMm = coveredHeight(zones);
   if (u.glassDoors && doors > 0 && coveredMm > 0) {
     out.push({
       label: 'דלת זכוכית',
@@ -257,17 +331,32 @@ export function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
     });
   }
 
-  // מדף זכוכית נחתך למידת הפנים, כמו מדף רגיל
-  const glassShelves = zones.reduce(
-    (n, z) => n + (z.kind === 'shelves' && z.glassShelves ? (z.shelves ?? 0) : 0),
-    0,
-  );
-  if (glassShelves > 0) {
+  // מדף זכוכית נחתך למידת התא שהוא יושב בו
+  const innerW = Math.max(carcassW - 2 * t, 0);
+  for (const zone of zones) {
+    const cells = zoneCells(zone);
+    const dividers = cells.length - 1;
+    for (const { content, share } of cells) {
+      if (content.kind !== 'shelves' || !content.glassShelves) continue;
+      const n = content.shelves ?? 0;
+      if (n < 1) continue;
+      out.push({
+        label: 'מדף זכוכית',
+        widthMm: Math.round(Math.max(innerW * share - (dividers > 0 ? t : 0), 0)),
+        heightMm: Math.round(Math.max((content.depthMm ?? zone.depthMm ?? u.depthMm) - 20, 0)),
+        qty: n,
+      });
+    }
+  }
+
+  // צד זכוכית בוויטרינה — במקום לוח צד
+  const sides = (u.glassSides?.start ? 1 : 0) + (u.glassSides?.end ? 1 : 0);
+  if (sides > 0) {
     out.push({
-      label: 'מדף זכוכית',
-      widthMm: Math.round(Math.max(carcassW - 2 * t, 0)),
-      heightMm: Math.round(Math.max(u.depthMm - 20, 0)),
-      qty: glassShelves,
+      label: 'צד זכוכית',
+      widthMm: Math.round(u.depthMm),
+      heightMm: Math.round(h - (u.exposed?.top ? ft : 0) - (u.exposed?.bottom ? ft : 0)),
+      qty: sides,
     });
   }
 
@@ -309,12 +398,32 @@ export function projectCosting(
   boards: Board[],
   settings: Settings,
   overrides: ProjectPrice[] = [],
+  finishes: Finish[] = [],
 ): ProjectCosting {
   const kerf = settings.kerfMm;
   const usableSheetM2 =
     (settings.sheetWidthMm / 1000) * (settings.sheetHeightMm / 1000) * (settings.yieldPct / 100);
 
-  const areaByRole: Record<BoardRole, number> = { carcass: 0, front: 0, back: 0 };
+  /*
+   * שטח מצטבר לפי לוח וגוון, ולא רק לפי תפקיד.
+   * נגרייה עובדת עם כמה סוגי MDF באותו פרויקט, וכל אחד מהם מוזמן
+   * בנפרד — ולכן רשימת ההזמנה חייבת להפריד ביניהם ולציין את הגוון.
+   */
+  const areaByKey = new Map<string, { boardId: string; finishId?: string; areaM2: number }>();
+  const primary = new Map<BoardRole, string>();
+  for (const b of boards) if (!primary.has(b.role)) primary.set(b.role, b.id);
+
+  /** הלוח שחלק בתפקיד מסוים באמת נחתך ממנו, לפי הגוון שנבחר לו. */
+  const resolve = (u: PlacedUnit, role: BoardRole): { boardId?: string; finishId?: string } => {
+    const finishId =
+      role === 'carcass'
+        ? u.carcassFinishId
+        : role === 'front'
+          ? (u.frontFinishId ?? u.finishId)
+          : undefined;
+    const finish = finishId ? finishes.find((f) => f.id === finishId) : undefined;
+    return { boardId: finish?.boardId ?? primary.get(role), finishId: finish?.id };
+  };
   let drawers = 0;
   let doors = 0;
   let exposedPanels = 0;
@@ -328,7 +437,12 @@ export function projectCosting(
     for (const part of unitParts(u, settings)) {
       // הכרסום נאכל סביב כל חלק בנפרד
       const area = ((part.widthMm + kerf) * (part.heightMm + kerf)) / 1_000_000;
-      areaByRole[part.role] += area * part.qty;
+      const { boardId, finishId } = resolve(u, part.role);
+      if (!boardId) continue;
+      const key = `${boardId}:${finishId ?? ''}`;
+      const row = areaByKey.get(key) ?? { boardId, finishId, areaM2: 0 };
+      row.areaM2 += area * part.qty;
+      areaByKey.set(key, row);
     }
     drawers += countDrawers(u);
     doors += effectiveDoors(u);
@@ -353,24 +467,23 @@ export function projectCosting(
     ledMeters += unitLedMeters(u);
   }
 
-  // כשיש כמה לוחות באותו תפקיד, השטח נזקף לראשון שבהם
-  const primary = new Map<BoardRole, string>();
-  for (const b of boards) if (!primary.has(b.role)) primary.set(b.role, b.id);
-
+  // שורה לכל צירוף של לוח וגוון — כך נראית הזמנה אמיתית מהספק
   const lines: BoardLine[] = [];
-  for (const board of boards) {
-    if (primary.get(board.role) !== board.id) continue;
-    const areaM2 = areaByRole[board.role];
-    if (areaM2 <= 0) continue;
+  for (const row of areaByKey.values()) {
+    const board = boards.find((b) => b.id === row.boardId);
+    if (!board || row.areaM2 <= 0) continue;
 
     const override = overrides.find((o) => o.boardId === board.id);
-    const factoryPrice = override?.factoryPrice ?? board.factoryPrice;
-    const consumerPrice = override?.consumerPrice ?? board.consumerPrice;
-    const sheets = Math.ceil(areaM2 / usableSheetM2);
+    const finish = row.finishId ? finishes.find((f) => f.id === row.finishId) : undefined;
+    // גוון עשוי לעלות אחרת מהלוח הבסיסי
+    const factoryPrice = override?.factoryPrice ?? finish?.factoryPrice ?? board.factoryPrice;
+    const consumerPrice = override?.consumerPrice ?? finish?.consumerPrice ?? board.consumerPrice;
+    const sheets = Math.ceil(row.areaM2 / usableSheetM2);
 
     lines.push({
       board,
-      areaM2,
+      finish,
+      areaM2: row.areaM2,
       sheets,
       factoryPrice,
       consumerPrice,
@@ -379,6 +492,7 @@ export function projectCosting(
       overridden: !!override,
     });
   }
+  lines.sort((a, b) => a.board.sortOrder - b.board.sortOrder || b.areaM2 - a.areaM2);
 
   // דלתות הזכוכית מתומחרות לפי שטח ולא לפי פלטה
   const glass = [...glassMap.values()].map((g) => {

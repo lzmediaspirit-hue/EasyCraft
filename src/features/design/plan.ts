@@ -74,3 +74,109 @@ export function cornerZones(
     endMm: next ? wallDepth(next, units) : 0,
   };
 }
+
+/** ארון אחד במבט על, כמלבן בקואורדינטות החדר. */
+export interface PlanUnit {
+  unit: PlacedUnit;
+  /** ארבע פינות המלבן, לפי סדר */
+  corners: PlanPoint[];
+  /** מרכז המלבן, לתווית */
+  center: PlanPoint;
+  /** מתנגש עם ארון על קיר אחר */
+  clash: boolean;
+}
+
+/**
+ * הארונות במבט על.
+ *
+ * כל ארון הוא מלבן ברוחב שלו ובעומק שלו, מונח לאורך הקיר ובולט
+ * ממנו פנימה. זה מה שמאפשר לראות מיד שארון בקצה קיר אחד נכנס
+ * לתוך ארון בקצה הקיר השכן — התנגשות שבמבט חזית לא נראית בכלל.
+ */
+export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
+  const out: PlanUnit[] = [];
+
+  for (const p of plan) {
+    const rad = (p.headingDeg * Math.PI) / 180;
+    // כיוון הקיר, והניצב לו שאליו הארונות בולטים
+    const dir = { x: Math.cos(rad), y: Math.sin(rad) };
+    const normal = { x: -Math.sin(rad), y: Math.cos(rad) };
+
+    for (const u of units.filter((x) => x.wallId === p.wall.id)) {
+      const a = {
+        x: p.start.x + dir.x * u.xMm,
+        y: p.start.y + dir.y * u.xMm,
+      };
+      const b = { x: a.x + dir.x * u.widthMm, y: a.y + dir.y * u.widthMm };
+      const d = u.depthMm;
+      const corners = [
+        a,
+        b,
+        { x: b.x + normal.x * d, y: b.y + normal.y * d },
+        { x: a.x + normal.x * d, y: a.y + normal.y * d },
+      ];
+      out.push({
+        unit: u,
+        corners,
+        center: {
+          x: a.x + dir.x * (u.widthMm / 2) + normal.x * (d / 2),
+          y: a.y + dir.y * (u.widthMm / 2) + normal.y * (d / 2),
+        },
+        clash: false,
+      });
+    }
+  }
+
+  /*
+   * התנגשות נבדקת רק בין ארונות על קירות שונים ובאותו מפלס: שני
+   * ארונות על אותו קיר כבר נבדקים במבט חזית, וארון תלוי עובר מעל
+   * ארון רצפה בלי לגעת בו.
+   */
+  for (let i = 0; i < out.length; i++) {
+    for (let j = i + 1; j < out.length; j++) {
+      const A = out[i];
+      const B = out[j];
+      if (A.unit.wallId === B.unit.wallId) continue;
+      if ((A.unit.level === 'wall') !== (B.unit.level === 'wall')) continue;
+      if (overlaps(A.corners, B.corners)) {
+        A.clash = true;
+        B.clash = true;
+      }
+    }
+  }
+
+  return out;
+}
+
+/**
+ * חפיפה בין שני מלבנים מסובבים, בשיטת הצירים המפרידים.
+ * אם קיים ציר שעליו ההיטלים אינם נחתכים — אין חפיפה.
+ */
+function overlaps(a: PlanPoint[], b: PlanPoint[]): boolean {
+  for (const poly of [a, b]) {
+    for (let i = 0; i < poly.length; i++) {
+      const p1 = poly[i];
+      const p2 = poly[(i + 1) % poly.length];
+      const axis = { x: -(p2.y - p1.y), y: p2.x - p1.x };
+      const len = Math.hypot(axis.x, axis.y);
+      if (len < 1e-6) continue;
+      const n = { x: axis.x / len, y: axis.y / len };
+      const [minA, maxA] = project(a, n);
+      const [minB, maxB] = project(b, n);
+      // סובלנות של מילימטר: מגע קצה בקצה אינו התנגשות
+      if (maxA <= minB + 1 || maxB <= minA + 1) return false;
+    }
+  }
+  return true;
+}
+
+function project(poly: PlanPoint[], n: PlanPoint): [number, number] {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const p of poly) {
+    const v = p.x * n.x + p.y * n.y;
+    min = Math.min(min, v);
+    max = Math.max(max, v);
+  }
+  return [min, max];
+}

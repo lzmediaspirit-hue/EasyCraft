@@ -1,5 +1,5 @@
 import { autoShelves } from './CabinetGlyph';
-import type { PlacedUnit, Zone, ZoneKind } from '../db/types';
+import type { PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../db/types';
 
 /**
  * אזורי הפנים של ארון.
@@ -15,7 +15,14 @@ export const ZONE_LABELS: Record<ZoneKind, string> = {
   drawers: 'מגירות',
   rod: 'מוט תלייה',
   empty: 'חלל פתוח',
+  wine: 'כוורת יין',
 };
+
+/** גובה מינימלי לאזור, כדי שלא ייווצר תא שאי אפשר לבנות. */
+export const MIN_ZONE_MM = 50;
+
+/** גובה מרבי מומלץ לגוף ארון, בלי הרגליים. */
+export const MAX_BODY_MM = 2400;
 
 /** האם האיור הוא ארון שיש לו פנים שאפשר לחלק לאזורים. */
 const CONTAINERS = new Set([
@@ -45,13 +52,73 @@ export function isContainer(glyph: string): boolean {
 }
 
 export function newZone(kind: ZoneKind, heightMm: number): Zone {
-  return {
-    id: crypto.randomUUID(),
-    kind,
-    heightMm,
-    ...(kind === 'shelves' ? { shelves: Math.max(autoShelves(heightMm), 1) } : {}),
-    ...(kind === 'drawers' ? { drawers: 3, drawerCols: 1 } : {}),
-  };
+  return { id: crypto.randomUUID(), heightMm, ...contentDefaults(kind, heightMm) };
+}
+
+/** ערכי פתיחה סבירים לתוכן, לפי הסוג והגובה שיש לו. */
+export function contentDefaults(kind: ZoneKind, heightMm: number): ZoneContent {
+  if (kind === 'shelves') return { kind, shelves: Math.max(autoShelves(heightMm), 1) };
+  if (kind === 'drawers') return { kind, drawers: 3, drawerCols: 1 };
+  if (kind === 'wine') return { kind, wineRows: Math.max(Math.round(heightMm / 110), 2), wineCols: 4 };
+  return { kind };
+}
+
+/**
+ * קושרת: מחלקת את האזור למספר עמודות שוות.
+ * עמודה שכבר קיימת שומרת על התוכן שלה, כדי ששינוי מספר הקושרות
+ * לא ימחק מה שכבר הוגדר בתא.
+ */
+export function splitZone(zone: Zone, parts = 2): Zone {
+  const n = Math.max(parts, 2);
+  const existing = zoneColumns(zone);
+  const columns: ZoneColumn[] = Array.from({ length: n }, (_, i) => {
+    const base =
+      existing[i] ?? {
+        id: crypto.randomUUID(),
+        ...contentDefaults(i === 0 ? zone.kind : 'shelves', zone.heightMm),
+      };
+    return { ...base, widthShare: 1 / n };
+  });
+  return { ...zone, columns };
+}
+
+/** מבטל את הקושרת ומחזיר את האזור לתא אחד. */
+export function mergeZone(zone: Zone): Zone {
+  const first = zoneColumns(zone)[0];
+  const { columns: _drop, ...rest } = zone;
+  return first ? { ...rest, ...stripColumn(first) } : rest;
+}
+
+function stripColumn(c: ZoneColumn): ZoneContent {
+  const { id: _id, widthShare: _w, ...content } = c;
+  return content;
+}
+
+/** העמודות של האזור, או רשימה ריקה כשאין קושרת. */
+export function zoneColumns(zone: Zone): ZoneColumn[] {
+  return (zone.columns?.length ?? 0) > 1 ? zone.columns! : [];
+}
+
+/**
+ * התאים של האזור — מה שבאמת יושב בתוכו.
+ * אזור בלי קושרת הוא תא אחד ברוחב מלא; אזור עם קושרת מחזיר תא לכל
+ * עמודה, עם החלק היחסי שלה ברוחב. כך כל חישוב וכל ציור עובדים על
+ * אותה רשימה בלי לדעת אם יש קושרת.
+ */
+export function zoneCells(zone: Zone): { content: ZoneContent; share: number; key: string }[] {
+  const cols = zoneColumns(zone);
+  if (!cols.length) return [{ content: zone, share: 1, key: zone.id }];
+  const total = cols.reduce((a, c) => a + (c.widthShare || 0), 0) || cols.length;
+  return cols.map((c) => ({
+    content: c,
+    share: (c.widthShare || 1) / total,
+    key: c.id,
+  }));
+}
+
+/** כל התאים בארון, מכל האזורים. */
+export function unitCells(u: FlatSource): { content: ZoneContent; share: number }[] {
+  return unitZones(u).flatMap((z) => zoneCells(z));
 }
 
 type FlatSource = Pick<
@@ -70,14 +137,43 @@ export function isZoned(u: FlatSource): boolean {
   return (u.zones?.length ?? 0) > 1;
 }
 
-/** גובה כל אזור נמתח יחסית, כדי שסכום האזורים תמיד שווה לגובה הארון. */
+/**
+ * מותח את האזורים לגובה הארון.
+ *
+ * אזור עם גובה קבוע לא נוגעים בו — מתקן תלייה צריך 120 ס"מ ומגירה
+ * פנימית צריכה 90, וגובה כזה אינו נתון למשא ומתן. השאר מתחלקים
+ * במה שנשאר. כשהקבועים לבדם גדולים מהארון, `requiredBody` מחזיר
+ * את הגובה שהארון צריך לגדול אליו.
+ */
 export function normalizeHeights(zones: Zone[], heightMm: number): Zone[] {
-  const total = zones.reduce((a, z) => a + z.heightMm, 0);
-  if (total <= 0) {
-    const each = Math.round(heightMm / zones.length);
-    return zones.map((z) => ({ ...z, heightMm: each }));
+  const flex = zones.filter((z) => !z.fixedHeight);
+  const fixedTotal = zones.filter((z) => z.fixedHeight).reduce((a, z) => a + z.heightMm, 0);
+
+  // הכול קבוע, או שאין מקום לגמישים — הגבהים נשארים כפי שהם
+  if (!flex.length) return zones.map((z) => ({ ...z }));
+  const rest = heightMm - fixedTotal;
+  if (rest < flex.length * MIN_ZONE_MM) {
+    return zones.map((z) => ({ ...z, heightMm: z.fixedHeight ? z.heightMm : MIN_ZONE_MM }));
   }
-  return zones.map((z) => ({ ...z, heightMm: Math.round((z.heightMm / total) * heightMm) }));
+
+  const flexTotal = flex.reduce((a, z) => a + z.heightMm, 0);
+  return zones.map((z) => {
+    if (z.fixedHeight) return { ...z };
+    const share = flexTotal > 0 ? z.heightMm / flexTotal : 1 / flex.length;
+    return { ...z, heightMm: Math.max(Math.round(rest * share), MIN_ZONE_MM) };
+  });
+}
+
+/**
+ * גובה הגוף שהאזורים מחייבים.
+ * כשכל האזורים קבועים — או כשהקבועים לבדם לא נכנסים — הארון גדל
+ * במקום לדחוס תוכן שיש לו מידה אמיתית.
+ */
+export function requiredBody(zones: Zone[], bodyMm: number): number {
+  const flex = zones.filter((z) => !z.fixedHeight);
+  const fixedTotal = zones.filter((z) => z.fixedHeight).reduce((a, z) => a + z.heightMm, 0);
+  if (!flex.length) return Math.max(fixedTotal, MIN_ZONE_MM);
+  return Math.max(bodyMm, fixedTotal + flex.length * MIN_ZONE_MM);
 }
 
 function derive(u: FlatSource): Zone[] {
@@ -145,7 +241,14 @@ export function zoneBands(
   zones: Zone[],
   heightMm: number,
 ): { zone: Zone; top: number; bottom: number }[] {
-  const scaled = normalizeHeights(zones, heightMm);
+  // הגבהים עשויים לחרוג מהמסגרת כשכולם קבועים; הציור מתאים את עצמו
+  // לסכום האמיתי, כדי שהאזורים תמיד ימלאו בדיוק את הארון שעל המסך
+  const fitted = normalizeHeights(zones, heightMm);
+  const sum = fitted.reduce((a, z) => a + z.heightMm, 0);
+  const scaled =
+    sum > 0 && Math.abs(sum - heightMm) > 1
+      ? fitted.map((z) => ({ ...z, heightMm: (z.heightMm / sum) * heightMm }))
+      : fitted;
   const out: { zone: Zone; top: number; bottom: number }[] = [];
   // האזור הראשון ברשימה הוא התחתון בארון
   let fromBottom = 0;
@@ -157,20 +260,29 @@ export function zoneBands(
   return out;
 }
 
-/** סך המגירות בארון, מכל האזורים. */
+/** סך המגירות בארון, מכל התאים. */
 export function countDrawers(u: FlatSource): number {
-  return unitZones(u).reduce(
-    (n, z) => n + (z.kind === 'drawers' ? (z.drawers ?? 0) * Math.max(z.drawerCols ?? 1, 1) : 0),
+  return unitCells(u).reduce(
+    (n, { content: c }) =>
+      n + (c.kind === 'drawers' ? (c.drawers ?? 0) * Math.max(c.drawerCols ?? 1, 1) : 0),
     0,
   );
 }
 
-/** סך המדפים בארון, מכל האזורים. */
+/** סך המדפים בארון, מכל התאים. */
 export function countShelves(u: FlatSource): number {
-  return unitZones(u).reduce((n, z) => n + (z.kind === 'shelves' ? (z.shelves ?? 0) : 0), 0);
+  return unitCells(u).reduce(
+    (n, { content: c }) => n + (c.kind === 'shelves' ? (c.shelves ?? 0) : 0),
+    0,
+  );
 }
 
 /** סך מוטות התלייה בארון. */
 export function countRods(u: FlatSource): number {
-  return unitZones(u).filter((z) => z.kind === 'rod').length;
+  return unitCells(u).filter(({ content: c }) => c.kind === 'rod').length;
+}
+
+/** סך הקושרות האנכיות בארון — כל אחת היא לוח בפני עצמו. */
+export function countDividers(u: FlatSource): number {
+  return unitZones(u).reduce((n, z) => n + Math.max(zoneColumns(z).length - 1, 0), 0);
 }

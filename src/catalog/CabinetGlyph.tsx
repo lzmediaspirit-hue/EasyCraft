@@ -1,5 +1,5 @@
-import { zoneBands, isContainer } from './zones';
-import type { CornerKind, OpeningMech, Zone } from '../db/types';
+import { zoneBands, zoneCells, isContainer } from './zones';
+import type { CornerKind, OpeningMech, Zone, ZoneContent } from '../db/types';
 
 /**
  * מנוע האיורים של הארגזים.
@@ -378,6 +378,113 @@ function details(c: Ctx) {
   }
 }
 
+/**
+ * תוכן של תא אחד — אזור שלם, או עמודה בתוך אזור עם קושרת.
+ * הרוחב מגיע כפרמטר, ולכן אותו קוד משרת את שתי הרמות.
+ */
+function cellContent(
+  c: Ctx,
+  content: ZoneContent,
+  cw: number,
+  top: number,
+  bottom: number,
+  key: string,
+): React.ReactNode {
+  const { t, inside } = c;
+  const cc = { ...c, w: cw };
+
+  if (content.kind === 'drawers') {
+    const rows = content.drawers ?? 1;
+    const cols = Math.max(content.drawerCols ?? 1, 1);
+    const hidden = content.drawerStyle === 'inner';
+    // מגירה פנימית נראית רק כשמסתכלים פנימה
+    if (hidden && !inside) return null;
+    return <g key={`d-${key}`}>{drawerGrid(cc, top, bottom, rows, cols, hidden && inside)}</g>;
+  }
+
+  if (!inside && c.doors > 0) return null;
+
+  if (content.kind === 'shelves') {
+    return (
+      <g key={`s-${key}`}>
+        {shelfLines(
+          { ...cc, shelves: content.shelves ?? 0, gaps: content.shelfGapsMm },
+          top,
+          bottom,
+          key,
+          !!content.glassShelves,
+        )}
+      </g>
+    );
+  }
+
+  if (content.kind === 'rod') {
+    const rodY = top + (bottom - top) * 0.14;
+    return (
+      <g key={`r-${key}`}>
+        <line x1={cw * 0.08} y1={rodY} x2={cw * 0.92} y2={rodY} strokeWidth={t} />
+        {hangersAt(cw, rodY, (bottom - top) * 0.5, t, key)}
+      </g>
+    );
+  }
+
+  if (content.kind === 'wine') {
+    return <g key={`w-${key}`}>{wineLattice(cw, top, bottom, content, t, key)}</g>;
+  }
+
+  return null;
+}
+
+/**
+ * כוורת ליין.
+ *
+ * הכוורת נבנית משתי סדרות אלכסונים מצטלבות, בדיוק כמו בשטח: אלה
+ * הלוחות שנחרצים זה בזה ויוצרים מעוינים שהבקבוק שוכב בהם. הצפיפות
+ * נגזרת ממספר השורות והעמודות, כדי שהציור יתאר את מה שייבנה.
+ */
+function wineLattice(
+  w: number,
+  top: number,
+  bottom: number,
+  content: ZoneContent,
+  t: number,
+  key: string,
+): React.ReactNode[] {
+  const rows = Math.max(content.wineRows ?? 3, 1);
+  const cols = Math.max(content.wineCols ?? 4, 1);
+  const zh = bottom - top;
+  const stepX = w / cols;
+  const stepY = zh / rows;
+  const out: React.ReactNode[] = [];
+
+  // מספר האלכסונים בכל כיוון, כדי לכסות את כל המלבן
+  const diagonals = cols + rows;
+  for (let i = 1 - rows; i < diagonals; i++) {
+    const x0 = i * stepX;
+    out.push(
+      <line
+        key={`wl-${key}-${i}`}
+        x1={clamp(x0, 0, w)}
+        y1={clamp(top + (x0 < 0 ? -x0 / stepX : 0) * stepY, top, bottom)}
+        x2={clamp(x0 + rows * stepX, 0, w)}
+        y2={clamp(top + Math.min(rows, (w - x0) / stepX) * stepY, top, bottom)}
+        strokeWidth={t * 0.8}
+      />,
+      <line
+        key={`wr-${key}-${i}`}
+        x1={clamp(w - x0, 0, w)}
+        y1={clamp(top + (x0 < 0 ? -x0 / stepX : 0) * stepY, top, bottom)}
+        x2={clamp(w - x0 - rows * stepX, 0, w)}
+        y2={clamp(top + Math.min(rows, (w - x0) / stepX) * stepY, top, bottom)}
+        strokeWidth={t * 0.8}
+      />,
+    );
+  }
+  return out;
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+
 /* ------------------------------------------------------------------ */
 
 /**
@@ -391,37 +498,35 @@ function zonedContainer(c: Ctx) {
   const out: React.ReactNode[] = [];
 
   for (const { zone, top, bottom } of bands) {
-    if (zone.kind === 'drawers') {
-      const rows = zone.drawers ?? 1;
-      const cols = Math.max(zone.drawerCols ?? 1, 1);
-      const hidden = zone.drawerStyle === 'inner';
-      // מגירה פנימית נראית רק כשמסתכלים פנימה
-      if (!hidden || inside) {
+    /*
+     * כל אזור מצויר תא-תא. בלי קושרת יש תא אחד ברוחב מלא; עם קושרת
+     * כל עמודה מקבלת את הרוחב שלה, והקושרת עצמה מצוירת בין העמודות
+     * כלוח אנכי — בדיוק כמו בארון אמיתי.
+     */
+    const cells = zoneCells(zone);
+    let x = 0;
+    cells.forEach((cell, i) => {
+      const cw = w * cell.share;
+      out.push(
+        <g key={`cell-${zone.id}-${cell.key}`} transform={`translate(${x} 0)`}>
+          {cellContent(c, cell.content, cw, top, bottom, `${zone.id}-${cell.key}`)}
+        </g>,
+      );
+      x += cw;
+      // הקושרת בין תא לתא, כשרואים את הפנים
+      if (i < cells.length - 1 && (inside || !c.doors)) {
         out.push(
-          <g key={`dz-${zone.id}`}>{drawerGrid(c, top, bottom, rows, cols, hidden && inside)}</g>,
+          <line
+            key={`div-${zone.id}-${cell.key}`}
+            x1={x}
+            y1={top}
+            x2={x}
+            y2={bottom}
+            strokeWidth={t * 1.3}
+          />,
         );
       }
-    } else if (zone.kind === 'shelves' && (inside || !c.doors)) {
-      out.push(
-        <g key={`sz-${zone.id}`}>
-          {shelfLines(
-            { ...c, shelves: zone.shelves ?? 0, gaps: zone.shelfGapsMm },
-            top,
-            bottom,
-            '',
-            !!zone.glassShelves,
-          )}
-        </g>,
-      );
-    } else if (zone.kind === 'rod' && (inside || !c.doors)) {
-      const rodY = top + (bottom - top) * 0.14;
-      out.push(
-        <g key={`rz-${zone.id}`}>
-          <line x1={w * 0.08} y1={rodY} x2={w * 0.92} y2={rodY} strokeWidth={t} />
-          {hangersAt(w, rodY, (bottom - top) * 0.5, t, zone.id)}
-        </g>,
-      );
-    }
+    });
 
     // קו הפרדה בין אזורים
     if (top > 0 && (inside || !c.doors)) {

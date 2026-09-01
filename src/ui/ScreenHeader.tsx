@@ -1,5 +1,4 @@
 import { nav } from '../nav/navigation';
-import { QuickCalcButton } from './QuickCalc';
 import { BackIcon } from './icons';
 
 /** כותרת מסך עם כפתור חזרה קטן. */
@@ -37,8 +36,6 @@ export function ScreenHeader({
           </div>
           {subtitle && <p className="truncate text-sm text-stone-500">{subtitle}</p>}
         </div>
-        {/* מחשבון מהיר — זמין בכל מסך, כי חישוב מול לקוח קורה בכל שלב */}
-        <QuickCalcButton />
         {action}
       </div>
       {children}

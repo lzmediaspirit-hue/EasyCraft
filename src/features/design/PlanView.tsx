@@ -1,4 +1,4 @@
-import { buildPlan, DEFAULT_TURN_DEG } from './plan';
+import { buildPlan, planUnits, DEFAULT_TURN_DEG } from './plan';
 import { wallName } from '../projects/wallLayouts';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
@@ -26,9 +26,12 @@ export function PlanView({
   onChangeWall: (id: string, patch: Partial<Wall>) => void;
 }) {
   const plan = buildPlan(walls, units);
+  const boxes = planUnits(plan, units);
+  const clashes = boxes.filter((b) => b.clash);
 
-  const xs = plan.flatMap((p) => [p.start.x, p.end.x]);
-  const ys = plan.flatMap((p) => [p.start.y, p.end.y]);
+  const pts = [...plan.flatMap((p) => [p.start, p.end]), ...boxes.flatMap((b) => b.corners)];
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
   const pad = 700;
   const minX = Math.min(...xs) - pad;
   const minY = Math.min(...ys) - pad;
@@ -50,14 +53,14 @@ export function PlanView({
             const d = p.depthMm;
             return (
               <g key={p.wall.id} onClick={() => onSelectWall(p.wall.id)} className="cursor-pointer">
+                {/* רצועת העומק נשארת כרקע חיוור; הארונות עצמם מצוירים מעליה */}
                 {d > 0 && (
                   <path
                     d={`M ${p.start.x} ${p.start.y} L ${p.end.x} ${p.end.y} L ${p.end.x + nx * d} ${
                       p.end.y + ny * d
                     } L ${p.start.x + nx * d} ${p.start.y + ny * d} Z`}
-                    fill={active ? '#d9b483' : '#e7e5e4'}
-                    stroke={active ? '#a06236' : '#d6d3d1'}
-                    strokeWidth={stroke * 0.5}
+                    fill={active ? '#f2e6d5' : '#f5f5f4'}
+                    stroke="none"
                   />
                 )}
                 <line
@@ -83,8 +86,45 @@ export function PlanView({
               </g>
             );
           })}
+
+          {/*
+            כל ארון כמלבן ברוחב ובעומק שלו. ארון שמתנגש בארון על קיר
+            אחר מסומן באדום — זו התנגשות שבמבט חזית לא רואים בכלל.
+          */}
+          {boxes.map((b) => (
+            <g key={b.unit.id} pointerEvents="none">
+              <polygon
+                points={b.corners.map((c) => `${c.x},${c.y}`).join(' ')}
+                fill={b.clash ? '#fecaca' : b.unit.level === 'wall' ? '#e7e5e4' : '#d9b483'}
+                fillOpacity={b.unit.level === 'wall' ? 0.55 : 0.9}
+                stroke={b.clash ? '#dc2626' : '#a06236'}
+                strokeWidth={stroke * (b.clash ? 1.2 : 0.6)}
+                strokeDasharray={b.unit.level === 'wall' ? `${stroke * 4} ${stroke * 3}` : undefined}
+              />
+              <text
+                x={b.center.x}
+                y={b.center.y + fontSize * 0.3}
+                textAnchor="middle"
+                fontSize={fontSize * 0.8}
+                fill={b.clash ? '#7f1d1d' : '#44403c'}
+                direction="ltr"
+              >
+                {cm(b.unit.widthMm)}
+              </text>
+            </g>
+          ))}
         </svg>
       </div>
+
+      {clashes.length > 0 && (
+        <ul className="space-y-1.5 rounded-2xl border border-red-200 bg-red-50 p-3">
+          {[...new Set(clashes.map((c) => c.unit.name))].map((name) => (
+            <li key={name} className="text-sm leading-snug text-red-900">
+              {name} מתנגש עם ארון על קיר אחר
+            </li>
+          ))}
+        </ul>
+      )}
 
       <ul className="space-y-1.5">
         {walls.map((wall, i) => {
@@ -153,8 +193,9 @@ export function PlanView({
       </ul>
 
       <p className="text-xs leading-snug text-stone-500">
-        פנייה של 90° היא פינה ישרה. שנה את הזווית כדי לתאר חדר שאינו מלבן —
-        הרצועה לאורך כל קיר היא עומק הארונות שעליו, ושם שתי שורות נפגשות.
+        פנייה של 90° היא פינה ישרה. שנה את הזווית כדי לתאר חדר שאינו מלבן.
+        כל מלבן הוא ארון ברוחב ובעומק שלו; מקווקו הוא ארון תלוי, ואדום
+        הוא ארון שמתנגש בארון על הקיר השכן.
       </p>
     </div>
   );

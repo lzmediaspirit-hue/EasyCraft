@@ -25,6 +25,8 @@ export default function App() {
   switch (route.name) {
     case 'customers':
       return <CustomersScreen />;
+    case 'archive':
+      return <CustomersScreen archived />;
     case 'projects':
       return <ProjectsScreen customerId={route.customerId} />;
     case 'design':

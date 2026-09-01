@@ -7,7 +7,15 @@ import { cm } from '../../ui/units';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /** מרחק הצמדה בין ארגזים ולקצות הקיר (מ"מ). */
+/**
+ * מרחק ההצמדה במ"מ, ובנוסף מרחק מינימלי במסך.
+ *
+ * 60 מ"מ הם כ-5 פיקסלים בקיר של 4 מטר על מסך טלפון — קטן מדי כדי
+ * לפגוע באצבע, ולכן הארגזים "לא נצמדו לרצפה". סף ההצמדה נגזר גם
+ * מקנה המידה של הציור, כך שהוא מרגיש זהה ביד בכל מרחק תצוגה.
+ */
 const SNAP = 60;
+const SNAP_PX = 18;
 /** גרירה חופשית נוחתת על סנטימטרים שלמים, לא על מידות שבורות. */
 const STEP = 10;
 
@@ -19,6 +27,8 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onMove: (id: string, xMm: number, yMm: number) => void;
+  /** נקרא בשחרור הגרירה — שם מחליטים אם הארגז נצמד לרצפה */
+  onDropUnit?: (id: string, yMm: number) => void;
   /** הסתרת חזיתות — תצוגת פנים הארונות */
   inside: boolean;
   /** גוון לכל ארגז, לפי מזהה הגוון */
@@ -42,6 +52,7 @@ export function WallElevation({
   selectedId,
   onSelect,
   onMove,
+  onDropUnit,
   inside,
   finishHex,
   measure,
@@ -57,6 +68,11 @@ export function WallElevation({
     originX: number;
     originY: number;
     scale: number;
+    /* מצב הנעילה כפי שהיה בתחילת הגרירה. בלעדיו הצמדה שקורית
+       באמצע הגרירה הייתה מקפיאה אותה במקום */
+    locked: boolean;
+    /* המיקום האחרון, כדי להחליט על הצמדה בשחרור ולא תוך כדי */
+    lastY: number;
   } | null>(null);
 
   const padX = 120;
@@ -74,8 +90,13 @@ export function WallElevation({
     onSelect(unit.id);
     // במצב מדידה ההקשה רק בוחרת ארגז, בלי להזיז אותו בטעות
     if (measure) return;
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    /*
+     * קנה המידה נגזר מהטרנספורם האמיתי של ה-SVG ולא מרוחב האלמנט:
+     * כשהציור משתלב במסגרת נמוכה הוא מוקטן וממורכז, ואז רוחב
+     * האלמנט כבר אינו רוחב הציור — וגרירה לפיו הייתה קופצת.
+     */
+    const ctm = svgRef.current?.getScreenCTM();
+    if (!ctm || !ctm.a) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = {
       id: unit.id,
@@ -83,7 +104,9 @@ export function WallElevation({
       startY: e.clientY,
       originX: unit.xMm,
       originY: unit.yMm,
-      scale: vbW / rect.width,
+      scale: 1 / ctm.a,
+      locked: !!unit.floorLocked,
+      lastY: unit.yMm,
     };
   }
 
@@ -97,13 +120,25 @@ export function WallElevation({
     // מסך גדל כלפי מטה, הקיר נמדד כלפי מעלה — ולכן הסימן הפוך
     const rawY = d.originY - (e.clientY - d.startY) * d.scale;
 
-    const x = snapX(rawX, unit, units, wall.lengthMm, corners);
-    const y = unit.floorLocked ? unit.yMm : snapY(rawY, unit, units, wall.heightMm);
+    // סף ההצמדה במ"מ, שקול למרחק קבוע על המסך בכל קנה מידה
+    const tol = Math.max(SNAP, SNAP_PX * d.scale);
+    const x = snapX(rawX, unit, units, wall.lengthMm, corners, tol);
+    const y = d.locked ? d.originY : snapY(rawY, unit, units, wall.heightMm, tol);
+    d.lastY = y;
     onMove(d.id, x, y);
   }
 
   function endDrag(e: React.PointerEvent) {
-    if (drag.current) e.currentTarget.releasePointerCapture(e.pointerId);
+    const d = drag.current;
+    if (d) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      /*
+       * ההצמדה לרצפה נקבעת בשחרור ולא תוך כדי תנועה: קודם היא
+       * נקבעה בכל pointermove, ולכן הפיקסל הראשון של גרירה כלפי
+       * מעלה נעל את הארגז לרצפה — ומשם הוא כבר לא זז.
+       */
+      if (!d.locked) onDropUnit?.(d.id, d.lastY);
+    }
     drag.current = null;
   }
 
@@ -111,7 +146,7 @@ export function WallElevation({
     <svg
       ref={svgRef}
       viewBox={`${-padX} ${-padTop} ${vbW} ${vbH}`}
-      className="w-full touch-pan-y select-none"
+      className="max-h-full w-full min-h-0 flex-1 touch-pan-y select-none"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onSelect(null);
       }}
@@ -687,7 +722,8 @@ function snapX(
   unit: PlacedUnit,
   units: PlacedUnit[],
   wallLength: number,
-  corners?: { startMm: number; endMm: number },
+  corners: { startMm: number; endMm: number } | undefined,
+  tol: number,
 ): number {
   const blocked = corners && unit.level !== 'wall' && !unit.corner;
   const min = blocked ? corners.startMm : 0;
@@ -698,12 +734,18 @@ function snapX(
     if (other.id === unit.id || other.level !== unit.level) continue;
     targets.push(other.xMm + other.widthMm, other.xMm - unit.widthMm);
   }
-  const snapped = nearest(x, targets, SNAP);
+  const snapped = nearest(x, targets, tol);
   return Math.round(Math.min(Math.max(snapped, min), max));
 }
 
 /** מצמיד גובה לרצפה, לתקרה, ולקצוות של ארגזים אחרים. */
-function snapY(y: number, unit: PlacedUnit, units: PlacedUnit[], wallHeight: number): number {
+function snapY(
+  y: number,
+  unit: PlacedUnit,
+  units: PlacedUnit[],
+  wallHeight: number,
+  tol: number,
+): number {
   const ceiling = wallHeight - unit.heightMm;
   // הרצפה היא 0: תחתית הארגז כוללת את הרגליים, ולכן אין יעד נפרד להן
   const targets = [0, ceiling];
@@ -711,6 +753,8 @@ function snapY(y: number, unit: PlacedUnit, units: PlacedUnit[], wallHeight: num
     if (other.id === unit.id) continue;
     targets.push(other.yMm, other.yMm + other.heightMm, other.yMm - unit.heightMm);
   }
-  const snapped = nearest(y, targets, SNAP);
+  // הרצפה מושכת חזק יותר מכל יעד אחר — לשם רוב הארגזים אמורים לרדת
+  if (y < tol * 2) return 0;
+  const snapped = nearest(y, targets, tol);
   return Math.round(Math.min(Math.max(snapped, 0), Math.max(ceiling, 0)));
 }
