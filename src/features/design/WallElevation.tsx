@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
+import { glyphDef } from '../../catalog/glyphList';
 import { featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
@@ -45,7 +46,7 @@ type Props = {
  */
 export function WallElevation({
   wall,
-  units,
+  units: allUnits,
   selectedId,
   onSelect,
   onMove,
@@ -55,6 +56,13 @@ export function WallElevation({
   measure,
   corners,
 }: Props) {
+  /*
+   * חיפוי קיר מצויר ראשון: הוא מכסה את הקיר, והארגזים עומדים לפניו.
+   * בלי הסדר הזה לוח שנוסף אחרון היה מסתיר את מה שהוא אמור לגבות.
+   */
+  const layer = (u: PlacedUnit) => (glyphDef(u.glyph).cladding ? 0 : 1);
+  const units = [...allUnits].sort((a, b) => layer(a) - layer(b));
+
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{
     id: string;

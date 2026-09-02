@@ -89,8 +89,19 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const me = useCurrentMember();
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
 
-  // מעבר לקיר אחר מבטל בחירה, כדי שלא נערוך ארגז שלא רואים
-  useEffect(() => setSelectedId(null), [wallIndex]);
+  /*
+   * מעבר לקיר אחר מבטל בחירה, כדי שלא נערוך ארגז שלא רואים —
+   * אלא אם המעבר עצמו נבע מבחירת ארגז שנמצא על הקיר החדש, כמו
+   * בלחיצה בתלת־ממד על ארון של קיר שכן.
+   */
+  useEffect(() => {
+    const wallId = walls?.[wallIndex]?.id;
+    setSelectedId((id) => {
+      const picked = (allUnits ?? []).find((u) => u.id === id);
+      return picked && picked.wallId === wallId ? id : null;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallIndex]);
 
   const corners = wall && walls && walls.length > 1
     ? cornerZones(walls, wall, allUnits ?? [])
@@ -172,19 +183,18 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             icon={<DepthIcon className="size-4" />}
             label="עומק אחיד"
           />
-          {walls.length > 1 && (
-            <Tool
-              active={planOpen}
-              onClick={() => setPlanOpen((v) => !v)}
-              icon={<PlanIcon className="size-4" />}
-              label="מבט על"
-            />
-          )}
+          {/* מבט על זמין תמיד: משם גם מוסיפים קיר לחדר */}
+          <Tool
+            active={planOpen}
+            onClick={() => setPlanOpen((v) => !v)}
+            icon={<PlanIcon className="size-4" />}
+            label="מבט על"
+          />
 
         </div>
-        {walls.length > 1 && (
-          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
-            {walls.map((w, i) => (
+        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
+          {walls.length > 1 &&
+            walls.map((w, i) => (
               <button
                 key={w.id}
                 onClick={() => setWallIndex(i)}
@@ -198,8 +208,19 @@ export function DesignScreen({ projectId }: { projectId: string }) {
                 {wallName(i)}
               </button>
             ))}
-          </div>
-        )}
+          <button
+            onClick={async () => {
+              await wallsRepo.add(projectId);
+              setWallIndex(walls.length);
+            }}
+            aria-label="קיר נוסף"
+            title="קיר נוסף"
+            className="flex shrink-0 items-center gap-1 rounded-full border border-dashed border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
+          >
+            <PlusIcon className="size-4" />
+            קיר
+          </button>
+        </div>
       </ScreenHeader>
 
       {/*
@@ -210,11 +231,21 @@ export function DesignScreen({ projectId }: { projectId: string }) {
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
         <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
           {iso ? (
+            /* התלת־ממד מראה את החדר כולו, ולא רק את הקיר שעובדים עליו */
             <WallIso
-              wall={wall}
-              units={units}
+              walls={walls}
+              units={allUnits ?? []}
+              activeWallId={wall.id}
               selectedId={selectedId}
-              onSelect={setSelectedId}
+              /* בחירה בתלת־ממד עשויה ליפול על קיר אחר — עוברים אליו */
+              onSelect={(id) => {
+                const picked = (allUnits ?? []).find((u) => u.id === id);
+                if (picked && picked.wallId !== wall.id) {
+                  const i = walls.findIndex((w) => w.id === picked.wallId);
+                  if (i >= 0) setWallIndex(i);
+                }
+                setSelectedId(id);
+              }}
               inside={inside}
               finishHex={finishHex ?? {}}
             />
@@ -376,6 +407,14 @@ export function DesignScreen({ projectId }: { projectId: string }) {
               if (i >= 0) setWallIndex(i);
             }}
             onChangeWall={(id, patch) => wallsRepo.update(id, patch)}
+            onAddWall={async () => {
+              await wallsRepo.add(projectId);
+              setWallIndex(walls.length);
+            }}
+            onRemoveWall={async (id) => {
+              await wallsRepo.remove(id);
+              setWallIndex((i) => Math.max(Math.min(i, walls.length - 2), 0));
+            }}
           />
         </Sheet>
       )}
@@ -451,7 +490,11 @@ function Tool({
     <button
       onClick={onClick}
       aria-pressed={active}
-      aria-label={title}
+      /*
+       * התווית הנראית היא חלק מהשם הנגיש. כשהיא לא נמצאת בו, מי
+       * שמפעיל את האפליקציה בקול אומר "שטוח" ושום כפתור לא נענה.
+       */
+      aria-label={title ? `${label} — ${title}` : undefined}
       title={title}
       className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
         active ? 'bg-stone-900 text-white' : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'

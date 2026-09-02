@@ -3,6 +3,7 @@ import { wallName } from '../projects/wallLayouts';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { selectOnFocus } from '../../ui/Field';
+import { PlusIcon, TrashIcon } from '../../ui/icons';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -18,12 +19,17 @@ export function PlanView({
   activeWallId,
   onSelectWall,
   onChangeWall,
+  onAddWall,
+  onRemoveWall,
 }: {
   walls: Wall[];
   units: PlacedUnit[];
   activeWallId: string;
   onSelectWall: (id: string) => void;
   onChangeWall: (id: string, patch: Partial<Wall>) => void;
+  /** הוספת קיר בסוף השרשרת — חדר לא תמיד מסתיים בארבעה קירות */
+  onAddWall: () => void;
+  onRemoveWall: (id: string) => void;
 }) {
   const plan = buildPlan(walls, units);
   const boxes = planUnits(plan, units);
@@ -155,6 +161,16 @@ export function PlanView({
               />
             </label>
 
+            {walls.length > 1 && (
+              <button
+                onClick={() => onRemoveWall(wall.id)}
+                aria-label={`מחיקת ${wallName(i)}`}
+                className="shrink-0 rounded-lg p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600"
+              >
+                <TrashIcon className="size-4" />
+              </button>
+            )}
+
             {i > 0 && (
               <label className="flex items-center gap-1 rounded-lg bg-stone-100 px-2 py-1">
                 <span className="text-[10px] text-stone-500">פנייה</span>
@@ -191,6 +207,14 @@ export function PlanView({
           );
         })}
       </ul>
+
+      <button
+        onClick={onAddWall}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 py-2.5 text-sm font-medium text-stone-600 transition-colors hover:border-oak-400 hover:text-oak-700"
+      >
+        <PlusIcon className="size-4" />
+        קיר נוסף
+      </button>
 
       <p className="text-xs leading-snug text-stone-500">
         פנייה של 90° היא פינה ישרה. שנה את הזווית כדי לתאר חדר שאינו מלבן.

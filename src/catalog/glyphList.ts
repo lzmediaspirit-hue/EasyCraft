@@ -24,6 +24,11 @@ export interface GlyphDef {
    * עצמו — ולכן אין כאן דלת לחשב, וגם לא מדפים שנכנסים מאליהם.
    */
   appliance?: boolean;
+  /**
+   * חיפוי קיר: לוח שנצמד לקיר ויושב מאחורי הארגזים.
+   * הוא מכסה קיר, ולא ניצב לפניו, ולכן גם בציור הוא מצויר ראשון.
+   */
+  cladding?: boolean;
 }
 
 export const GLYPHS: GlyphDef[] = [
@@ -58,7 +63,7 @@ export const GLYPHS: GlyphDef[] = [
   { noCarcass: 'vertical', key: 'plain', label: 'לוח בודד' },
   { noCarcass: 'horizontal', key: 'desk', label: 'שולחן' },
   { key: 'tv', label: 'טלוויזיה', doors: true, drawers: true },
-  { noCarcass: 'vertical', key: 'panel', label: 'פאנל' },
+  { noCarcass: 'vertical', key: 'panel', label: 'פאנל', cladding: true },
   { noCarcass: 'horizontal', key: 'slab', label: 'מדף צף' },
   { noCarcass: 'vertical', key: 'spacer', label: 'מרווח' },
 ];

@@ -140,6 +140,44 @@ export const wallsRepo = {
     return rows.sort((a, b) => a.index - b.index);
   },
 
+  /**
+   * מוסיף קיר בסוף השרשרת.
+   * חדר אמיתי לא תמיד מלבן, ולפעמים מתגלה קיר נוסף רק במדידה
+   * בשטח — ולכן מספר הקירות אינו נעול למה שנבחר ביצירת הפרויקט.
+   * הקיר החדש יורש את גובה הקודם, כי זה אותו חדר.
+   */
+  async add(projectId: string): Promise<Wall> {
+    const existing = await this.listForProject(projectId);
+    const last = existing[existing.length - 1];
+    const now = Date.now();
+    const wall: Wall = {
+      id: crypto.randomUUID(),
+      projectId,
+      index: existing.length,
+      lengthMm: last?.lengthMm ?? 3000,
+      heightMm: last?.heightMm ?? 2600,
+      features: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.walls.add(wall);
+    return wall;
+  },
+
+  /** מוחק קיר ואת הארגזים שעליו, ומסדר מחדש את המספור. */
+  async remove(id: string): Promise<void> {
+    const wall = await db.walls.get(id);
+    if (!wall) return;
+    await db.transaction('rw', db.walls, db.units, async () => {
+      await db.units.where('wallId').equals(id).delete();
+      await db.walls.delete(id);
+      const rest = (await db.walls.where('projectId').equals(wall.projectId).toArray()).sort(
+        (a, b) => a.index - b.index,
+      );
+      await Promise.all(rest.map((w, index) => db.walls.update(w.id, { index })));
+    });
+  },
+
   async update(id: string, patch: Partial<Omit<Wall, 'id'>>): Promise<void> {
     await db.walls.update(id, { ...patch, updatedAt: Date.now() });
   },
@@ -194,7 +232,12 @@ export const unitsRepo = {
       exposedFinishId: item.exposedFinishId,
       level: item.level,
       xMm,
-      yMm: item.defaultYMm,
+      /*
+       * ארגז שעומד על הרצפה מתחיל עליה, ולא בגובה שנשמר בספרייה.
+       * הגובה השמור נועד לארון תלוי; ארגז תחתון או עמודה שמקבלים
+       * אותו היו נראים מרחפים מעל הרצפה ברגע ההוספה.
+       */
+      yMm: item.level === 'wall' ? item.defaultYMm : 0,
       widthMm: widthMm ?? item.defaultWidthMm,
       heightMm: item.defaultHeightMm,
       depthMm: item.defaultDepthMm,
