@@ -208,16 +208,31 @@ export function WallElevation({
       {/* רגליים ומשטחי עבודה — נגזרים מהארגז, לא נבחרים בנפרד */}
       {units.map((u) => (
         <g key={`trim-${u.id}`}>
+          {/*
+            הסוקל יושב על הרצפה ברוחב מלא, כמו בשטח. הנסיגה שלו
+            מהחזית מסומנת בקו ולא בהצרה של המלבן — ארגז שמצויר צר
+            יותר בתחתיתו נראה כאילו הוא מרחף.
+          */}
           {!!u.socleMm && (
-            <rect
-              x={u.xMm + u.widthMm * 0.03}
-              y={flip(u.yMm + u.socleMm)}
-              width={u.widthMm * 0.94}
-              height={u.socleMm}
-              fill="#e7e5e4"
-              stroke="#d6d3d1"
-              strokeWidth={stroke * 0.7}
-            />
+            <>
+              <rect
+                x={u.xMm}
+                y={flip(u.yMm + u.socleMm)}
+                width={u.widthMm}
+                height={u.socleMm}
+                fill="#ddd9d4"
+                stroke="#c4bfb8"
+                strokeWidth={stroke * 0.7}
+              />
+              <line
+                x1={u.xMm}
+                y1={flip(u.yMm + u.socleMm) + u.socleMm * 0.25}
+                x2={u.xMm + u.widthMm}
+                y2={flip(u.yMm + u.socleMm) + u.socleMm * 0.25}
+                stroke="#c4bfb8"
+                strokeWidth={stroke * 0.5}
+              />
+            </>
           )}
           {!!u.counterMm && (
             <rect
@@ -336,17 +351,16 @@ export function WallElevation({
         );
       })}
 
-      {/* מדפים נגררים — רק כשרואים את פנים הארון ורק בארגז הנבחר */}
-
-      {/* מדידה של הארגז שנבחר */}
-      {measure && selectedId
-        ? measureOverlay(
-            units.find((u) => u.id === selectedId),
-            measure,
-            flip,
-            stroke,
-            fontSize,
-          )
+      {/*
+        מדידה מוצגת על כל הארגזים בבת אחת: כשמודדים קיר רוצים לראות
+        את כל המידות יחד, לא ללחוץ על ארגז אחרי ארגז.
+      */}
+      {measure
+        ? units.map((u) => (
+            <g key={`measure-${u.id}`}>
+              {measureOverlay(u, measure, flip, stroke, fontSize)}
+            </g>
+          ))
         : null}
 
       {/* קו מידה של הקיר */}

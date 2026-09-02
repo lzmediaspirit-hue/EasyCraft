@@ -4,10 +4,12 @@ import { customersRepo } from './customersRepo';
 import { NewCustomerSheet } from './NewCustomerSheet';
 import { normalizePhone } from './phone';
 import { WorkBar } from '../workflow/WorkBar';
+import { LibrarySheet } from '../design/LibrarySheet';
 import type { Customer } from '../../db/types';
 import {
   ArchiveIcon,
   BackIcon,
+  BoxesIcon,
   ChevronIcon,
   DotsIcon,
   PhoneIcon,
@@ -29,6 +31,7 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
     [],
   );
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState<string | null>(null);
 
@@ -74,6 +77,20 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
             <span className="num text-sm font-medium text-stone-400">{customers.length}</span>
           )}
           <span className="ms-auto flex shrink-0 items-center">
+            {/*
+              הספרייה נגישה גם בלי פרויקט פתוח: בונים ומתחזקים אותה
+              בזמן שקט, כדי שבפגישה עם הלקוח רק בוחרים ממנה.
+            */}
+            {!archived && (
+              <button
+                onClick={() => setLibraryOpen(true)}
+                aria-label="ספריית המוצרים"
+                title="ספריית המוצרים"
+                className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
+              >
+                <BoxesIcon />
+              </button>
+            )}
             {!archived && (
               <button
                 onClick={() => nav.push({ name: 'archive' })}
@@ -144,6 +161,14 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
 
       {sheetOpen && (
         <NewCustomerSheet onClose={() => setSheetOpen(false)} onCreated={handleCreated} />
+      )}
+
+      {libraryOpen && (
+        <LibrarySheet
+          roomKind="custom"
+          manage
+          onClose={() => setLibraryOpen(false)}
+        />
       )}
 
       {toast && (

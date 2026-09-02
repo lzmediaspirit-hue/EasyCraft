@@ -9,6 +9,8 @@ import { UnitEditor } from './UnitEditor';
 import { UnitEditSheet } from './UnitEditSheet';
 import { MaterialsSheet } from './MaterialsSheet';
 import { NestingSheet } from './NestingSheet';
+import { SaleSheet } from '../projects/SaleSheet';
+import { useCurrentMember } from '../../workflow/useMember';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
 import { WallThumb } from './WallThumb';
@@ -52,6 +54,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [editOpen, setEditOpen] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [nestingOpen, setNestingOpen] = useState(false);
+  const [saleOpen, setSaleOpen] = useState(false);
   /* חזית שטוחה לעבודה מדויקת, ומבט תלת-ממדי להבנת המבנה ולהצגה ללקוח */
   const [iso, setIso] = useState(false);
   const [depthOpen, setDepthOpen] = useState(false);
@@ -83,6 +86,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
     [allUnits, wall],
   );
   const selected = units.find((u) => u.id === selectedId) ?? null;
+  const me = useCurrentMember();
+  const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
 
   // מעבר לקיר אחר מבטל בחירה, כדי שלא נערוך ארגז שלא רואים
   useEffect(() => setSelectedId(null), [wallIndex]);
@@ -133,20 +138,28 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             label={inside ? 'פנים' : 'חזית'}
             title={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
           />
+          {/*
+            לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
+            עומק וכיבוי. קודם היה בורר ציר בשורה נפרדת שגזל מקום
+            מהציור, ובטלפון הוא נחתך.
+          */}
           <Tool
             active={measure !== null}
-            onClick={() => setMeasure((m) => (m === null ? 'w' : null))}
+            onClick={() =>
+              setMeasure((m) => (m === null ? 'w' : m === 'w' ? 'h' : m === 'h' ? 'd' : null))
+            }
             icon={<RulerIcon className="size-4" />}
-            label="מדידה"
+            label={
+              measure === null
+                ? 'מדידה'
+                : measure === 'w'
+                  ? 'רוחב'
+                  : measure === 'h'
+                    ? 'גובה'
+                    : 'עומק'
+            }
+            title="לחיצה נוספת מחליפה ציר"
           />
-          {/* חישוב הוא סוף התהליך על הקיר, ולכן הוא נראה אחרת מכלי תצוגה */}
-          <button
-            onClick={() => setMaterialsOpen(true)}
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-oak-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-oak-700"
-          >
-            <CalcIcon className="size-4" />
-            חישוב
-          </button>
           <Tool
             active={nestingOpen}
             onClick={() => setNestingOpen(true)}
@@ -169,31 +182,6 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           )}
 
         </div>
-
-        {/* בורר הציר יושב בשורה משלו — בשורת הכלים העומק נחתך */}
-        {measure !== null && (
-          <div className="mt-2 flex gap-1">
-            {(
-              [
-                ['w', 'רוחב'],
-                ['h', 'גובה'],
-                ['d', 'עומק'],
-              ] as const
-            ).map(([ax, label]) => (
-              <button
-                key={ax}
-                onClick={() => setMeasure(ax)}
-                className={`flex-1 rounded-full py-1.5 text-xs font-medium transition-colors ${
-                  measure === ax
-                    ? 'bg-teal-700 text-white'
-                    : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
         {walls.length > 1 && (
           <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
             {walls.map((w, i) => (
@@ -360,6 +348,19 @@ export function DesignScreen({ projectId }: { projectId: string }) {
               <PlusIcon />
               הוספת ארגז
             </button>
+
+            {/*
+              חישוב הוא סוף העבודה על הקיר ולכן הוא יושב ליד הפעולה
+              הראשית, לא בין כלי התצוגה. פתיחת הפרויקט עצמה נעשית
+              מתוכו — אחרי שרואים מה זה עולה.
+            */}
+            <button
+              onClick={() => setMaterialsOpen(true)}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
+            >
+              <CalcIcon />
+              חישוב פרויקט
+            </button>
           </div>
         </>
       )}
@@ -394,12 +395,29 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         <UnitEditSheet unit={selected} onClose={() => setEditOpen(false)} />
       )}
 
+      {saleOpen && (
+        <SaleSheet
+          project={project}
+          units={allUnits ?? []}
+          costing={costing}
+          isManager={me?.role === 'manager'}
+          onClose={() => setSaleOpen(false)}
+        />
+      )}
+
       {nestingOpen && (
         <NestingSheet projectId={projectId} onClose={() => setNestingOpen(false)} />
       )}
 
       {materialsOpen && (
-        <MaterialsSheet projectId={projectId} onClose={() => setMaterialsOpen(false)} />
+        <MaterialsSheet
+          projectId={projectId}
+          onStart={() => {
+            setMaterialsOpen(false);
+            setSaleOpen(true);
+          }}
+          onClose={() => setMaterialsOpen(false)}
+        />
       )}
 
       {libraryOpen && (

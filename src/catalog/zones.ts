@@ -1,4 +1,5 @@
 import { autoShelves } from './CabinetGlyph';
+import { glyphDef } from './glyphList';
 import type { PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../db/types';
 
 /**
@@ -222,7 +223,13 @@ function derive(u: FlatSource): Zone[] {
     ];
   }
 
-  const shelves = u.shelves ?? autoShelves(h);
+  /*
+   * מדפים מאליהם רק לארון שיש לו מדפים. נישה למקרר או לתנור אינה
+   * ארון — מי שכן רוצה שם מדף יגדיר אותו, אבל הוא לא ייספר בחומרים
+   * רק מפני שהצורה נראית כמו ארגז.
+   */
+  const auto = glyphDef(u.glyph).shelves ? autoShelves(h) : 0;
+  const shelves = u.shelves ?? auto;
   return [
     {
       id: id('shelves'),

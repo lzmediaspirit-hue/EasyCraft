@@ -159,3 +159,27 @@ db.version(8)
         });
     }
   });
+
+/**
+ * לוח מוגדר לפי החומר שלו ולא לפי "תפקיד" בארון: אותו MDF משמש
+ * גם לחזית וגם לגוף, ואותו גוון קיים על כמה חומרים. החלק בארון
+ * נקבע מעכשיו לפי הגוון שנבחר לו בהדמיה.
+ */
+db.version(9)
+  .stores({
+    ...TABLES_V3,
+    team: 'id, role, active, username',
+    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+    attachments: 'id, projectId, kind',
+  })
+  .upgrade((tx) =>
+    tx
+      .table('boards')
+      .toCollection()
+      .modify((b: { role?: string; material?: string }) => {
+        if (b.material) return;
+        // התפקיד הישן מנחש את החומר הסביר, וזה מה שהיה בפועל
+        b.material = b.role === 'front' ? 'mdf' : b.role === 'back' ? 'other' : 'sandwich';
+        delete b.role;
+      }),
+  );

@@ -74,12 +74,7 @@ export const MATERIAL = {
   backMm: 4,
   /** דופן זרה עמוקה מהארגז, כדי לכסות את החזית */
   exposedExtraMm: 22,
-  sheetWidthMm: 2440,
-  sheetHeightMm: 1220,
-  /** אחוז ניצולת ריאלי של פלטה */
-  yield: 0.85,
+  /* פלטה עומדת: הצלע הארוכה היא כיוון הסיבים, כמו ב-`Board` */
+  sheetWidthMm: 1220,
+  sheetHeightMm: 2440,
 };
-
-/** שטח פלטה נטו במ"ר, אחרי פחת. */
-export const usableSheetM2 =
-  (MATERIAL.sheetWidthMm / 1000) * (MATERIAL.sheetHeightMm / 1000) * MATERIAL.yield;

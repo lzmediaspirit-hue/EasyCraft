@@ -16,7 +16,6 @@ export function FinishSheet({
   onClose: () => void;
 }) {
   const [name, setName] = useState(finish?.name ?? '');
-  const [code, setCode] = useState(finish?.code ?? '');
   const [hex, setHex] = useState(finish?.hex ?? '#d9b483');
   const [hasGrain, setHasGrain] = useState(finish?.hasGrain ?? false);
   const [factoryPrice, setFactoryPrice] = useState(
@@ -33,7 +32,6 @@ export function FinishSheet({
       id: finish?.id,
       boardId,
       name: name.trim(),
-      code: code.trim() || undefined,
       hex,
       hasGrain,
       factoryPrice: factoryPrice.trim() ? Number(factoryPrice) : undefined,
@@ -97,15 +95,6 @@ export function FinishSheet({
             onFocus={selectOnFocus}
             className={inputClass}
             placeholder="למשל: אלון טבעי"
-          />
-        </Field>
-
-        <Field label="קוד אצל הספק" hint="לא חובה">
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            onFocus={selectOnFocus}
-            className={`${inputClass} num text-end`}
           />
         </Field>
 

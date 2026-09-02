@@ -5,15 +5,13 @@ import { BoardSheet } from './BoardSheet';
 import { ExtrasSection } from './ExtrasSection';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { nav } from '../../nav/navigation';
-import { NumField, selectOnFocus } from '../../ui/Field';
+import { Field, NumField, inputClass, selectOnFocus } from '../../ui/Field';
+import { displayUnit } from '../../ui/units';
+import { useDisplayUnit } from '../../ui/useDisplayUnit';
 import { ChevronIcon, PlusIcon, TeamIcon } from '../../ui/icons';
+import { BOARD_MATERIALS } from '../../db/types';
 import type { Board } from '../../db/types';
 
-const ROLE_LABELS: Record<Board['role'], string> = {
-  carcass: 'גוף',
-  front: 'חזית',
-  back: 'גב',
-};
 
 /**
  * הגדרות העסק: הלוחות שעובדים איתם, וההנחות שמאחורי חישוב הפלטות.
@@ -30,6 +28,8 @@ export function SettingsScreen() {
       return acc;
     }, {});
   }, []);
+
+  const unit = useDisplayUnit();
 
   if (!settings || !boards) return null;
 
@@ -71,7 +71,7 @@ export function SettingsScreen() {
                       {board.name}
                     </span>
                     <span className="block truncate text-xs text-stone-500">
-                      {ROLE_LABELS[board.role]}
+                      {BOARD_MATERIALS.find((m) => m.key === board.material)?.label}
                       {board.catalogNumber && <span className="num"> · {board.catalogNumber}</span>}
                       {!!finishCounts?.[board.id] && (
                         <span> · {finishCounts[board.id]} גוונים</span>
@@ -97,6 +97,76 @@ export function SettingsScreen() {
             <PlusIcon className="size-4" />
             לוח חדש
           </button>
+        </section>
+
+        <section>
+          <SectionTitle>יחידות</SectionTitle>
+          {/*
+            הכול נשמר תמיד במ"מ; זו רק שפת התצוגה. רוב הנגרים מדברים
+            בסנטימטרים, ובשרטוט מדויק נוח יותר במ"מ.
+          */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-4">
+            <span className="mb-2 block text-sm font-medium text-stone-700">מידות מוצגות ב־</span>
+            <div className="flex gap-1.5">
+              {(['cm', 'mm'] as const).map((u) => (
+                <button
+                  key={u}
+                  onClick={() => displayUnit.set(u)}
+                  aria-pressed={unit === u}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-medium transition-colors ${
+                    unit === u ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}
+                >
+                  {u === 'cm' ? 'סנטימטרים' : 'מילימטרים'}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] leading-snug text-stone-400">
+              האחסון והחישוב תמיד במ״מ. הבחירה משנה רק את מה שנראה על המסך.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <SectionTitle>מחיר ומע״מ</SectionTitle>
+          <div className="grid grid-cols-2 gap-3 rounded-2xl border border-stone-200 bg-white p-4">
+            <Field label="מע״מ" hint="%">
+              <input
+                value={settings.vatPct}
+                onChange={(e) => settingsRepo.save({ vatPct: Number(e.target.value) || 0 })}
+                onFocus={selectOnFocus}
+                type="number"
+                inputMode="decimal"
+                className={`${inputClass} num text-end`}
+              />
+            </Field>
+            <Field label="קנט לצרכן" hint="₪ למטר">
+              <input
+                value={settings.edgeConsumerPerM || ''}
+                onChange={(e) =>
+                  settingsRepo.save({ edgeConsumerPerM: Number(e.target.value) || 0 })
+                }
+                onFocus={selectOnFocus}
+                type="number"
+                inputMode="decimal"
+                placeholder="₪"
+                className={`${inputClass} num text-end`}
+              />
+            </Field>
+            <Field label="קנט במפעל" hint="₪ למטר">
+              <input
+                value={settings.edgeFactoryPerM || ''}
+                onChange={(e) =>
+                  settingsRepo.save({ edgeFactoryPerM: Number(e.target.value) || 0 })
+                }
+                onFocus={selectOnFocus}
+                type="number"
+                inputMode="decimal"
+                placeholder="₪"
+                className={`${inputClass} num text-end`}
+              />
+            </Field>
+          </div>
         </section>
 
         <section>

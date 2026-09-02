@@ -11,11 +11,14 @@ import { seedCatalog } from './catalog/catalogRepo';
 import { seedMaterials } from './materials/materialsRepo';
 import { seedAdmin } from './workflow/auth';
 import { useRoute } from './nav/navigation';
+import { useDisplayUnit } from './ui/useDisplayUnit';
 import { LoginScreen } from './features/team/LoginScreen';
 import { useCurrentMember } from './workflow/useMember';
 
 export default function App() {
   const route = useRoute();
+  // שינוי יחידת התצוגה נוגע בכל מספר על המסך, ולכן העץ נבנה מחדש
+  const unit = useDisplayUnit();
   const me = useCurrentMember();
   const [ready, setReady] = useState(false);
 
@@ -28,6 +31,10 @@ export default function App() {
   // בלי משתמש מחובר אין מה להראות: התפקיד קובע מה מוצג בכל מסך
   if (!me) return <LoginScreen />;
 
+  return <div key={unit}>{screen(route)}</div>;
+}
+
+function screen(route: ReturnType<typeof useRoute>) {
   switch (route.name) {
     case 'customers':
       return <CustomersScreen />;

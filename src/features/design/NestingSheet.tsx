@@ -1,10 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
-import { settingsRepo } from '../../materials/materialsRepo';
-import { nestParts } from '../../costing/nesting';
 import { Sheet } from '../../ui/Sheet';
-import { cm } from '../../ui/units';
+import { cm, unitLabel } from '../../ui/units';
 import type { NestResult } from '../../costing/nesting';
 
 /** צבע לכל סוג חלק, כדי לזהות אותו על הפלטה במבט אחד. */
@@ -13,60 +11,57 @@ const TONES = ['#d9b483', '#a8c3d9', '#c4b5a0', '#b8d4b8', '#d9b8c4', '#c9c4a8']
 /**
  * ניסור: איך החלקים יושבים על הפלטות בפועל.
  *
- * זה מה שמחליף את ההערכה "שטח חלקים חלקי ניצולת קבועה". החיתוך הוא
- * גיליוטינה — כל חתך חוצה את הלוח מקצה לקצה — כי זה מה שמסור אנכי
- * באמת עושה, ולכן הפריסה כאן היא פריסה שאפשר לעבוד לפיה.
+ * הפריסה מגיעה מוכנה מהתמחור — אותו מנוע שסופר את הפלטות במסך
+ * החישוב הוא זה שמצייר אותן כאן, ולכן המספרים לא יכולים להיפרד.
+ * החיתוך הוא גיליוטינה: כל חתך חוצה את הלוח מקצה לקצה, כמו במסור
+ * פנלים, ולכן זו פריסה שאפשר לעבוד לפיה ולא רק להתרשם ממנה.
+ *
+ * הפלטה מצוירת שוכבת — הצלע הארוכה לרוחב המסך — כמו שהיא באמת
+ * מונחת על שולחן המסור. זה סיבוב של התצוגה בלבד: החלקים עצמם
+ * נפרסו בכיוון הסיבים הנכון, ולא סובבו בחישוב.
  */
 export function NestingSheet({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
-  const settings = useLiveQuery(() => settingsRepo.get(), []);
   const [openGroup, setOpenGroup] = useState(0);
+  // מדידת השארית: מה נשאר בין קצה החלק לקצה הפלטה
+  const [showOffcuts, setShowOffcuts] = useState(false);
 
-  const nested = useMemo(() => {
-    if (!costing || !settings) return [];
-    return costing.groups.map((g) => ({
-      group: g,
-      result: nestParts(
-        g.parts,
-        g.board.sheetWidthMm,
-        g.board.sheetHeightMm,
-        settings.kerfMm,
-        // גוון עם סיבים מחייב כיוון קבוע, ולכן אסור לסובב חלקים
-        !g.finish?.hasGrain,
-      ),
-    }));
-  }, [costing, settings]);
+  if (!costing) return null;
 
-  if (!costing || !settings) return null;
-
-  const totalSheets = nested.reduce((n, x) => n + x.result.sheets.length, 0);
-  const estimated = costing.lines.reduce((n, l) => n + l.sheets, 0);
+  const groups = costing.groups;
+  const totalSheets = groups.reduce((n, g) => n + g.nest.sheets.length, 0);
+  const partsM2 = costing.lines.reduce((n, l) => n + l.areaM2, 0);
+  const sheetsM2 = groups.reduce(
+    (n, g) =>
+      n + (g.nest.sheets.length * g.board.sheetWidthMm * g.board.sheetHeightMm) / 1_000_000,
+    0,
+  );
+  const usedPct = sheetsM2 > 0 ? Math.round((partsM2 / sheetsM2) * 100) : 0;
 
   return (
     <Sheet title="ניסור הלוחות" onClose={onClose} tall>
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-2">
-          <Stat label="פלטות בפריסה" value={String(totalSheets)} />
-          <Stat label="לפי הערכה" value={String(estimated)} />
-          <Stat
-            label="ניצולת בפועל"
-            value={`${nested.length ? Math.round(nested.reduce((n, x) => n + x.result.usedPct, 0) / nested.length) : 0}%`}
-          />
+          <Stat label="פלטות" value={String(totalSheets)} />
+          <Stat label="מ״ר חלקים" value={partsM2.toFixed(1)} />
+          <Stat label="ניצולת" value={`${usedPct}%`} />
         </div>
 
-        {totalSheets !== estimated && (
-          <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900">
-            הפריסה בפועל נותנת מספר אחר מההערכה שבמסך החומרים. הפריסה
-            מדויקת יותר — היא מתחשבת במידות האמיתיות של כל חלק ולא רק
-            בשטח הכולל. כדאי להזמין לפיה.
-          </p>
-        )}
+        <button
+          onClick={() => setShowOffcuts((v) => !v)}
+          aria-pressed={showOffcuts}
+          className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+            showOffcuts
+              ? 'border-oak-500 bg-oak-50 text-oak-800'
+              : 'border-stone-200 bg-white text-stone-600 hover:border-oak-300'
+          }`}
+        >
+          {showOffcuts ? 'מסתיר שאריות' : 'הצגת השארית שנותרה'}
+        </button>
 
-        {nested.length === 0 && (
-          <p className="text-sm text-stone-500">אין עדיין חלקים לנסר.</p>
-        )}
+        {groups.length === 0 && <p className="text-sm text-stone-500">אין עדיין חלקים לנסר.</p>}
 
-        {nested.map(({ group, result }, i) => (
+        {groups.map((group, i) => (
           <section key={`${group.board.id}-${group.finish?.id ?? ''}`}>
             <button
               onClick={() => setOpenGroup(openGroup === i ? -1 : i)}
@@ -85,32 +80,34 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
                   {group.finish && <span className="text-stone-500"> · {group.finish.name}</span>}
                 </span>
                 <span className="num block text-[11px] text-stone-400">
-                  פלטה {cm(group.board.sheetWidthMm)}×{cm(group.board.sheetHeightMm)} ס״מ
+                  פלטה {cm(group.board.sheetWidthMm)}×{cm(group.board.sheetHeightMm)}{' '}
+                  {unitLabel()}
                   {group.finish?.hasGrain && ' · כיוון סיבים'}
                 </span>
               </span>
               <span className="num shrink-0 text-sm font-bold text-stone-900">
-                {result.sheets.length}
+                {group.nest.sheets.length}
               </span>
             </button>
 
             {openGroup === i && (
               <div className="mt-2 space-y-3">
-                {result.oversize.length > 0 && (
+                {group.nest.oversize.length > 0 && (
                   <p className="rounded-xl bg-red-50 px-3 py-2 text-[11px] leading-snug text-red-900">
-                    {result.oversize.length} חלקים גדולים מהפלטה ולא ניתן לנסר אותם ממנה:{' '}
-                    {result.oversize
-                      .map((o) => `${o.label} ${cm(o.widthMm)}×${cm(o.heightMm)}`)
+                    חלקים גדולים מהפלטה, ולא ניתן לנסר אותם ממנה:{' '}
+                    {group.nest.oversize
+                      .map((o) => `${o.label} ${cm(o.widthMm)}×${cm(o.heightMm)} ×${o.qty}`)
                       .join(', ')}
                     . צריך לפצל אותם או להזמין לוח גדול יותר.
                   </p>
                 )}
-                {result.sheets.map((sheet) => (
+                {group.nest.sheets.map((sheet) => (
                   <SheetPlan
                     key={sheet.index}
                     sheet={sheet}
                     sheetW={group.board.sheetWidthMm}
                     sheetH={group.board.sheetHeightMm}
+                    showOffcuts={showOffcuts}
                   />
                 ))}
               </div>
@@ -119,8 +116,9 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
         ))}
 
         <p className="text-[11px] leading-snug text-stone-400">
-          הפריסה היא ניסור גיליוטינה בשורות: כל חתך חוצה את הלוח מקצה
-          לקצה, כמו במסור אנכי. הכרסום נוסף סביב כל חלק.
+          כל חתך חוצה את הלוח מקצה לקצה, והכרסום נגרע בקווי החיתוך
+          עצמם. חזיתות וצדדים נשמרים בכיוון הסיבים; מדפים, תחתיות
+          וגב מסובבים לניצול טוב יותר.
         </p>
       </div>
     </Sheet>
@@ -131,12 +129,26 @@ function SheetPlan({
   sheet,
   sheetW,
   sheetH,
+  showOffcuts,
 }: {
   sheet: NestResult['sheets'][number];
   sheetW: number;
   sheetH: number;
+  showOffcuts: boolean;
 }) {
   const labels = [...new Set(sheet.parts.map((p) => p.label))];
+
+  /*
+   * הפלטה מוצגת שוכבת. מסובבים רק את הקואורדינטות, ולא את הטקסט —
+   * מידה שצריך לקרוא בהטיית ראש היא מידה שקוראים לא נכון.
+   */
+  const box = (x: number, y: number, w: number, h: number) => ({
+    x: y,
+    y: sheetW - x - w,
+    w: h,
+    h: w,
+  });
+
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-2">
       <div className="mb-1.5 flex items-baseline gap-2 px-1">
@@ -144,35 +156,90 @@ function SheetPlan({
         <span className="num text-[11px] text-stone-400">{sheet.usedPct}% ניצולת</span>
       </div>
       <svg
-        viewBox={`0 0 ${sheetW} ${sheetH}`}
+        viewBox={`0 0 ${sheetH} ${sheetW}`}
         className="w-full rounded bg-stone-100"
-        style={{ aspectRatio: `${sheetW} / ${sheetH}` }}
+        style={{ aspectRatio: `${sheetH} / ${sheetW}` }}
       >
-        {sheet.parts.map((p) => (
-          <g key={p.id}>
-            <rect
-              x={p.x}
-              y={p.y}
-              width={p.widthMm}
-              height={p.heightMm}
-              fill={TONES[labels.indexOf(p.label) % TONES.length]}
-              stroke="#78716c"
-              strokeWidth={Math.max(sheetW / 400, 2)}
-            />
-            <text
-              x={p.x + p.widthMm / 2}
-              y={p.y + p.heightMm / 2}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={Math.max(Math.min(p.widthMm, p.heightMm) / 5, sheetW / 40)}
-              fill="#44403c"
-              direction="ltr"
-            >
-              {cm(p.widthMm)}×{cm(p.heightMm)}
-            </text>
-          </g>
-        ))}
+        {sheet.parts.map((p) => {
+          const b = box(p.x, p.y, p.widthMm, p.heightMm);
+          return (
+            <g key={p.id}>
+              <rect
+                x={b.x}
+                y={b.y}
+                width={b.w}
+                height={b.h}
+                fill={TONES[labels.indexOf(p.label) % TONES.length]}
+                stroke="#78716c"
+                strokeWidth={Math.max(sheetH / 400, 2)}
+              />
+              <text
+                x={b.x + b.w / 2}
+                y={b.y + b.h / 2}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={Math.max(Math.min(b.w, b.h) / 5, sheetH / 45)}
+                fill="#44403c"
+                direction="ltr"
+              >
+                {cm(p.widthMm)}×{cm(p.heightMm)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* השארית: מה נשאר בין החלק האחרון לקצה הפלטה, במידה אמיתית */}
+        {showOffcuts &&
+          sheet.offcuts.map((o, i) => {
+            const b = box(o.x, o.y, o.widthMm, o.heightMm);
+            return (
+              <g key={`off-${i}`}>
+                <rect
+                  x={b.x}
+                  y={b.y}
+                  width={b.w}
+                  height={b.h}
+                  fill="#ecfdf5"
+                  fillOpacity={0.85}
+                  stroke="#059669"
+                  strokeDasharray={`${sheetH / 90} ${sheetH / 130}`}
+                  strokeWidth={Math.max(sheetH / 350, 2)}
+                />
+                {/* מידה על הציור רק כשיש לה מקום; אחרת היא ברשימה שמתחת */}
+                {b.w > sheetH / 9 && b.h > sheetW / 12 && (
+                  <text
+                    x={b.x + b.w / 2}
+                    y={b.y + b.h / 2}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={Math.max(Math.min(b.w, b.h) / 5, sheetH / 45)}
+                    fill="#047857"
+                    direction="ltr"
+                  >
+                    {cm(o.heightMm)}×{cm(o.widthMm)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
       </svg>
+
+      {showOffcuts && (
+        <p className="mt-1.5 px-1 text-[10px] leading-relaxed text-emerald-700">
+          {sheet.offcuts.length === 0 ? (
+            <span className="text-stone-400">אין בפלטה הזו שארית שכדאי לשמור.</span>
+          ) : (
+            <>
+              שארית:{' '}
+              <span className="num">
+                {sheet.offcuts.map((o) => `${cm(o.heightMm)}×${cm(o.widthMm)}`).join(' · ')}
+              </span>{' '}
+              {unitLabel()}
+            </>
+          )}
+        </p>
+      )}
+
       <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 px-1">
         {labels.map((l, i) => (
           <li key={l} className="flex items-center gap-1 text-[10px] text-stone-500">
@@ -184,6 +251,15 @@ function SheetPlan({
             {l}
           </li>
         ))}
+        {showOffcuts && sheet.offcuts.length > 0 && (
+          <li className="flex items-center gap-1 text-[10px] text-emerald-700">
+            <span
+              aria-hidden="true"
+              className="size-2.5 rounded-sm border border-emerald-600 bg-emerald-50"
+            />
+            שארית
+          </li>
+        )}
       </ul>
     </div>
   );

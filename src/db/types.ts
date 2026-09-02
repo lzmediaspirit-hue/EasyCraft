@@ -183,6 +183,8 @@ export interface PlacedUnit extends Entity {
   frontFinishId?: string;
   /** גוון הדפנות הזרות */
   exposedFinishId?: string;
+  /** גוון הגב */
+  backFinishId?: string;
   /** סוג הגב */
   backKind?: BackKind;
   /** ידיות על החזיתות */
@@ -369,8 +371,30 @@ export interface CatalogItem extends Entity {
 /* חומרים והגדרות                                                      */
 /* ------------------------------------------------------------------ */
 
-/** תפקיד הלוח במבנה הארון. */
-export type BoardRole = 'carcass' | 'front' | 'back';
+/**
+ * סוג החומר של הלוח.
+ *
+ * הלוח אינו "שייך" לחלק מסוים בארון — אותו MDF משמש גם לחזית וגם
+ * לגוף, ואותו גוון קיים על סנדוויץ' ועל MDF כאחד. מה שמבדיל לוח
+ * מלוח הוא החומר עצמו והמידה שהוא מגיע בה, ולכן זה מה שנשמר.
+ * החלק בארון נקבע לפי הגוון שנבחר לו בהדמיה.
+ */
+export type BoardMaterial = 'sandwich' | 'mdf' | 'plywood' | 'other';
+
+export const BOARD_MATERIALS: { key: BoardMaterial; label: string }[] = [
+  { key: 'sandwich', label: 'סנדוויץ׳' },
+  { key: 'mdf', label: 'MDF' },
+  { key: 'plywood', label: 'דיקט' },
+  { key: 'other', label: 'אחר' },
+];
+
+/** תפקיד החלק במבנה הארון — נגזר מהחיתוך, לא מהלוח. */
+/**
+ * תפקיד החלק בארגז. התפקיד קובע מאיזה גוון — ולכן מאיזה לוח —
+ * הוא נחתך. דופן זרה היא תפקיד בפני עצמו: היא נראית מבחוץ ולעיתים
+ * קרובות נבחר לה גוון אחר מהחזיתות.
+ */
+export type PartRole = 'carcass' | 'front' | 'exposed' | 'back';
 
 /**
  * לוח גלם. העובי לא נשמר כאן במכוון — הוא משתנה בין פרויקטים ובין
@@ -380,7 +404,7 @@ export interface Board extends Entity {
   name: string;
   /** מספר קטלוגי אצל הספק */
   catalogNumber?: string;
-  role: BoardRole;
+  material: BoardMaterial;
   /**
    * מידת הפלטה שהלוח הזה מגיע בה.
    * הרוחב תמיד 1220; הגובה משתנה בין ספקים — 2440 הוא התקן,
@@ -457,6 +481,11 @@ export interface Settings {
   /** מחיר דלת זכוכית למ"ר — נספרת בנפרד ולא מתוך הפלטות */
   glassFactoryPerM2: number;
   glassConsumerPerM2: number;
+  /** אחוז מע"מ. ברירת המחדל בישראל היא 18% */
+  vatPct: number;
+  /** מחיר מטר קנט, למפעל וללקוח */
+  edgeFactoryPerM: number;
+  edgeConsumerPerM: number;
   updatedAt: number;
 }
 

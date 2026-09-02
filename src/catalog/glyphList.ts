@@ -19,6 +19,11 @@ export interface GlyphDef {
    * 'vertical' — לוח עומד, שטחו רוחב על גובה (פאנל, מרווח).
    */
   noCarcass?: 'horizontal' | 'vertical';
+  /**
+   * נישה למכשיר. הגוף אמיתי ונבנה מלוחות, אבל החזית היא המכשיר
+   * עצמו — ולכן אין כאן דלת לחשב, וגם לא מדפים שנכנסים מאליהם.
+   */
+  appliance?: boolean;
 }
 
 export const GLYPHS: GlyphDef[] = [
@@ -31,14 +36,14 @@ export const GLYPHS: GlyphDef[] = [
   { key: 'lift', label: 'קלאפה', shelves: true },
   { key: 'shutter', label: 'תריס', shelves: true },
   { key: 'corner', label: 'פינתי', doors: true, shelves: true },
-  { key: 'carousel', label: 'סחרחרה' },
-  { key: 'sink', label: 'כיור' },
-  { key: 'hob', label: 'כיריים', drawers: true },
-  { key: 'oven', label: 'תנור' },
-  { key: 'ovenMicro', label: 'תנור ומיקרוגל', doors: true },
-  { key: 'fridge', label: 'מקרר' },
-  { key: 'dishwasher', label: 'מדיח' },
-  { key: 'hood', label: 'קולט אדים' },
+  { key: 'carousel', label: 'סחרחרה', appliance: true },
+  { key: 'sink', label: 'כיור', appliance: true },
+  { key: 'hob', label: 'כיריים', drawers: true, appliance: true },
+  { key: 'oven', label: 'תנור', appliance: true },
+  { key: 'ovenMicro', label: 'תנור ומיקרוגל', appliance: true },
+  { key: 'fridge', label: 'מקרר', appliance: true },
+  { key: 'dishwasher', label: 'מדיח', appliance: true },
+  { key: 'hood', label: 'קולט אדים', appliance: true },
   { key: 'pantry', label: 'מזווה', shelves: true },
   { key: 'hang', label: 'תלייה' },
   { key: 'hangDouble', label: 'תלייה כפולה' },

@@ -1,9 +1,11 @@
 import { glyphDef } from '../catalog/glyphList';
+import { nestParts, type NestResult, type PartGrain } from './nesting';
 import { MATERIAL } from '../catalog/standards';
-import { countDrawers, countShelves, unitZones, zoneCells } from '../catalog/zones';
+import { countDrawers, countShelves, unitCells, unitZones, zoneCells } from '../catalog/zones';
 import type {
   Board,
-  BoardRole,
+  BoardMaterial,
+  PartRole,
   PlacedUnit,
   ProjectPrice,
   Finish,
@@ -18,13 +20,27 @@ import type {
  * ולא רק סכום שטחים. עובי הכרסום נוסף לכל חלק בנפרד, כי המסור אוכל
  * חתך סביב כל חלק ולא פעם אחת בסוף.
  *
- * כמות הפלטות היא עדיין הערכה: שטח החלקים חלקי שטח פלטה נטו. מנוע
- * ניצול הלוח יחליף את החלוקה הזו במספר מדויק, ואז גם אחוז הניצולת
- * ייגזר מהניסורים בפועל במקום להיות הגדרה.
+ * כמות הפלטות נגזרת מפריסה אמיתית על הלוח ולא מחלוקת שטחים: אותו
+ * מנוע ניסור שמצייר את הפלטות במסך הניסור הוא זה שסופר אותן כאן,
+ * ולכן שני המסכים לעולם לא סותרים זה את זה. אחוז הניצולת שבהגדרות
+ * נשאר רק כרזרבה לרכש, ולא כבסיס לספירה.
  */
 
 export interface Part {
-  role: BoardRole;
+  role: PartRole;
+  /**
+   * אורך הצלע שמקונטת בחלק אחד, במ"מ.
+   * חזית מקונטת בכל ההיקף; חלק גוף מקונט רק בצלע הקדמית הגלויה,
+   * וזו לא תמיד אותה צלע — בצד זו הצלע האנכית, במדף האופקית.
+   * ריק = לא מקונט (גב, וחלקים שנשארים בפנים).
+   */
+  edgeMm?: number;
+  /**
+   * כיוון הסיבים בחלק, לפריסה על לוח עם טקסטורה.
+   * `height` — הסיבים רצים לאורך `heightMm`, ולכן אסור לסובב אותו.
+   * `free` — חלק פנימי שלא רואים, ומותר לסובב לניצול טוב יותר.
+   */
+  grain?: PartGrain;
   label: string;
   widthMm: number;
   heightMm: number;
@@ -69,11 +85,16 @@ export interface GlassDoorLine {
   consumerTotal: number;
 }
 
-/** החלקים שנחתכים מלוח וגוון מסוימים — הקלט לניסור. */
+/** החלקים שנחתכים מלוח וגוון מסוימים, והפריסה שלהם על הפלטות. */
 export interface PartGroup {
   board: Board;
   finish?: Finish;
   parts: Part[];
+  /**
+   * הפריסה בפועל. היא מחושבת כאן פעם אחת ומשמשת גם לספירת הפלטות
+   * בתמחור וגם לציור במסך הניסור — אותו מספר בשני המקומות.
+   */
+  nest: NestResult;
 }
 
 export interface ProjectCosting {
@@ -93,10 +114,19 @@ export interface ProjectCosting {
   lifts: number;
   handles: number;
   totalSheets: number;
+  /** חלקים שלא שויכו לשום לוח, ולכן אינם מתומחרים */
+  unpricedParts: number;
+  /** מטרים רצים של קנט */
+  edgeMeters: number;
   boardsFactoryTotal: number;
   boardsConsumerTotal: number;
+  /** לפני מע"מ */
   factoryTotal: number;
   consumerTotal: number;
+  vatPct: number;
+  vatAmount: number;
+  /** מה שהלקוח משלם בפועל */
+  consumerWithVat: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -104,7 +134,13 @@ export interface ProjectCosting {
 /** מגירה פנימית מוסתרת מאחורי דלת, ולכן יש חזית גם בלי שהוגדרו דלתות. */
 function effectiveDoors(u: PlacedUnit): number {
   const hasInner = unitZones(u).some((z) => z.kind === 'drawers' && z.drawerStyle === 'inner');
-  return hasInner ? Math.max(u.doors ?? 0, 1) : (u.doors ?? 0);
+  if (hasInner) return Math.max(u.doors ?? 0, 1);
+  /*
+   * בנישה למכשיר החזית היא המכשיר עצמו. אם נשאר שם ערך ישן משינוי
+   * איור, הוא לא ייהפך לדלת שמישהו ישלם עליה.
+   */
+  if (glyphDef(u.glyph).appliance) return 0;
+  return u.doors ?? 0;
 }
 
 /** מנגנוני קלאפה בארגז — אחד לכל דלת שנפתחת כלפי מעלה. */
@@ -119,7 +155,11 @@ function liftCount(u: PlacedUnit): number {
  */
 export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   const w = u.widthMm;
-  // הגובה כולל את הרגליים, והגוף מתחיל מעליהן
+  /*
+   * הגובה כולל את הרגליים, והגוף מתחיל מעליהן.
+   * פס הסוקל עצמו אינו נספר כאן במכוון: הוא נחתך משאריות או מפרופיל
+   * נפרד, ולא מהפלטות של הארון.
+   */
   const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
   const d = u.depthMm;
   const t = s.carcassThicknessMm;
@@ -131,6 +171,8 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     return [
       {
         role: u.panelThicknessMm && u.panelThicknessMm < 10 ? 'back' : 'front',
+        // לוח מונח לרוחב — הסיבים רצים לאורכו, לא לעומקו
+        grain: flat === 'horizontal' ? 'width' : 'height',
         label: u.name,
         widthMm: w,
         heightMm: flat === 'horizontal' ? d : h,
@@ -151,9 +193,28 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   const g = u.glassSides ?? {};
   const boardSides = 2 - (g.start ? 1 : 0) - (g.end ? 1 : 0);
   if (boardSides > 0) {
-    parts.push({ role: 'carcass', label: 'צד', widthMm: d, heightMm: carcassH, qty: boardSides });
+        // בצד הצלע הגלויה היא האנכית
+    parts.push({
+      role: 'carcass',
+      label: 'צד',
+      // צד גלוי — הסיבים חייבים לרוץ במאונך, כמו בכל הארון
+      grain: 'height',
+      widthMm: d,
+      heightMm: carcassH,
+      qty: boardSides,
+      edgeMm: carcassH,
+    });
   }
-  parts.push({ role: 'carcass', label: 'תחתית ותקרה', widthMm: innerW, heightMm: d, qty: 2 });
+  parts.push({
+    role: 'carcass',
+    label: 'תחתית ותקרה',
+    // בתוך הארון לא רואים את הסיבים, ולכן מותר לסובב לניצול טוב יותר
+    grain: 'free',
+    widthMm: innerW,
+    heightMm: d,
+    qty: 2,
+    edgeMm: innerW,
+  });
 
   /*
    * פנים הארון, תא אחר תא.
@@ -174,9 +235,11 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
       parts.push({
         role: 'carcass',
         label: 'קושרת',
+        grain: 'free',
         widthMm: zoneDepth,
         heightMm: zone.heightMm,
         qty: dividers,
+        edgeMm: zone.heightMm,
       });
     }
 
@@ -192,9 +255,11 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
           parts.push({
             role: 'carcass',
             label: 'מדף',
+            grain: 'free',
             widthMm: cellW,
             heightMm: Math.max(cellDepth - 20, 0),
             qty: n,
+            edgeMm: cellW,
           });
         }
       }
@@ -207,9 +272,11 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     parts.push({
       role: 'carcass',
       label: 'חוצץ בין אזורים',
+      grain: 'free',
       widthMm: innerW,
       heightMm: d,
       qty: zones.length - 1,
+      edgeMm: innerW,
     });
   }
 
@@ -220,6 +287,7 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     parts.push({
       role: backKind === 'thin' ? 'back' : 'carcass',
       label: backKind === 'thin' ? 'גב' : 'גב בעובי גוף',
+      grain: 'free',
       widthMm: Math.max(carcassW - 2 * t + 2 * groove, 0),
       heightMm: Math.max(carcassH - 2 * t + 2 * groove, 0),
       qty: 1,
@@ -235,6 +303,8 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
       const cols = Math.max(content.drawerCols ?? 1, 1);
       parts.push({
         role: 'front',
+        // חזית נראית — כיוון הסיבים חייב להיות אחיד בכל החזיתות
+        grain: 'height',
         label: 'חזית מגירה',
         widthMm: Math.max((carcassW * share) / cols - gap, 0),
         heightMm: Math.max(z.heightMm / rows - gap, 0),
@@ -246,12 +316,22 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   // דלתות מכסות את כל מה שאינו מגירה חיצונית
   const doors = effectiveDoors(u);
   const coveredMm = coveredHeight(zones);
+  /*
+   * בפינה מתה החזית יושבת רק על החלק הנגיש: מה שנחסם על ידי הארון
+   * שעל הקיר הסמוך אין דרך לפתוח, ולכן גם אין שם דלת.
+   */
+  const blind =
+    u.glyph === 'blindStart' || u.glyph === 'blindEnd'
+      ? Math.min(u.blindMm ?? 300, carcassW)
+      : 0;
+  const frontW = Math.max(carcassW - blind, 0);
   // דלת זכוכית אינה לוח, ולכן היא נספרת בנפרד ולא בעמודות הפלטות
-  if (doors > 0 && coveredMm > 0 && !u.glassDoors) {
+  if (doors > 0 && coveredMm > 0 && frontW > 0 && !u.glassDoors) {
     parts.push({
       role: 'front',
+      grain: 'height',
       label: 'דלת',
-      widthMm: Math.max(carcassW / doors - gap, 0),
+      widthMm: Math.max(frontW / doors - gap, 0),
       heightMm: Math.max(coveredMm - gap, 0),
       qty: doors,
     });
@@ -261,7 +341,8 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   // ברירת המחדל מכסה חזית סטנדרטית; נגר שעובד אחרת מזין מידה משלו.
   const panelDepth = u.exposedDepthMm ?? d + MATERIAL.exposedExtraMm;
   const panel = (heightMm: number): Part => ({
-    role: 'front',
+    role: 'exposed',
+    grain: 'height',
     label: 'דופן זרה',
     widthMm: panelDepth,
     heightMm,
@@ -358,15 +439,38 @@ export function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
   return out;
 }
 
-/** ידיות בארגז — אחת לכל חזית נראית. */
+/**
+ * מטרי קנט בארגז.
+ *
+ * מקנטים את מה שנראה: היקף כל חזית — דלת או מגירה — ואת קדמת
+ * החלקים של הגוף, כלומר את הצלע הגלויה של הצדדים, התחתית, התקרה,
+ * המדפים והקושרות. הגב וקצוות שנשארים בפנים אינם מקונטים, ולכן
+ * הם לא נספרים כאן.
+ */
+export function unitEdgeMeters(u: PlacedUnit, s: PartSettings): number {
+  let mm = 0;
+  for (const p of unitParts(u, s)) {
+    if (p.role === 'back') continue;
+    // חזית ודופן זרה מקונטות בכל ההיקף; חלק גוף רק בצלע שסומנה כגלויה
+    if (p.role === 'front' || p.role === 'exposed') mm += 2 * (p.widthMm + p.heightMm) * p.qty;
+    else if (p.edgeMm) mm += p.edgeMm * p.qty;
+  }
+  return mm / 1000;
+}
+
+/**
+ * ידיות בארגז — אחת לכל חזית נראית.
+ * נספר לפי התאים ולא לפי האזורים: אזור שחולק בקושרת מחזיק את
+ * המגירות בעמודות, והשדות שברמת האזור עלולים להישאר מהמצב הקודם.
+ */
 export function unitHandles(u: PlacedUnit): number {
   if (!u.handles) return 0;
   const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
-  const outerDrawers = unitZones({ ...u, heightMm: h }).reduce(
-    (n, z) =>
+  const outerDrawers = unitCells({ ...u, heightMm: h }).reduce(
+    (n, { content: c }) =>
       n +
-      (z.kind === 'drawers' && z.drawerStyle !== 'inner'
-        ? (z.drawers ?? 0) * Math.max(z.drawerCols ?? 1, 1)
+      (c.kind === 'drawers' && c.drawerStyle !== 'inner'
+        ? (c.drawers ?? 0) * Math.max(c.drawerCols ?? 1, 1)
         : 0),
     0,
   );
@@ -395,10 +499,6 @@ export function projectCosting(
   overrides: ProjectPrice[] = [],
   finishes: Finish[] = [],
 ): ProjectCosting {
-  const kerf = settings.kerfMm;
-  // כל לוח מגיע במידה משלו — פלטת 305 נותנת יותר משטח מפלטת 244
-  const sheetM2 = (b: Board) =>
-    (b.sheetWidthMm / 1000) * (b.sheetHeightMm / 1000) * (settings.yieldPct / 100);
 
   /*
    * שטח מצטבר לפי לוח וגוון, ולא רק לפי תפקיד.
@@ -409,19 +509,35 @@ export function projectCosting(
     string,
     { boardId: string; finishId?: string; areaM2: number; parts: Part[] }
   >();
-  const primary = new Map<BoardRole, string>();
-  for (const b of boards) if (!primary.has(b.role)) primary.set(b.role, b.id);
+  /*
+   * הלוח נגזר מהגוון שנבחר לחלק, ולא מ"תפקיד" שהוגדר על הלוח:
+   * אותו MDF משמש גם לחזית וגם לגוף, ואותו גוון קיים על כמה
+   * חומרים. כשעוד לא נבחר גוון — נופלים לחומר הסביר לתפקיד, כדי
+   * שפרויקט ישן ימשיך להתמחר.
+   */
+  const fallbackMaterial: Record<PartRole, BoardMaterial> = {
+    carcass: 'sandwich',
+    front: 'mdf',
+    exposed: 'mdf',
+    back: 'other',
+  };
+  const byMaterial = (m: BoardMaterial) => boards.find((b) => b.material === m)?.id;
 
-  /** הלוח שחלק בתפקיד מסוים באמת נחתך ממנו, לפי הגוון שנבחר לו. */
-  const resolve = (u: PlacedUnit, role: BoardRole): { boardId?: string; finishId?: string } => {
+  const resolve = (u: PlacedUnit, role: PartRole): { boardId?: string; finishId?: string } => {
     const finishId =
       role === 'carcass'
         ? u.carcassFinishId
         : role === 'front'
           ? (u.frontFinishId ?? u.finishId)
-          : undefined;
+          : role === 'exposed'
+            ? // דופן זרה נופלת לגוון החזיתות רק אם לא נבחר לה גוון משלה
+              (u.exposedFinishId ?? u.frontFinishId ?? u.finishId)
+            : u.backFinishId;
     const finish = finishId ? finishes.find((f) => f.id === finishId) : undefined;
-    return { boardId: finish?.boardId ?? primary.get(role), finishId: finish?.id };
+    return {
+      boardId: finish?.boardId ?? byMaterial(fallbackMaterial[role]) ?? boards[0]?.id,
+      finishId: finish?.id,
+    };
   };
   let drawers = 0;
   let doors = 0;
@@ -430,20 +546,28 @@ export function projectCosting(
 
   let lifts = 0;
   let handles = 0;
+  let edgeMeters = 0;
+  /** חלקים שלא נמצא להם לוח — נספרים כדי שאפשר יהיה להתריע עליהם */
+  let unpriced = 0;
   const glassMap = new Map<string, GlassDoorLine>();
 
   for (const u of units) {
     for (const part of unitParts(u, settings)) {
-      // הכרסום נאכל סביב כל חלק בנפרד
-      const area = ((part.widthMm + kerf) * (part.heightMm + kerf)) / 1_000_000;
+      // שטח נטו. הכרסום נאכל בקווי החיתוך, וזה כבר עניינו של מנוע הניסור
+      const area = (part.widthMm * part.heightMm) / 1_000_000;
       const { boardId, finishId } = resolve(u, part.role);
-      if (!boardId) continue;
+      // אין לוחות בכלל — אין למה לשייך את החלק, ולא נעלים אותו בשקט
+      if (!boardId) {
+        unpriced += part.qty;
+        continue;
+      }
       const key = `${boardId}:${finishId ?? ''}`;
       const row = areaByKey.get(key) ?? { boardId, finishId, areaM2: 0, parts: [] };
       row.areaM2 += area * part.qty;
       row.parts.push(part);
       areaByKey.set(key, row);
     }
+    edgeMeters += unitEdgeMeters(u, settings);
     drawers += countDrawers(u);
     doors += effectiveDoors(u);
     lifts += liftCount(u);
@@ -479,7 +603,19 @@ export function projectCosting(
     // גוון עשוי לעלות אחרת מהלוח הבסיסי
     const factoryPrice = override?.factoryPrice ?? finish?.factoryPrice ?? board.factoryPrice;
     const consumerPrice = override?.consumerPrice ?? finish?.consumerPrice ?? board.consumerPrice;
-    const sheets = Math.ceil(row.areaM2 / Math.max(sheetM2(board), 0.01));
+    /*
+     * כמה פלטות באמת צריך — לפי פריסה על הלוח.
+     * לוח עם טקסטורה מחייב כיוון סיבים קבוע בחזיתות ובצדדים, ולכן
+     * הוא כמעט תמיד יבזבז יותר מלוח חלק. זה הבדל שהנגר משלם עליו,
+     * ולכן הוא צריך להופיע במחיר ולא להיעלם בתוך אחוז ניצולת.
+     */
+    const nest = nestParts(row.parts, {
+      sheetWidthMm: board.sheetWidthMm,
+      sheetHeightMm: board.sheetHeightMm,
+      kerfMm: settings.kerfMm,
+      hasGrain: !!finish?.hasGrain,
+    });
+    const sheets = nest.sheets.length;
 
     lines.push({
       board,
@@ -492,7 +628,7 @@ export function projectCosting(
       consumerTotal: sheets * consumerPrice,
       overridden: !!override,
     });
-    groups.push({ board, finish, parts: row.parts });
+    groups.push({ board, finish, parts: row.parts, nest });
   }
   lines.sort((a, b) => a.board.sortOrder - b.board.sortOrder || b.areaM2 - a.areaM2);
 
@@ -535,11 +671,27 @@ export function projectCosting(
   ].filter((l) => l.qty > 0);
 
   const boardsFactoryTotal = lines.reduce((n, l) => n + l.factoryTotal, 0);
+  // קנט נמכר במטר רץ, ולכן הוא שורת אביזר ולא שורת פלטה
+  if (edgeMeters > 0 && (settings.edgeConsumerPerM > 0 || settings.edgeFactoryPerM > 0)) {
+    accessories.push({
+      label: 'קנט',
+      qty: Math.ceil(edgeMeters),
+      unit: 'מ׳',
+      factoryPrice: settings.edgeFactoryPerM,
+      consumerPrice: settings.edgeConsumerPerM,
+      factoryTotal: Math.ceil(edgeMeters) * settings.edgeFactoryPerM,
+      consumerTotal: Math.ceil(edgeMeters) * settings.edgeConsumerPerM,
+    });
+  }
+
   const boardsConsumerTotal = lines.reduce((n, l) => n + l.consumerTotal, 0);
   const accFactory = accessories.reduce((n, l) => n + l.factoryTotal, 0);
   const accConsumer = accessories.reduce((n, l) => n + l.consumerTotal, 0);
   const glassFactory = glass.reduce((n, g) => n + g.factoryTotal, 0);
   const glassConsumer = glass.reduce((n, g) => n + g.consumerTotal, 0);
+  // מע"מ מחושב על המחיר ללקוח בלבד; מחיר המפעל הוא עלות ולא מכירה
+  const consumerBeforeVat = boardsConsumerTotal + accConsumer + glassConsumer;
+  const vat = Math.round(consumerBeforeVat * (settings.vatPct / 100));
 
   return {
     lines,
@@ -555,10 +707,15 @@ export function projectCosting(
     lifts,
     handles,
     totalSheets: lines.reduce((n, l) => n + l.sheets, 0),
+    unpricedParts: unpriced,
     boardsFactoryTotal,
     boardsConsumerTotal,
     factoryTotal: boardsFactoryTotal + accFactory + glassFactory,
-    consumerTotal: boardsConsumerTotal + accConsumer + glassConsumer,
+    edgeMeters,
+    consumerTotal: consumerBeforeVat,
+    vatPct: settings.vatPct,
+    vatAmount: vat,
+    consumerWithVat: consumerBeforeVat + vat,
   };
 }
 

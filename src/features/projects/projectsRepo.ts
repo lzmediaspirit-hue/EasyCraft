@@ -220,11 +220,12 @@ export const unitsRepo = {
   /** קובע גוון אחיד לחלק מסוים בכל הארונות בפרויקט. */
   async setFinishForProject(
     projectId: string,
-    part: 'carcass' | 'front' | 'exposed',
+    part: 'carcass' | 'front' | 'exposed' | 'back',
     finishId: string | undefined,
   ): Promise<void> {
-    const key =
-      part === 'carcass' ? 'carcassFinishId' : part === 'front' ? 'frontFinishId' : 'exposedFinishId';
+    const key = (
+      { carcass: 'carcassFinishId', front: 'frontFinishId', exposed: 'exposedFinishId', back: 'backFinishId' } as const
+    )[part];
     const rows = await db.units.where('projectId').equals(projectId).toArray();
     const now = Date.now();
     await db.units.bulkPut(rows.map((u) => ({ ...u, [key]: finishId, updatedAt: now })));

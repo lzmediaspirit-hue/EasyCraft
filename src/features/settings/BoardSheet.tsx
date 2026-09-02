@@ -5,33 +5,25 @@ import { FinishSheet } from './FinishSheet';
 import { Sheet } from '../../ui/Sheet';
 import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { PlusIcon, TrashIcon } from '../../ui/icons';
-import { SHEET_HEIGHTS_MM, SHEET_WIDTH_MM } from '../../db/types';
+import { BOARD_MATERIALS, SHEET_HEIGHTS_MM, SHEET_WIDTH_MM } from '../../db/types';
 import { cm } from '../../ui/units';
-import type { Board, BoardRole, Finish } from '../../db/types';
+import type { Board, BoardMaterial, Finish } from '../../db/types';
 
-const ROLES: { role: BoardRole; label: string; hint: string }[] = [
-  { role: 'carcass', label: 'גוף', hint: 'צדדים, מדפים ותחתיות' },
-  { role: 'front', label: 'חזית', hint: 'דלתות, מגירות ודפנות זרות' },
-  { role: 'back', label: 'גב', hint: 'לוח דק מאחורי הארון' },
-];
 
 /** הגדרת לוח גלם וקטלוג הגוונים שלו. */
 export function BoardSheet({
   board,
-  initialRole,
   onSaved,
   onClose,
 }: {
   board: Board | null;
-  /** תפקיד פותח ללוח חדש, כשפותחים אותו מתוך בחירת גוון */
-  initialRole?: BoardRole;
   /** מזהה הלוח שנשמר — כדי שהמסך שפתח יוכל להמשיך לגוונים שלו */
   onSaved?: (boardId: string) => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(board?.name ?? '');
   const [catalogNumber, setCatalogNumber] = useState(board?.catalogNumber ?? '');
-  const [role, setRole] = useState<BoardRole>(board?.role ?? initialRole ?? 'carcass');
+  const [material, setMaterial] = useState<BoardMaterial>(board?.material ?? 'sandwich');
   const [sheetHeight, setSheetHeight] = useState(board?.sheetHeightMm ?? SHEET_HEIGHTS_MM[0]);
   const [factoryPrice, setFactoryPrice] = useState(String(board?.factoryPrice ?? 0));
   const [consumerPrice, setConsumerPrice] = useState(String(board?.consumerPrice ?? 0));
@@ -49,7 +41,7 @@ export function BoardSheet({
       id: board?.id,
       name: name.trim(),
       catalogNumber: catalogNumber.trim() || undefined,
-      role,
+      material,
       sheetWidthMm: SHEET_WIDTH_MM,
       sheetHeightMm: sheetHeight,
       factoryPrice: Number(factoryPrice) || 0,
@@ -108,17 +100,19 @@ export function BoardSheet({
             />
           </Field>
 
-          <Field group label="תפקיד בארון">
+          {/*
+            הלוח אינו שייך לחלק מסוים בארון — אותו MDF משמש גם לחזית
+            וגם לגוף. מה שמבדיל לוח מלוח הוא החומר והמידה, והחלק
+            נקבע לפי הגוון שנבחר לו בהדמיה.
+          */}
+          <Field group label="סוג החומר">
             <div className="flex flex-wrap gap-1.5">
-              {ROLES.map((r) => (
-                <Chip key={r.role} active={r.role === role} onClick={() => setRole(r.role)}>
-                  {r.label}
+              {BOARD_MATERIALS.map((m) => (
+                <Chip key={m.key} active={m.key === material} onClick={() => setMaterial(m.key)}>
+                  {m.label}
                 </Chip>
               ))}
             </div>
-            <span className="mt-1.5 block text-xs text-stone-400">
-              {ROLES.find((r) => r.role === role)?.hint}
-            </span>
           </Field>
 
           {/*

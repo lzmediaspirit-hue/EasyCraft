@@ -4,7 +4,7 @@ import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
 import { MAX_BODY_MM, isContainer } from '../../catalog/zones';
 import { MATERIAL } from '../../catalog/standards';
-import { boardsRepo, finishesRepo } from '../../materials/materialsRepo';
+import { finishesRepo } from '../../materials/materialsRepo';
 import { InteriorEditor } from './InteriorEditor';
 import { FinishPicker } from './FinishPicker';
 import { BoardSheet } from '../settings/BoardSheet';
@@ -14,7 +14,6 @@ import { MeasureInput } from '../../ui/MeasureInput';
 import { BookmarkIcon, CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
 import type {
   BackKind,
-  BoardRole,
   ExposedSides,
   LedSpot,
   OpeningMech,
@@ -51,7 +50,7 @@ const BACKS: { key: BackKind; label: string }[] = [
 ];
 
 /** מידות תקן לכל ציר, לבחירה מהירה. */
-const WIDTHS = [150, 200, 300, 400, 450, 500, 600, 700, 800, 900, 1000, 1200];
+const WIDTHS = [150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1100, 1200];
 const HEIGHTS = [350, 450, 600, 700, 720, 900, 1000, 1200, 1600, 2000, 2050, 2200, 2320, 2400];
 const DEPTHS = [250, 300, 320, 350, 400, 450, 500, 560, 580, 600, 650];
 
@@ -78,7 +77,7 @@ export function UnitEditor({
   inside: boolean;
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון על כל הארונות בפרויקט */
-  onApplyFinishAll: (part: 'carcass' | 'front' | 'exposed', finishId?: string) => void;
+  onApplyFinishAll: (part: 'carcass' | 'front' | 'exposed' | 'back', finishId?: string) => void;
   onEdit: () => void;
   onRemove: () => void;
   onClose: () => void;
@@ -86,7 +85,7 @@ export function UnitEditor({
   const [axis, setAxis] = useState<Axis>('w');
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
-  const [newBoardRole, setNewBoardRole] = useState<BoardRole | null>(null);
+  const [addingBoard, setAddingBoard] = useState(false);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
   /*
@@ -94,16 +93,12 @@ export function UnitEditor({
    * החזיתות והדפנות הזרות מלוחות החזית. אחרת אפשר היה לצבוע גוף
    * בגוון שאין ממנו לוח גוף.
    */
-  const finishesByRole = useLiveQuery(async () => {
-    const boards = await boardsRepo.list();
-    const lists = await Promise.all(
-      boards.map(async (b) => ({ role: b.role, items: await finishesRepo.listForBoard(b.id) })),
-    );
-    const pick = (role: BoardRole) => lists.filter((l) => l.role === role).flatMap((l) => l.items);
-    return { carcass: pick('carcass'), front: pick('front') };
-  }, []);
-  const carcassFinishes = finishesByRole?.carcass ?? [];
-  const frontFinishes = finishesByRole?.front ?? [];
+  /*
+   * כל הגוונים זמינים לכל חלק. הלוח אינו שייך לחלק מסוים, ולכן מה
+   * שקובע את החומר הוא הגוון שנבחר — אותו גוון יכול להתקיים על
+   * סנדוויץ' ועל MDF, והבחירה היא בין השניים.
+   */
+  const allFinishes = useLiveQuery(async () => finishesRepo.all(), []) ?? [];
 
   const caps = glyphDef(unit.glyph);
   const locked = unit.floorLocked ?? false;
@@ -114,11 +109,14 @@ export function UnitEditor({
   const led = unit.led ?? [];
   const container = isContainer(unit.glyph);
 
+  /*
+   * ברוחב מוצגות גם המידות של הפריט וגם מידות התקן עד 120 ס"מ:
+   * ארגז בספרייה מגיע עם כמה רוחבים נפוצים, אבל בשטח צריך לפעמים
+   * מידה אחרת, ולחפש אותה בהקלדה זה חיכוך מיותר.
+   */
   const options =
     axis === 'w'
-      ? source?.widthOptionsMm?.length
-        ? source.widthOptionsMm
-        : WIDTHS
+      ? [...new Set([...(source?.widthOptionsMm ?? []), ...WIDTHS])].sort((a, b) => a - b)
       : axis === 'h'
         ? HEIGHTS
         : DEPTHS;
@@ -367,32 +365,41 @@ export function UnitEditor({
 
           <FinishPicker
             label="גוון החזיתות"
-            finishes={frontFinishes}
+            finishes={allFinishes}
             value={unit.frontFinishId ?? unit.finishId}
             onChange={(id) => onChange({ frontFinishId: id, finishId: id })}
             onApplyAll={(id) => onApplyFinishAll('front', id)}
-            onAddBoard={() => setNewBoardRole('front')}
+            onAddBoard={() => setAddingBoard(true)}
           />
 
           <FinishPicker
             label="גוון הגוף"
-            finishes={carcassFinishes}
+            finishes={allFinishes}
             value={unit.carcassFinishId}
             onChange={(id) => onChange({ carcassFinishId: id })}
             onApplyAll={(id) => onApplyFinishAll('carcass', id)}
-            onAddBoard={() => setNewBoardRole('carcass')}
+            onAddBoard={() => setAddingBoard(true)}
+          />
+
+          <FinishPicker
+            label="גוון הגב"
+            finishes={allFinishes}
+            value={unit.backFinishId}
+            onChange={(id) => onChange({ backFinishId: id })}
+            onApplyAll={(id) => onApplyFinishAll('back', id)}
+            onAddBoard={() => setAddingBoard(true)}
           />
 
           <FinishPicker
             label="גוון הדפנות הזרות"
-            finishes={frontFinishes}
+            finishes={allFinishes}
             value={unit.exposedFinishId}
             onChange={(id) => onChange({ exposedFinishId: id })}
             onApplyAll={(id) => onApplyFinishAll('exposed', id)}
-            onAddBoard={() => setNewBoardRole('front')}
+            onAddBoard={() => setAddingBoard(true)}
           />
 
-          {carcassFinishes.length + frontFinishes.length === 0 && (
+          {allFinishes.length === 0 && (
             <p className="mt-1 text-[10px] text-stone-400">
               אין עדיין גוונים. אפשר להוסיף לוח כאן, או להגדיר אותם בהגדרות.
             </p>
@@ -511,13 +518,7 @@ export function UnitEditor({
       </div>
     </div>
 
-    {newBoardRole && (
-      <BoardSheet
-        board={null}
-        initialRole={newBoardRole}
-        onClose={() => setNewBoardRole(null)}
-      />
-    )}
+    {addingBoard && <BoardSheet board={null} onClose={() => setAddingBoard(false)} />}
 
     {savingToLibrary && (
       <SaveToLibrarySheet unit={unit} onClose={() => setSavingToLibrary(false)} />

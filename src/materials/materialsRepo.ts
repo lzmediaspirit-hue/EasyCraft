@@ -1,5 +1,5 @@
 import { db } from '../db/db';
-import type { Board, BoardRole, Finish, ProjectPrice, Settings } from '../db/types';
+import type { Board, BoardMaterial, Finish, ProjectPrice, Settings } from '../db/types';
 
 /** הגדרות ברירת מחדל, עד שהמשתמש משנה אותן במסך ההגדרות. */
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,6 +23,9 @@ export const DEFAULT_SETTINGS: Settings = {
   extras: [],
   glassFactoryPerM2: 0,
   glassConsumerPerM2: 0,
+  vatPct: 18,
+  edgeFactoryPerM: 0,
+  edgeConsumerPerM: 0,
   updatedAt: 0,
 };
 
@@ -30,7 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
 const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
     name: 'סנדוויץ׳',
-    role: 'carcass',
+    material: 'sandwich',
     sheetWidthMm: 1220,
     sheetHeightMm: 2440,
     factoryPrice: 0,
@@ -39,7 +42,7 @@ const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
   },
   {
     name: 'MDF',
-    role: 'front',
+    material: 'mdf',
     sheetWidthMm: 1220,
     sheetHeightMm: 2440,
     factoryPrice: 0,
@@ -48,7 +51,7 @@ const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
   },
   {
     name: 'גב 5 מ״מ',
-    role: 'back',
+    material: 'other',
     sheetWidthMm: 1220,
     sheetHeightMm: 2440,
     factoryPrice: 0,
@@ -106,13 +109,13 @@ export const boardsRepo = {
     return db.boards.get(id);
   },
 
-  /** הלוח שמשמש לתפקיד מסוים. הראשון לפי הסדר הוא ברירת המחדל. */
-  async forRole(role: BoardRole): Promise<Board | undefined> {
+  /** הלוח הראשון מחומר מסוים. משמש כברירת מחדל כשלא נבחר גוון. */
+  async forMaterial(material: BoardMaterial): Promise<Board | undefined> {
     const rows = await boardsRepo.list();
-    return rows.find((b) => b.role === role);
+    return rows.find((b) => b.material === material);
   },
 
-  async save(input: Partial<Board> & { name: string; role: BoardRole }): Promise<string> {
+  async save(input: Partial<Board> & { name: string; material: BoardMaterial }): Promise<string> {
     const now = Date.now();
     if (input.id) {
       const { id, ...rest } = input;

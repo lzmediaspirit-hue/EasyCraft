@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cmToMm, mmToCm } from './units';
+import { fromMm, toMm } from './units';
 
 /**
  * שדה מידה. נשמר במ"מ, נערך בסנטימטרים.
@@ -32,8 +32,9 @@ export function MeasureInput({
   onFocus?: () => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const show = (mm: number) => String(inMm ? mm : mmToCm(mm));
-  const parse = (v: number) => (inMm ? Math.round(v) : cmToMm(v));
+  // `inMm` הוא שדה שתמיד במ"מ (כרסום, עובי); השאר לפי יחידת התצוגה
+  const show = (mm: number) => String(inMm ? mm : fromMm(mm));
+  const parse = (v: number) => (inMm ? Math.round(v) : toMm(v));
 
   function clamp(mm: number): number {
     const lo = Math.max(mm, minMm);

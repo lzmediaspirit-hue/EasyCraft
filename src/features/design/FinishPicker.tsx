@@ -43,15 +43,12 @@ export function FinishPicker({
         </button>
       </span>
 
+      {/*
+        אין "ללא": כל חלק נבנה מחומר כלשהו, ולכן חייב גוון. בלעדיו
+        החישוב היה נופל לברירת מחדל בשקט, והנגר לא היה יודע ממה
+        בדיוק הוא מזמין.
+      */}
       <div className="flex flex-wrap gap-1.5">
-        <button
-          onClick={() => onChange(undefined)}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-            !value ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-          }`}
-        >
-          ללא
-        </button>
         {finishes.map((f) => (
           <button
             key={f.id}

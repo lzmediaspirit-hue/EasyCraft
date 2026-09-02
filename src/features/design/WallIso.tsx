@@ -118,7 +118,8 @@ export function WallIso({
 
     // רגליים
     if (socle > 0) {
-      add(box(x + 20, u.yMm, 40, w - 40, socle, d - 60, shade(carcassTone, 0.7), `${u.id}-soc`));
+      // הסוקל נסוג מהחזית אבל יושב על הרצפה במלוא הרוחב
+      add(box(x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`));
     }
 
     // גוף: שני צדדים, תחתית, תקרה וגב

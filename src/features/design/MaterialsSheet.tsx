@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
 import { projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
+import { TagIcon } from '../../ui/icons';
 import { selectOnFocus } from '../../ui/Field';
 import { cm, shekels } from '../../ui/units';
 
@@ -12,9 +13,12 @@ import { cm, shekels } from '../../ui/units';
  */
 export function MaterialsSheet({
   projectId,
+  onStart,
   onClose,
 }: {
   projectId: string;
+  /** מעבר למכירה ולפתיחת תהליך העבודה */
+  onStart?: () => void;
   onClose: () => void;
 }) {
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
@@ -26,11 +30,18 @@ export function MaterialsSheet({
   const hasPrices = costing.consumerTotal > 0 || costing.factoryTotal > 0;
 
   return (
-    <Sheet title="חומרים ומחיר" onClose={onClose} tall>
+    <Sheet title="חישוב פרויקט" onClose={onClose} tall>
       {costing.units === 0 ? (
         <p className="pt-10 text-center text-stone-500">אין עדיין ארגזים בפרויקט.</p>
       ) : (
         <div className="space-y-6">
+          {costing.unpricedParts > 0 && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900">
+              <span className="num">{costing.unpricedParts}</span> חלקים לא שויכו לשום
+              לוח, ולכן הם לא נספרים כאן. צריך להגדיר לוחות בהגדרות.
+            </p>
+          )}
+
           <section>
             <h3 className="mb-2 text-sm font-semibold text-stone-700">פלטות</h3>
             <ul className="space-y-2">
@@ -91,10 +102,9 @@ export function MaterialsSheet({
               })}
             </ul>
             <p className="mt-2 text-[11px] leading-snug text-stone-400">
-              מחושב לפי פלטה <span className="num">{cm(settings.sheetWidthMm)}</span>×
-              <span className="num">{cm(settings.sheetHeightMm)}</span> ס״מ, כרסום{' '}
-              <span className="num">{settings.kerfMm}</span> מ״מ וניצולת{' '}
-              <span className="num">{settings.yieldPct}</span>%.
+              כמות הפלטות נספרת מפריסה אמיתית על הלוח, עם כרסום{' '}
+              <span className="num">{settings.kerfMm}</span> מ״מ ובכיוון הסיבים —
+              אותה פריסה שמוצגת במסך הניסור.
             </p>
           </section>
 
@@ -196,8 +206,20 @@ export function MaterialsSheet({
             </div>
             <div className="mt-2 flex items-baseline justify-between">
               <span className="text-sm text-white/70">מחיר לצרכן</span>
-              <span className="num text-2xl font-bold">
+              <span className="num text-sm">
                 {hasPrices ? shekels(costing.consumerTotal) : '—'}
+              </span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between">
+              <span className="num text-sm text-white/70">מע״מ {costing.vatPct}%</span>
+              <span className="num text-sm">
+                {hasPrices ? shekels(costing.vatAmount) : '—'}
+              </span>
+            </div>
+            <div className="mt-2 flex items-baseline justify-between border-t border-white/15 pt-2">
+              <span className="text-sm font-medium">לתשלום</span>
+              <span className="num text-2xl font-bold">
+                {hasPrices ? shekels(costing.consumerWithVat) : '—'}
               </span>
             </div>
             {!hasPrices && (
@@ -209,8 +231,23 @@ export function MaterialsSheet({
           </section>
 
           <p className="text-xs leading-snug text-stone-500">
-            המחיר מכסה חומר גלם בלבד. אביזרים, עבודה ורווח ייכנסו בשכבת התמחור.
+            הסכום מכסה חומר גלם ואביזרים. עבודה ורווח נקבעים במסך המכירה,
+            שם גם נסגר המחיר ללקוח.
           </p>
+
+          {/*
+            מכאן ממשיכים: אחרי שרואים מה זה עולה, פותחים את המכירה
+            ואת תהליך העבודה. זו הנקודה שבה הצעה הופכת לייצור.
+          */}
+          {onStart && (
+            <button
+              onClick={onStart}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"
+            >
+              <TagIcon />
+              מכירה והתחלת עבודה
+            </button>
+          )}
         </div>
       )}
     </Sheet>

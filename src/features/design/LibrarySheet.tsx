@@ -28,10 +28,17 @@ const ROOM_ICONS: Record<string, (p: { className?: string }) => React.ReactEleme
 export function LibrarySheet({
   roomKind,
   onAdd,
+  manage,
   onClose,
 }: {
   roomKind: RoomKind;
-  onAdd: (item: CatalogItem) => void;
+  /** הוספה לקיר. במצב ניהול אין לאן להוסיף, ולכן היא לא נדרשת. */
+  onAdd?: (item: CatalogItem) => void;
+  /**
+   * מצב ניהול: לחיצה על פריט פותחת אותו לעריכה במקום להוסיף אותו
+   * לקיר. כך אפשר לבנות ולתחזק את הספרייה גם בלי פרויקט פתוח.
+   */
+  manage?: boolean;
   onClose: () => void;
 }) {
   const items = useLiveQuery(() => catalogRepo.all(), []);
@@ -74,7 +81,7 @@ export function LibrarySheet({
   return (
     <>
       <Sheet
-        title={titles[view]}
+        title={manage && view === 'classic' ? 'ספריית המוצרים' : titles[view]}
         onClose={onClose}
         onBack={view === 'classic' ? undefined : () => goTo('classic')}
         tall
@@ -101,7 +108,7 @@ export function LibrarySheet({
           {visible.map((item) => (
             <div key={item.id} className="relative">
               <button
-                onClick={() => onAdd(item)}
+                onClick={() => (manage ? setEditing(item) : onAdd?.(item))}
                 className="flex h-full w-full flex-col items-center gap-1.5 rounded-2xl border border-stone-200 bg-white p-2.5 text-center transition-colors hover:border-oak-400 hover:bg-oak-50 active:bg-oak-100"
               >
                 <span className="text-stone-500">
@@ -127,13 +134,16 @@ export function LibrarySheet({
                   {item.panelThicknessMm && <> · {item.panelThicknessMm} מ״מ</>}
                 </span>
               </button>
-              <button
-                onClick={() => setEditing(item)}
-                aria-label={`עריכת ${item.name}`}
-                className="absolute top-1 start-1 rounded-lg p-1 text-stone-300 transition-colors hover:bg-stone-100 hover:text-oak-600"
-              >
-                <PencilIcon className="size-3.5" />
-              </button>
+              {/* במצב ניהול הלחיצה על הפריט עצמו כבר פותחת עריכה */}
+              {!manage && (
+                <button
+                  onClick={() => setEditing(item)}
+                  aria-label={`עריכת ${item.name}`}
+                  className="absolute top-1 start-1 rounded-lg p-1 text-stone-300 transition-colors hover:bg-stone-100 hover:text-oak-600"
+                >
+                  <PencilIcon className="size-3.5" />
+                </button>
+              )}
             </div>
           ))}
 
