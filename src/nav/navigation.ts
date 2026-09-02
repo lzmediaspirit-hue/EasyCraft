@@ -43,6 +43,15 @@ export const nav = {
     stack = stack.slice(0, -1);
     emit();
   },
+  /**
+   * חוזר למסך הפתיחה ומאפס את המחסנית.
+   * נדרש בהחלפת משתמש: מה שהיה פתוח שייך למי שהיה מחובר, ולא
+   * בהכרח מותר למי שנכנס אחריו.
+   */
+  reset() {
+    stack = [{ name: 'customers' }];
+    emit();
+  },
   current(): Route {
     return stack[stack.length - 1];
   },

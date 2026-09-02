@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { wallName } from '../projects/wallLayouts';
 import { WallElevation, type MeasureAxis } from './WallElevation';
+import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
 import { UnitEditSheet } from './UnitEditSheet';
@@ -20,6 +21,7 @@ import { QuickCalcButton } from '../../ui/QuickCalc';
 import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
+  CubeIcon,
   DepthIcon,
   NestIcon,
   FrontsIcon,
@@ -50,6 +52,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [editOpen, setEditOpen] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [nestingOpen, setNestingOpen] = useState(false);
+  /* חזית שטוחה לעבודה מדויקת, ומבט תלת-ממדי להבנת המבנה ולהצגה ללקוח */
+  const [iso, setIso] = useState(false);
   const [depthOpen, setDepthOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [inside, setInside] = useState(false);
@@ -115,6 +119,13 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         action={<QuickCalcButton />}
       >
         <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <Tool
+            active={iso}
+            onClick={() => setIso((v) => !v)}
+            icon={<CubeIcon className="size-4" />}
+            label={iso ? 'תלת־ממד' : 'שטוח'}
+            title={iso ? 'חזרה לציור חזית' : 'מבט תלת־ממדי'}
+          />
           <Tool
             active={inside}
             onClick={() => setInside((v) => !v)}
@@ -210,6 +221,16 @@ export function DesignScreen({ projectId }: { projectId: string }) {
       */}
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
         <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
+          {iso ? (
+            <WallIso
+              wall={wall}
+              units={units}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              inside={inside}
+              finishHex={finishHex ?? {}}
+            />
+          ) : (
           <WallElevation
             wall={wall}
             units={units}
@@ -222,8 +243,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
             /* ארגז שהונח על הרצפה נצמד אליה שוב, בלי לחזור ללוח העריכה */
             onDropUnit={(id, yMm) => yMm === 0 && patchUnit(id, { floorLocked: true })}
-
           />
+          )}
         </div>
       </div>
 

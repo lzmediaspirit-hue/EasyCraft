@@ -284,3 +284,53 @@ export function countRods(u: FlatSource): number {
 export function countDividers(u: FlatSource): number {
   return unitZones(u).reduce((n, z) => n + Math.max(zoneColumns(z).length - 1, 0), 0);
 }
+
+/**
+ * מסיר עמודה אחת מהאזור, ומחלק את הרוחב שלה בין הנותרות.
+ * כשנשארת עמודה אחת אין יותר קושרת, והאזור חוזר להיות תא יחיד.
+ */
+export function removeColumn(zone: Zone, columnId: string): Zone {
+  const rest = zoneColumns(zone).filter((c) => c.id !== columnId);
+  if (rest.length < 2) {
+    const first = rest[0];
+    const { columns: _drop, ...bare } = zone;
+    return first ? { ...bare, ...stripColumn(first) } : bare;
+  }
+  const total = rest.reduce((a, c) => a + (c.widthShare || 0), 0) || rest.length;
+  return { ...zone, columns: rest.map((c) => ({ ...c, widthShare: (c.widthShare || 1) / total })) };
+}
+
+/**
+ * מוסיף מדף מפריד בתוך אזור: האזור נחצה לשניים באותו תוכן.
+ * זו הפעולה שהנגר עושה בראש — "שמים מדף, נוצרים שני תאים" —
+ * ולכן היא הפעולה שהעורך מציע, ולא "הוסף אזור" מופשט.
+ */
+export function splitByShelf(zone: Zone): [Zone, Zone] {
+  const half = Math.round(zone.heightMm / 2);
+  const bare = (id: string, heightMm: number): Zone => ({
+    ...zone,
+    id,
+    heightMm,
+    fixedHeight: undefined,
+  });
+  return [bare(crypto.randomUUID(), zone.heightMm - half), bare(crypto.randomUUID(), half)];
+}
+
+/** תיאור קצר של תוכן תא, לשורה שמוצגת בלי להיכנס אליה. */
+export function contentSummary(c: ZoneContent): string {
+  if (c.kind === 'shelves') {
+    const n = c.shelves ?? 0;
+    if (n === 0) return 'בלי מדפים';
+    return `${n} ${n === 1 ? 'מדף' : 'מדפים'}${c.glassShelves ? ' · זכוכית' : ''}`;
+  }
+  if (c.kind === 'drawers') {
+    const rows = c.drawers ?? 0;
+    const cols = Math.max(c.drawerCols ?? 1, 1);
+    const total = rows * cols;
+    return `${total} ${total === 1 ? 'מגירה' : 'מגירות'}${
+      c.drawerStyle === 'inner' ? ' · פנימיות' : ''
+    }`;
+  }
+  if (c.kind === 'rod') return 'מוט תלייה';
+  return 'חלל פתוח';
+}

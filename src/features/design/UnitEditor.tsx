@@ -5,7 +5,7 @@ import { glyphDef } from '../../catalog/glyphList';
 import { MAX_BODY_MM, isContainer } from '../../catalog/zones';
 import { MATERIAL } from '../../catalog/standards';
 import { boardsRepo, finishesRepo } from '../../materials/materialsRepo';
-import { ZonesEditor } from './ZonesEditor';
+import { InteriorEditor } from './InteriorEditor';
 import { FinishPicker } from './FinishPicker';
 import { BoardSheet } from '../settings/BoardSheet';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
@@ -259,7 +259,7 @@ export function UnitEditor({
         /* ---- פנים הארון ---- */
         container ? (
           <>
-            <ZonesEditor unit={unit} onChange={onChange} />
+            <InteriorEditor unit={unit} onChange={onChange} />
             <Row label="גב">
               {BACKS.map((bk) => (
                 <Pill

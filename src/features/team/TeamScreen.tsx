@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { teamRepo } from '../../workflow/workflowRepo';
 import { can, session } from '../../workflow/auth';
+import { nav } from '../../nav/navigation';
 import { useCurrentMember } from '../../workflow/useMember';
 import { ROLE_LABEL } from '../../workflow/stages';
 import { MemberSheet } from './MemberSheet';
@@ -32,7 +33,11 @@ export function TeamScreen() {
 
   const signOut = (
     <button
-      onClick={() => session.signOut()}
+      onClick={() => {
+        // המסך שפתוח שייך למי שיצא, ולכן חוזרים להתחלה
+        nav.reset();
+        session.signOut();
+      }}
       className="shrink-0 rounded-lg bg-stone-100 px-2.5 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-200"
     >
       יציאה
