@@ -1,15 +1,23 @@
 import { useEffect, useState } from 'react';
 import { teamRepo } from '../../workflow/workflowRepo';
-import { hasAnyUser, login, normalizeUsername, session, setPassword } from '../../workflow/auth';
+import {
+  DEFAULT_ADMIN,
+  hasAnyUser,
+  login,
+  normalizeUsername,
+  session,
+  setPassword,
+  usesDefaultPassword,
+} from '../../workflow/auth';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { BoxesIcon } from '../../ui/icons';
 
 /**
  * מסך הכניסה.
  *
- * בהתקנה הראשונה אין אף משתמש, ולכן המסך יוצר את המנהל — הוא
- * היחיד שיכול אחר כך לפתוח משתמשים לשאר הצוות. מכאן ואילך זו
- * כניסה רגילה עם שם משתמש וסיסמה.
+ * האפליקציה מגיעה עם חשבון מנהל מוכן, ולכן זו כניסה רגילה עם שם
+ * משתמש וסיסמה. מסך יצירת המנהל נשאר למקרה שאין אף משתמש — למשל
+ * אחרי מחיקת נתוני האפליקציה.
  */
 export function LoginScreen() {
   const [first, setFirst] = useState<boolean | null>(null);
@@ -19,9 +27,15 @@ export function LoginScreen() {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** הסיסמה שמגיעה עם האפליקציה עדיין בתוקף — כדאי להזכיר אותה */
+  const [showDefault, setShowDefault] = useState(false);
 
   useEffect(() => {
     hasAnyUser().then((any) => setFirst(!any));
+    teamRepo.list().then(async (members) => {
+      const admin = members.find((m) => m.username === DEFAULT_ADMIN.username);
+      setShowDefault(!!admin && (await usesDefaultPassword(admin)));
+    });
   }, []);
 
   if (first === null) return null;
@@ -135,6 +149,28 @@ export function LoginScreen() {
           </PrimaryButton>
         </div>
       </form>
+
+      {!first && showDefault && (
+        <button
+          onClick={() => {
+            setUsername(DEFAULT_ADMIN.username);
+            setPassword2(DEFAULT_ADMIN.password);
+            setError(null);
+          }}
+          className="mt-5 w-full rounded-xl border border-oak-200 bg-oak-50 px-3 py-2.5 text-start"
+        >
+          <span className="block text-[11px] font-medium text-oak-900">
+            כניסת מנהל ראשונה
+          </span>
+          <span className="num mt-0.5 block text-xs text-oak-800">
+            {DEFAULT_ADMIN.username} / {DEFAULT_ADMIN.password}
+          </span>
+          <span className="mt-1 block text-[10px] leading-snug text-oak-700/70">
+            הקש כדי למלא. הסיסמה הזו מגיעה עם האפליקציה וידועה — כדאי
+            להחליף אותה במסך הצוות.
+          </span>
+        </button>
+      )}
 
       <p className="mt-6 text-center text-[11px] leading-snug text-stone-400">
         {first

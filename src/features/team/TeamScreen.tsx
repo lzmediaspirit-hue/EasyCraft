@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { teamRepo } from '../../workflow/workflowRepo';
-import { can, session } from '../../workflow/auth';
+import { can, session, usesDefaultPassword } from '../../workflow/auth';
 import { nav } from '../../nav/navigation';
 import { useCurrentMember } from '../../workflow/useMember';
 import { ROLE_LABEL } from '../../workflow/stages';
@@ -23,8 +23,20 @@ export function TeamScreen() {
   const me = useCurrentMember();
   const members = useLiveQuery(() => teamRepo.list(), []);
   const [editing, setEditing] = useState<TeamMember | 'new' | null>(null);
+  /* מי עדיין עם הסיסמה שמגיעה עם האפליקציה — סיסמה ידועה אינה סיסמה */
+  const [defaults, setDefaults] = useState<string[]>([]);
 
   const isManager = can.manageTeam(me?.role);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all(
+      (members ?? []).map(async (m) => ((await usesDefaultPassword(m)) ? m.id : null)),
+    ).then((ids) => alive && setDefaults(ids.filter((x): x is string => !!x)));
+    return () => {
+      alive = false;
+    };
+  }, [members]);
 
   const byRole = ROLE_ORDER.map((role) => ({
     role,
@@ -103,10 +115,16 @@ export function TeamScreen() {
                         {m.phone && ` · ${m.phone}`}
                       </span>
                     </span>
-                    {!m.passwordHash && (
+                    {!m.passwordHash ? (
                       <span className="shrink-0 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                         בלי סיסמה
                       </span>
+                    ) : (
+                      defaults.includes(m.id) && (
+                        <span className="shrink-0 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                          סיסמת ברירת מחדל
+                        </span>
+                      )
                     )}
                   </button>
                 </li>

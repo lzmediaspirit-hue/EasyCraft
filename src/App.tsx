@@ -9,6 +9,7 @@ import { TasksScreen } from './features/workflow/TasksScreen';
 import { TeamScreen } from './features/team/TeamScreen';
 import { seedCatalog } from './catalog/catalogRepo';
 import { seedMaterials } from './materials/materialsRepo';
+import { seedAdmin } from './workflow/auth';
 import { useRoute } from './nav/navigation';
 import { LoginScreen } from './features/team/LoginScreen';
 import { useCurrentMember } from './workflow/useMember';
@@ -18,9 +19,9 @@ export default function App() {
   const me = useCurrentMember();
   const [ready, setReady] = useState(false);
 
-  // ספריית המוצרים נזרעת פעם אחת, לפני שמסך כלשהו מבקש ממנה פריטים
+  // הספרייה, החומרים וחשבון המנהל נזרעים פעם אחת, לפני שמסך מבקש אותם
   useEffect(() => {
-    Promise.all([seedCatalog(), seedMaterials()]).finally(() => setReady(true));
+    Promise.all([seedCatalog(), seedMaterials(), seedAdmin()]).finally(() => setReady(true));
   }, []);
 
   if (!ready || me === undefined) return null;

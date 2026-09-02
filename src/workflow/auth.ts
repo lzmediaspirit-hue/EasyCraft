@@ -120,6 +120,60 @@ export const session = {
   },
 };
 
+/* ------------------------------------------------------------------ */
+/* חשבון המנהל שמגיע עם האפליקציה                                      */
+/* ------------------------------------------------------------------ */
+
+export const DEFAULT_ADMIN = { username: 'admin', password: 'admin2026' };
+
+let seeding: Promise<void> | null = null;
+
+/**
+ * חשבון מנהל שמגיע מוכן עם האפליקציה.
+ *
+ * בלעדיו ההתקנה הראשונה מחייבת למלא טופס לפני שרואים משהו, וזה
+ * חיכוך מיותר בנגרייה שרק רוצה לפתוח ולעבוד. החשבון נוצר פעם אחת:
+ * אם כבר קיים משתמש בשם הזה — לא נוגעים בו, כדי שסיסמה שהוחלפה
+ * לא תידרס בטעינה הבאה.
+ *
+ * הסיסמה הזו ידועה לכל מי שראה את הקוד, ולכן היא נקודת פתיחה ולא
+ * הגנה. מסך הכניסה ומסך הצוות מסמנים אותה כל עוד לא הוחלפה.
+ */
+export function seedAdmin(): Promise<void> {
+  seeding ??= runSeed();
+  return seeding;
+}
+
+async function runSeed(): Promise<void> {
+  const exists = (await db.team.toArray()).some((m) => m.username === DEFAULT_ADMIN.username);
+  if (exists) return;
+  const now = Date.now();
+  const salt = newSalt();
+  const passwordHash = await hashPassword(DEFAULT_ADMIN.password, salt);
+  await db.team.put({
+    id: crypto.randomUUID(),
+    name: 'מנהל',
+    role: 'manager',
+    active: true,
+    username: DEFAULT_ADMIN.username,
+    passwordSalt: salt,
+    passwordHash,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+/**
+ * האם המשתמש עדיין עם סיסמת ברירת המחדל.
+ * כך אפשר להזכיר את זה בדיוק במקום שבו זה רלוונטי, ולהפסיק להזכיר
+ * ברגע שהסיסמה הוחלפה.
+ */
+export async function usesDefaultPassword(member: TeamMember): Promise<boolean> {
+  if (!member.passwordHash || !member.passwordSalt) return false;
+  const hash = await hashPassword(DEFAULT_ADMIN.password, member.passwordSalt);
+  return hash === member.passwordHash;
+}
+
 /** מה מותר לתפקיד. הפרדה במקום אחד, כדי שלא תתפזר על המסכים. */
 export const can = {
   /** לנהל צוות, ליצור משתמשים ולשנות תפקידים */
