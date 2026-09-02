@@ -170,6 +170,11 @@ export interface PlacedUnit extends Entity {
   drawerStyle?: DrawerStyle;
   /** דפנות זרות — צדדים גלויים שנבנים מלוח חזיתי ועמוקים מהארגז */
   exposed?: ExposedSides;
+  /**
+   * עומק הדופן הזרה במ"מ. ריק = עומק הארגז ועוד 22, המידה
+   * שמכסה חזית סטנדרטית. נגר שעובד אחרת מזין מידה משלו.
+   */
+  exposedDepthMm?: number;
   /** גוון החזית — נשמר מגרסאות קודמות, משמש כברירת מחדל ל-frontFinishId */
   finishId?: string;
   /** גוון גוף הארון */
@@ -254,14 +259,6 @@ export interface ZoneContent {
   drawers?: number;
   drawerCols?: number;
   drawerStyle?: DrawerStyle;
-  /** שורות ועמודות בכוורת יין */
-  wineRows?: number;
-  wineCols?: number;
-  /**
-   * עומק שונה מעומק הארון — מדף רדוד מעל משטח, או תא עמוק יותר.
-   * ריק = עומק הארון.
-   */
-  depthMm?: number;
 }
 
 /**
@@ -280,6 +277,11 @@ export interface Zone extends ZoneContent {
    */
   fixedHeight?: boolean;
   /**
+   * עומק שונה מעומק הארון — אזור רדוד מעל משטח עבודה.
+   * ריק = עומק הארון.
+   */
+  depthMm?: number;
+  /**
    * קושרות אנכיות: העמודות שהאזור מחולק אליהן.
    * ריק או עמודה אחת = אין קושרת. רמת עומק אחת מספיקה לתאר
    * ארון אמיתי, ולכן עמודה אינה מתחלקת שוב.
@@ -294,7 +296,7 @@ export interface ZoneColumn extends ZoneContent {
   widthShare: number;
 }
 
-export type ZoneKind = 'shelves' | 'drawers' | 'rod' | 'empty' | 'wine';
+export type ZoneKind = 'shelves' | 'drawers' | 'rod' | 'empty';
 
 /** מגירה חיצונית נראית בחזית; פנימית מסתתרת מאחורי דלת. */
 export type DrawerStyle = 'outer' | 'inner';
@@ -379,8 +381,14 @@ export interface Board extends Entity {
   /** מספר קטלוגי אצל הספק */
   catalogNumber?: string;
   role: BoardRole;
-  /** ללוח יש כיוון סיבים שמחייב ניסור בכיוון קבוע */
-  hasGrain: boolean;
+  /**
+   * מידת הפלטה שהלוח הזה מגיע בה.
+   * הרוחב תמיד 1220; הגובה משתנה בין ספקים — 2440 הוא התקן,
+   * ויש לוחות שמגיעים ב-2750 או ב-3050. נקבע ביצירת הלוח, כי הוא
+   * מאפיין של המוצר ולא של החישוב.
+   */
+  sheetWidthMm: number;
+  sheetHeightMm: number;
   /** מחיר פלטה במפעל */
   factoryPrice: number;
   /** מחיר פלטה ללקוח */
@@ -388,12 +396,22 @@ export interface Board extends Entity {
   sortOrder: number;
 }
 
+/** גבהים נפוצים של פלטה, במ"מ. הרוחב תמיד 1220. */
+export const SHEET_HEIGHTS_MM = [2440, 2750, 3050];
+export const SHEET_WIDTH_MM = 1220;
+
 /** גוון מתוך קטלוג הגוונים של לוח מסוים. */
 export interface Finish extends Entity {
   boardId: string;
   name: string;
   /** קוד הגוון אצל הספק */
   code?: string;
+  /**
+   * לגוון יש כיוון סיבים שמחייב ניסור בכיוון קבוע.
+   * זה מאפיין של הגוון ולא של הלוח: אותו MDF יכול להגיע בלכה
+   * חלקה ובפורניר עם סיבים.
+   */
+  hasGrain?: boolean;
   /** צבע לתצוגה בהדמיה */
   hex: string;
   /** מחיר שונה מהמחיר הבסיסי של הלוח, אם יש */
@@ -489,6 +507,14 @@ export interface TeamMember extends Entity {
   phone?: string;
   /** עובד שעזב נשאר במערכת, כדי שההיסטוריה של הפרויקטים לא תישבר */
   active: boolean;
+  /** שם משתמש לכניסה. ייחודי, באותיות קטנות */
+  username?: string;
+  /**
+   * גיבוב הסיסמה והמלח שלה. הסיסמה עצמה לא נשמרת בשום מקום —
+   * גם מי שפותח את בסיס הנתונים על המכשיר לא רואה אותה.
+   */
+  passwordHash?: string;
+  passwordSalt?: string;
 }
 
 /**

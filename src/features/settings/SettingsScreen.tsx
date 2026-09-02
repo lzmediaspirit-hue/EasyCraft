@@ -73,7 +73,6 @@ export function SettingsScreen() {
                     <span className="block truncate text-xs text-stone-500">
                       {ROLE_LABELS[board.role]}
                       {board.catalogNumber && <span className="num"> · {board.catalogNumber}</span>}
-                      {board.hasGrain && ' · כיוון סיבים'}
                       {!!finishCounts?.[board.id] && (
                         <span> · {finishCounts[board.id]} גוונים</span>
                       )}
@@ -102,19 +101,10 @@ export function SettingsScreen() {
 
         <section>
           <SectionTitle>חישוב פלטות</SectionTitle>
+          <p className="mb-2 text-xs leading-snug text-stone-400">
+            מידת הפלטה נקבעת לכל לוח בנפרד, כי היא מאפיין של המוצר אצל הספק.
+          </p>
           <div className="grid grid-cols-2 gap-3 rounded-2xl border border-stone-200 bg-white p-4">
-            <NumField
-              label="רוחב פלטה"
-              value={settings.sheetWidthMm}
-              minMm={100}
-              onChange={(v) => settingsRepo.save({ sheetWidthMm: v })}
-            />
-            <NumField
-              label="גובה פלטה"
-              value={settings.sheetHeightMm}
-              minMm={100}
-              onChange={(v) => settingsRepo.save({ sheetHeightMm: v })}
-            />
             <NumField
               label="עובי כרסום"
               inMm
@@ -130,12 +120,14 @@ export function SettingsScreen() {
             <NumField
               label="שקע הגב בחריץ"
               inMm
+              help="הגב לא מולבש על הארון אלא יושב בחריץ שנחרץ בצדדים, בתחתית ובתקרה. לכן הוא נחתך גדול מהפתח הפנימי — בעומק החריץ מכל צד. 8 מ״מ הוא הנפוץ."
               value={settings.backGrooveMm}
               onChange={(v) => settingsRepo.save({ backGrooveMm: v })}
             />
             <NumField
               label="מרווח סביב חזית"
               inMm
+              help="דלת או חזית מגירה נחתכת קטנה מהפתח, כדי שיישאר אוויר לצירים ולא תתחכך בשכנה. המרווח נלקח מכל צד. 3 מ״מ הוא הנפוץ."
               value={settings.frontGapMm}
               onChange={(v) => settingsRepo.save({ frontGapMm: v })}
             />

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { MeasureInput } from './MeasureInput';
 
 export const inputClass =
@@ -17,12 +18,15 @@ export function selectOnFocus(e: React.FocusEvent<HTMLInputElement>) {
 export function Field({
   label,
   hint,
+  help,
   error,
   group,
   children,
 }: {
   label: string;
   hint?: string;
+  /** הסבר קצר שנפתח בלחיצה על סימן שאלה, למונח שאינו מובן מאליו */
+  help?: string;
   error?: string | null;
   /**
    * קבוצת כפתורים ולא שדה קלט יחיד.
@@ -37,6 +41,7 @@ export function Field({
     <Wrapper className="block" role={group ? 'group' : undefined} aria-label={group ? label : undefined}>
       <span className="mb-1.5 flex items-baseline gap-2">
         <span className="text-sm font-medium text-stone-700">{label}</span>
+        {help && <HelpDot label={label} text={help} />}
         {hint && <span className="text-xs text-stone-400">{hint}</span>}
       </span>
       {children}
@@ -100,6 +105,7 @@ export function NumField({
   minMm = 0,
   inMm = false,
   hint,
+  help,
 }: {
   label: string;
   /** במ"מ */
@@ -110,9 +116,10 @@ export function NumField({
   /** הצגה במ"מ במקום בסנטימטרים */
   inMm?: boolean;
   hint?: string;
+  help?: string;
 }) {
   return (
-    <Field label={label} hint={hint ?? (inMm ? 'מ״מ' : 'ס״מ')}>
+    <Field label={label} hint={hint ?? (inMm ? 'מ״מ' : 'ס״מ')} help={help}>
       <MeasureInput
         value={value}
         onChange={onChange}
@@ -121,5 +128,35 @@ export function NumField({
         className={`${inputClass} num text-end`}
       />
     </Field>
+  );
+}
+
+/**
+ * סימן שאלה שפותח הסבר קצר.
+ *
+ * מונחים כמו "שקע הגב בחריץ" ברורים לנגר ותיק ולא לכל אחד, וההסבר
+ * שייך לצד השדה — לא במדריך נפרד שאף אחד לא פותח.
+ */
+export function HelpDot({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={`מה זה ${label}`}
+        className={`grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold transition-colors ${
+          open ? 'bg-oak-600 text-white' : 'bg-stone-200 text-stone-500 hover:bg-stone-300'
+        }`}
+      >
+        ?
+      </button>
+      {open && (
+        <span className="mt-1 block w-full basis-full rounded-lg bg-stone-100 px-2.5 py-2 text-[11px] leading-snug font-normal text-stone-600">
+          {text}
+        </span>
+      )}
+    </>
   );
 }

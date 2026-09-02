@@ -121,3 +121,41 @@ db.version(7).stores({
   stages: 'id, projectId, key, status, assigneeId, scheduledAt',
   attachments: 'id, projectId, kind',
 });
+
+/**
+ * מידת הפלטה עוברת מהגדרה כללית ללוח עצמו, וכיוון הסיבים עובר
+ * מהלוח לגוון. שניהם מאפיינים של המוצר אצל הספק: אותו MDF מגיע
+ * בכמה מידות, ואותו לוח מגיע גם בלכה חלקה וגם בפורניר עם סיבים.
+ */
+db.version(8)
+  .stores({
+    ...TABLES_V3,
+    team: 'id, role, active, username',
+    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+    attachments: 'id, projectId, kind',
+  })
+  .upgrade(async (tx) => {
+    const settings = await tx.table('settings').get('app');
+    const w = settings?.sheetWidthMm ?? 1220;
+    const h = settings?.sheetHeightMm ?? 2440;
+    const grainy: string[] = [];
+    await tx
+      .table('boards')
+      .toCollection()
+      .modify((b: { sheetWidthMm?: number; sheetHeightMm?: number; hasGrain?: boolean; id: string }) => {
+        // המידה הכללית הייתה נכונה לכל הלוחות עד כה
+        b.sheetWidthMm ??= w;
+        b.sheetHeightMm ??= h;
+        if (b.hasGrain) grainy.push(b.id);
+        delete b.hasGrain;
+      });
+    // כיוון הסיבים שהיה על הלוח עובר לכל הגוונים שלו
+    if (grainy.length) {
+      await tx
+        .table('finishes')
+        .toCollection()
+        .modify((f: { boardId: string; hasGrain?: boolean }) => {
+          if (grainy.includes(f.boardId)) f.hasGrain = true;
+        });
+    }
+  });

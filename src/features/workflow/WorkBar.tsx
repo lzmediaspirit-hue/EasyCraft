@@ -24,25 +24,6 @@ export function WorkBar() {
     (s) => s.scheduledAt && s.status !== 'skipped' && s.scheduledAt >= startOfToday(),
   ).length;
 
-  // אין צוות ואין תהליכים — לא מציגים כלים שעוד לא נחוצים
-  if (!me && active.length === 0) {
-    return (
-      <button
-        onClick={() => nav.push({ name: 'team' })}
-        className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white p-3 text-start transition-colors hover:border-oak-400"
-      >
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-oak-100 text-oak-700">
-          <TeamIcon className="size-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-stone-900">הקמת צוות</span>
-          <span className="block text-xs leading-snug text-stone-500">
-            מנהל, תכנת ונגרים — ומכאן כל פרויקט מקבל תהליך עבודה
-          </span>
-        </span>
-      </button>
-    );
-  }
 
   return (
     <div className="mt-3 grid grid-cols-2 gap-2">
@@ -60,9 +41,13 @@ export function WorkBar() {
         onClick={() => nav.push({ name: 'calendar' })}
       />
       {me && (
-        <p className="col-span-2 text-[11px] text-stone-400">
-          מחובר: {me.name} · {ROLE_LABEL[me.role]}
-        </p>
+        <button
+          onClick={() => nav.push({ name: 'team' })}
+          className="col-span-2 flex items-center gap-1.5 text-start text-[11px] text-stone-400 transition-colors hover:text-oak-700"
+        >
+          <TeamIcon className="size-3.5" />
+          {me.name} · {ROLE_LABEL[me.role]}
+        </button>
       )}
     </div>
   );

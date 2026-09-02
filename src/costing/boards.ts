@@ -69,8 +69,17 @@ export interface GlassDoorLine {
   consumerTotal: number;
 }
 
+/** החלקים שנחתכים מלוח וגוון מסוימים — הקלט לניסור. */
+export interface PartGroup {
+  board: Board;
+  finish?: Finish;
+  parts: Part[];
+}
+
 export interface ProjectCosting {
   lines: BoardLine[];
+  /** החלקים מקובצים לפי לוח וגוון, לפריסה על פלטות */
+  groups: PartGroup[];
   accessories: AccessoryLine[];
   glass: GlassDoorLine[];
   glassAreaM2: number;
@@ -171,10 +180,11 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
       });
     }
 
+    // הקושרות אוכלות מרוחב הפנים פעם אחת, והשאר מתחלק בין התאים
+    const usableW = Math.max(innerW - dividers * t, 0);
     for (const { content, share } of cells) {
-      const cellDepth = content.depthMm ?? zoneDepth;
-      // רוחב פנים התא: רוחב הארון פחות הצדדים, פחות הקושרות שמסביבו
-      const cellW = Math.max(innerW * share - (dividers > 0 ? t : 0), 0);
+      const cellDepth = zoneDepth;
+      const cellW = Math.round(usableW * share);
 
       if (content.kind === 'shelves' && !content.glassShelves) {
         const n = content.shelves ?? 0;
@@ -189,22 +199,6 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
         }
       }
 
-      if (content.kind === 'wine') {
-        /*
-         * כוורת: שתי סדרות אלכסונים מצטלבות. כל אלכסון חוצה את התא,
-         * ולכן אורכו הוא אלכסון המלבן. זו הערכה לתמחור — הנגר יחתוך
-         * לפי שרטוט — אבל היא בסדר הגודל הנכון ולא מתעלמת מהחומר.
-         */
-        const rows = Math.max(content.wineRows ?? 3, 1);
-        const cols = Math.max(content.wineCols ?? 4, 1);
-        parts.push({
-          role: 'carcass',
-          label: 'לוח כוורת',
-          widthMm: Math.round(Math.hypot(cellW, zone.heightMm)),
-          heightMm: Math.max(cellDepth - 20, 0),
-          qty: rows + cols,
-        });
-      }
     }
   }
 
@@ -263,8 +257,9 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     });
   }
 
-  // דפנות זרות במידה החיצונית המלאה, ועמוקות מהארגז
-  const panelDepth = d + MATERIAL.exposedExtraMm;
+  // דפנות זרות במידה החיצונית המלאה, ועמוקות מהארגז.
+  // ברירת המחדל מכסה חזית סטנדרטית; נגר שעובד אחרת מזין מידה משלו.
+  const panelDepth = u.exposedDepthMm ?? d + MATERIAL.exposedExtraMm;
   const panel = (heightMm: number): Part => ({
     role: 'front',
     label: 'דופן זרה',
@@ -335,15 +330,15 @@ export function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
   const innerW = Math.max(carcassW - 2 * t, 0);
   for (const zone of zones) {
     const cells = zoneCells(zone);
-    const dividers = cells.length - 1;
+    const usableW = Math.max(innerW - (cells.length - 1) * t, 0);
     for (const { content, share } of cells) {
       if (content.kind !== 'shelves' || !content.glassShelves) continue;
       const n = content.shelves ?? 0;
       if (n < 1) continue;
       out.push({
         label: 'מדף זכוכית',
-        widthMm: Math.round(Math.max(innerW * share - (dividers > 0 ? t : 0), 0)),
-        heightMm: Math.round(Math.max((content.depthMm ?? zone.depthMm ?? u.depthMm) - 20, 0)),
+        widthMm: Math.round(usableW * share),
+        heightMm: Math.round(Math.max((zone.depthMm ?? u.depthMm) - 20, 0)),
         qty: n,
       });
     }
@@ -401,15 +396,19 @@ export function projectCosting(
   finishes: Finish[] = [],
 ): ProjectCosting {
   const kerf = settings.kerfMm;
-  const usableSheetM2 =
-    (settings.sheetWidthMm / 1000) * (settings.sheetHeightMm / 1000) * (settings.yieldPct / 100);
+  // כל לוח מגיע במידה משלו — פלטת 305 נותנת יותר משטח מפלטת 244
+  const sheetM2 = (b: Board) =>
+    (b.sheetWidthMm / 1000) * (b.sheetHeightMm / 1000) * (settings.yieldPct / 100);
 
   /*
    * שטח מצטבר לפי לוח וגוון, ולא רק לפי תפקיד.
    * נגרייה עובדת עם כמה סוגי MDF באותו פרויקט, וכל אחד מהם מוזמן
    * בנפרד — ולכן רשימת ההזמנה חייבת להפריד ביניהם ולציין את הגוון.
    */
-  const areaByKey = new Map<string, { boardId: string; finishId?: string; areaM2: number }>();
+  const areaByKey = new Map<
+    string,
+    { boardId: string; finishId?: string; areaM2: number; parts: Part[] }
+  >();
   const primary = new Map<BoardRole, string>();
   for (const b of boards) if (!primary.has(b.role)) primary.set(b.role, b.id);
 
@@ -440,8 +439,9 @@ export function projectCosting(
       const { boardId, finishId } = resolve(u, part.role);
       if (!boardId) continue;
       const key = `${boardId}:${finishId ?? ''}`;
-      const row = areaByKey.get(key) ?? { boardId, finishId, areaM2: 0 };
+      const row = areaByKey.get(key) ?? { boardId, finishId, areaM2: 0, parts: [] };
       row.areaM2 += area * part.qty;
+      row.parts.push(part);
       areaByKey.set(key, row);
     }
     drawers += countDrawers(u);
@@ -469,6 +469,7 @@ export function projectCosting(
 
   // שורה לכל צירוף של לוח וגוון — כך נראית הזמנה אמיתית מהספק
   const lines: BoardLine[] = [];
+  const groups: PartGroup[] = [];
   for (const row of areaByKey.values()) {
     const board = boards.find((b) => b.id === row.boardId);
     if (!board || row.areaM2 <= 0) continue;
@@ -478,7 +479,7 @@ export function projectCosting(
     // גוון עשוי לעלות אחרת מהלוח הבסיסי
     const factoryPrice = override?.factoryPrice ?? finish?.factoryPrice ?? board.factoryPrice;
     const consumerPrice = override?.consumerPrice ?? finish?.consumerPrice ?? board.consumerPrice;
-    const sheets = Math.ceil(row.areaM2 / usableSheetM2);
+    const sheets = Math.ceil(row.areaM2 / Math.max(sheetM2(board), 0.01));
 
     lines.push({
       board,
@@ -491,6 +492,7 @@ export function projectCosting(
       consumerTotal: sheets * consumerPrice,
       overridden: !!override,
     });
+    groups.push({ board, finish, parts: row.parts });
   }
   lines.sort((a, b) => a.board.sortOrder - b.board.sortOrder || b.areaM2 - a.areaM2);
 
@@ -541,6 +543,7 @@ export function projectCosting(
 
   return {
     lines,
+    groups,
     accessories,
     glass,
     glassAreaM2,

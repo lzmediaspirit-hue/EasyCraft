@@ -10,9 +10,12 @@ import { TeamScreen } from './features/team/TeamScreen';
 import { seedCatalog } from './catalog/catalogRepo';
 import { seedMaterials } from './materials/materialsRepo';
 import { useRoute } from './nav/navigation';
+import { LoginScreen } from './features/team/LoginScreen';
+import { useCurrentMember } from './workflow/useMember';
 
 export default function App() {
   const route = useRoute();
+  const me = useCurrentMember();
   const [ready, setReady] = useState(false);
 
   // ספריית המוצרים נזרעת פעם אחת, לפני שמסך כלשהו מבקש ממנה פריטים
@@ -20,7 +23,9 @@ export default function App() {
     Promise.all([seedCatalog(), seedMaterials()]).finally(() => setReady(true));
   }, []);
 
-  if (!ready) return null;
+  if (!ready || me === undefined) return null;
+  // בלי משתמש מחובר אין מה להראות: התפקיד קובע מה מוצג בכל מסך
+  if (!me) return <LoginScreen />;
 
   switch (route.name) {
     case 'customers':

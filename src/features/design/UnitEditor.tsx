@@ -398,13 +398,36 @@ export function UnitEditor({
             </p>
           )}
 
-          <Row label="דפנות זרות" hint={`עמוקות ב-${MATERIAL.exposedExtraMm} מ״מ מהארגז`}>
+          <Row label="דפנות זרות" hint={`ברירת מחדל: גוף +${MATERIAL.exposedExtraMm} מ״מ`}>
             {SIDES.map((s) => (
               <Pill key={s.key} active={!!exposed[s.key]} onClick={() => toggleSide(s.key)}>
                 {s.label}
               </Pill>
             ))}
           </Row>
+
+          {/* עומק הדופן — קבוע לפי הגוף, או מידה שהנגר מזין */}
+          {(exposed.start || exposed.end || exposed.top || exposed.bottom) && (
+            <div className="mt-2 flex items-center gap-1.5">
+              <span className="w-16 shrink-0 text-[11px] text-stone-500">עומק הדופן</span>
+              <Pill
+                active={unit.exposedDepthMm === undefined}
+                onClick={() => onChange({ exposedDepthMm: undefined })}
+              >
+                גוף +{MATERIAL.exposedExtraMm}
+              </Pill>
+              <label className="flex flex-1 items-center gap-1 rounded-lg bg-stone-100 px-2 py-1">
+                <MeasureInput
+                  value={unit.exposedDepthMm ?? unit.depthMm + MATERIAL.exposedExtraMm}
+                  onChange={(mm) => onChange({ exposedDepthMm: mm })}
+                  minMm={100}
+                  ariaLabel="עומק הדופן הזרה"
+                  className="num w-full bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
+                />
+                <span className="shrink-0 text-[10px] text-stone-400">ס״מ</span>
+              </label>
+            </div>
+          )}
 
           {/*
             ויטרינה: צד שעשוי זכוכית במקום לוח. הצד יוצא מפירוק

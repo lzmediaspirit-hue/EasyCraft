@@ -7,11 +7,11 @@ import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
 import { UnitEditSheet } from './UnitEditSheet';
 import { MaterialsSheet } from './MaterialsSheet';
+import { NestingSheet } from './NestingSheet';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
 import { WallThumb } from './WallThumb';
 import { cornerZones } from './plan';
-import { unitZones } from '../../catalog/zones';
 import { analyzeWall, nextFreeX } from './analysis';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { roomDef } from '../../catalog/rooms';
@@ -21,6 +21,7 @@ import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
   DepthIcon,
+  NestIcon,
   FrontsIcon,
   InsideIcon,
   PlanIcon,
@@ -48,6 +49,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [nestingOpen, setNestingOpen] = useState(false);
   const [depthOpen, setDepthOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [inside, setInside] = useState(false);
@@ -92,7 +94,9 @@ export function DesignScreen({ projectId }: { projectId: string }) {
     const floorLevel = item.level !== 'wall';
     const from = floorLevel && !item.corner ? (corners?.startMm ?? 0) : 0;
     const x = Math.max(nextFreeX(units, item.level), from);
-    const unit = await unitsRepo.add(projectId, wall.id, item, Math.min(x, wall.lengthMm));
+    // הארגז נכנס בתוך הקיר, ולא נדחף אל מעבר לקצה שלו
+    const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, from);
+    const unit = await unitsRepo.add(projectId, wall.id, item, Math.min(x, maxX));
     setLibraryOpen(false);
     setSelectedId(unit.id);
   }
@@ -124,11 +128,19 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             icon={<RulerIcon className="size-4" />}
             label="מדידה"
           />
-          <Tool
-            active={materialsOpen}
+          {/* חישוב הוא סוף התהליך על הקיר, ולכן הוא נראה אחרת מכלי תצוגה */}
+          <button
             onClick={() => setMaterialsOpen(true)}
-            icon={<CalcIcon className="size-4" />}
-            label="חומרים"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-oak-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-oak-700"
+          >
+            <CalcIcon className="size-4" />
+            חישוב
+          </button>
+          <Tool
+            active={nestingOpen}
+            onClick={() => setNestingOpen(true)}
+            icon={<NestIcon className="size-4" />}
+            label="ניסור"
           />
           <Tool
             active={depthOpen}
@@ -210,14 +222,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
             /* ארגז שהונח על הרצפה נצמד אליה שוב, בלי לחזור ללוח העריכה */
             onDropUnit={(id, yMm) => yMm === 0 && patchUnit(id, { floorLocked: true })}
-            onMoveShelf={(unitId, zoneId, gapsMm) => {
-              const u = units.find((x) => x.id === unitId);
-              if (!u) return;
-              const zones = unitZones(u).map((z) =>
-                z.id === zoneId ? { ...z, shelfGapsMm: gapsMm } : z,
-              );
-              patchUnit(unitId, { zones });
-            }}
+
           />
         </div>
       </div>
@@ -284,13 +289,26 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             {analysis && (
               <>
                 <div className="grid grid-cols-3 gap-2">
-                  <Stat label="ארגזים" value={String(units.length)} />
+                  <Stat
+                    label="שטח הקיר"
+                    value={((wall.lengthMm / 1000) * (wall.heightMm / 1000)).toFixed(2)}
+                    unit="מ״ר"
+                  />
+                  <Stat label="גובה הקיר" value={cm(wall.heightMm)} unit="ס״מ" />
                   <Stat label="מטר רץ תחתון" value={meters(analysis.floorUsedMm)} unit="מ׳" />
+                  <Stat label="ארגזים" value={String(units.length)} />
                   <Stat
                     label={analysis.freeMm >= 0 ? 'נשאר על הקיר' : 'חריגה'}
                     value={cm(Math.abs(analysis.freeMm))}
                     unit="ס״מ"
                     tone={analysis.freeMm < 0 ? 'bad' : 'ok'}
+                  />
+                  <Stat
+                    label="שטח חזיתות"
+                    value={(
+                      units.reduce((n, u) => n + (u.widthMm / 1000) * (u.heightMm / 1000), 0)
+                    ).toFixed(2)}
+                    unit="מ״ר"
                   />
                 </div>
 
@@ -353,6 +371,10 @@ export function DesignScreen({ projectId }: { projectId: string }) {
 
       {editOpen && selected && (
         <UnitEditSheet unit={selected} onClose={() => setEditOpen(false)} />
+      )}
+
+      {nestingOpen && (
+        <NestingSheet projectId={projectId} onClose={() => setNestingOpen(false)} />
       )}
 
       {materialsOpen && (

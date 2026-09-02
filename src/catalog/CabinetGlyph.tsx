@@ -428,62 +428,9 @@ function cellContent(
     );
   }
 
-  if (content.kind === 'wine') {
-    return <g key={`w-${key}`}>{wineLattice(cw, top, bottom, content, t, key)}</g>;
-  }
-
   return null;
 }
 
-/**
- * כוורת ליין.
- *
- * הכוורת נבנית משתי סדרות אלכסונים מצטלבות, בדיוק כמו בשטח: אלה
- * הלוחות שנחרצים זה בזה ויוצרים מעוינים שהבקבוק שוכב בהם. הצפיפות
- * נגזרת ממספר השורות והעמודות, כדי שהציור יתאר את מה שייבנה.
- */
-function wineLattice(
-  w: number,
-  top: number,
-  bottom: number,
-  content: ZoneContent,
-  t: number,
-  key: string,
-): React.ReactNode[] {
-  const rows = Math.max(content.wineRows ?? 3, 1);
-  const cols = Math.max(content.wineCols ?? 4, 1);
-  const zh = bottom - top;
-  const stepX = w / cols;
-  const stepY = zh / rows;
-  const out: React.ReactNode[] = [];
-
-  // מספר האלכסונים בכל כיוון, כדי לכסות את כל המלבן
-  const diagonals = cols + rows;
-  for (let i = 1 - rows; i < diagonals; i++) {
-    const x0 = i * stepX;
-    out.push(
-      <line
-        key={`wl-${key}-${i}`}
-        x1={clamp(x0, 0, w)}
-        y1={clamp(top + (x0 < 0 ? -x0 / stepX : 0) * stepY, top, bottom)}
-        x2={clamp(x0 + rows * stepX, 0, w)}
-        y2={clamp(top + Math.min(rows, (w - x0) / stepX) * stepY, top, bottom)}
-        strokeWidth={t * 0.8}
-      />,
-      <line
-        key={`wr-${key}-${i}`}
-        x1={clamp(w - x0, 0, w)}
-        y1={clamp(top + (x0 < 0 ? -x0 / stepX : 0) * stepY, top, bottom)}
-        x2={clamp(w - x0 - rows * stepX, 0, w)}
-        y2={clamp(top + Math.min(rows, (w - x0) / stepX) * stepY, top, bottom)}
-        strokeWidth={t * 0.8}
-      />,
-    );
-  }
-  return out;
-}
-
-const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
 /* ------------------------------------------------------------------ */
 

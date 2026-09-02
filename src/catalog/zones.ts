@@ -15,7 +15,6 @@ export const ZONE_LABELS: Record<ZoneKind, string> = {
   drawers: 'מגירות',
   rod: 'מוט תלייה',
   empty: 'חלל פתוח',
-  wine: 'כוורת יין',
 };
 
 /** גובה מינימלי לאזור, כדי שלא ייווצר תא שאי אפשר לבנות. */
@@ -59,7 +58,6 @@ export function newZone(kind: ZoneKind, heightMm: number): Zone {
 export function contentDefaults(kind: ZoneKind, heightMm: number): ZoneContent {
   if (kind === 'shelves') return { kind, shelves: Math.max(autoShelves(heightMm), 1) };
   if (kind === 'drawers') return { kind, drawers: 3, drawerCols: 1 };
-  if (kind === 'wine') return { kind, wineRows: Math.max(Math.round(heightMm / 110), 2), wineCols: 4 };
   return { kind };
 }
 

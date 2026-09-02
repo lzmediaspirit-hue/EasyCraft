@@ -17,7 +17,7 @@ import { MeasureInput } from '../../ui/MeasureInput';
 import { ArrowDownIcon, ArrowUpIcon, LockIcon, PlusIcon, TrashIcon, UnlockIcon } from '../../ui/icons';
 import type { PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../../db/types';
 
-const KINDS: ZoneKind[] = ['shelves', 'drawers', 'rod', 'empty', 'wine'];
+const KINDS: ZoneKind[] = ['shelves', 'drawers', 'rod', 'empty'];
 const COUNTS = [0, 1, 2, 3, 4, 5, 6];
 
 /**
@@ -239,8 +239,6 @@ export function ZonesEditor({
                       <ContentEditor
                         content={col}
                         heightMm={zone.heightMm}
-                        depthFallback={zone.depthMm ?? unit.depthMm}
-                        label={`תא ${i + 1}`}
                         onChange={(patch) => patchColumn(zone.id, col.id, patch)}
                       />
                     </li>
@@ -250,8 +248,6 @@ export function ZonesEditor({
                 <ContentEditor
                   content={zone}
                   heightMm={zone.heightMm}
-                  depthFallback={unit.depthMm}
-                  label={`אזור ${index + 1}`}
                   onChange={(patch) => patchZone(zone.id, patch)}
                 />
               )}
@@ -288,14 +284,10 @@ export function ZonesEditor({
 function ContentEditor({
   content,
   heightMm,
-  depthFallback,
-  label,
   onChange,
 }: {
   content: ZoneContent;
   heightMm: number;
-  depthFallback: number;
-  label: string;
   onChange: (patch: Partial<ZoneContent>) => void;
 }) {
   return (
@@ -392,43 +384,6 @@ function ContentEditor({
         </div>
       )}
 
-      {content.kind === 'wine' && (
-        <div className="mt-2 space-y-2">
-          <Row label="שורות">
-            {[2, 3, 4, 5, 6].map((n) => (
-              <MiniPill
-                key={n}
-                active={n === (content.wineRows ?? 3)}
-                onClick={() => onChange({ wineRows: n })}
-              >
-                {n}
-              </MiniPill>
-            ))}
-          </Row>
-          <Row label="לרוחב">
-            {[2, 3, 4, 5, 6].map((n) => (
-              <MiniPill
-                key={n}
-                active={n === (content.wineCols ?? 4)}
-                onClick={() => onChange({ wineCols: n })}
-              >
-                {n}
-              </MiniPill>
-            ))}
-          </Row>
-          <p className="text-[10px] leading-snug text-stone-400">
-            אלכסונים מצטלבים שיוצרים מעוינים לבקבוק שוכב. מספר הלוחות
-            בחישוב הוא הערכה — הנגר חותך לפי שרטוט.
-          </p>
-        </div>
-      )}
-
-      <DepthRow
-        label={`עומק ${label}`}
-        value={content.depthMm}
-        fallback={depthFallback}
-        onChange={(mm) => onChange({ depthMm: mm })}
-      />
     </>
   );
 }

@@ -319,3 +319,12 @@ export const DotsIcon = ({ className = 'size-5' }: P) => (
     <circle cx="19" cy="12" r="1.8" />
   </svg>
 );
+
+/** ניסור — פריסת חלקים על פלטה. */
+export const NestIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="3" y="4" width="18" height="16" rx="1.5" />
+    <path d="M3 11h9M12 4v16M16 11h5M16 15h5" />
+  </svg>
+);

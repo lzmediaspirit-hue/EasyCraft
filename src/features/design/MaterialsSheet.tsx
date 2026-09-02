@@ -58,7 +58,6 @@ export function MaterialsSheet({
                       {line.board.catalogNumber && (
                         <span className="num"> · {line.board.catalogNumber}</span>
                       )}
-                      {line.board.hasGrain && ' · כיוון סיבים'}
                     </p>
 
                     <div className="mt-2.5 grid grid-cols-2 gap-2">

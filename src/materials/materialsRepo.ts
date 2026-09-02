@@ -31,7 +31,8 @@ const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
     name: 'סנדוויץ׳',
     role: 'carcass',
-    hasGrain: false,
+    sheetWidthMm: 1220,
+    sheetHeightMm: 2440,
     factoryPrice: 0,
     consumerPrice: 120,
     sortOrder: 0,
@@ -39,7 +40,8 @@ const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
     name: 'MDF',
     role: 'front',
-    hasGrain: false,
+    sheetWidthMm: 1220,
+    sheetHeightMm: 2440,
     factoryPrice: 0,
     consumerPrice: 400,
     sortOrder: 1,
@@ -47,7 +49,8 @@ const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
     name: 'גב 5 מ״מ',
     role: 'back',
-    hasGrain: false,
+    sheetWidthMm: 1220,
+    sheetHeightMm: 2440,
     factoryPrice: 0,
     consumerPrice: 80,
     sortOrder: 2,
@@ -119,7 +122,8 @@ export const boardsRepo = {
     const id = crypto.randomUUID();
     const count = await db.boards.count();
     await db.boards.add({
-      hasGrain: false,
+    sheetWidthMm: 1220,
+    sheetHeightMm: 2440,
       factoryPrice: 0,
       consumerPrice: 0,
       sortOrder: count,

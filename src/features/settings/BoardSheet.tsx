@@ -5,6 +5,8 @@ import { FinishSheet } from './FinishSheet';
 import { Sheet } from '../../ui/Sheet';
 import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { PlusIcon, TrashIcon } from '../../ui/icons';
+import { SHEET_HEIGHTS_MM, SHEET_WIDTH_MM } from '../../db/types';
+import { cm } from '../../ui/units';
 import type { Board, BoardRole, Finish } from '../../db/types';
 
 const ROLES: { role: BoardRole; label: string; hint: string }[] = [
@@ -30,7 +32,7 @@ export function BoardSheet({
   const [name, setName] = useState(board?.name ?? '');
   const [catalogNumber, setCatalogNumber] = useState(board?.catalogNumber ?? '');
   const [role, setRole] = useState<BoardRole>(board?.role ?? initialRole ?? 'carcass');
-  const [hasGrain, setHasGrain] = useState(board?.hasGrain ?? false);
+  const [sheetHeight, setSheetHeight] = useState(board?.sheetHeightMm ?? SHEET_HEIGHTS_MM[0]);
   const [factoryPrice, setFactoryPrice] = useState(String(board?.factoryPrice ?? 0));
   const [consumerPrice, setConsumerPrice] = useState(String(board?.consumerPrice ?? 0));
   const [editingFinish, setEditingFinish] = useState<Finish | 'new' | null>(null);
@@ -48,7 +50,8 @@ export function BoardSheet({
       name: name.trim(),
       catalogNumber: catalogNumber.trim() || undefined,
       role,
-      hasGrain,
+      sheetWidthMm: SHEET_WIDTH_MM,
+      sheetHeightMm: sheetHeight,
       factoryPrice: Number(factoryPrice) || 0,
       consumerPrice: Number(consumerPrice) || 0,
     });
@@ -118,35 +121,35 @@ export function BoardSheet({
             </span>
           </Field>
 
-          <button
-            onClick={() => setHasGrain((v) => !v)}
-            aria-pressed={hasGrain}
-            className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-start text-sm font-medium transition-colors ${
-              hasGrain ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
-          >
-            <span
-              className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
-                hasGrain ? 'bg-white/30' : 'bg-stone-300'
-              }`}
-            >
-              <span
-                className={`size-4 rounded-full bg-white transition-transform ${
-                  hasGrain ? '-translate-x-4' : ''
-                }`}
-              />
-            </span>
-            <span className="flex-1">
-              כיוון סיבים
-              <span
-                className={`block text-[11px] font-normal ${
-                  hasGrain ? 'text-white/70' : 'text-stone-400'
-                }`}
-              >
-                מחייב ניסור בכיוון קבוע ומעלה את הפחת
+          {/*
+            מידת הפלטה היא מאפיין של המוצר ולא של החישוב, ולכן היא
+            נקבעת פעם אחת ביצירת הלוח. הרוחב תמיד 122 ס"מ; הגובה
+            משתנה בין ספקים, ולכן הוא נבחר מהגבהים שקיימים בשוק.
+          */}
+          {!board ? (
+            <Field group label="מידת הפלטה" hint={`רוחב ${cm(SHEET_WIDTH_MM)} ס״מ תמיד`}>
+              <div className="flex flex-wrap gap-1.5">
+                {SHEET_HEIGHTS_MM.map((h) => (
+                  <Chip key={h} active={h === sheetHeight} onClick={() => setSheetHeight(h)}>
+                    <span className="num">
+                      {cm(SHEET_WIDTH_MM)}×{cm(h)}
+                    </span>
+                  </Chip>
+                ))}
+              </div>
+            </Field>
+          ) : (
+            <p className="rounded-xl bg-stone-50 px-3 py-2.5 text-sm text-stone-600">
+              מידת הפלטה:{' '}
+              <span className="num font-medium text-stone-900">
+                {cm(board.sheetWidthMm)}×{cm(board.sheetHeightMm)}
+              </span>{' '}
+              ס״מ
+              <span className="mt-0.5 block text-[11px] text-stone-400">
+                נקבעת ביצירת הלוח. לוח במידה אחרת הוא לוח אחר אצל הספק.
               </span>
-            </span>
-          </button>
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-3 border-t border-stone-100 pt-5">
             <PriceField label="מחיר במפעל" value={factoryPrice} onChange={setFactoryPrice} />
