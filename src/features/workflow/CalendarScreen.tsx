@@ -6,7 +6,8 @@ import { stagesRepo, teamRepo } from '../../workflow/workflowRepo';
 import { stageDef } from '../../workflow/stages';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { nav } from '../../nav/navigation';
-import { ChevronIcon } from '../../ui/icons';
+import { ScheduleInstallSheet } from './ScheduleInstallSheet';
+import { ChevronIcon, PlusIcon } from '../../ui/icons';
 import type { ProjectStage } from '../../db/types';
 
 const WEEKDAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
@@ -26,6 +27,7 @@ export function CalendarScreen() {
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [selected, setSelected] = useState<Date | null>(() => new Date());
+  const [scheduling, setScheduling] = useState(false);
 
   const stages = useLiveQuery(() => stagesRepo.all(), []);
   const projects = useLiveQuery(() => projectsRepo.all(), []);
@@ -162,14 +164,33 @@ export function CalendarScreen() {
               })}
             </ul>
           )}
+
+          {/*
+            התקנה נקבעת גם מכאן, ולא רק מתוך תהליך עבודה פתוח:
+            התקנה חוזרת או תיקון אצל לקוח שהפרויקט שלו כבר נסגר הם
+            עבודה אמיתית, ולוח שלא מכיל אותם משקר.
+          */}
+          {selected && (
+            <button
+              onClick={() => setScheduling(true)}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-stone-300 py-2.5 text-sm font-medium text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
+            >
+              <PlusIcon className="size-4" />
+              קביעת התקנה
+            </button>
+          )}
         </section>
 
         {scheduled.length === 0 && (
           <p className="mt-5 text-xs leading-snug text-stone-400">
-            מועד נקבע בשלב ההתקנה של הפרויקט, ומופיע כאן.
+            מועד נקבע בשלב ההתקנה של הפרויקט או מכאן, ומופיע בלוח.
           </p>
         )}
       </main>
+
+      {scheduling && selected && (
+        <ScheduleInstallSheet date={selected} onClose={() => setScheduling(false)} />
+      )}
     </div>
   );
 }
