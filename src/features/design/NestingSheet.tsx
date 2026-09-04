@@ -155,9 +155,14 @@ function SheetPlan({
         <span className="text-xs font-medium text-stone-700">פלטה {sheet.index + 1}</span>
         <span className="num text-[11px] text-stone-400">{sheet.usedPct}% ניצולת</span>
       </div>
+      {/*
+        גובה קבוע ורוחב שנגזר ממנו: פלטה שוכבת על רוחב מסך מלא תפסה
+        חצי מסך, ופרויקט עם תשע פלטות היה גלילה בלי סוף. כך רואים
+        כמה פלטות בבת אחת ועדיין קוראים את המידות.
+      */}
       <svg
         viewBox={`0 0 ${sheetH} ${sheetW}`}
-        className="w-full rounded bg-stone-100"
+        className="mx-auto block h-[16vh] max-w-full rounded bg-stone-100"
         style={{ aspectRatio: `${sheetH} / ${sheetW}` }}
       >
         {sheet.parts.map((p) => {

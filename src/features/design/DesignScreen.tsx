@@ -14,7 +14,7 @@ import { useCurrentMember } from '../../workflow/useMember';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
 import { WallThumb } from './WallThumb';
-import { cornerZones } from './plan';
+import { buildPlan, cornerZones, planUnits } from './plan';
 import { analyzeWall, nextFreeX } from './analysis';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { roomDef } from '../../catalog/rooms';
@@ -106,16 +106,27 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const corners = wall && walls && walls.length > 1
     ? cornerZones(walls, wall, allUnits ?? [])
     : undefined;
-  const analysis = wall ? analyzeWall(wall, units, corners) : null;
+  /*
+   * ההתנגשות נמדדת על המלבנים במבט העל ולא על סימון אזור הפינה:
+   * הפינה פתוחה לכל ארגז, והשאלה היחידה היא אם שני ארונות באמת
+   * תופסים את אותו מקום.
+   */
+  const clashing = useMemo(() => {
+    if (!wall || !walls || walls.length < 2) return [];
+    const boxes = planUnits(buildPlan(walls, allUnits ?? []), allUnits ?? []);
+    return [
+      ...new Set(
+        boxes.filter((b) => b.clash && b.unit.wallId === wall.id).map((b) => b.unit.name),
+      ),
+    ];
+  }, [walls, wall, allUnits]);
+  const analysis = wall ? analyzeWall(wall, units, clashing) : null;
 
   async function addItem(item: CatalogItem) {
     if (!wall) return;
-    // ארגז רגיל לא מתחיל בתוך אזור הפינה של הקיר השכן
-    const floorLevel = item.level !== 'wall';
-    const from = floorLevel && !item.corner ? (corners?.startMm ?? 0) : 0;
-    const x = Math.max(nextFreeX(units, item.level), from);
+    const x = nextFreeX(units, item.level);
     // הארגז נכנס בתוך הקיר, ולא נדחף אל מעבר לקצה שלו
-    const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, from);
+    const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, 0);
     const unit = await unitsRepo.add(projectId, wall.id, item, Math.min(x, maxX));
     setLibraryOpen(false);
     setSelectedId(unit.id);
@@ -134,7 +145,35 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         subtitle={subtitle(project.name, project.roomKind, walls.length)}
         action={<QuickCalcButton />}
       >
+        {/*
+          שתי שורות ולא אחת: השורה הראשונה היא מה שעושים על הקיר
+          שעובדים עליו, והשנייה היא איך מסתכלים עליו. שורה אחת
+          ארוכה נגללה הצידה, וכפתור שצריך לגלול אליו הוא כפתור
+          שלא לוחצים עליו.
+        */}
         <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <Tool
+            active={inside}
+            onClick={() => setInside((v) => !v)}
+            icon={inside ? <InsideIcon className="size-4" /> : <FrontsIcon className="size-4" />}
+            label={inside ? 'פנים' : 'חזית'}
+            title={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
+          />
+          <Tool
+            active={nestingOpen}
+            onClick={() => setNestingOpen(true)}
+            icon={<NestIcon className="size-4" />}
+            label="ניסור"
+          />
+          <Tool
+            active={depthOpen}
+            onClick={() => setDepthOpen(true)}
+            icon={<DepthIcon className="size-4" />}
+            label="עומק אחיד"
+          />
+        </div>
+
+        <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <Tool
             active={iso}
             onClick={() => setIso((v) => !v)}
@@ -142,12 +181,12 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             label={iso ? 'תלת־ממד' : 'שטוח'}
             title={iso ? 'חזרה לציור חזית' : 'מבט תלת־ממדי'}
           />
+          {/* מבט על זמין תמיד: משם גם מוסיפים קיר לחדר */}
           <Tool
-            active={inside}
-            onClick={() => setInside((v) => !v)}
-            icon={inside ? <InsideIcon className="size-4" /> : <FrontsIcon className="size-4" />}
-            label={inside ? 'פנים' : 'חזית'}
-            title={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
+            active={planOpen}
+            onClick={() => setPlanOpen((v) => !v)}
+            icon={<PlanIcon className="size-4" />}
+            label="מבט על"
           />
           {/*
             לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
@@ -171,26 +210,6 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             }
             title="לחיצה נוספת מחליפה ציר"
           />
-          <Tool
-            active={nestingOpen}
-            onClick={() => setNestingOpen(true)}
-            icon={<NestIcon className="size-4" />}
-            label="ניסור"
-          />
-          <Tool
-            active={depthOpen}
-            onClick={() => setDepthOpen(true)}
-            icon={<DepthIcon className="size-4" />}
-            label="עומק אחיד"
-          />
-          {/* מבט על זמין תמיד: משם גם מוסיפים קיר לחדר */}
-          <Tool
-            active={planOpen}
-            onClick={() => setPlanOpen((v) => !v)}
-            icon={<PlanIcon className="size-4" />}
-            label="מבט על"
-          />
-
         </div>
         <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
           {walls.length > 1 &&
@@ -260,8 +279,6 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             corners={corners}
             finishHex={finishHex ?? {}}
             onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
-            /* ארגז שהונח על הרצפה נצמד אליה שוב, בלי לחזור ללוח העריכה */
-            onDropUnit={(id, yMm) => yMm === 0 && patchUnit(id, { floorLocked: true })}
           />
           )}
         </div>

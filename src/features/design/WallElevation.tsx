@@ -27,8 +27,6 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onMove: (id: string, xMm: number, yMm: number) => void;
-  /** נקרא בשחרור הגרירה — שם מחליטים אם הארגז נצמד לרצפה */
-  onDropUnit?: (id: string, yMm: number) => void;
   /** הסתרת חזיתות — תצוגת פנים הארונות */
   inside: boolean;
   /** גוון לכל ארגז, לפי מזהה הגוון */
@@ -50,7 +48,6 @@ export function WallElevation({
   selectedId,
   onSelect,
   onMove,
-  onDropUnit,
   inside,
   finishHex,
   measure,
@@ -75,7 +72,6 @@ export function WallElevation({
        באמצע הגרירה הייתה מקפיאה אותה במקום */
     locked: boolean;
     /* המיקום האחרון, כדי להחליט על הצמדה בשחרור ולא תוך כדי */
-    lastY: number;
   } | null>(null);
 
   const padX = 120;
@@ -109,7 +105,6 @@ export function WallElevation({
       originY: unit.yMm,
       scale: 1 / ctm.a,
       locked: !!unit.floorLocked,
-      lastY: unit.yMm,
     };
   }
 
@@ -127,21 +122,16 @@ export function WallElevation({
     const tol = Math.max(SNAP, SNAP_PX * d.scale);
     const x = snapX(rawX, unit, units, wall.lengthMm, corners, tol);
     const y = d.locked ? d.originY : snapY(rawY, unit, units, wall.heightMm, tol);
-    d.lastY = y;
     onMove(d.id, x, y);
   }
 
   function endDrag(e: React.PointerEvent) {
-    const d = drag.current;
-    if (d) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      /*
-       * ההצמדה לרצפה נקבעת בשחרור ולא תוך כדי תנועה: קודם היא
-       * נקבעה בכל pointermove, ולכן הפיקסל הראשון של גרירה כלפי
-       * מעלה נעל את הארגז לרצפה — ומשם הוא כבר לא זז.
-       */
-      if (!d.locked) onDropUnit?.(d.id, d.lastY);
-    }
+    /*
+     * שחרור הגרירה לא נוגע בנעילה לרצפה. מי שכיבה את הנעילה רוצה
+     * לגרור לגובה, וארגז שנח על הרצפה תוך כדי לא אומר שהחליט
+     * להינעל אליה — נעילה חוזרת שם הפכה את המתג לחסר משמעות.
+     */
+    if (drag.current) e.currentTarget.releasePointerCapture(e.pointerId);
     drag.current = null;
   }
 
@@ -618,8 +608,11 @@ function nearest(value: number, targets: number[], limit: number): number {
 
 /**
  * מצמיד ארגז לקצות הקיר ולשכנים באותו מפלס.
- * אזור הפינה תפוס על ידי ארונות הקיר השכן, ולכן ארגז רגיל נעצר לפניו —
- * רק ארגז פינתי מורשה להיכנס לשם.
+ *
+ * הפינה פתוחה לכל ארגז. קודם היא הייתה חסומה לכל מי שאינו ארגז
+ * פינתי, אבל בפינה אמיתית אחד משני הקירות מקבל אותה — וזו החלטה
+ * של הנגר, לא של האפליקציה. מה שכן: קצה הפינה הוא יעד הצמדה,
+ * ואם שני הארונות באמת נכנסים זה בזה מבט העל מסמן את ההתנגשות.
  */
 function snapX(
   x: number,
@@ -629,11 +622,15 @@ function snapX(
   corners: { startMm: number; endMm: number } | undefined,
   tol: number,
 ): number {
-  const blocked = corners && unit.level !== 'wall' && !unit.corner;
-  const min = blocked ? corners.startMm : 0;
-  const max = Math.max((blocked ? wallLength - corners.endMm : wallLength) - unit.widthMm, min);
+  const min = 0;
+  const max = Math.max(wallLength - unit.widthMm, min);
 
   const targets = [min, max];
+  // קצה אזור הפינה — נצמדים אליו מרצון, לא נעצרים בו בכפייה
+  if (corners && unit.level !== 'wall') {
+    if (corners.startMm > 0) targets.push(corners.startMm);
+    if (corners.endMm > 0) targets.push(wallLength - corners.endMm - unit.widthMm);
+  }
   for (const other of units) {
     if (other.id === unit.id || other.level !== unit.level) continue;
     targets.push(other.xMm + other.widthMm, other.xMm - unit.widthMm);

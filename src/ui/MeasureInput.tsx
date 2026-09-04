@@ -17,6 +17,7 @@ export function MeasureInput({
   className = '',
   ariaLabel,
   onFocus,
+  autoFocus,
 }: {
   /** במ"מ */
   value: number;
@@ -30,6 +31,8 @@ export function MeasureInput({
   ariaLabel?: string;
   /** נקרא בנוסף לבחירת הטקסט — למשל כדי לסמן את הציר שנערך */
   onFocus?: () => void;
+  /** מיקוד מיידי — לשדה שנפתח בלחיצה מפורשת, ולכן המקלדת מבוקשת */
+  autoFocus?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   // `inMm` הוא שדה שתמיד במ"מ (כרסום, עובי); השאר לפי יחידת התצוגה
@@ -68,6 +71,7 @@ export function MeasureInput({
       }}
       type="number"
       inputMode="decimal"
+      autoFocus={autoFocus}
       className={className}
     />
   );

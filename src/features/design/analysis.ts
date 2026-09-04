@@ -19,7 +19,8 @@ export interface WallAnalysis {
 export function analyzeWall(
   wall: Wall,
   units: PlacedUnit[],
-  corners?: { startMm: number; endMm: number },
+  /** שמות ארונות שמתנגשים בפועל בארון של קיר אחר, ממבט העל */
+  clashing: string[] = [],
 ): WallAnalysis {
   const floor = units.filter((u) => u.level !== 'wall');
   const upper = units.filter((u) => u.level === 'wall');
@@ -70,19 +71,13 @@ export function analyzeWall(
     }
   }
 
-  // ארון רגיל שנכנס לאזור הפינה יתנגש בארון של הקיר השכן
-  if (corners) {
-    for (const u of units) {
-      if (u.level === 'wall' || u.corner) continue;
-      if (corners.startMm > 0 && u.xMm < corners.startMm) {
-        warnings.push(`${u.name} נכנס לפינה — שם יושבים ארונות הקיר הקודם`);
-        break;
-      }
-      if (corners.endMm > 0 && u.xMm + u.widthMm > wall.lengthMm - corners.endMm) {
-        warnings.push(`${u.name} נכנס לפינה — שם יושבים ארונות הקיר הבא`);
-        break;
-      }
-    }
+  /*
+   * התנגשות אמיתית בפינה, ולא "נכנס לאזור שסומן".
+   * הפינה פתוחה לכל ארגז; מה שאסור זה ששני ארונות יתפסו את אותו
+   * מקום בחדר — וזה נמדד במבט העל, על המלבנים עצמם.
+   */
+  for (const name of clashing) {
+    warnings.push(`${name} מתנגש בארון על הקיר השכן`);
   }
 
   return { floorUsedMm, wallUsedMm, freeMm: wall.lengthMm - floorUsedMm, warnings };

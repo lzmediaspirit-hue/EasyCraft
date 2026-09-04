@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { unitZones, zoneBands, zoneColumns } from '../../catalog/zones';
 import { shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
@@ -23,11 +24,42 @@ import type { PlacedUnit, Wall } from '../../db/types';
  */
 
 const COS30 = Math.cos(Math.PI / 6);
-const SIN30 = 0.5;
 
-/** נקודה בעולם → נקודה על המסך, בהיטל איזומטרי. */
-function project(x: number, y: number, z: number): [number, number] {
-  return [(x - z) * COS30, (x + z) * SIN30 - y];
+/** זווית המבט: סיבוב סביב הציר האנכי, והגובה שממנו מסתכלים. */
+export interface IsoView {
+  /** מעלות. 0 = המבט ההתחלתי */
+  yawDeg: number;
+  /**
+   * שיטוח המישור האופקי, בין מבט כמעט מהצד למבט כמעט מלמעלה.
+   * 0.5 הוא ההיטל האיזומטרי המוכר.
+   */
+  rise: number;
+}
+
+const DEFAULT_VIEW: IsoView = { yawDeg: 0, rise: 0.5 };
+const MIN_RISE = 0.12;
+const MAX_RISE = 0.95;
+
+/** מרחק בפיקסלים שמעליו הגרירה היא סיבוב מבט ולא בחירת ארון. */
+const ORBIT_SLOP = 6;
+
+/**
+ * בונה את פונקציית ההיטל לזווית מבט נתונה.
+ * הסיבוב נעשה סביב הציר האנכי לפני ההיטל, ולכן החדר מסתובב והמידות
+ * נשארות נכונות — זו עדיין הטלה מקבילה ולא פרספקטיבה.
+ */
+function projector(view: IsoView) {
+  const rad = (view.yawDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const project = (x: number, y: number, z: number): [number, number] => {
+    const rx = x * cos - z * sin;
+    const rz = x * sin + z * cos;
+    return [(rx - rz) * COS30, (rx + rz) * view.rise - y];
+  };
+  /** המרחק מהצופה — לפיו מסודר סדר הציור, ולפיו קיר הוא רקע או חסימה */
+  const toward = (x: number, z: number): number => x * (cos + sin) + z * (cos - sin);
+  return { project, toward };
 }
 
 /**
@@ -45,6 +77,7 @@ type Face = { points: string; fill: string; key: string; depth: number; unitId?:
  * אחר. ההצללה היא מה שנותן לעין את העובי בלי לצייר אור אמיתי.
  */
 function box(
+  view: ReturnType<typeof projector>,
   tf: Tf,
   x: number,
   y: number,
@@ -57,14 +90,14 @@ function box(
 ): Face[] {
   const p = (dx: number, dy: number, dz: number) => {
     const [wx, wz] = tf(x + dx, z + dz);
-    return project(wx, y + dy, wz).join(',');
+    return view.project(wx, y + dy, wz).join(',');
   };
   const front = [p(0, 0, d), p(w, 0, d), p(w, h, d), p(0, h, d)].join(' ');
   const top = [p(0, h, 0), p(w, h, 0), p(w, h, d), p(0, h, d)].join(' ');
   const side = [p(w, 0, 0), p(w, h, 0), p(w, h, d), p(w, 0, d)].join(' ');
   // מיון לפי המרחק מהצופה: מה שקרוב יותר מצויר אחרון
   const [cx, cz] = tf(x + w / 2, z + d / 2);
-  const depth = cx + cz + y * 0.001;
+  const depth = view.toward(cx, cz) + y * 0.001;
   return [
     { points: side, fill: shade(tone, 0.78), key: `${key}-s`, depth },
     { points: top, fill: shade(tone, 1.12), key: `${key}-t`, depth },
@@ -103,6 +136,16 @@ export function WallIso({
   finishHex: Record<string, string>;
 }) {
   const t = MATERIAL.carcassMm;
+  /*
+   * זווית המבט נשמרת במצב ולא בהגדרות: היא שייכת לרגע ההסתכלות,
+   * לא לפרויקט. גרירה על הציור מסובבת אופקית ומרימה או מנמיכה את
+   * נקודת המבט — אותה תנועה שעושים ביד על מודל אמיתי.
+   */
+  const [view, setView] = useState<IsoView>(DEFAULT_VIEW);
+  const orbit = useRef<{ x: number; y: number; from: IsoView; moved: boolean } | null>(null);
+  const v = projector(view);
+  const project = v.project;
+
   const plan = buildPlan(walls, units);
   const faces: Face[] = [];
   const backdrops: {
@@ -134,7 +177,8 @@ export function WallIso({
      * הקרוב לצופה: קיר שעומד בין הצופה לחדר היה מסתיר את הכול,
      * וחדר סגור היה נראה קופסה אטומה במקום חדר.
      */
-    const toward = -sin + cos; // המכפלה הפנימית של הנורמל הפנימי עם כיוון הצופה
+    // המכפלה הפנימית של הנורמל הפנימי של הקיר עם הכיוון אל הצופה
+    const toward = v.toward(-sin, cos);
     backdrops.push({
       key: w0.id,
       floor: poly([at(0, 0, 0), at(w0.lengthMm, 0, 0), at(w0.lengthMm, 0, 800), at(0, 0, 800)]),
@@ -208,9 +252,9 @@ export function WallIso({
       if (def.noCarcass) {
         const th = u.panelThicknessMm ?? MATERIAL.frontMm;
         if (def.noCarcass === 'horizontal') {
-          add(box(tf, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`));
+          add(box(v, tf, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`));
         } else {
-          add(box(tf, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`));
+          add(box(v, tf, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`));
         }
         continue;
       }
@@ -218,18 +262,18 @@ export function WallIso({
       // רגליים
       if (socle > 0) {
         // הסוקל נסוג מהחזית אבל יושב על הרצפה במלוא הרוחב
-        add(box(tf, x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`));
+        add(box(v, tf, x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`));
       }
 
       // גוף: שני צדדים, תחתית, תקרה וגב
       const gs = u.glassSides ?? {};
-      if (!gs.start) add(box(tf, x, y, 0, t, h, d, carcassTone, `${u.id}-l`));
-      if (!gs.end) add(box(tf, x + w - t, y, 0, t, h, d, carcassTone, `${u.id}-r`));
-      add(box(tf, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`));
-      add(box(tf, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`));
+      if (!gs.start) add(box(v, tf, x, y, 0, t, h, d, carcassTone, `${u.id}-l`));
+      if (!gs.end) add(box(v, tf, x + w - t, y, 0, t, h, d, carcassTone, `${u.id}-r`));
+      add(box(v, tf, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`));
+      add(box(v, tf, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`));
       if ((u.backKind ?? 'thin') !== 'none') {
         add(
-          box(tf, x + t, y + t, 0, w - 2 * t, h - 2 * t, 6, shade(carcassTone, 0.86), `${u.id}-bk`),
+          box(v, tf, x + t, y + t, 0, w - 2 * t, h - 2 * t, 6, shade(carcassTone, 0.86), `${u.id}-bk`),
         );
       }
 
@@ -258,6 +302,7 @@ export function WallIso({
             for (const sy of shelfYs({ shelves, gaps: cell.content.shelfGapsMm }, 0, zh)) {
               add(
                 box(
+                  v,
                   tf,
                   cx,
                   zBottom + (zh - sy),
@@ -272,7 +317,7 @@ export function WallIso({
             }
           }
           if (cell.content.kind === 'rod') {
-            add(box(tf, cx, zBottom + zh * 0.86, d / 2 - 15, cw, 30, 30, '#a8a29e', `${zk}-rod-${i}`));
+            add(box(v, tf, cx, zBottom + zh * 0.86, d / 2 - 15, cw, 30, 30, '#a8a29e', `${zk}-rod-${i}`));
           }
           if (cell.content.kind === 'drawers') {
             const rows = cell.content.drawers ?? 1;
@@ -280,6 +325,7 @@ export function WallIso({
               const dh = zh / rows;
               add(
                 box(
+                  v,
                   tf,
                   cx + 10,
                   zBottom + r * dh + 10,
@@ -296,7 +342,7 @@ export function WallIso({
           cx += cw;
           // קושרת בין תא לתא
           if (i < cells.length - 1) {
-            add(box(tf, cx, zBottom, 0, t, zh, d - 20, carcassTone, `${zk}-div-${i}`));
+            add(box(v, tf, cx, zBottom, 0, t, zh, d - 20, carcassTone, `${zk}-div-${i}`));
             cx += t;
           }
         });
@@ -310,6 +356,7 @@ export function WallIso({
           for (let k = 0; k < doors; k++) {
             add(
               box(
+                v,
                 tf,
                 x + (w / doors) * k + 2,
                 zBottom + 2,
@@ -330,9 +377,9 @@ export function WallIso({
       const pd = u.exposedDepthMm ?? d + MATERIAL.exposedExtraMm;
       const eTone = u.exposedFinishId ? (finishHex[u.exposedFinishId] ?? tone) : tone;
       if (e.start)
-        add(box(tf, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`));
-      if (e.end) add(box(tf, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`));
-      if (e.top) add(box(tf, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`));
+        add(box(v, tf, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`));
+      if (e.end) add(box(v, tf, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`));
+      if (e.top) add(box(v, tf, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`));
     }
   }
 
@@ -348,12 +395,49 @@ export function WallIso({
   const vbH = Math.max(...ys) - Math.min(...ys) + pad * 2;
   const stroke = Math.max(vbW / 700, 3);
 
+  /*
+   * גרירה מסובבת, נגיעה בוחרת.
+   * הבחירה נעשית בהרפיה ולא בלחיצה, כי אחרת כל תחילת סיבוב שהתחילה
+   * על ארון הייתה בוחרת אותו — והלוח היה נפתח באמצע התנועה.
+   */
+  const moved = () => !!orbit.current?.moved;
+
   return (
+    <div className="relative flex min-h-0 w-full flex-1 flex-col">
     <svg
       viewBox={`${minX} ${minY} ${vbW} ${vbH}`}
-      className="max-h-full min-h-0 w-full flex-1 select-none"
+      className="max-h-full min-h-0 w-full flex-1 touch-none select-none"
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onSelect(null);
+        e.currentTarget.setPointerCapture(e.pointerId);
+        orbit.current = { x: e.clientX, y: e.clientY, from: view, moved: false };
+      }}
+      onPointerMove={(e) => {
+        const o = orbit.current;
+        if (!o) return;
+        const dx = e.clientX - o.x;
+        const dy = e.clientY - o.y;
+        if (!o.moved && Math.hypot(dx, dy) < ORBIT_SLOP) return;
+        o.moved = true;
+        const box = e.currentTarget.getBoundingClientRect();
+        setView({
+          // סיבוב מלא כשגוררים על פני רוחב המסך פעמיים
+          yawDeg: o.from.yawDeg - (dx / Math.max(box.width, 1)) * 180,
+          rise: Math.min(
+            Math.max(o.from.rise + (dy / Math.max(box.height, 1)) * 1.2, MIN_RISE),
+            MAX_RISE,
+          ),
+        });
+      }}
+      onPointerUp={(e) => {
+        const wasOrbit = moved();
+        orbit.current = null;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        if (wasOrbit) return;
+        const id = (e.target as Element).getAttribute?.('data-unit') ?? null;
+        onSelect(id);
+      }}
+      onPointerCancel={() => {
+        orbit.current = null;
       }}
     >
       {backdrops.map((b) => (
@@ -386,7 +470,7 @@ export function WallIso({
           stroke={f.unitId === selectedId ? '#a06236' : '#57534e'}
           strokeWidth={f.unitId === selectedId ? stroke * 1.6 : stroke * 0.7}
           strokeLinejoin="round"
-          onPointerDown={() => f.unitId && onSelect(f.unitId)}
+          data-unit={f.unitId}
           className={f.unitId ? 'cursor-pointer' : undefined}
         />
       ))}
@@ -414,5 +498,16 @@ export function WallIso({
         </g>
       ))}
     </svg>
+
+    {/* חזרה לזווית ההתחלתית, אחרי שהסתובבנו למקום שקשה לחזור ממנו */}
+    {(view.yawDeg !== DEFAULT_VIEW.yawDeg || view.rise !== DEFAULT_VIEW.rise) && (
+      <button
+        onClick={() => setView(DEFAULT_VIEW)}
+        className="absolute end-1 top-1 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-stone-600 shadow-sm transition-colors hover:text-oak-700"
+      >
+        זווית התחלתית
+      </button>
+    )}
+    </div>
   );
 }

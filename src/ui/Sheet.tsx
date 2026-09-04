@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { BackIcon, CloseIcon } from './icons';
 
 type Props = {
@@ -15,7 +16,14 @@ type Props = {
   onBack?: () => void;
 };
 
-/** מגירה שנפתחת מתחתית המסך. מציגה דבר אחד בכל פעם. */
+/**
+ * מגירה שנפתחת מתחתית המסך. מציגה דבר אחד בכל פעם.
+ *
+ * המגירה נשתלת ישירות ב-body ולא במקום שבו נכתבה. `position: fixed`
+ * מתייחס לאב שיש עליו `filter`, `transform` או `backdrop-blur`, וכותרת
+ * המסך מטושטשת — כך שמגירה שנפתחה מתוכה נחתכה לגובה הכותרת. השתילה
+ * מוציאה אותה מהשרשרת הזו, ומכאן היא תמיד ממלאת את המסך.
+ */
 export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -27,7 +35,7 @@ export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack
 
   const Body = onSubmit ? 'form' : 'div';
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <button
         type="button"
@@ -76,6 +84,7 @@ export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack
           </div>
         )}
       </Body>
-    </div>
+    </div>,
+    document.body,
   );
 }

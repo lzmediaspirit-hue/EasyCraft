@@ -58,8 +58,13 @@ export function wallDepth(wall: Wall, units: PlacedUnit[]): number {
 }
 
 /**
- * אזורי הפינה של קיר: הרוחב בכל קצה שנתפס על ידי הארונות של הקיר
- * השכן. ארון רגיל שנכנס לשם יתנגש בפועל.
+ * אזורי הפינה של קיר: הרוחב בכל קצה שכבר תפוס בפועל על ידי ארון
+ * של הקיר השכן.
+ *
+ * זו הצגה ולא חסימה — הנגר הוא שמחליט על איזה מהשניים הפינה
+ * נופלת. נספרים רק ארונות שבאמת נוגעים בפינה המשותפת: ארון בקצה
+ * הרחוק של הקיר השכן לא תופס כאן כלום, וסימון שלו היה חוסם שטח
+ * פנוי בלי סיבה.
  */
 export function cornerZones(
   walls: Wall[],
@@ -70,9 +75,21 @@ export function cornerZones(
   const prev = i > 0 ? walls[i - 1] : undefined;
   const next = i < walls.length - 1 ? walls[i + 1] : undefined;
   return {
-    startMm: prev ? wallDepth(prev, units) : 0,
-    endMm: next ? wallDepth(next, units) : 0,
+    // הפינה עם הקיר הקודם היא הסוף שלו ותחילת שלנו
+    startMm: prev ? depthAt(prev, units, 'end') : 0,
+    endMm: next ? depthAt(next, units, 'start') : 0,
   };
+}
+
+/** עומק הארון העמוק ביותר שנוגע בקצה מסוים של הקיר. */
+function depthAt(wall: Wall, units: PlacedUnit[], side: 'start' | 'end'): number {
+  const touching = units.filter(
+    (u) =>
+      u.wallId === wall.id &&
+      u.level !== 'wall' &&
+      (side === 'start' ? u.xMm <= 1 : u.xMm + u.widthMm >= wall.lengthMm - 1),
+  );
+  return touching.reduce((max, u) => Math.max(max, u.depthMm), 0);
 }
 
 /** ארון אחד במבט על, כמלבן בקואורדינטות החדר. */

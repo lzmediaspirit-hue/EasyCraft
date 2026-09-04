@@ -9,7 +9,7 @@ import { InteriorEditor } from './InteriorEditor';
 import { FinishPicker } from './FinishPicker';
 import { BoardSheet } from '../settings/BoardSheet';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
-import { cm } from '../../ui/units';
+import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { BookmarkIcon, CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
 import type {
@@ -83,6 +83,8 @@ export function UnitEditor({
   onClose: () => void;
 }) {
   const [axis, setAxis] = useState<Axis>('w');
+  /** שדה מידה מדויקת, נפתח מהעיפרון שבקצה הקרוסלה */
+  const [typing, setTyping] = useState(false);
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
   const [addingBoard, setAddingBoard] = useState(false);
@@ -136,6 +138,8 @@ export function UnitEditor({
     const chipBox = chip.getBoundingClientRect();
     row.scrollLeft += chipBox.left + chipBox.width / 2 - (rowBox.left + rowBox.width / 2);
   }, [axis, currentValue]);
+
+  const axisLabel = axis === 'w' ? 'רוחב' : axis === 'h' ? 'גובה' : 'עומק';
 
   const applyStandard = (mm: number) =>
     onChange(axis === 'w' ? { widthMm: mm } : axis === 'h' ? { heightMm: mm } : { depthMm: mm });
@@ -199,21 +203,18 @@ export function UnitEditor({
           onSelect={() => setAxis('w')}
           label="רוחב"
           value={unit.widthMm}
-          onChange={(mm) => onChange({ widthMm: mm })}
         />
         <AxisTab
           active={axis === 'h'}
           onSelect={() => setAxis('h')}
           label="גובה"
           value={unit.heightMm}
-          onChange={(mm) => onChange({ heightMm: mm })}
         />
         <AxisTab
           active={axis === 'd'}
           onSelect={() => setAxis('d')}
           label="עומק"
           value={unit.depthMm}
-          onChange={(mm) => onChange({ depthMm: mm })}
         />
       </div>
 
@@ -225,22 +226,58 @@ export function UnitEditor({
         </p>
       )}
 
-      <div ref={chipRow} className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
-        {options.map((mm) => (
-          <button
-            key={mm}
-            ref={mm === currentValue ? activeChip : undefined}
-            onClick={() => applyStandard(mm)}
-            className={`num shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-              mm === currentValue
-                ? 'bg-oak-600 text-white'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
-          >
-            {cm(mm)}
-          </button>
-        ))}
+      {/*
+        הקרוסלה נגמרת לפני העיפרון ולא מתחתיו: העיפרון יושב מחוץ
+        לאזור הגלילה, ולכן הוא תמיד במקום אחד ואפשר להגיע אליו בלי
+        לגלול עד הסוף.
+      */}
+      <div className="mt-2 flex items-center gap-1.5">
+        <div ref={chipRow} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-1">
+          {options.map((mm) => (
+            <button
+              key={mm}
+              ref={mm === currentValue ? activeChip : undefined}
+              onClick={() => {
+                setTyping(false);
+                applyStandard(mm);
+              }}
+              className={`num shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                mm === currentValue
+                  ? 'bg-oak-600 text-white'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              {cm(mm)}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setTyping((v) => !v)}
+          aria-pressed={typing}
+          aria-label={`הקלדת ${axisLabel} מדויק`}
+          title="מידה מדויקת"
+          className={`shrink-0 rounded-full p-2 transition-colors ${
+            typing ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+          }`}
+        >
+          <PencilIcon className="size-4" />
+        </button>
       </div>
+
+      {typing && (
+        <label className="mt-1.5 flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-2">
+          <span className="text-[11px] text-stone-500">{axisLabel}</span>
+          <MeasureInput
+            value={currentValue}
+            onChange={applyStandard}
+            minMm={50}
+            autoFocus
+            ariaLabel={`${axisLabel} מדויק`}
+            className="num min-w-0 flex-1 bg-transparent text-end text-base font-semibold text-stone-900 focus:outline-none"
+          />
+          <span className="text-[11px] text-stone-400">{unitLabel()}</span>
+        </label>
+      )}
 
       {unit.panelThicknessMm !== undefined && (
         <div className="mt-2">
@@ -337,7 +374,7 @@ export function UnitEditor({
                 label="עומק הפינה המתה"
                 hint="החלק שנחסם על ידי הארון שעל הקיר הסמוך"
               >
-                {[200, 250, 300, 350, 400].map((mm) => (
+                {[200, 250, 300, 350, 400, 450, 500, 550, 600, 650].map((mm) => (
                   <Pill
                     key={mm}
                     active={mm === (unit.blindMm ?? 300)}
@@ -358,7 +395,7 @@ export function UnitEditor({
                   ariaLabel="עומק הפינה המתה"
                   className="num w-14 bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
                 />
-                <span className="text-[10px] text-stone-400">ס״מ</span>
+                <span className="text-[10px] text-stone-400">{unitLabel()}</span>
               </label>
             </>
           )}
@@ -539,31 +576,30 @@ function AxisTab({
   onSelect,
   label,
   value,
-  onChange,
 }: {
   active: boolean;
   onSelect: () => void;
   label: string;
   value: number;
-  onChange: (mm: number) => void;
 }) {
+  /*
+   * הלשונית בוחרת ציר ומראה את המידה שלו — היא כבר לא שדה הקלדה.
+   * מקלדת שקפצה מכל נגיעה במספר כיסתה חצי מסך בדיוק כשרוצים לראות
+   * את הקיר; מי שצריך מידה שאינה בקרוסלה לוחץ על העיפרון שבקצה.
+   */
   return (
-    <div
+    <button
       onClick={onSelect}
+      aria-pressed={active}
       className={`min-w-0 flex-1 rounded-xl px-2 py-1.5 transition-colors ${
         active ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
       }`}
     >
       <span className="block text-center text-[10px] leading-tight opacity-70">{label}</span>
-      <MeasureInput
-        value={value}
-        onChange={onChange}
-        onFocus={onSelect}
-        minMm={50}
-        ariaLabel={label}
-        className="num block w-full bg-transparent text-center text-sm leading-tight font-semibold focus:outline-none"
-      />
-    </div>
+      <span className="num block w-full text-center text-sm leading-tight font-semibold">
+        {cm(value)}
+      </span>
+    </button>
   );
 }
 
