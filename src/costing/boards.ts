@@ -3,10 +3,11 @@ import { nestParts, type NestResult, type PartGrain } from './nesting';
 import { MATERIAL } from '../catalog/standards';
 import { countDrawers, countShelves, unitCells, unitZones, zoneCells } from '../catalog/zones';
 import type {
-  Board,
-  BoardMaterial,
+  Material,
+  PartChoice,
   PartRole,
   PlacedUnit,
+  Project,
   ProjectPrice,
   Finish,
   Settings,
@@ -48,8 +49,10 @@ export interface Part {
 }
 
 export interface BoardLine {
-  board: Board;
-  /** הגוון שהחלקים האלה נצבעים בו — לוח אחד יכול לשמש בכמה גוונים */
+  /** מפתח השורה, `finishId:materialId` — לפיו נדרס המחיר בפרויקט */
+  key: string;
+  material: Material;
+  /** הגוון שהחלקים האלה נצבעים בו — חומר אחד משמש בכמה גוונים */
   finish?: Finish;
   areaM2: number;
   sheets: number;
@@ -85,9 +88,10 @@ export interface GlassDoorLine {
   consumerTotal: number;
 }
 
-/** החלקים שנחתכים מלוח וגוון מסוימים, והפריסה שלהם על הפלטות. */
+/** החלקים שנחתכים מחומר וגוון מסוימים, והפריסה שלהם על הפלטות. */
 export interface PartGroup {
-  board: Board;
+  key: string;
+  material: Material;
   finish?: Finish;
   parts: Part[];
   /**
@@ -492,53 +496,79 @@ export function unitLedMeters(u: PlacedUnit): number {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * הגוון והחומר שחלים על חלק מסוים בארגז.
+ *
+ * הארגז מנצח על הפרויקט, והפרויקט על ברירת המחדל של העסק. כך אפשר
+ * לקבוע גוף אחד לכל המטבח ולשנות ארגז אחד בלי שהשאר יזוזו.
+ */
+export function partChoice(u: PlacedUnit, role: PartRole, project?: Project): PartChoice {
+  const fromProject = project?.defaults?.[role];
+  const finishId =
+    role === 'carcass'
+      ? u.carcassFinishId
+      : role === 'front'
+        ? (u.frontFinishId ?? u.finishId)
+        : role === 'exposed'
+          ? // דופן זרה נופלת לגוון החזיתות רק אם לא נבחר לה גוון משלה
+            (u.exposedFinishId ?? u.frontFinishId ?? u.finishId)
+          : u.backFinishId;
+  const materialId =
+    role === 'carcass'
+      ? u.carcassMaterialId
+      : role === 'front'
+        ? u.frontMaterialId
+        : role === 'exposed'
+          ? (u.exposedMaterialId ?? u.frontMaterialId)
+          : u.backMaterialId;
+  return {
+    finishId: finishId ?? fromProject?.finishId,
+    materialId: materialId ?? fromProject?.materialId,
+  };
+}
+
 export function projectCosting(
   units: PlacedUnit[],
-  boards: Board[],
+  materials: Material[],
   settings: Settings,
   overrides: ProjectPrice[] = [],
   finishes: Finish[] = [],
+  project?: Project,
 ): ProjectCosting {
 
   /*
-   * שטח מצטבר לפי לוח וגוון, ולא רק לפי תפקיד.
-   * נגרייה עובדת עם כמה סוגי MDF באותו פרויקט, וכל אחד מהם מוזמן
-   * בנפרד — ולכן רשימת ההזמנה חייבת להפריד ביניהם ולציין את הגוון.
+   * שטח מצטבר לפי חומר וגוון.
+   * נגרייה עובדת עם כמה גוונים על אותו חומר באותו פרויקט, וכל
+   * צירוף מוזמן בנפרד — ולכן רשימת ההזמנה חייבת להפריד ביניהם.
    */
   const areaByKey = new Map<
     string,
-    { boardId: string; finishId?: string; areaM2: number; parts: Part[] }
+    { materialId: string; finishId?: string; areaM2: number; parts: Part[] }
   >();
-  /*
-   * הלוח נגזר מהגוון שנבחר לחלק, ולא מ"תפקיד" שהוגדר על הלוח:
-   * אותו MDF משמש גם לחזית וגם לגוף, ואותו גוון קיים על כמה
-   * חומרים. כשעוד לא נבחר גוון — נופלים לחומר הסביר לתפקיד, כדי
-   * שפרויקט ישן ימשיך להתמחר.
-   */
-  const fallbackMaterial: Record<PartRole, BoardMaterial> = {
-    carcass: 'sandwich',
-    front: 'mdf',
-    exposed: 'mdf',
-    back: 'other',
-  };
-  const byMaterial = (m: BoardMaterial) => boards.find((b) => b.material === m)?.id;
 
-  const resolve = (u: PlacedUnit, role: PartRole): { boardId?: string; finishId?: string } => {
-    const finishId =
-      role === 'carcass'
-        ? u.carcassFinishId
-        : role === 'front'
-          ? (u.frontFinishId ?? u.finishId)
-          : role === 'exposed'
-            ? // דופן זרה נופלת לגוון החזיתות רק אם לא נבחר לה גוון משלה
-              (u.exposedFinishId ?? u.frontFinishId ?? u.finishId)
-            : u.backFinishId;
-    const finish = finishId ? finishes.find((f) => f.id === finishId) : undefined;
+  /*
+   * כשלא נבחר חומר לחלק — לא לארגז ולא לפרויקט — נופלים לחומר
+   * סביר לפי מיקומו ברשימה: הראשון לגוף, השני לחזית, והאחרון
+   * לגב. זה ניחוש, אבל הוא שומר על פרויקט ישן מתומחר במקום
+   * להשאיר אותו ריק.
+   */
+  const fallbackMaterial = (role: PartRole): string | undefined => {
+    if (!materials.length) return undefined;
+    if (role === 'back') return materials[materials.length - 1].id;
+    if (role === 'carcass') return materials[0].id;
+    return (materials[1] ?? materials[0]).id;
+  };
+
+  const resolve = (u: PlacedUnit, role: PartRole) => {
+    const choice = partChoice(u, role, project);
+    const finish = choice.finishId ? finishes.find((f) => f.id === choice.finishId) : undefined;
     return {
-      boardId: finish?.boardId ?? byMaterial(fallbackMaterial[role]) ?? boards[0]?.id,
+      materialId: choice.materialId ?? fallbackMaterial(role),
       finishId: finish?.id,
+      finish,
     };
   };
+
   let drawers = 0;
   let doors = 0;
   let exposedPanels = 0;
@@ -547,6 +577,8 @@ export function projectCosting(
   let lifts = 0;
   let handles = 0;
   let edgeMeters = 0;
+  /** מטרי קנט לפי גוון, כדי לתמחר כל אחד במחיר שלו */
+  const edgeByFinish = new Map<string, number>();
   /** חלקים שלא נמצא להם לוח — נספרים כדי שאפשר יהיה להתריע עליהם */
   let unpriced = 0;
   const glassMap = new Map<string, GlassDoorLine>();
@@ -555,19 +587,29 @@ export function projectCosting(
     for (const part of unitParts(u, settings)) {
       // שטח נטו. הכרסום נאכל בקווי החיתוך, וזה כבר עניינו של מנוע הניסור
       const area = (part.widthMm * part.heightMm) / 1_000_000;
-      const { boardId, finishId } = resolve(u, part.role);
-      // אין לוחות בכלל — אין למה לשייך את החלק, ולא נעלים אותו בשקט
-      if (!boardId) {
+      const { materialId, finishId } = resolve(u, part.role);
+      // אין חומרים בכלל — אין למה לשייך את החלק, ולא נעלים אותו בשקט
+      if (!materialId) {
         unpriced += part.qty;
         continue;
       }
-      const key = `${boardId}:${finishId ?? ''}`;
-      const row = areaByKey.get(key) ?? { boardId, finishId, areaM2: 0, parts: [] };
+      const key = `${finishId ?? ''}:${materialId}`;
+      const row = areaByKey.get(key) ?? { materialId, finishId, areaM2: 0, parts: [] };
       row.areaM2 += area * part.qty;
       row.parts.push(part);
       areaByKey.set(key, row);
     }
-    edgeMeters += unitEdgeMeters(u, settings);
+    /*
+     * הקנט נספר לפי הגוון של החזיתות: קנט תואם ללוח הוא המצב
+     * הרגיל, ולכן מטר קנט של גוון יקר עולה אחרת ממטר של גוון זול.
+     */
+    const um = unitEdgeMeters(u, settings);
+    edgeMeters += um;
+    if (um > 0) {
+      const front = resolve(u, 'front');
+      const k = front.finishId ?? '';
+      edgeByFinish.set(k, (edgeByFinish.get(k) ?? 0) + um);
+    }
     drawers += countDrawers(u);
     doors += effectiveDoors(u);
     lifts += liftCount(u);
@@ -591,34 +633,36 @@ export function projectCosting(
     ledMeters += unitLedMeters(u);
   }
 
-  // שורה לכל צירוף של לוח וגוון — כך נראית הזמנה אמיתית מהספק
+  // שורה לכל צירוף של גוון וחומר — כך נראית הזמנה אמיתית מהספק
   const lines: BoardLine[] = [];
   const groups: PartGroup[] = [];
-  for (const row of areaByKey.values()) {
-    const board = boards.find((b) => b.id === row.boardId);
-    if (!board || row.areaM2 <= 0) continue;
+  for (const [key, row] of areaByKey) {
+    const material = materials.find((m) => m.id === row.materialId);
+    if (!material || row.areaM2 <= 0) continue;
 
-    const override = overrides.find((o) => o.boardId === board.id);
+    const override = overrides.find((o) => o.lineKey === key);
     const finish = row.finishId ? finishes.find((f) => f.id === row.finishId) : undefined;
-    // גוון עשוי לעלות אחרת מהלוח הבסיסי
-    const factoryPrice = override?.factoryPrice ?? finish?.factoryPrice ?? board.factoryPrice;
-    const consumerPrice = override?.consumerPrice ?? finish?.consumerPrice ?? board.consumerPrice;
+    // המחיר יושב בהצטלבות: אותו גוון עולה אחרת על סנדוויץ׳ ועל MDF
+    const listed = finish?.prices?.[material.id];
+    const factoryPrice = override?.factoryPrice ?? listed?.factoryPrice ?? 0;
+    const consumerPrice = override?.consumerPrice ?? listed?.consumerPrice ?? 0;
     /*
      * כמה פלטות באמת צריך — לפי פריסה על הלוח.
-     * לוח עם טקסטורה מחייב כיוון סיבים קבוע בחזיתות ובצדדים, ולכן
-     * הוא כמעט תמיד יבזבז יותר מלוח חלק. זה הבדל שהנגר משלם עליו,
+     * גוון עם טקסטורה מחייב כיוון סיבים קבוע בחזיתות ובצדדים, ולכן
+     * הוא כמעט תמיד יבזבז יותר מגוון חלק. זה הבדל שהנגר משלם עליו,
      * ולכן הוא צריך להופיע במחיר ולא להיעלם בתוך אחוז ניצולת.
      */
     const nest = nestParts(row.parts, {
-      sheetWidthMm: board.sheetWidthMm,
-      sheetHeightMm: board.sheetHeightMm,
+      sheetWidthMm: material.sheetWidthMm,
+      sheetHeightMm: material.sheetHeightMm,
       kerfMm: settings.kerfMm,
       hasGrain: !!finish?.hasGrain,
     });
     const sheets = nest.sheets.length;
 
     lines.push({
-      board,
+      key,
+      material,
       finish,
       areaM2: row.areaM2,
       sheets,
@@ -628,9 +672,9 @@ export function projectCosting(
       consumerTotal: sheets * consumerPrice,
       overridden: !!override,
     });
-    groups.push({ board, finish, parts: row.parts, nest });
+    groups.push({ key, material, finish, parts: row.parts, nest });
   }
-  lines.sort((a, b) => a.board.sortOrder - b.board.sortOrder || b.areaM2 - a.areaM2);
+  lines.sort((a, b) => a.material.sortOrder - b.material.sortOrder || b.areaM2 - a.areaM2);
 
   // דלתות הזכוכית מתומחרות לפי שטח ולא לפי פלטה
   const glass = [...glassMap.values()].map((g) => {
@@ -671,16 +715,24 @@ export function projectCosting(
   ].filter((l) => l.qty > 0);
 
   const boardsFactoryTotal = lines.reduce((n, l) => n + l.factoryTotal, 0);
-  // קנט נמכר במטר רץ, ולכן הוא שורת אביזר ולא שורת פלטה
-  if (edgeMeters > 0 && (settings.edgeConsumerPerM > 0 || settings.edgeFactoryPerM > 0)) {
+  /*
+   * קנט נמכר במטר רץ, ולכן הוא שורת אביזר ולא שורת פלטה — ושורה
+   * לכל גוון, כי קנט תואם ללוח נקנה בגוון של הלוח ובמחיר שלו.
+   */
+  for (const [finishId, meters] of edgeByFinish) {
+    const finish = finishId ? finishes.find((f) => f.id === finishId) : undefined;
+    const factoryPrice = finish?.edgeFactoryPerM ?? settings.edgeFactoryPerM;
+    const consumerPrice = finish?.edgeConsumerPerM ?? settings.edgeConsumerPerM;
+    if (factoryPrice <= 0 && consumerPrice <= 0) continue;
+    const qty = Math.ceil(meters);
     accessories.push({
-      label: 'קנט',
-      qty: Math.ceil(edgeMeters),
+      label: finish ? `קנט ${finish.name}` : 'קנט',
+      qty,
       unit: 'מ׳',
-      factoryPrice: settings.edgeFactoryPerM,
-      consumerPrice: settings.edgeConsumerPerM,
-      factoryTotal: Math.ceil(edgeMeters) * settings.edgeFactoryPerM,
-      consumerTotal: Math.ceil(edgeMeters) * settings.edgeConsumerPerM,
+      factoryPrice,
+      consumerPrice,
+      factoryTotal: qty * factoryPrice,
+      consumerTotal: qty * consumerPrice,
     });
   }
 

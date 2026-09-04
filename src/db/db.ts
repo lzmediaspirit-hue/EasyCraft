@@ -1,10 +1,10 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
   Attachment,
-  Board,
   CatalogItem,
   Customer,
   Finish,
+  Material,
   PlacedUnit,
   Project,
   ProjectPrice,
@@ -25,7 +25,7 @@ export const db = new Dexie('easycraft') as Dexie & {
   walls: EntityTable<Wall, 'id'>;
   units: EntityTable<PlacedUnit, 'id'>;
   catalog: EntityTable<CatalogItem, 'id'>;
-  boards: EntityTable<Board, 'id'>;
+  materials: EntityTable<Material, 'id'>;
   finishes: EntityTable<Finish, 'id'>;
   projectPrices: EntityTable<ProjectPrice, 'id'>;
   settings: EntityTable<Settings, 'id'>;
@@ -183,3 +183,115 @@ db.version(9)
         delete b.role;
       }),
   );
+
+
+/**
+ * הגוון והחומר נפרדים.
+ *
+ * עד כאן "לוח" היה חומר ומחיר ביחד, והגוון היה תלוי בלוח מסוים.
+ * בפועל גוון אחד חוצה חומרים — אותו לבן קיים גם על סנדוויץ׳ וגם
+ * על MDF, במחיר אחר לגמרי — ולכן החומרים הופכים לרשימה קצרה,
+ * הגוונים לרשימה שגדלה, והמחיר יושב בהצטלבות שביניהם.
+ *
+ * מזהי הלוחות נשמרים כמזהי החומרים, ולכן כל הפניה קיימת בארגזים
+ * ובספרייה ממשיכה להצביע על החומר הנכון.
+ */
+db.version(10)
+  .stores({
+    ...TABLES_V3,
+    boards: null,
+    materials: 'id, sortOrder',
+    finishes: 'id, sortOrder',
+    projectPrices: 'id, projectId, lineKey',
+    team: 'id, role, active, username',
+    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+    attachments: 'id, projectId, kind',
+  })
+  .upgrade(async (tx) => {
+    type OldBoard = {
+      id: string;
+      name: string;
+      material?: string;
+      sheetWidthMm?: number;
+      sheetHeightMm?: number;
+      factoryPrice?: number;
+      consumerPrice?: number;
+      sortOrder?: number;
+      createdAt?: number;
+      updatedAt?: number;
+    };
+    const boards: OldBoard[] = await tx.table('boards').toArray();
+
+    await tx.table('materials').bulkPut(
+      boards.map((b, i) => ({
+        id: b.id,
+        name: b.name,
+        sheetWidthMm: b.sheetWidthMm ?? 1220,
+        sheetHeightMm: b.sheetHeightMm ?? 2440,
+        sortOrder: b.sortOrder ?? i,
+        createdAt: b.createdAt ?? Date.now(),
+        updatedAt: Date.now(),
+      })),
+    );
+
+    // הגוון מקבל את המחיר שהיה בפועל: שלו אם נקבע, אחרת של הלוח
+    const boardOf = new Map(boards.map((b) => [b.id, b]));
+    const materialByFinish = new Map<string, string>();
+    await tx
+      .table('finishes')
+      .toCollection()
+      .modify(
+        (f: {
+          id: string;
+          boardId?: string;
+          factoryPrice?: number;
+          consumerPrice?: number;
+          prices?: Record<string, unknown>;
+        }) => {
+          if (f.prices) return;
+          const b = f.boardId ? boardOf.get(f.boardId) : undefined;
+          f.prices = b
+            ? {
+                [b.id]: {
+                  factoryPrice: f.factoryPrice ?? b.factoryPrice ?? 0,
+                  consumerPrice: f.consumerPrice ?? b.consumerPrice ?? 0,
+                },
+              }
+            : {};
+          if (f.boardId) materialByFinish.set(f.id, f.boardId);
+          delete f.boardId;
+          delete f.factoryPrice;
+          delete f.consumerPrice;
+        },
+      );
+
+    /*
+     * החומר של כל חלק נגזר מהגוון שהיה עליו. ארגז בלי גוון נשאר
+     * בלי חומר, וייפול לברירת המחדל של הפרויקט — וזה נכון, כי גם
+     * קודם הוא נפל לברירת מחדל.
+     */
+    const carry = (row: Record<string, unknown>) => {
+      for (const role of ['carcass', 'front', 'exposed', 'back'] as const) {
+        const fid = row[`${role}FinishId`];
+        const mid = typeof fid === 'string' ? materialByFinish.get(fid) : undefined;
+        if (mid) row[`${role}MaterialId`] = mid;
+      }
+    };
+    await tx.table('units').toCollection().modify(carry);
+    await tx.table('catalog').toCollection().modify(carry);
+
+    /*
+     * דריסות המחיר ברמת הפרויקט היו לפי לוח, ובסיס התמחור השתנה
+     * לשורה של גוון וחומר. אין דרך נכונה לתרגם אותן, ולכן הן
+     * נמחקות — עדיף מחיר מחירון גלוי מדריסה שקופצת על שורה לא
+     * נכונה.
+     */
+    await tx.table('projectPrices').clear();
+
+    await tx
+      .table('settings')
+      .toCollection()
+      .modify((s: { defaultBackKind?: string }) => {
+        s.defaultBackKind ??= 'thin';
+      });
+  });

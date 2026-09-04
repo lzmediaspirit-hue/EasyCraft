@@ -33,7 +33,7 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
   const partsM2 = costing.lines.reduce((n, l) => n + l.areaM2, 0);
   const sheetsM2 = groups.reduce(
     (n, g) =>
-      n + (g.nest.sheets.length * g.board.sheetWidthMm * g.board.sheetHeightMm) / 1_000_000,
+      n + (g.nest.sheets.length * g.material.sheetWidthMm * g.material.sheetHeightMm) / 1_000_000,
     0,
   );
   const usedPct = sheetsM2 > 0 ? Math.round((partsM2 / sheetsM2) * 100) : 0;
@@ -62,7 +62,7 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
         {groups.length === 0 && <p className="text-sm text-stone-500">אין עדיין חלקים לנסר.</p>}
 
         {groups.map((group, i) => (
-          <section key={`${group.board.id}-${group.finish?.id ?? ''}`}>
+          <section key={group.key}>
             <button
               onClick={() => setOpenGroup(openGroup === i ? -1 : i)}
               className="flex w-full items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-start"
@@ -75,12 +75,13 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
                 />
               )}
               <span className="min-w-0 flex-1">
+                {/* הגוון הוא מה שמזמינים בשם, והחומר הוא על מה הוא יושב */}
                 <span className="block truncate text-sm font-semibold text-stone-900">
-                  {group.board.name}
-                  {group.finish && <span className="text-stone-500"> · {group.finish.name}</span>}
+                  {group.finish?.name ?? 'בלי גוון'}
+                  <span className="text-stone-500"> · {group.material.name}</span>
                 </span>
                 <span className="num block text-[11px] text-stone-400">
-                  פלטה {cm(group.board.sheetWidthMm)}×{cm(group.board.sheetHeightMm)}{' '}
+                  פלטה {cm(group.material.sheetWidthMm)}×{cm(group.material.sheetHeightMm)}{' '}
                   {unitLabel()}
                   {group.finish?.hasGrain && ' · כיוון סיבים'}
                 </span>
@@ -105,8 +106,8 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
                   <SheetPlan
                     key={sheet.index}
                     sheet={sheet}
-                    sheetW={group.board.sheetWidthMm}
-                    sheetH={group.board.sheetHeightMm}
+                    sheetW={group.material.sheetWidthMm}
+                    sheetH={group.material.sheetHeightMm}
                     showOffcuts={showOffcuts}
                   />
                 ))}

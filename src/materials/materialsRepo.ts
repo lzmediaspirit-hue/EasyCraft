@@ -1,5 +1,5 @@
 import { db } from '../db/db';
-import type { Board, BoardMaterial, Finish, ProjectPrice, Settings } from '../db/types';
+import type { Finish, Material, PartChoice, ProjectPrice, Settings } from '../db/types';
 
 /** הגדרות ברירת מחדל, עד שהמשתמש משנה אותן במסך ההגדרות. */
 export const DEFAULT_SETTINGS: Settings = {
@@ -26,38 +26,35 @@ export const DEFAULT_SETTINGS: Settings = {
   vatPct: 18,
   edgeFactoryPerM: 0,
   edgeConsumerPerM: 0,
+  defaultBackKind: 'thin',
   updatedAt: 0,
 };
 
-/** הלוחות שכל נגרייה עובדת איתם, כנקודת פתיחה. */
-const SEED_BOARDS: Omit<Board, 'id' | 'createdAt' | 'updatedAt'>[] = [
-  {
-    name: 'סנדוויץ׳',
-    material: 'sandwich',
-    sheetWidthMm: 1220,
-    sheetHeightMm: 2440,
-    factoryPrice: 0,
-    consumerPrice: 120,
-    sortOrder: 0,
-  },
-  {
-    name: 'MDF',
-    material: 'mdf',
-    sheetWidthMm: 1220,
-    sheetHeightMm: 2440,
-    factoryPrice: 0,
-    consumerPrice: 400,
-    sortOrder: 1,
-  },
-  {
-    name: 'גב 5 מ״מ',
-    material: 'other',
-    sheetWidthMm: 1220,
-    sheetHeightMm: 2440,
-    factoryPrice: 0,
-    consumerPrice: 80,
-    sortOrder: 2,
-  },
+/**
+ * החומרים שכל נגרייה עובדת איתם, כנקודת פתיחה.
+ * הרשימה קצרה ובקושי משתנה — מה שגדל הוא רשימת הגוונים.
+ */
+const SEED_MATERIALS: Omit<Material, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  { name: 'סנדוויץ׳', sheetWidthMm: 1220, sheetHeightMm: 2440, thicknessMm: 18, sortOrder: 0 },
+  { name: 'MDF', sheetWidthMm: 1220, sheetHeightMm: 2440, thicknessMm: 18, sortOrder: 1 },
+  { name: 'דיקט 5 מ״מ', sheetWidthMm: 1220, sheetHeightMm: 2440, thicknessMm: 5, sortOrder: 2 },
+];
+
+/**
+ * גוונים לפתיחה, עם מחיר לכל חומר.
+ * המספרים הם מחירון סביר ולא הבטחה: הם קיימים כדי שהחישוב הראשון
+ * ייתן מספר אמיתי, והנגר יתקן אותם למחירים שלו.
+ */
+const SEED_FINISHES: {
+  name: string;
+  hex: string;
+  hasGrain?: boolean;
+  /** מחיר לצרכן לכל חומר, לפי סדר החומרים שנזרעו */
+  byIndex: (number | undefined)[];
+}[] = [
+  { name: 'לבן', hex: '#f5f4f1', byIndex: [120, 380, 80] },
+  { name: 'אפור בטון', hex: '#9c9a95', byIndex: [140, 420, undefined] },
+  { name: 'אלון טבעי', hex: '#c9a227', hasGrain: true, byIndex: [190, 520, undefined] },
 ];
 
 let seeding: Promise<void> | null = null;
@@ -73,10 +70,36 @@ async function runSeed(): Promise<void> {
   if ((await db.settings.get('app')) === undefined) {
     await db.settings.put({ ...DEFAULT_SETTINGS, updatedAt: now });
   }
-  if ((await db.boards.count()) === 0) {
-    await db.boards.bulkPut(
-      SEED_BOARDS.map((b) => ({ ...b, id: crypto.randomUUID(), createdAt: now, updatedAt: now })),
-    );
+  if ((await db.materials.count()) === 0) {
+    const materials = SEED_MATERIALS.map((m) => ({
+      ...m,
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+    }));
+    await db.materials.bulkPut(materials);
+
+    // הגוונים נזרעים רק יחד עם החומרים, כי המחיר תלוי בהם
+    if ((await db.finishes.count()) === 0) {
+      await db.finishes.bulkPut(
+        SEED_FINISHES.map((f, i) => ({
+          id: crypto.randomUUID(),
+          name: f.name,
+          hex: f.hex,
+          hasGrain: f.hasGrain,
+          prices: f.byIndex.reduce<Record<string, { consumerPrice: number }>>(
+            (acc, price, k) => {
+              if (price !== undefined) acc[materials[k].id] = { consumerPrice: price };
+              return acc;
+            },
+            {},
+          ),
+          sortOrder: i,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+    }
   }
 }
 
@@ -99,36 +122,81 @@ export const settingsRepo = {
   },
 };
 
-export const boardsRepo = {
-  async list(): Promise<Board[]> {
-    const rows = await db.boards.toArray();
+export const materialsRepo = {
+  async list(): Promise<Material[]> {
+    const rows = await db.materials.toArray();
     return rows.sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
-  async get(id: string): Promise<Board | undefined> {
-    return db.boards.get(id);
+  async get(id: string): Promise<Material | undefined> {
+    return db.materials.get(id);
   },
 
-  /** הלוח הראשון מחומר מסוים. משמש כברירת מחדל כשלא נבחר גוון. */
-  async forMaterial(material: BoardMaterial): Promise<Board | undefined> {
-    const rows = await boardsRepo.list();
-    return rows.find((b) => b.material === material);
-  },
-
-  async save(input: Partial<Board> & { name: string; material: BoardMaterial }): Promise<string> {
+  async save(input: Partial<Material> & { name: string }): Promise<string> {
     const now = Date.now();
     if (input.id) {
       const { id, ...rest } = input;
-      await db.boards.update(id, { ...rest, updatedAt: now });
+      await db.materials.update(id, { ...rest, updatedAt: now });
       return id;
     }
     const id = crypto.randomUUID();
-    const count = await db.boards.count();
-    await db.boards.add({
-    sheetWidthMm: 1220,
-    sheetHeightMm: 2440,
-      factoryPrice: 0,
-      consumerPrice: 0,
+    const count = await db.materials.count();
+    await db.materials.add({
+      sheetWidthMm: 1220,
+      sheetHeightMm: 2440,
+      sortOrder: count,
+      ...input,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return id;
+  },
+
+  /**
+   * מחיקת חומר, יחד עם המחירים שנקבעו לו בגוונים.
+   * גוון שנשאר בלי אף מחיר עדיין קיים — הוא פשוט לא זמין לשום
+   * חומר עד שיינתן לו מחיר.
+   */
+  async remove(id: string): Promise<void> {
+    await db.transaction('rw', db.materials, db.finishes, async () => {
+      await db.finishes.toCollection().modify((f) => {
+        if (f.prices?.[id]) {
+          const { [id]: _drop, ...rest } = f.prices;
+          f.prices = rest;
+        }
+      });
+      await db.materials.delete(id);
+    });
+  },
+};
+
+export const finishesRepo = {
+  async all(): Promise<Finish[]> {
+    const rows = await db.finishes.toArray();
+    return rows.sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+
+  /** הגוונים שקיימים על חומר מסוים — כלומר שנקבע להם מחיר עליו. */
+  async forMaterial(materialId: string): Promise<Finish[]> {
+    return (await finishesRepo.all()).filter((f) => f.prices?.[materialId] !== undefined);
+  },
+
+  async get(id: string): Promise<Finish | undefined> {
+    return db.finishes.get(id);
+  },
+
+  async save(input: Partial<Finish> & { name: string; hex: string }): Promise<string> {
+    const now = Date.now();
+    if (input.id) {
+      const { id, ...rest } = input;
+      await db.finishes.update(id, { ...rest, updatedAt: now });
+      return id;
+    }
+    const id = crypto.randomUUID();
+    const count = await db.finishes.count();
+    await db.finishes.add({
+      prices: {},
       sortOrder: count,
       ...input,
       id,
@@ -139,58 +207,28 @@ export const boardsRepo = {
   },
 
   async remove(id: string): Promise<void> {
-    await db.transaction('rw', db.boards, db.finishes, async () => {
-      await db.finishes.where('boardId').equals(id).delete();
-      await db.boards.delete(id);
-    });
-  },
-};
-
-export const finishesRepo = {
-  async listForBoard(boardId: string): Promise<Finish[]> {
-    const rows = await db.finishes.where('boardId').equals(boardId).toArray();
-    return rows.sort((a, b) => a.sortOrder - b.sortOrder);
-  },
-
-  async all(): Promise<Finish[]> {
-    return db.finishes.toArray();
-  },
-
-  async get(id: string): Promise<Finish | undefined> {
-    return db.finishes.get(id);
-  },
-
-  async save(input: Partial<Finish> & { boardId: string; name: string; hex: string }): Promise<string> {
-    const now = Date.now();
-    if (input.id) {
-      const { id, ...rest } = input;
-      await db.finishes.update(id, { ...rest, updatedAt: now });
-      return id;
-    }
-    const id = crypto.randomUUID();
-    const count = await db.finishes.where('boardId').equals(input.boardId).count();
-    await db.finishes.add({ sortOrder: count, ...input, id, createdAt: now, updatedAt: now });
-    return id;
-  },
-
-  async remove(id: string): Promise<void> {
     await db.finishes.delete(id);
   },
 };
+
+/** מפתח שורת התמחור: אותו גוון על שני חומרים הוא שתי שורות הזמנה. */
+export function lineKey(choice: PartChoice): string {
+  return `${choice.finishId ?? ''}:${choice.materialId ?? ''}`;
+}
 
 export const projectPricesRepo = {
   async listForProject(projectId: string): Promise<ProjectPrice[]> {
     return db.projectPrices.where('projectId').equals(projectId).toArray();
   },
 
-  /** קובע מחיר שונה ללוח בפרויקט מסוים, או מנקה אותו כששני השדות ריקים. */
+  /** קובע מחיר שונה לשורת גוון וחומר בפרויקט מסוים, או מנקה אותו. */
   async set(
     projectId: string,
-    boardId: string,
+    key: string,
     prices: { factoryPrice?: number; consumerPrice?: number },
   ): Promise<void> {
     const existing = (await db.projectPrices.where('projectId').equals(projectId).toArray()).find(
-      (p) => p.boardId === boardId,
+      (p) => p.lineKey === key,
     );
     const empty = prices.factoryPrice === undefined && prices.consumerPrice === undefined;
     const now = Date.now();
@@ -204,7 +242,7 @@ export const projectPricesRepo = {
     await db.projectPrices.add({
       id: crypto.randomUUID(),
       projectId,
-      boardId,
+      lineKey: key,
       ...prices,
       createdAt: now,
       updatedAt: now,

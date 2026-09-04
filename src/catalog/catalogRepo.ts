@@ -96,8 +96,13 @@ export const catalogRepo = {
     led?: CatalogItem['led'];
     shelfGapsMm?: number[];
     carcassFinishId?: string;
+    carcassMaterialId?: string;
     frontFinishId?: string;
+    frontMaterialId?: string;
     exposedFinishId?: string;
+    exposedMaterialId?: string;
+    backFinishId?: string;
+    backMaterialId?: string;
     common?: boolean;
     level: CatalogItem['level'];
     defaultWidthMm: number;

@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
-import { MAX_BODY_MM, isContainer } from '../../catalog/zones';
+import { MAX_BODY_MM, isContainer, unitCells } from '../../catalog/zones';
 import { MATERIAL } from '../../catalog/standards';
-import { finishesRepo } from '../../materials/materialsRepo';
+import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
+import { partChoice } from '../../costing/boards';
 import { InteriorEditor } from './InteriorEditor';
-import { FinishPicker } from './FinishPicker';
-import { BoardSheet } from '../settings/BoardSheet';
+import { PartChoiceRow } from './PartChoiceRow';
+import { FinishSheet } from '../settings/FinishSheet';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
@@ -17,7 +18,10 @@ import type {
   ExposedSides,
   LedSpot,
   OpeningMech,
+  PartChoice,
+  PartRole,
   PlacedUnit,
+  Project,
 } from '../../db/types';
 
 const DOOR_COUNTS = [0, 1, 2, 3, 4, 5, 6];
@@ -66,8 +70,9 @@ type Axis = 'w' | 'h' | 'd';
 export function UnitEditor({
   unit,
   inside,
+  project,
   onChange,
-  onApplyFinishAll,
+  onApplyChoiceAll,
   onEdit,
   onRemove,
   onClose,
@@ -75,9 +80,11 @@ export function UnitEditor({
   unit: PlacedUnit;
   /** מצב התצוגה הנוכחי — חזיתות מוסתרות */
   inside: boolean;
+  /** הפרויקט, לברירות המחדל של הגוון והחומר */
+  project?: Project;
   onChange: (patch: Partial<PlacedUnit>) => void;
-  /** החלת גוון על כל הארונות בפרויקט */
-  onApplyFinishAll: (part: 'carcass' | 'front' | 'exposed' | 'back', finishId?: string) => void;
+  /** החלת גוון וחומר על כל הפרויקט */
+  onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
   onEdit: () => void;
   onRemove: () => void;
   onClose: () => void;
@@ -87,7 +94,7 @@ export function UnitEditor({
   const [typing, setTyping] = useState(false);
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
-  const [addingBoard, setAddingBoard] = useState(false);
+  const [addingFinish, setAddingFinish] = useState(false);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
   /*
@@ -101,6 +108,9 @@ export function UnitEditor({
    * סנדוויץ' ועל MDF, והבחירה היא בין השניים.
    */
   const allFinishes = useLiveQuery(async () => finishesRepo.all(), []) ?? [];
+  const materials = useLiveQuery(async () => materialsRepo.list(), []) ?? [];
+  /** מה שבאמת חל על חלק — הארגז, ואם לא נקבע בו, הפרויקט */
+  const choiceOf = (role: PartRole) => partChoice(unit, role, project);
 
   const caps = glyphDef(unit.glyph);
   const locked = unit.floorLocked ?? false;
@@ -110,6 +120,16 @@ export function UnitEditor({
   const bodyH = unit.heightMm - (unit.socleMm ?? 0);
   const led = unit.led ?? [];
   const container = isContainer(unit.glyph);
+  /*
+   * לארגז יש חזיתות אם יש לו דלתות או מגירות חיצוניות. ארגז פתוח
+   * או נישה למכשיר לא צריכים גוון חזיתות, ולכן השורה לא מוצגת.
+   */
+  const hasFronts =
+    (unit.doors ?? 0) > 0 ||
+    unitCells(unit).some(
+      ({ content: c }) => c.kind === 'drawers' && c.drawerStyle !== 'inner',
+    );
+  const hasExposed = !!(exposed.start || exposed.end || exposed.top || exposed.bottom);
 
   /*
    * ברוחב מוצגות גם המידות של הפריט וגם מידות התקן עד 120 ס"מ:
@@ -400,46 +420,61 @@ export function UnitEditor({
             </>
           )}
 
-          <FinishPicker
-            label="גוון החזיתות"
+          {/*
+            שורת גוון מוצגת רק לחלק שקיים בארגז הזה: לארגז פתוח אין
+            חזיתות, ולארגז בלי דפנות זרות אין להן גוון. שורה שאין לה
+            משמעות היא שורה שמסיחה את הדעת.
+          */}
+          {hasFronts && (
+            <PartChoiceRow
+              label="חזיתות"
+              finishes={allFinishes}
+              materials={materials}
+              value={{ finishId: unit.frontFinishId ?? unit.finishId, materialId: unit.frontMaterialId }}
+              effective={choiceOf('front')}
+              onChange={(c) =>
+                onChange({ frontFinishId: c.finishId, finishId: c.finishId, frontMaterialId: c.materialId })
+              }
+              onApplyAll={(c) => onApplyChoiceAll('front', c)}
+              onAddFinish={() => setAddingFinish(true)}
+            />
+          )}
+
+          <PartChoiceRow
+            label="גוף"
             finishes={allFinishes}
-            value={unit.frontFinishId ?? unit.finishId}
-            onChange={(id) => onChange({ frontFinishId: id, finishId: id })}
-            onApplyAll={(id) => onApplyFinishAll('front', id)}
-            onAddBoard={() => setAddingBoard(true)}
+            materials={materials}
+            value={{ finishId: unit.carcassFinishId, materialId: unit.carcassMaterialId }}
+            effective={choiceOf('carcass')}
+            onChange={(c) => onChange({ carcassFinishId: c.finishId, carcassMaterialId: c.materialId })}
+            onApplyAll={(c) => onApplyChoiceAll('carcass', c)}
+            onAddFinish={() => setAddingFinish(true)}
           />
 
-          <FinishPicker
-            label="גוון הגוף"
-            finishes={allFinishes}
-            value={unit.carcassFinishId}
-            onChange={(id) => onChange({ carcassFinishId: id })}
-            onApplyAll={(id) => onApplyFinishAll('carcass', id)}
-            onAddBoard={() => setAddingBoard(true)}
-          />
+          {(unit.backKind ?? 'thin') !== 'none' && (
+            <PartChoiceRow
+              label="גב"
+              finishes={allFinishes}
+              materials={materials}
+              value={{ finishId: unit.backFinishId, materialId: unit.backMaterialId }}
+              effective={choiceOf('back')}
+              onChange={(c) => onChange({ backFinishId: c.finishId, backMaterialId: c.materialId })}
+              onApplyAll={(c) => onApplyChoiceAll('back', c)}
+              onAddFinish={() => setAddingFinish(true)}
+            />
+          )}
 
-          <FinishPicker
-            label="גוון הגב"
-            finishes={allFinishes}
-            value={unit.backFinishId}
-            onChange={(id) => onChange({ backFinishId: id })}
-            onApplyAll={(id) => onApplyFinishAll('back', id)}
-            onAddBoard={() => setAddingBoard(true)}
-          />
-
-          <FinishPicker
-            label="גוון הדפנות הזרות"
-            finishes={allFinishes}
-            value={unit.exposedFinishId}
-            onChange={(id) => onChange({ exposedFinishId: id })}
-            onApplyAll={(id) => onApplyFinishAll('exposed', id)}
-            onAddBoard={() => setAddingBoard(true)}
-          />
-
-          {allFinishes.length === 0 && (
-            <p className="mt-1 text-[10px] text-stone-400">
-              אין עדיין גוונים. אפשר להוסיף לוח כאן, או להגדיר אותם בהגדרות.
-            </p>
+          {hasExposed && (
+            <PartChoiceRow
+              label="דפנות זרות"
+              finishes={allFinishes}
+              materials={materials}
+              value={{ finishId: unit.exposedFinishId, materialId: unit.exposedMaterialId }}
+              effective={choiceOf('exposed')}
+              onChange={(c) => onChange({ exposedFinishId: c.finishId, exposedMaterialId: c.materialId })}
+              onApplyAll={(c) => onApplyChoiceAll('exposed', c)}
+              onAddFinish={() => setAddingFinish(true)}
+            />
           )}
 
           <Row label="דפנות זרות" hint={`ברירת מחדל: גוף +${MATERIAL.exposedExtraMm} מ״מ`}>
@@ -555,7 +590,7 @@ export function UnitEditor({
       </div>
     </div>
 
-    {addingBoard && <BoardSheet board={null} onClose={() => setAddingBoard(false)} />}
+    {addingFinish && <FinishSheet finish={null} onClose={() => setAddingFinish(false)} />}
 
     {savingToLibrary && (
       <SaveToLibrarySheet unit={unit} onClose={() => setSavingToLibrary(false)} />

@@ -38,7 +38,7 @@ export function MaterialsSheet({
           {costing.unpricedParts > 0 && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900">
               <span className="num">{costing.unpricedParts}</span> חלקים לא שויכו לשום
-              לוח, ולכן הם לא נספרים כאן. צריך להגדיר לוחות בהגדרות.
+              חומר, ולכן הם לא נספרים כאן. צריך להגדיר חומרים בהגדרות.
             </p>
           )}
 
@@ -46,15 +46,20 @@ export function MaterialsSheet({
             <h3 className="mb-2 text-sm font-semibold text-stone-700">פלטות</h3>
             <ul className="space-y-2">
               {costing.lines.map((line) => {
-                const override = overrides?.find((o) => o.boardId === line.board.id);
+                const override = overrides?.find((o) => o.lineKey === line.key);
                 return (
-                  <li
-                    key={line.board.id}
-                    className="rounded-2xl border border-stone-200 bg-white p-3"
-                  >
+                  <li key={line.key} className="rounded-2xl border border-stone-200 bg-white p-3">
                     <div className="flex items-baseline gap-2">
+                      {line.finish && (
+                        <span
+                          aria-hidden="true"
+                          className="size-4 shrink-0 rounded border border-black/10"
+                          style={{ background: line.finish.hex }}
+                        />
+                      )}
                       <span className="min-w-0 flex-1 truncate font-semibold text-stone-900">
-                        {line.board.name}
+                        {line.finish?.name ?? 'בלי גוון'}
+                        <span className="font-normal text-stone-500"> · {line.material.name}</span>
                       </span>
                       <span className="num shrink-0 text-lg font-semibold text-stone-900">
                         {line.sheets}
@@ -66,9 +71,7 @@ export function MaterialsSheet({
 
                     <p className="mt-0.5 text-xs text-stone-500">
                       <span className="num">{line.areaM2.toFixed(2)}</span> מ״ר חלקים
-                      {line.board.catalogNumber && (
-                        <span className="num"> · {line.board.catalogNumber}</span>
-                      )}
+                      {line.finish?.note && <span> · {line.finish.note}</span>}
                     </p>
 
                     <div className="mt-2.5 grid grid-cols-2 gap-2">
@@ -77,7 +80,7 @@ export function MaterialsSheet({
                         perSheet={line.factoryPrice}
                         total={line.factoryTotal}
                         onChange={(v) =>
-                          projectPricesRepo.set(projectId, line.board.id, {
+                          projectPricesRepo.set(projectId, line.key, {
                             factoryPrice: v,
                             consumerPrice: override?.consumerPrice,
                           })
@@ -89,7 +92,7 @@ export function MaterialsSheet({
                         perSheet={line.consumerPrice}
                         total={line.consumerTotal}
                         onChange={(v) =>
-                          projectPricesRepo.set(projectId, line.board.id, {
+                          projectPricesRepo.set(projectId, line.key, {
                             factoryPrice: override?.factoryPrice,
                             consumerPrice: v,
                           })

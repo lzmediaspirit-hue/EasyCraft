@@ -328,8 +328,9 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           unit={selected}
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
-          onApplyFinishAll={(part, finishId) =>
-            unitsRepo.setFinishForProject(projectId, part, finishId)
+          project={project}
+          onApplyChoiceAll={(role, choice) =>
+            unitsRepo.setChoiceForProject(projectId, role, choice)
           }
           onEdit={() => setEditOpen(true)}
           onRemove={async () => {

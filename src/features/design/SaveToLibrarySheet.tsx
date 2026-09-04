@@ -55,8 +55,13 @@ export function SaveToLibrarySheet({
       led: unit.led,
       shelfGapsMm: unit.shelfGapsMm,
       carcassFinishId: unit.carcassFinishId,
+      carcassMaterialId: unit.carcassMaterialId,
       frontFinishId: unit.frontFinishId ?? unit.finishId,
+      frontMaterialId: unit.frontMaterialId,
       exposedFinishId: unit.exposedFinishId,
+      exposedMaterialId: unit.exposedMaterialId,
+      backFinishId: unit.backFinishId,
+      backMaterialId: unit.backMaterialId,
       level: unit.level,
       defaultWidthMm: unit.widthMm,
       // הרוחב הנוכחי נכנס לרשימת מידות התקן, כדי שיהיה זמין בבחירה מהירה

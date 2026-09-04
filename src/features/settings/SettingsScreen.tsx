@@ -1,16 +1,23 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { boardsRepo, finishesRepo, settingsRepo } from '../../materials/materialsRepo';
-import { BoardSheet } from './BoardSheet';
+import { finishesRepo, materialsRepo, settingsRepo } from '../../materials/materialsRepo';
+import { MaterialSheet } from './MaterialSheet';
+import { FinishSheet } from './FinishSheet';
 import { ExtrasSection } from './ExtrasSection';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { nav } from '../../nav/navigation';
 import { Field, NumField, inputClass, selectOnFocus } from '../../ui/Field';
-import { displayUnit } from '../../ui/units';
+import { cm, displayUnit, unitLabel } from '../../ui/units';
 import { useDisplayUnit } from '../../ui/useDisplayUnit';
 import { ChevronIcon, PlusIcon, TeamIcon } from '../../ui/icons';
-import { BOARD_MATERIALS } from '../../db/types';
-import type { Board } from '../../db/types';
+import type { BackKind, Finish, Material } from '../../db/types';
+
+/** סוגי הגב, כברירת מחדל לכל ארגז חדש. */
+const BACK_KINDS: { key: BackKind; label: string }[] = [
+  { key: 'thin', label: 'גב דק בחריץ' },
+  { key: 'carcass', label: 'בעובי הגוף' },
+  { key: 'none', label: 'ללא גב' },
+];
 
 
 /**
@@ -18,24 +25,19 @@ import type { Board } from '../../db/types';
  * מה שנקבע כאן חל על כל הפרויקטים, אלא אם נדרס בפרויקט מסוים.
  */
 export function SettingsScreen() {
-  const [editing, setEditing] = useState<Board | 'new' | null>(null);
+  const [editingMaterial, setEditingMaterial] = useState<Material | 'new' | null>(null);
+  const [editingFinish, setEditingFinish] = useState<Finish | 'new' | null>(null);
   const settings = useLiveQuery(() => settingsRepo.get(), []);
-  const boards = useLiveQuery(() => boardsRepo.list(), []);
-  const finishCounts = useLiveQuery(async () => {
-    const all = await finishesRepo.all();
-    return all.reduce<Record<string, number>>((acc, f) => {
-      acc[f.boardId] = (acc[f.boardId] ?? 0) + 1;
-      return acc;
-    }, {});
-  }, []);
+  const materials = useLiveQuery(() => materialsRepo.list(), []);
+  const finishes = useLiveQuery(() => finishesRepo.all(), []);
 
   const unit = useDisplayUnit();
 
-  if (!settings || !boards) return null;
+  if (!settings || !materials || !finishes) return null;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
-      <ScreenHeader title="הגדרות" subtitle="צוות, לוחות, גוונים וחישוב" />
+      <ScreenHeader title="הגדרות" subtitle="צוות, גוונים, חומרים וחישוב" />
 
       <main className="flex-1 space-y-8 px-5 pt-5 pb-28">
         <section>
@@ -57,32 +59,67 @@ export function SettingsScreen() {
           </button>
         </section>
 
+        {/*
+          הגוון הוא מה שהלקוח בוחר ומה שמזמינים לפי שם, ולכן הוא
+          הרשימה הראשית. החומר הוא הבסיס שעליו הגוון יושב, והמחיר
+          יושב בהצטלבות שביניהם.
+        */}
         <section>
-          <SectionTitle>לוחות</SectionTitle>
+          <SectionTitle>גוונים</SectionTitle>
+          {finishes.length > 0 && (
+            <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+              {finishes.map((f) => {
+                const on = materials.filter((m) => f.prices?.[m.id] !== undefined);
+                return (
+                  <li key={f.id}>
+                    <button
+                      onClick={() => setEditingFinish(f)}
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-start transition-colors hover:bg-stone-50"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-8 shrink-0 rounded-lg border border-stone-200"
+                        style={{ background: f.hex }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold text-stone-900">{f.name}</span>
+                        <span className="block truncate text-xs text-stone-500">
+                          {on.length ? on.map((m) => m.name).join(' · ') : 'עוד בלי מחיר לאף חומר'}
+                          {f.hasGrain && <span className="text-stone-400"> · סיבים</span>}
+                        </span>
+                      </span>
+                      <ChevronIcon className="size-4 shrink-0 text-stone-300" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <button
+            onClick={() => setEditingFinish('new')}
+            className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-stone-300 py-3 text-sm font-medium text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
+          >
+            <PlusIcon className="size-4" />
+            גוון חדש
+          </button>
+        </section>
+
+        <section>
+          <SectionTitle>חומרים</SectionTitle>
           <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
-            {boards.map((board) => (
-              <li key={board.id}>
+            {materials.map((m) => (
+              <li key={m.id}>
                 <button
-                  onClick={() => setEditing(board)}
+                  onClick={() => setEditingMaterial(m)}
                   className="flex w-full items-center gap-3 px-4 py-3.5 text-start transition-colors hover:bg-stone-50"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold text-stone-900">
-                      {board.name}
+                    <span className="block truncate font-semibold text-stone-900">{m.name}</span>
+                    <span className="num block truncate text-xs text-stone-500">
+                      פלטה {cm(m.sheetWidthMm)}×{cm(m.sheetHeightMm)} {unitLabel()}
+                      {m.thicknessMm !== undefined && <span> · {m.thicknessMm} מ״מ</span>}
                     </span>
-                    <span className="block truncate text-xs text-stone-500">
-                      {BOARD_MATERIALS.find((m) => m.key === board.material)?.label}
-                      {board.catalogNumber && <span className="num"> · {board.catalogNumber}</span>}
-                      {!!finishCounts?.[board.id] && (
-                        <span> · {finishCounts[board.id]} גוונים</span>
-                      )}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-end">
-                    <span className="num block text-sm font-medium text-stone-800">
-                      {board.consumerPrice > 0 ? `₪${board.consumerPrice}` : '—'}
-                    </span>
-                    <span className="block text-[10px] text-stone-400">לצרכן</span>
                   </span>
                   <ChevronIcon className="size-4 shrink-0 text-stone-300" />
                 </button>
@@ -91,11 +128,11 @@ export function SettingsScreen() {
           </ul>
 
           <button
-            onClick={() => setEditing('new')}
+            onClick={() => setEditingMaterial('new')}
             className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-stone-300 py-3 text-sm font-medium text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
           >
             <PlusIcon className="size-4" />
-            לוח חדש
+            חומר חדש
           </button>
         </section>
 
@@ -172,7 +209,7 @@ export function SettingsScreen() {
         <section>
           <SectionTitle>חישוב פלטות</SectionTitle>
           <p className="mb-2 text-xs leading-snug text-stone-400">
-            מידת הפלטה נקבעת לכל לוח בנפרד, כי היא מאפיין של המוצר אצל הספק.
+            מידת הפלטה נקבעת לכל חומר בנפרד, כי היא מאפיין של המוצר אצל הספק.
           </p>
           <div className="grid grid-cols-2 gap-3 rounded-2xl border border-stone-200 bg-white p-4">
             <NumField
@@ -203,28 +240,34 @@ export function SettingsScreen() {
             />
           </div>
 
-          <label className="mt-3 block rounded-2xl border border-stone-200 bg-white p-4">
-            <span className="mb-1.5 flex items-baseline gap-2">
-              <span className="text-sm font-medium text-stone-700">ניצולת פלטה</span>
-              <span className="num text-xs text-stone-400">{settings.yieldPct}%</span>
+          {/*
+            סוג הגב הוא דרך עבודה של הנגרייה ולא החלטה לכל ארגז,
+            ולכן הוא נקבע פעם אחת. ארגז שצריך אחרת משנה אצלו.
+          */}
+          <div className="mt-3 rounded-2xl border border-stone-200 bg-white p-4">
+            <span className="mb-2 block text-sm font-medium text-stone-700">
+              הגב של ארגז חדש
             </span>
-            <input
-              type="range"
-              min={50}
-              max={100}
-              step={1}
-              value={settings.yieldPct}
-              onChange={(e) => settingsRepo.save({ yieldPct: Number(e.target.value) })}
-              className="w-full accent-oak-600"
-            />
-            <span className="mt-1.5 block text-xs leading-snug text-stone-500">
-              אחוז הפלטה שבאמת הופך לחלקים. זו הערכה עד שייכנס מנוע ניצול לוח,
-              ואז המספר ייגזר מהניסורים בפועל.
-            </span>
-          </label>
+            <div className="flex flex-wrap gap-1.5">
+              {BACK_KINDS.map((b) => (
+                <button
+                  key={b.key}
+                  onClick={() => settingsRepo.save({ defaultBackKind: b.key })}
+                  aria-pressed={settings.defaultBackKind === b.key}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    settings.defaultBackKind === b.key
+                      ? 'bg-oak-600 text-white'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <p className="mt-3 text-xs leading-snug text-stone-500">
-            עובי הלוח עצמו אינו נשמר בהגדרת הלוח — הוא משתנה בין משלוחים ונקבע
+            עובי הלוח עצמו אינו נשמר בהגדרת החומר — הוא משתנה בין משלוחים ונקבע
             מול הלוח הפיזי. העובי כאן משמש רק לגזירת רוחב התחתית והתקרה.
           </p>
         </section>
@@ -310,10 +353,17 @@ export function SettingsScreen() {
         </section>
       </main>
 
-      {editing && (
-        <BoardSheet
-          board={editing === 'new' ? null : editing}
-          onClose={() => setEditing(null)}
+      {editingFinish && (
+        <FinishSheet
+          finish={editingFinish === 'new' ? null : editingFinish}
+          onClose={() => setEditingFinish(null)}
+        />
+      )}
+
+      {editingMaterial && (
+        <MaterialSheet
+          material={editingMaterial === 'new' ? null : editingMaterial}
+          onClose={() => setEditingMaterial(null)}
         />
       )}
     </div>

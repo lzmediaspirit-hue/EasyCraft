@@ -44,6 +44,12 @@ export interface Project extends Entity {
   perUnitRate?: number;
   /** ₪ למטר רץ של קיר */
   perMeterRate?: number;
+  /**
+   * הגוון והחומר שנבחרו לפרויקט, לכל חלק בארגז.
+   * זו ברירת המחדל של כל ארגז בפרויקט: רוב המטבח הוא אותו גוף
+   * ואותן חזיתות, ולבחור אותם מחדש בכל ארגז זו עבודה כפולה.
+   */
+  defaults?: Partial<Record<PartRole, PartChoice>>;
   /** מתי נמכר. עד אז תהליך העבודה סגור */
   soldAt?: number;
   /** תשלום אחד או בתשלומים */
@@ -177,14 +183,19 @@ export interface PlacedUnit extends Entity {
   exposedDepthMm?: number;
   /** גוון החזית — נשמר מגרסאות קודמות, משמש כברירת מחדל ל-frontFinishId */
   finishId?: string;
-  /** גוון גוף הארון */
+  /*
+   * גוון וחומר לכל חלק. ריק = מה שנבחר לפרויקט.
+   * ברירת המחדל אינה מועתקת לארגז אלא נקראת בזמן אמת, כדי ששינוי
+   * הגוון של הפרויקט יחול על כל מי שלא נגעו בו במפורש.
+   */
   carcassFinishId?: string;
-  /** גוון החזיתות */
+  carcassMaterialId?: string;
   frontFinishId?: string;
-  /** גוון הדפנות הזרות */
+  frontMaterialId?: string;
   exposedFinishId?: string;
-  /** גוון הגב */
+  exposedMaterialId?: string;
   backFinishId?: string;
+  backMaterialId?: string;
   /** סוג הגב */
   backKind?: BackKind;
   /** ידיות על החזיתות */
@@ -346,8 +357,13 @@ export interface CatalogItem extends Entity {
   led?: LedSpot[];
   shelfGapsMm?: number[];
   carcassFinishId?: string;
+  carcassMaterialId?: string;
   frontFinishId?: string;
+  frontMaterialId?: string;
   exposedFinishId?: string;
+  exposedMaterialId?: string;
+  backFinishId?: string;
+  backMaterialId?: string;
   level: UnitLevel;
   defaultWidthMm: number;
   /** רוחבי תקן נפוצים למוצר הזה */
@@ -379,44 +395,28 @@ export interface CatalogItem extends Entity {
  * מלוח הוא החומר עצמו והמידה שהוא מגיע בה, ולכן זה מה שנשמר.
  * החלק בארון נקבע לפי הגוון שנבחר לו בהדמיה.
  */
-export type BoardMaterial = 'sandwich' | 'mdf' | 'plywood' | 'other';
-
-export const BOARD_MATERIALS: { key: BoardMaterial; label: string }[] = [
-  { key: 'sandwich', label: 'סנדוויץ׳' },
-  { key: 'mdf', label: 'MDF' },
-  { key: 'plywood', label: 'דיקט' },
-  { key: 'other', label: 'אחר' },
-];
-
-/** תפקיד החלק במבנה הארון — נגזר מהחיתוך, לא מהלוח. */
 /**
- * תפקיד החלק בארגז. התפקיד קובע מאיזה גוון — ולכן מאיזה לוח —
- * הוא נחתך. דופן זרה היא תפקיד בפני עצמו: היא נראית מבחוץ ולעיתים
- * קרובות נבחר לה גוון אחר מהחזיתות.
+ * חומר גלם — הבסיס הפיזי של הלוח.
+ *
+ * החומר והגוון הם שני דברים נפרדים: "לבן" הוא גוון, וסנדוויץ׳ הוא
+ * חומר, ואותו לבן קיים גם על סנדוויץ׳ וגם על MDF במחיר אחר לגמרי.
+ * לכן החומרים הם רשימה קצרה שכמעט לא משתנה, והגוונים הם הרשימה
+ * שגדלה — ומחיר הפלטה יושב בהצטלבות שביניהם.
  */
-export type PartRole = 'carcass' | 'front' | 'exposed' | 'back';
-
-/**
- * לוח גלם. העובי לא נשמר כאן במכוון — הוא משתנה בין פרויקטים ובין
- * משלוחים, ונקבע מול הלוח הפיזי בשטח.
- */
-export interface Board extends Entity {
+export interface Material extends Entity {
   name: string;
-  /** מספר קטלוגי אצל הספק */
-  catalogNumber?: string;
-  material: BoardMaterial;
   /**
-   * מידת הפלטה שהלוח הזה מגיע בה.
+   * מידת הפלטה שהחומר מגיע בה.
    * הרוחב תמיד 1220; הגובה משתנה בין ספקים — 2440 הוא התקן,
-   * ויש לוחות שמגיעים ב-2750 או ב-3050. נקבע ביצירת הלוח, כי הוא
-   * מאפיין של המוצר ולא של החישוב.
+   * ויש חומרים שמגיעים ב-2750 או ב-3050.
    */
   sheetWidthMm: number;
   sheetHeightMm: number;
-  /** מחיר פלטה במפעל */
-  factoryPrice: number;
-  /** מחיר פלטה ללקוח */
-  consumerPrice: number;
+  /**
+   * עובי נומינלי, לתיאור בלבד.
+   * העובי האמיתי נקבע מול הלוח הפיזי ומשתנה בין משלוחים.
+   */
+  thicknessMm?: number;
   sortOrder: number;
 }
 
@@ -424,30 +424,70 @@ export interface Board extends Entity {
 export const SHEET_HEIGHTS_MM = [2440, 2750, 3050];
 export const SHEET_WIDTH_MM = 1220;
 
-/** גוון מתוך קטלוג הגוונים של לוח מסוים. */
+/** תפקיד החלק במבנה הארון — נגזר מהחיתוך, לא מהלוח. */
+/**
+ * תפקיד החלק בארגז. התפקיד קובע מאיזה גוון וחומר — ולכן מאיזו
+ * פלטה — הוא נחתך. דופן זרה היא תפקיד בפני עצמו: היא נראית מבחוץ
+ * ולעיתים קרובות נבחר לה גוון אחר מהחזיתות.
+ */
+export type PartRole = 'carcass' | 'front' | 'exposed' | 'back';
+
+export const PART_ROLES: { key: PartRole; label: string }[] = [
+  { key: 'carcass', label: 'גוף' },
+  { key: 'front', label: 'חזיתות' },
+  { key: 'exposed', label: 'דפנות זרות' },
+  { key: 'back', label: 'גב' },
+];
+
+/** מחיר פלטה של גוון מסוים על חומר מסוים. */
+export interface MaterialPrice {
+  factoryPrice?: number;
+  consumerPrice?: number;
+}
+
+/**
+ * גוון.
+ *
+ * הגוון הוא מה שהלקוח בוחר ומה שהנגר מזמין לפי שם, והוא חוצה
+ * חומרים: אותו "אפור בטון" מוזמן גם כסנדוויץ׳ לגוף וגם כ-MDF
+ * לחזיתות. לכן המחיר אינו מספר אחד אלא מחיר לכל חומר שהגוון קיים
+ * עליו — וחומר שאין לו מחיר פשוט לא מוצע לגוון הזה.
+ */
 export interface Finish extends Entity {
-  boardId: string;
   name: string;
-  /** קוד הגוון אצל הספק */
-  code?: string;
+  /** תיאור קצר של הצבע — לא חובה */
+  note?: string;
   /**
    * לגוון יש כיוון סיבים שמחייב ניסור בכיוון קבוע.
-   * זה מאפיין של הגוון ולא של הלוח: אותו MDF יכול להגיע בלכה
+   * זה מאפיין של הגוון ולא של החומר: אותו MDF יכול להגיע בלכה
    * חלקה ובפורניר עם סיבים.
    */
   hasGrain?: boolean;
   /** צבע לתצוגה בהדמיה */
   hex: string;
-  /** מחיר שונה מהמחיר הבסיסי של הלוח, אם יש */
-  factoryPrice?: number;
-  consumerPrice?: number;
+  /** מחיר פלטה לכל חומר שהגוון קיים עליו, לפי מזהה החומר */
+  prices: Record<string, MaterialPrice>;
+  /**
+   * קנט בגוון הזה, במחיר למטר רץ.
+   * קנט תואם ללוח הוא המצב הרגיל, ולכן המחיר שלו שייך לגוון ולא
+   * להגדרה גלובלית. ריק = המחיר הכללי שבהגדרות.
+   */
+  edgeFactoryPerM?: number;
+  edgeConsumerPerM?: number;
   sortOrder: number;
+}
+
+/** בחירת גוון וחומר לחלק מסוים. */
+export interface PartChoice {
+  finishId?: string;
+  materialId?: string;
 }
 
 /** מחיר לוח שנקבע אחרת עבור פרויקט מסוים. */
 export interface ProjectPrice extends Entity {
   projectId: string;
-  boardId: string;
+  /** מזהה שורת התמחור: `finishId:materialId` */
+  lineKey: string;
   factoryPrice?: number;
   consumerPrice?: number;
 }
@@ -474,6 +514,12 @@ export interface Settings {
   backGrooveMm: number;
   /** מרווח סביב חזית — דלת קטנה מהפתח בכל צד */
   frontGapMm: number;
+  /**
+   * סוג הגב שכל ארגז חדש מקבל.
+   * לנגרייה יש דרך עבודה אחת לגב, ולבחור אותה מחדש בכל ארגז זו
+   * עבודה שחוזרת על עצמה. מי שרוצה אחרת בארגז מסוים משנה שם.
+   */
+  defaultBackKind: BackKind;
   /** מחירי אביזרים, ליחידה */
   accessories: AccessoryPrices;
   /** תוספות שהעסק הגדיר בעצמו */

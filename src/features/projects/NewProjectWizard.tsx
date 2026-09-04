@@ -5,6 +5,8 @@ import { cmToMm, mmToCm } from '../../ui/units';
 import { ROOMS, roomDef } from '../../catalog/rooms';
 import { WALL_LAYOUTS, wallName } from './wallLayouts';
 import { WallFeaturesEditor } from './WallFeaturesEditor';
+import { RoomShapeEditor, shapeWalls, type ShapePoint } from './RoomShapeEditor';
+import { ProjectFinishesStep } from './ProjectFinishesStep';
 import { projectsRepo, type NewWallInput } from './projectsRepo';
 import { DEFAULT_WALL_HEIGHT, DEFAULT_WALL_LENGTH } from '../../catalog/standards';
 import {
@@ -13,9 +15,25 @@ import {
   KitchenIcon,
   LivingIcon,
 } from '../../ui/icons';
-import type { RoomKind, WallFeature } from '../../db/types';
+import type { PartChoice, PartRole, RoomKind, WallFeature } from '../../db/types';
 
-type Step = 'room' | 'name' | 'layout' | 'condition' | 'dims' | 'features';
+type Step =
+  | 'room'
+  | 'name'
+  | 'layout'
+  | 'shape'
+  | 'order'
+  | 'condition'
+  | 'dims'
+  | 'finishes'
+  | 'features';
+
+/** מנרמל זווית לטווח (-180, 180]. */
+const norm = (deg: number): number => {
+  let d = ((deg + 180) % 360) - 180;
+  if (d <= -180) d += 360;
+  return Math.round(d);
+};
 
 const ROOM_ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
   kitchen: KitchenIcon,
@@ -45,7 +63,28 @@ export function NewProjectWizard({
   const [heightCm, setHeightCm] = useState(String(mmToCm(DEFAULT_WALL_HEIGHT)));
   const [lengthsCm, setLengthsCm] = useState<string[]>([String(mmToCm(DEFAULT_WALL_LENGTH))]);
   const [features, setFeatures] = useState<WallFeature[][]>([[]]);
+  /* צורת חדר שמשרטטים, כשהפריסות המוכנות לא מתארות אותו */
+  const [shape, setShape] = useState<ShapePoint[]>([]);
+  const [startIndex, setStartIndex] = useState(0);
+  const [reversed, setReversed] = useState(false);
+  const [turns, setTurns] = useState<number[]>([]);
+  const [defaults, setDefaults] = useState<Partial<Record<PartRole, PartChoice>>>({});
   const [saving, setSaving] = useState(false);
+
+  /* ---- הקירות שנגזרים מהשרטוט, לפי הסדר שנבחר ---- */
+  const drawn = shapeWalls(shape);
+  const shapeClosed =
+    shape.length > 3 &&
+    shape[0].x === shape[shape.length - 1].x &&
+    shape[0].y === shape[shape.length - 1].y;
+
+  const ordered = (() => {
+    const base = reversed
+      ? [...drawn].reverse().map((w) => ({ ...w, headingDeg: w.headingDeg + 180 }))
+      : drawn;
+    const i = shapeClosed ? startIndex % Math.max(base.length, 1) : 0;
+    return [...base.slice(i), ...base.slice(0, i)];
+  })();
 
   /* ---- מעבר בין שלבים ---- */
 
@@ -56,6 +95,11 @@ export function NewProjectWizard({
   }
 
   function pickLayout(walls: number) {
+    if (walls === 0) {
+      setStep('shape');
+      return;
+    }
+    setTurns([]);
     setWallCount(walls);
     setLengthsCm((prev) =>
       Array.from({ length: walls }, (_, i) => prev[i] ?? String(mmToCm(DEFAULT_WALL_LENGTH))),
@@ -77,12 +121,18 @@ export function NewProjectWizard({
         return () => setStep('room');
       case 'layout':
         return () => setStep(roomKind === 'custom' ? 'name' : 'room');
-      case 'condition':
+      case 'shape':
         return () => setStep('layout');
+      case 'order':
+        return () => setStep('shape');
+      case 'condition':
+        return () => setStep(turns.length ? 'order' : 'layout');
       case 'dims':
         return () => setStep('condition');
-      case 'features':
+      case 'finishes':
         return () => setStep('dims');
+      case 'features':
+        return () => setStep('finishes');
     }
   }
 
@@ -100,12 +150,15 @@ export function NewProjectWizard({
       lengthMm: cmToMm(Number(lengthsCm[i]) || 0),
       heightMm,
       features: features[i] ?? [],
+      // פנייה נשמרת רק לחדר ששורטט; פריסה מוכנה היא תמיד פינות ישרות
+      turnDeg: turns[i],
     }));
     const project = await projectsRepo.create({
       customerId,
       name: name.trim() || roomDef(roomKind).label,
       roomKind,
       walls,
+      defaults,
     });
     onCreated(project.id);
   }
@@ -138,19 +191,44 @@ export function NewProjectWizard({
     room: 'איזה חדר?',
     name: 'שם החדר',
     layout: 'כמה קירות?',
+    shape: 'צורת החדר',
+    order: 'סדר הקירות',
     condition: 'מה יש על הקיר?',
     dims: 'מידות הקירות',
+    finishes: 'גוונים לפרויקט',
     features: 'סימון על הקיר',
   };
+
+  /** קובע את הקירות מהשרטוט וממשיך הלאה. */
+  function acceptShape() {
+    const n = ordered.length;
+    setWallCount(n);
+    setLengthsCm(ordered.map((w) => String(mmToCm(w.lengthMm))));
+    setFeatures(Array.from({ length: n }, (_, i) => features[i] ?? []));
+    setTurns(ordered.map((w, i) => (i === 0 ? 0 : norm(w.headingDeg - ordered[i - 1].headingDeg))));
+    setStep('condition');
+  }
 
   const footer =
     step === 'name' ? (
       <PrimaryButton disabled={!name.trim()} onClick={() => setStep('layout')}>
         המשך
       </PrimaryButton>
+    ) : step === 'shape' ? (
+      <PrimaryButton disabled={drawn.length === 0} onClick={() => setStep('order')}>
+        {drawn.length === 0
+          ? 'שרטט את החדר'
+          : `המשך · ${drawn.length} ${drawn.length === 1 ? 'קיר' : 'קירות'}`}
+      </PrimaryButton>
+    ) : step === 'order' ? (
+      <PrimaryButton onClick={acceptShape}>המשך</PrimaryButton>
     ) : step === 'dims' ? (
+      <PrimaryButton disabled={!dimsValid} onClick={() => setStep('finishes')}>
+        המשך לגוונים
+      </PrimaryButton>
+    ) : step === 'finishes' ? (
       <PrimaryButton
-        disabled={!dimsValid}
+        disabled={saving}
         onClick={() => (marksFeatures ? setStep('features') : save())}
       >
         {marksFeatures ? 'המשך לסימונים' : 'יצירת הפרויקט'}
@@ -216,6 +294,22 @@ export function NewProjectWizard({
             </button>
           ))}
         </div>
+      )}
+
+      {step === 'shape' && <RoomShapeEditor points={shape} onChange={setShape} />}
+
+      {step === 'order' && (
+        <OrderStep
+          walls={ordered}
+          closed={shapeClosed}
+          reversed={reversed}
+          onReverse={() => setReversed((v) => !v)}
+          onStart={(i) => setStartIndex((prev) => (prev + i) % Math.max(ordered.length, 1))}
+        />
+      )}
+
+      {step === 'finishes' && (
+        <ProjectFinishesStep value={defaults} onChange={setDefaults} />
       )}
 
       {step === 'condition' && (
@@ -308,5 +402,70 @@ function ConditionCard({
       <span className="block font-semibold text-stone-900">{title}</span>
       <span className="mt-0.5 block text-sm leading-snug text-stone-500">{hint}</span>
     </button>
+  );
+}
+
+
+/**
+ * סדר הקירות בחדר ששורטט.
+ *
+ * הקירות משורשרים, ולכן "קיר א׳" הוא לא בחירה חופשית אלא נקודת
+ * התחלה: בחדר סגור אפשר להתחיל מכל קיר, ובחדר פתוח רק מאחד משני
+ * הקצוות. השאר נגזר מהשרשרת — וזה בדיוק מה שמונע מספור שלא מתאר
+ * חדר אמיתי.
+ */
+function OrderStep({
+  walls,
+  closed,
+  reversed,
+  onReverse,
+  onStart,
+}: {
+  walls: { lengthMm: number; headingDeg: number }[];
+  closed: boolean;
+  reversed: boolean;
+  onReverse: () => void;
+  onStart: (offset: number) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <ul className="space-y-1.5">
+        {walls.map((w, i) => (
+          <li key={i} className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-3 py-2.5">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-stone-900 text-xs font-bold text-white">
+              {i + 1}
+            </span>
+            <span className="min-w-0 flex-1 text-sm font-medium text-stone-800">
+              {wallName(i)}
+            </span>
+            <span className="num shrink-0 text-sm text-stone-600">{mmToCm(w.lengthMm)}</span>
+            <span className="shrink-0 text-[10px] text-stone-400">ס״מ</span>
+            {closed && i > 0 && (
+              <button
+                onClick={() => onStart(i)}
+                className="shrink-0 rounded-md bg-stone-100 px-2 py-1 text-[10px] font-medium text-stone-600 transition-colors hover:bg-stone-200 hover:text-oak-700"
+              >
+                שיהיה ראשון
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <button
+        onClick={onReverse}
+        aria-pressed={reversed}
+        className="w-full rounded-xl bg-stone-100 py-2.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-200"
+      >
+        הפיכת כיוון המספור
+      </button>
+
+      <p className="text-xs leading-snug text-stone-500">
+        {closed
+          ? 'החדר סגור, ולכן אפשר להתחיל את המספור מכל קיר.'
+          : 'החדר פתוח, ולכן המספור מתחיל מאחד משני הקצוות.'}{' '}
+        המידות ניתנות לתיקון בשלב הבא.
+      </p>
+    </div>
   );
 }

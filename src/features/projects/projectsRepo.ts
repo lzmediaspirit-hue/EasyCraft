@@ -1,9 +1,11 @@
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { projectCosting, type ProjectCosting } from '../../costing/boards';
-import { boardsRepo, finishesRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
+import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import type {
   CatalogItem,
+  PartChoice,
+  PartRole,
   PlacedUnit,
   Project,
   RoomKind,
@@ -15,6 +17,8 @@ export interface NewWallInput {
   lengthMm: number;
   heightMm: number;
   features: WallFeature[];
+  /** הפנייה ביחס לקיר הקודם. ריק = פינה ישרה */
+  turnDeg?: number;
 }
 
 export const projectsRepo = {
@@ -39,6 +43,8 @@ export const projectsRepo = {
     name: string;
     roomKind: RoomKind;
     walls: NewWallInput[];
+    /** הגוון והחומר שנבחרו לפרויקט, לכל חלק */
+    defaults?: Project['defaults'];
   }): Promise<Project> {
     const now = Date.now();
     const project: Project = {
@@ -46,6 +52,7 @@ export const projectsRepo = {
       customerId: input.customerId,
       name: input.name.trim(),
       roomKind: input.roomKind,
+      defaults: input.defaults,
       createdAt: now,
       updatedAt: now,
     };
@@ -56,6 +63,7 @@ export const projectsRepo = {
       lengthMm: w.lengthMm,
       heightMm: w.heightMm,
       features: w.features,
+      turnDeg: w.turnDeg,
       createdAt: now,
       updatedAt: now,
     }));
@@ -105,32 +113,34 @@ export const projectsRepo = {
 
   /** סיכום כל פרויקט — ארגזים, פלטות ומחיר — לתצוגה ברשימה. */
   async summaries(projectIds: string[]): Promise<Record<string, ProjectCosting>> {
-    const [boards, settings, finishes] = await Promise.all([
-      boardsRepo.list(),
+    const [materials, settings, finishes] = await Promise.all([
+      materialsRepo.list(),
       settingsRepo.get(),
       finishesRepo.all(),
     ]);
     const out: Record<string, ProjectCosting> = {};
     for (const id of projectIds) {
-      const [units, overrides] = await Promise.all([
+      const [project, units, overrides] = await Promise.all([
+        db.projects.get(id),
         db.units.where('projectId').equals(id).toArray(),
         projectPricesRepo.listForProject(id),
       ]);
-      out[id] = projectCosting(units, boards, settings, overrides, finishes);
+      out[id] = projectCosting(units, materials, settings, overrides, finishes, project);
     }
     return out;
   },
 
   /** תמחור פרויקט יחיד, למסך ההדמיה. */
   async costing(projectId: string): Promise<ProjectCosting> {
-    const [units, boards, settings, overrides, finishes] = await Promise.all([
+    const [units, materials, settings, overrides, finishes, project] = await Promise.all([
       db.units.where('projectId').equals(projectId).toArray(),
-      boardsRepo.list(),
+      materialsRepo.list(),
       settingsRepo.get(),
       projectPricesRepo.listForProject(projectId),
       finishesRepo.all(),
+      db.projects.get(projectId),
     ]);
-    return projectCosting(units, boards, settings, overrides, finishes);
+    return projectCosting(units, materials, settings, overrides, finishes, project);
   },
 };
 
@@ -203,6 +213,7 @@ export const unitsRepo = {
     widthMm?: number,
   ): Promise<PlacedUnit> {
     const now = Date.now();
+    const { defaultBackKind: backKind } = await settingsRepo.get();
     const unit: PlacedUnit = {
       id: crypto.randomUUID(),
       projectId,
@@ -222,14 +233,20 @@ export const unitsRepo = {
       // גימור שנשמר עם הפריט חוזר איתו, כדי שלא יידרש אותו כיוונון שוב
       drawerStyle: item.drawerStyle,
       exposed: item.exposed,
-      backKind: item.backKind,
+      // הגב שהפריט הגיע איתו, ואם אין — דרך העבודה של הנגרייה
+      backKind: item.backKind ?? backKind,
       handles: item.handles,
       glassDoors: item.glassDoors,
       led: item.led,
       shelfGapsMm: item.shelfGapsMm,
       carcassFinishId: item.carcassFinishId,
+      carcassMaterialId: item.carcassMaterialId,
       frontFinishId: item.frontFinishId,
+      frontMaterialId: item.frontMaterialId,
       exposedFinishId: item.exposedFinishId,
+      exposedMaterialId: item.exposedMaterialId,
+      backFinishId: item.backFinishId,
+      backMaterialId: item.backMaterialId,
       level: item.level,
       xMm,
       /*
@@ -260,18 +277,37 @@ export const unitsRepo = {
     await db.units.delete(id);
   },
 
-  /** קובע גוון אחיד לחלק מסוים בכל הארונות בפרויקט. */
-  async setFinishForProject(
+  /**
+   * קובע גוון וחומר אחידים לחלק מסוים בכל הפרויקט.
+   *
+   * הבחירה נשמרת כברירת המחדל של הפרויקט, והחריגות שנקבעו בארגזים
+   * בודדים נמחקות. כך "לכל הפרויקט" באמת מחיל — וגם ארגז שיתווסף
+   * מחר יקבל את אותו גוון בלי לגעת בו.
+   */
+  async setChoiceForProject(
     projectId: string,
-    part: 'carcass' | 'front' | 'exposed' | 'back',
-    finishId: string | undefined,
+    role: PartRole,
+    choice: PartChoice,
   ): Promise<void> {
-    const key = (
-      { carcass: 'carcassFinishId', front: 'frontFinishId', exposed: 'exposedFinishId', back: 'backFinishId' } as const
-    )[part];
-    const rows = await db.units.where('projectId').equals(projectId).toArray();
+    const project = await db.projects.get(projectId);
+    if (!project) return;
     const now = Date.now();
-    await db.units.bulkPut(rows.map((u) => ({ ...u, [key]: finishId, updatedAt: now })));
+    await db.projects.update(projectId, {
+      defaults: { ...project.defaults, [role]: choice },
+      updatedAt: now,
+    });
+
+    const rows = await db.units.where('projectId').equals(projectId).toArray();
+    await db.units.bulkPut(
+      rows.map((u) => ({
+        ...u,
+        [`${role}FinishId`]: undefined,
+        [`${role}MaterialId`]: undefined,
+        // הגוון הישן של החזית נשמר בשדה נפרד, ולכן הוא נמחק גם הוא
+        ...(role === 'front' ? { finishId: undefined } : {}),
+        updatedAt: now,
+      })),
+    );
   },
 
   /** קובע עומק אחיד לכל הארונות בפרויקט. */

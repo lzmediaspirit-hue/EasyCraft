@@ -155,10 +155,7 @@ function ProjectCard({
       {boards && boards.lines.length > 0 && (
         <ul className="border-t border-stone-100 px-3 py-2">
           {boards.lines.map((line) => (
-            <li
-              key={`${line.board.id}-${line.finish?.id ?? ''}`}
-              className="flex items-baseline gap-2 py-0.5 text-xs"
-            >
+            <li key={line.key} className="flex items-baseline gap-2 py-0.5 text-xs">
               {line.finish && (
                 <span
                   aria-hidden="true"
@@ -167,14 +164,9 @@ function ProjectCard({
                 />
               )}
               <span className="min-w-0 flex-1 truncate text-stone-700">
-                {line.board.name}
-                {line.finish && <span className="text-stone-500"> · {line.finish.name}</span>}
-                {(line.finish?.code || line.board.catalogNumber) && (
-                  <span className="num text-stone-400">
-                    {' '}
-                    · {line.finish?.code ?? line.board.catalogNumber}
-                  </span>
-                )}
+                {line.finish?.name ?? 'בלי גוון'}
+                <span className="text-stone-500"> · {line.material.name}</span>
+                {line.finish?.note && <span className="text-stone-400"> · {line.finish.note}</span>}
               </span>
               <span className="num shrink-0 font-semibold text-stone-800">{line.sheets}</span>
               <span className="shrink-0 text-[10px] text-stone-400">
