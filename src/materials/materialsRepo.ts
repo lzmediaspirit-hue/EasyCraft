@@ -56,12 +56,19 @@ const SEED_FINISHES: {
   name: string;
   hex: string;
   hasGrain?: boolean;
+  texture?: string;
   /** מחיר לצרכן לכל חומר, לפי סדר החומרים שנזרעו */
   byIndex: (number | undefined)[];
 }[] = [
-  { name: 'לבן', hex: '#f5f4f1', byIndex: [120, 380, 80] },
-  { name: 'אפור בטון', hex: '#9c9a95', byIndex: [140, 420, undefined] },
-  { name: 'אלון טבעי', hex: '#c9a227', hasGrain: true, byIndex: [190, 520, undefined] },
+  { name: 'לבן', hex: '#f5f4f1', texture: 'מט', byIndex: [120, 380, 80] },
+  { name: 'אפור בטון', hex: '#9c9a95', texture: 'סטון', byIndex: [140, 420, undefined] },
+  {
+    name: 'אלון טבעי',
+    hex: '#c9a227',
+    hasGrain: true,
+    texture: 'יער',
+    byIndex: [190, 520, undefined],
+  },
 ];
 
 let seeding: Promise<void> | null = null;
@@ -94,6 +101,7 @@ async function runSeed(): Promise<void> {
           name: f.name,
           hex: f.hex,
           hasGrain: f.hasGrain,
+          texture: f.texture,
           prices: f.byIndex.reduce<Record<string, { consumerPrice: number }>>(
             (acc, price, k) => {
               if (price !== undefined) acc[materials[k].id] = { consumerPrice: price };

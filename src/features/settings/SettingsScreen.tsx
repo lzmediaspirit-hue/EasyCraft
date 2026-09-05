@@ -85,8 +85,8 @@ export function SettingsScreen() {
                         <span className="block truncate font-semibold text-stone-900">{f.name}</span>
                         <span className="block truncate text-xs text-stone-500">
                           {on.length ? on.map((m) => m.name).join(' · ') : 'עוד בלי מחיר לאף חומר'}
-                          {!!f.textures?.length && (
-                            <span className="text-stone-400"> · {f.textures.join(' ')}</span>
+                          {!!f.texture && (
+                            <span className="text-stone-400"> · {f.texture}</span>
                           )}
                           {f.hasGrain && <span className="text-stone-400"> · סיבים</span>}
                         </span>

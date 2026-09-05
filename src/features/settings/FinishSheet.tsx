@@ -19,7 +19,9 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
   const materials = useLiveQuery(() => materialsRepo.list(), []);
   const finishes = useLiveQuery(() => finishesRepo.all(), []);
   const [name, setName] = useState(finish?.name ?? '');
-  const [textures, setTextures] = useState<string[]>(finish?.textures ?? []);
+  const [texture, setTexture] = useState<string | undefined>(finish?.texture);
+  /** מרקמים שהמשתמש הוסיף, מעבר לרשימה שמגיעה עם האפליקציה */
+  const [extraTextures, setExtraTextures] = useState<string[]>([]);
   /** מרקם שהמשתמש הוסיף בעצמו, מעבר לרשימה שמגיעה עם האפליקציה */
   const [newTexture, setNewTexture] = useState('');
   const [copying, setCopying] = useState(false);
@@ -66,7 +68,7 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
     await finishesRepo.save({
       id: finish?.id,
       name: name.trim(),
-      textures: textures.length ? textures : undefined,
+      texture,
       hex,
       hasGrain,
       prices: out,
@@ -139,22 +141,23 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
           מרקם נבחר ולא נכתב: הרשימה חוזרת על עצמה אצל כל ספק, וטקסט
           חופשי היה יוצר חמש כתיבות שונות לאותו דבר. מי שחסר לו מרקם
           מוסיף אותו, והוא נשמר לגוון הזה.
+
+          אחד בלבד: לוח מגיע מהספק במרקם אחד, ולחיצה שנייה על אותו
+          שבב מבטלת את הבחירה.
         */}
-        <Field group label="מרקם" hint="אפשר לבחור כמה">
+        <Field group label="מרקם" hint="מרקם אחד ללוח">
           <div className="flex flex-wrap gap-1.5">
-            {[...new Set([...BUILTIN_TEXTURES, ...textures])].map((t) => (
-              <Chip
-                key={t}
-                active={textures.includes(t)}
-                onClick={() =>
-                  setTextures((prev) =>
-                    prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
-                  )
-                }
-              >
-                {t}
-              </Chip>
-            ))}
+            {[...new Set([...BUILTIN_TEXTURES, ...extraTextures, ...(texture ? [texture] : [])])].map(
+              (t) => (
+                <Chip
+                  key={t}
+                  active={texture === t}
+                  onClick={() => setTexture((prev) => (prev === t ? undefined : t))}
+                >
+                  {t}
+                </Chip>
+              ),
+            )}
           </div>
           <div className="mt-2 flex gap-1.5">
             <input
@@ -169,7 +172,8 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
               onClick={() => {
                 const t = newTexture.trim();
                 if (!t) return;
-                setTextures((prev) => (prev.includes(t) ? prev : [...prev, t]));
+                setExtraTextures((prev) => (prev.includes(t) ? prev : [...prev, t]));
+                setTexture(t);
                 setNewTexture('');
               }}
               disabled={!newTexture.trim()}

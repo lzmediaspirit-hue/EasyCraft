@@ -13,7 +13,7 @@ import { selectOnFocus } from '../../ui/Field';
 import { CheckIcon } from '../../ui/icons';
 import type { ProjectCosting } from '../../costing/boards';
 
-type SortKey = 'finish' | 'material' | 'missing';
+type SortKey = 'finish' | 'texture' | 'material' | 'missing';
 
 /**
  * מלאי הפלטות בעסק.
@@ -68,7 +68,9 @@ export function StockScreen() {
   if (!materials || !finishes || !stock) return null;
 
   const at = (f: string, m: string) => stock.find((s) => s.finishId === f && s.materialId === m);
-  const textures = [...new Set(finishes.flatMap((f) => f.textures ?? []))];
+  const textures = [...new Set(finishes.map((f) => f.texture).filter(Boolean) as string[])].sort(
+    (a, b) => a.localeCompare(b, 'he'),
+  );
 
   const rows = finishes
     .flatMap((f) =>
@@ -92,10 +94,24 @@ export function StockScreen() {
         }),
     )
     .filter((r) => !materialId || r.material.id === materialId)
-    .filter((r) => !texture || r.finish.textures?.includes(texture))
+    .filter((r) => !texture || r.finish.texture === texture)
     .filter((r) => !onlyNeeded || r.missing > 0)
     .sort((a, b) => {
       if (sort === 'missing') return b.missing - a.missing || a.finish.name.localeCompare(b.finish.name, 'he');
+      /*
+        מיון לפי מרקם: ככה עומדים הלוחות במחסן וככה מזמינים אותם —
+        כל היער יחד, כל המט יחד. לוח בלי מרקם יורד לסוף, כדי שלא
+        ישב באמצע קבוצה שהוא לא שייך אליה.
+      */
+      if (sort === 'texture') {
+        const ta = a.finish.texture ?? '\uffff';
+        const tb = b.finish.texture ?? '\uffff';
+        return (
+          ta.localeCompare(tb, 'he') ||
+          a.finish.name.localeCompare(b.finish.name, 'he') ||
+          a.material.sortOrder - b.material.sortOrder
+        );
+      }
       if (sort === 'material') {
         return (
           a.material.sortOrder - b.material.sortOrder ||
@@ -149,6 +165,7 @@ export function StockScreen() {
           {(
             [
               ['finish', 'גוון'],
+              ['texture', 'מרקם'],
               ['material', 'חומר'],
               ['missing', 'חסר'],
             ] as const
@@ -205,6 +222,8 @@ export function StockScreen() {
                       </span>
                       <span className="block truncate text-[10px] text-stone-500">
                         {r.material.name}
+                        {/* המרקם הוא מה שמפריד בין שני לוחות באותו שם */}
+                        {r.finish.texture && <span> · {r.finish.texture}</span>}
                         {r.missing > 0 && (
                           <span className="num font-semibold text-red-600"> · חסר {r.missing}</span>
                         )}

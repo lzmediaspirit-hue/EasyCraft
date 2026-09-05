@@ -366,3 +366,33 @@ db.version(12)
         };
       }),
   );
+
+/**
+ * מרקם אחד לגוון.
+ *
+ * המרקם היה רשימה, כאילו אפשר לסמן על אותו גוון גם מט וגם יער.
+ * בפועל לוח מגיע מהספק במרקם אחד; שני מרקמים על אותו שם הם שני
+ * לוחות שונים, שמוזמנים ונספרים בנפרד. מי שסימן כמה — הראשון
+ * נשמר, כי הוא זה שנבחר קודם.
+ */
+db.version(13)
+  .stores({
+    ...TABLES_V3,
+    boards: null,
+    materials: 'id, sortOrder',
+    finishes: 'id, sortOrder',
+    projectPrices: 'id, projectId, lineKey',
+    stock: 'id, finishId, materialId',
+    team: 'id, role, active, username',
+    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+    attachments: 'id, projectId, kind',
+  })
+  .upgrade((tx) =>
+    tx
+      .table('finishes')
+      .toCollection()
+      .modify((f: { textures?: string[]; texture?: string }) => {
+        if (f.texture === undefined) f.texture = f.textures?.[0];
+        delete f.textures;
+      }),
+  );

@@ -88,6 +88,8 @@ export function Chip({
     <button
       type="button"
       onClick={onClick}
+      /* השבב הוא מתג, ובלי aria-pressed מי שמקשיב למסך לא שומע אם הוא דלוק */
+      aria-pressed={active}
       className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
         active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
       }`}

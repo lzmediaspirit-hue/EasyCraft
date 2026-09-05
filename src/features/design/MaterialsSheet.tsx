@@ -71,8 +71,8 @@ export function MaterialsSheet({
 
                     <p className="mt-0.5 text-xs text-stone-500">
                       <span className="num">{line.areaM2.toFixed(2)}</span> מ״ר חלקים
-                      {!!line.finish?.textures?.length && (
-                        <span> · {line.finish.textures.join(' ')}</span>
+                      {!!line.finish?.texture && (
+                        <span> · {line.finish.texture}</span>
                       )}
                     </p>
 
