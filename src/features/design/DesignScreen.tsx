@@ -23,7 +23,7 @@ import { WallToolsSheet } from './WallToolsSheet';
 import { useViewOptions } from './viewOptions';
 import { history, useHistory } from './history';
 import { WallThumb } from './WallThumb';
-import { buildPlan, cornerZones, planUnits } from './plan';
+import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
 import { analyzeWall, nextFreeX } from './analysis';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { roomDef } from '../../catalog/rooms';
@@ -170,7 +170,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
      * ארגז חדש לא נוחת בפינה שכבר תפוסה בידי הקיר השכן — אלא אם
      * הוא ארגז פינתי, שנבנה בדיוק בשביל המקום הזה.
      */
-    const from = item.level !== 'wall' && !item.corner ? (corners?.startMm ?? 0) : 0;
+    const from = item.corner ? 0 : cornerDepth(corners?.start, item.level === 'wall');
     const x = Math.max(nextFreeX(units, item.level), from);
     // הארגז נכנס בתוך הקיר, ולא נדחף אל מעבר לקצה שלו
     const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, from);

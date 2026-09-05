@@ -6,6 +6,8 @@ import { featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
+import { cornerDepth } from './plan';
+import type { CornerZones } from './plan';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /** מרחק הצמדה בין ארגזים ולקצות הקיר (מ"מ). */
@@ -36,7 +38,7 @@ type Props = {
   /** מצב מדידה פעיל, והציר שנמדד */
   measure?: MeasureAxis | null;
   /** רוחב אזורי הפינה בשני קצות הקיר, שנתפסים בידי הקיר השכן */
-  corners?: { startMm: number; endMm: number };
+  corners?: CornerZones;
   /** קו מידה אנכי לגובה הקיר */
   showHeight?: boolean;
   /**
@@ -171,7 +173,20 @@ export function WallElevation({
     const tol = Math.max(SNAP, SNAP_PX * d.scale);
     const x = snapX(rawX, unit, units, wall.lengthMm, corners, tol);
     const y = d.locked ? d.originY : snapY(rawY, unit, units, wall.heightMm, tol);
-    onMove(d.id, x, y);
+    /*
+     * שני ארגזים לא עומדים באותו מקום. כשהיעד תפוס מנסים קודם
+     * להזיז רק בציר אחד — כך גרירה לאורך קיר מלא עדיין זזה במקום
+     * להיתקע — ואם גם זה תפוס, הארגז נשאר איפה שהוא.
+     */
+    const at = (nx: number, ny: number) => !collides(unit, nx, ny, units);
+    const [fx, fy] = at(x, y)
+      ? [x, y]
+      : at(x, unit.yMm)
+        ? [x, unit.yMm]
+        : at(unit.xMm, y)
+          ? [unit.xMm, y]
+          : [unit.xMm, unit.yMm];
+    onMove(d.id, fx, fy);
   }
 
   function endDrag(e: React.PointerEvent) {
@@ -220,19 +235,33 @@ export function WallElevation({
       />
 
       {/* אזורי הפינה — שם הארונות של הקיר השכן תופסים מקום */}
+      {/*
+        רצועת הפינה מסומנת בגובה שהיא באמת תופסת: ארון תחתון בקיר
+        השכן חוסם את התחתית, ארון עליון את החלק העליון. פס שנמתח
+        על כל הקיר היה מסתיר מקום פנוי.
+      */}
       {corners && (
         <g pointerEvents="none">
-          {corners.startMm > 0 && (
-            <CornerBand x={0} width={corners.startMm} height={wall.heightMm} stroke={stroke} />
-          )}
-          {corners.endMm > 0 && (
+          {corners.start.map((z) => (
             <CornerBand
-              x={wall.lengthMm - corners.endMm}
-              width={corners.endMm}
-              height={wall.heightMm}
+              key={`cs-${z.wallLevel}`}
+              x={0}
+              y={flip(z.yMm + z.heightMm)}
+              width={z.depthMm}
+              height={z.heightMm}
               stroke={stroke}
             />
-          )}
+          ))}
+          {corners.end.map((z) => (
+            <CornerBand
+              key={`ce-${z.wallLevel}`}
+              x={wall.lengthMm - z.depthMm}
+              y={flip(z.yMm + z.heightMm)}
+              width={z.depthMm}
+              height={z.heightMm}
+              stroke={stroke}
+            />
+          ))}
         </g>
       )}
 
@@ -585,11 +614,13 @@ export function WallElevation({
 /** סימון אזור פינה — רצועה מקווקוות שבה יושבים ארונות הקיר השכן. */
 function CornerBand({
   x,
+  y,
   width,
   height,
   stroke,
 }: {
   x: number;
+  y: number;
   width: number;
   height: number;
   stroke: number;
@@ -597,7 +628,7 @@ function CornerBand({
   return (
     <rect
       x={x}
-      y={0}
+      y={y}
       width={width}
       height={height}
       fill="#a8a29e"
@@ -795,6 +826,26 @@ function nearest(value: number, targets: number[], limit: number): number {
 }
 
 /**
+ * האם הארגז היה חופף לארגז אחר אילו הונח כאן.
+ *
+ * שני ארגזים באותו מקום הם שרטוט שלא ייבנה, ולכן זו לא אזהרה אלא
+ * חסימה. חיפוי קיר הוא היוצא מן הכלל: הוא לוח דק שמכסה את הקיר,
+ * והארגזים אמורים לעמוד לפניו ולהסתיר אותו.
+ *
+ * נגיעה אינה חפיפה — ארגז שנצמד לשכן חולק איתו קו, וזה בדיוק מה
+ * שההצמדה נועדה לעשות.
+ */
+function collides(unit: PlacedUnit, x: number, y: number, units: PlacedUnit[]): boolean {
+  if (glyphDef(unit.glyph).cladding) return false;
+  const right = x + unit.widthMm;
+  const top = y + unit.heightMm;
+  return units.some((o) => {
+    if (o.id === unit.id || glyphDef(o.glyph).cladding) return false;
+    return x < o.xMm + o.widthMm && right > o.xMm && y < o.yMm + o.heightMm && top > o.yMm;
+  });
+}
+
+/**
  * מצמיד ארגז לקצות הקיר ולשכנים באותו מפלס.
  *
  * פינה פנויה פתוחה לכל ארגז — היא שייכת למי שיגיע אליה ראשון.
@@ -810,12 +861,19 @@ function snapX(
   unit: PlacedUnit,
   units: PlacedUnit[],
   wallLength: number,
-  corners: { startMm: number; endMm: number } | undefined,
+  corners: CornerZones | undefined,
   tol: number,
 ): number {
-  const blocked = corners && unit.level !== 'wall' && !unit.corner;
-  const min = blocked ? corners.startMm : 0;
-  const max = Math.max((blocked ? wallLength - corners.endMm : wallLength) - unit.widthMm, min);
+  /*
+   * הפינה נחסמת לפי המפלס: ארון עליון בקיר השכן תופס את הפינה
+   * לארונות עליונים, ולא לארון תחתון שעומד מתחתיו. ארגז פינתי נכנס
+   * בכל מקרה — זה בדיוק מה שהוא נבנה בשבילו.
+   */
+  const wallLevel = unit.level === 'wall';
+  const startMm = unit.corner ? 0 : cornerDepth(corners?.start, wallLevel);
+  const endMm = unit.corner ? 0 : cornerDepth(corners?.end, wallLevel);
+  const min = startMm;
+  const max = Math.max(wallLength - endMm - unit.widthMm, min);
 
   const targets = [min, max];
   for (const other of units) {

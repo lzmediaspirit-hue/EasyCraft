@@ -66,30 +66,71 @@ export function wallDepth(wall: Wall, units: PlacedUnit[]): number {
  * הרחוק של הקיר השכן לא תופס כאן כלום, וסימון שלו היה חוסם שטח
  * פנוי בלי סיבה.
  */
-export function cornerZones(
-  walls: Wall[],
-  wall: Wall,
-  units: PlacedUnit[],
-): { startMm: number; endMm: number } {
+/**
+ * רצועה אחת שתפוסה בפינה: כמה היא נכנסת לקיר הזה, ובאיזה גובה.
+ *
+ * הגובה חשוב: ארון תחתון בפינה תופס את החלק התחתון, וארון עליון
+ * את העליון. בלי זה ארון עליון היה נחסם בגלל ארון תחתון שעומד
+ * מתחתיו לגמרי, או — מה שקרה בפועל — לא היה נחסם בכלל.
+ */
+export interface CornerZone {
+  /** כמה מ"מ מהקצה תפוסים */
+  depthMm: number;
+  /** תחתית הרצועה */
+  yMm: number;
+  /** גובה הרצועה */
+  heightMm: number;
+  /** המפלס שהרצועה חוסמת — ארון עליון אינו חוסם תחתון ולהיפך */
+  wallLevel: boolean;
+}
+
+export interface CornerZones {
+  start: CornerZone[];
+  end: CornerZone[];
+}
+
+export function cornerZones(walls: Wall[], wall: Wall, units: PlacedUnit[]): CornerZones {
   const i = walls.findIndex((w) => w.id === wall.id);
   const prev = i > 0 ? walls[i - 1] : undefined;
   const next = i < walls.length - 1 ? walls[i + 1] : undefined;
   return {
     // הפינה עם הקיר הקודם היא הסוף שלו ותחילת שלנו
-    startMm: prev ? depthAt(prev, units, 'end') : 0,
-    endMm: next ? depthAt(next, units, 'start') : 0,
+    start: prev ? zonesAt(prev, units, 'end') : [],
+    end: next ? zonesAt(next, units, 'start') : [],
   };
 }
 
-/** עומק הארון העמוק ביותר שנוגע בקצה מסוים של הקיר. */
-function depthAt(wall: Wall, units: PlacedUnit[], side: 'start' | 'end'): number {
+/** כמה מ"מ תפוסים בפינה במפלס מסוים — 0 כשהפינה פנויה שם. */
+export function cornerDepth(zones: CornerZone[] | undefined, wallLevel: boolean): number {
+  return (zones ?? [])
+    .filter((z) => z.wallLevel === wallLevel)
+    .reduce((max, z) => Math.max(max, z.depthMm), 0);
+}
+
+/**
+ * הרצועות שנוגעות בקצה מסוים של הקיר, אחת לכל מפלס.
+ * נספר הארון העמוק ביותר בכל מפלס, כי הוא זה שקובע כמה נכנס לכאן.
+ */
+function zonesAt(wall: Wall, units: PlacedUnit[], side: 'start' | 'end'): CornerZone[] {
   const touching = units.filter(
     (u) =>
       u.wallId === wall.id &&
-      u.level !== 'wall' &&
       (side === 'start' ? u.xMm <= 1 : u.xMm + u.widthMm >= wall.lengthMm - 1),
   );
-  return touching.reduce((max, u) => Math.max(max, u.depthMm), 0);
+  const out: CornerZone[] = [];
+  for (const wallLevel of [false, true]) {
+    const same = touching.filter((u) => (u.level === 'wall') === wallLevel);
+    if (!same.length) continue;
+    out.push({
+      depthMm: same.reduce((max, u) => Math.max(max, u.depthMm), 0),
+      yMm: same.reduce((min, u) => Math.min(min, u.yMm), Infinity),
+      heightMm:
+        same.reduce((max, u) => Math.max(max, u.yMm + u.heightMm), 0) -
+        same.reduce((min, u) => Math.min(min, u.yMm), Infinity),
+      wallLevel,
+    });
+  }
+  return out;
 }
 
 /** ארון אחד במבט על, כמלבן בקואורדינטות החדר. */
