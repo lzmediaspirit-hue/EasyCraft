@@ -200,6 +200,20 @@ export interface PlacedUnit extends Entity {
   backMaterialId?: string;
   /** סוג הגב */
   backKind?: BackKind;
+  /** מבנה תיבת המגירה — קובע אילו חלקים נחתכים לה */
+  drawerBox?: DrawerBox;
+  /**
+   * גובה הדלת, כשהוא שונה מגובה הארגז.
+   * דלת אחת יכולה לכסות שני ארגזים שעומדים זה מעל זה, ואז היא
+   * שייכת לארגז אחד ומידתה אינה מידתו.
+   */
+  doorHeightMm?: number;
+  /**
+   * הדופן הזרה מתיישרת לגובה הדלת ולא לגובה הארגז.
+   * זה מה שקורה בפועל כשדלת אחת מכסה שני ארגזים: הדופן שלצידה
+   * צריכה להגיע לאותו גובה, אחרת נראה קו.
+   */
+  exposedMatchesDoor?: boolean;
   /** ידיות על החזיתות */
   handles?: boolean;
   /** דלתות זכוכית במקום חזית מלאה */
@@ -239,6 +253,19 @@ export interface PlacedUnit extends Entity {
  * none — בלי גב.
  */
 export type BackKind = 'thin' | 'carcass' | 'none';
+
+/**
+ * מבנה תיבת המגירה.
+ * `wood` — מגירת עץ שנבנית בנגרייה: תחתית, שתי דפנות, גב וחזית.
+ * `metal` — מסילת ברזל שהדפנות שלה מגיעות מוכנות, ולכן נבנים רק
+ * התחתית והגב.
+ */
+export type DrawerBox = 'wood' | 'metal';
+
+export const DRAWER_BOXES: { key: DrawerBox; label: string; hint: string }[] = [
+  { key: 'wood', label: 'מגירת עץ', hint: 'תחתית, דפנות, גב וחזית' },
+  { key: 'metal', label: 'מגירת ברזל', hint: 'תחתית וגב; הדפנות מגיעות מוכנות' },
+];
 
 /** מיקום פס לד בארגז. */
 export type LedSpot = 'start' | 'end' | 'top' | 'bottom' | 'shelf';
@@ -354,6 +381,7 @@ export interface CatalogItem extends Entity {
   drawerStyle?: DrawerStyle;
   exposed?: ExposedSides;
   backKind?: BackKind;
+  drawerBox?: DrawerBox;
   handles?: boolean;
   glassDoors?: boolean;
   led?: LedSpot[];

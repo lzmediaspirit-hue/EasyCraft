@@ -382,6 +382,33 @@ export function WallElevation({
       })}
 
       {/*
+        דלת שגבוהה מהארגז — כשדלת אחת מכסה שניים.
+        מצוירת כמסגרת מעל מה שהיא באמת מכסה, כדי שרואים מיד אם היא
+        מגיעה למקום שכבר תפוס.
+      */}
+      {!inside &&
+        units
+          .filter((u) => u.doorHeightMm && u.doorHeightMm > u.heightMm - (u.socleMm ?? 0))
+          .map((u) => {
+            const socle = u.socleMm ?? 0;
+            const top = flip(u.yMm + u.heightMm);
+            return (
+              <rect
+                key={`door-${u.id}`}
+                x={u.xMm}
+                y={top}
+                width={u.widthMm}
+                height={Math.max(u.doorHeightMm! - socle, 0)}
+                fill="none"
+                stroke="#a06236"
+                strokeWidth={stroke * 1.2}
+                strokeDasharray={`${stroke * 4} ${stroke * 3}`}
+                pointerEvents="none"
+              />
+            );
+          })}
+
+      {/*
         מדידה מוצגת על כל הארגזים בבת אחת: כשמודדים קיר רוצים לראות
         את כל המידות יחד, לא ללחוץ על ארגז אחרי ארגז.
       */}

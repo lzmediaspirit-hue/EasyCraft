@@ -54,7 +54,8 @@ const kitchenBase = (
   level: 'floor',
   w,
   widths,
-  h: K.baseCarcassH + K.socleH,
+  // גובה המשטח קובע: הארגז מגיע עד תחתית המשטח, והרגליים בתוכו
+  h: K.counterTop - K.counterH,
   d: K.baseDepth,
   y: 0,
   socle: K.socleH,
@@ -217,7 +218,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
     note: 'עומק 600 מ"מ נדרש לתלייה על מוט; 500 מספיק רק למדפים',
   },
   {
@@ -233,7 +234,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
   {
     key: 'b-wd-door3',
@@ -248,7 +249,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
   {
     key: 'b-wd-sliding',
@@ -263,7 +264,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
     note: 'ארון הזזה דורש עומק 600 מ"מ לפחות בגלל המסילות',
   },
   {
@@ -278,7 +279,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
     note: `מוט תלייה ארוכה בגובה ${B.longHangRod} מ"מ`,
   },
   {
@@ -293,7 +294,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
     note: `מוטות בגובה ${B.doubleHangLower} ו-${B.doubleHangUpper} מ"מ`,
   },
   {
@@ -308,7 +309,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
     note: 'מרווח מדף לקיפול בגדים 300–400 מ"מ',
   },
   {
@@ -323,7 +324,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
     note: 'מגירת הלבשה 160 מ"מ, מגירת בגדים 200–250 מ"מ',
   },
   {
@@ -338,7 +339,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
   {
     key: 'b-wd-corner',
@@ -353,7 +354,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
   {
     key: 'b-wd-mirror',
@@ -368,7 +369,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: B.wardrobeH,
     d: B.wardrobeDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
 
   /* ---------------- חדר שינה — רהיטים ---------------- */
@@ -399,7 +400,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: 880,
     d: 450,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
   {
     key: 'b-desk',
@@ -501,7 +502,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: 1080,
     d: 400,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
   {
     key: 'v-float-shelf',
@@ -556,7 +557,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: 2280,
     d: V.wallUnitDepth,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
   {
     key: 'v-panel',
@@ -584,7 +585,7 @@ export const SEED_CATALOG: SeedItem[] = [
     h: 1880,
     d: 400,
     y: 0,
-    socle: 80,
+    socle: K.socleH,
   },
 
   /* ---------------- זמין בכל חדר ---------------- */

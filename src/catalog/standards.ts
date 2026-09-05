@@ -17,7 +17,13 @@
  */
 
 export const KITCHEN = {
-  socleH: 150,
+  /**
+   * גובה הרגליים התקני.
+   * 10 ס"מ הוא מה שמותקן בפועל ברוב הנגריות. גובה המשטח נשאר 90,
+   * ולכן גוף הארון התחתון נגזר ממנו ולא להפך: משטח פחות עובי
+   * המשטח פחות הרגליים.
+   */
+  socleH: 100,
   baseCarcassH: 720,
   counterH: 30,
   /** גובה משטח העבודה מהרצפה */
@@ -78,3 +84,35 @@ export const MATERIAL = {
   sheetWidthMm: 1220,
   sheetHeightMm: 2440,
 };
+
+/**
+ * מגירה בתוך הארגז.
+ *
+ * עומק תיבת המגירה אינו עומק הארגז: מאחוריה יושב הגב, ומלפניה
+ * נשאר מרווח למסילה ולחזית. ההפחתות האלה קבועות בעבודה, ולכן
+ * העומק נגזר מהארגז ולא נשאל מהנגר בכל פעם.
+ */
+export const DRAWER = {
+  /** מרווח קדמי למסילה ולחזית */
+  frontClearMm: 30,
+  /** מרווח אחורי מאחורי הגב */
+  backClearMm: 20,
+  /** מרווח לכל צד, למסילה */
+  sideClearMm: 13,
+  /** עובי דופן ותחתית של מגירת עץ */
+  woodMm: 12,
+  /** גובה דופן תיבה תקני */
+  sideHeightMm: 90,
+  /** אורכי מסילה תקניים */
+  runnersMm: [270, 300, 350, 400, 450, 500, 550, 600],
+};
+
+/**
+ * עומק תיבת המגירה שנגזר מעומק הארגז.
+ * מתעגל כלפי מטה למסילה תקנית — מסילה אינה נחתכת לפי מידה.
+ */
+export function drawerDepth(cabinetDepthMm: number, backMm = MATERIAL.backMm): number {
+  const usable = cabinetDepthMm - DRAWER.frontClearMm - DRAWER.backClearMm - backMm;
+  const fits = DRAWER.runnersMm.filter((r) => r <= usable);
+  return fits.length ? fits[fits.length - 1] : Math.max(Math.round(usable), 0);
+}

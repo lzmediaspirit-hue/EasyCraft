@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
 import { MAX_BODY_MM, isContainer, unitCells } from '../../catalog/zones';
-import { MATERIAL } from '../../catalog/standards';
+import { MATERIAL, drawerDepth } from '../../catalog/standards';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
 import { partChoice } from '../../costing/boards';
 import { InteriorEditor } from './InteriorEditor';
@@ -13,6 +13,7 @@ import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { BookmarkIcon, CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
+import { DRAWER_BOXES } from '../../db/types';
 import type {
   BackKind,
   ExposedSides,
@@ -71,6 +72,7 @@ export function UnitEditor({
   unit,
   inside,
   project,
+  maxDoorHeightMm,
   onChange,
   onApplyChoiceAll,
   onEdit,
@@ -82,6 +84,11 @@ export function UnitEditor({
   inside: boolean;
   /** הפרויקט, לברירות המחדל של הגוון והחומר */
   project?: Project;
+  /**
+   * הגובה המרבי שדלת יכולה להגיע אליו בלי להתנגש בארגז שמתחת.
+   * נמדד בהדמיה, כי רק שם יודעים מי השכנים.
+   */
+  maxDoorHeightMm?: number;
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
@@ -130,6 +137,7 @@ export function UnitEditor({
       ({ content: c }) => c.kind === 'drawers' && c.drawerStyle !== 'inner',
     );
   const hasExposed = !!(exposed.start || exposed.end || exposed.top || exposed.bottom);
+  const hasDrawers = unitCells(unit).some(({ content: c }) => c.kind === 'drawers');
 
   /*
    * ברוחב מוצגות גם המידות של הפריט וגם מידות התקן עד 120 ס"מ:
@@ -326,6 +334,61 @@ export function UnitEditor({
                 </Pill>
               ))}
             </Row>
+
+            {/*
+              מבנה תיבת המגירה משנה אילו חלקים נחתכים, ולכן הוא
+              שייך לפנים הארון ולא לחזית.
+            */}
+            {hasDrawers && (
+              <>
+                <Row label="תיבת המגירה">
+                  {DRAWER_BOXES.map((bx) => (
+                    <Pill
+                      key={bx.key}
+                      active={(unit.drawerBox ?? 'metal') === bx.key}
+                      onClick={() => onChange({ drawerBox: bx.key })}
+                    >
+                      {bx.label}
+                    </Pill>
+                  ))}
+                </Row>
+                <p className="mt-1 text-[10px] leading-snug text-stone-400">
+                  {DRAWER_BOXES.find((bx) => bx.key === (unit.drawerBox ?? 'metal'))?.hint}
+                  {' · עומק התיבה '}
+                  <span className="num">{cm(drawerDepth(unit.depthMm))}</span> {unitLabel()},
+                  נגזר מעומק הארגז.
+                </p>
+              </>
+            )}
+
+            {/*
+              גוון הגוף והגב שייכים למה שרואים כשהחזיתות מוסתרות.
+              בתצוגת חזית הם רק שורות שמסיחות את הדעת.
+            */}
+          <PartChoiceRow
+              label="גוף"
+              finishes={allFinishes}
+              materials={materials}
+              value={{ finishId: unit.carcassFinishId, materialId: unit.carcassMaterialId }}
+              effective={choiceOf('carcass')}
+              onChange={(c) => onChange({ carcassFinishId: c.finishId, carcassMaterialId: c.materialId })}
+              onApplyAll={(c) => onApplyChoiceAll('carcass', c)}
+              onAddFinish={() => setAddingFinish(true)}
+            />
+
+            {(unit.backKind ?? 'thin') !== 'none' && (
+              <PartChoiceRow
+                label="גב"
+                finishes={allFinishes}
+                materials={materials}
+                value={{ finishId: unit.backFinishId, materialId: unit.backMaterialId }}
+                effective={choiceOf('back')}
+                onChange={(c) => onChange({ backFinishId: c.finishId, backMaterialId: c.materialId })}
+                onApplyAll={(c) => onApplyChoiceAll('back', c)}
+                onAddFinish={() => setAddingFinish(true)}
+              />
+            )}
+
           </>
         ) : (
           <p className="mt-4 text-xs leading-snug text-stone-500">
@@ -358,6 +421,63 @@ export function UnitEditor({
                       </Pill>
                     ))}
                   </Row>
+
+                  {/*
+                    גובה הדלת יכול להיות שונה מגובה הארגז: דלת אחת
+                    שמכסה שני ארגזים שייכת לאחד מהם, והמידה שלה אינה
+                    מידתו. ברירת המחדל היא הארגז עצמו.
+                  */}
+                  {(unit.doors ?? 0) > 0 && (
+                    <>
+                      <div className="mt-3 flex items-center gap-1.5">
+                        <span className="w-20 shrink-0 text-[11px] font-medium text-stone-500">
+                          גובה הדלת
+                          {maxDoorHeightMm !== undefined && maxDoorHeightMm > bodyH && (
+                            <span className="num block text-[10px] font-normal text-stone-400">
+                              עד {cm(maxDoorHeightMm)}
+                            </span>
+                          )}
+                        </span>
+                        <Pill
+                          active={unit.doorHeightMm === undefined}
+                          onClick={() =>
+                            onChange({ doorHeightMm: undefined, exposedMatchesDoor: undefined })
+                          }
+                        >
+                          כגובה הארגז
+                        </Pill>
+                        <label className="flex flex-1 items-center gap-1 rounded-lg bg-stone-100 px-2 py-1">
+                          <MeasureInput
+                            value={unit.doorHeightMm ?? bodyH}
+                            onChange={(mm) => onChange({ doorHeightMm: mm })}
+                            minMm={100}
+                            maxMm={maxDoorHeightMm}
+                            ariaLabel="גובה הדלת"
+                            className="num w-full bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
+                          />
+                          <span className="shrink-0 text-[10px] text-stone-400">
+                            {unitLabel()}
+                          </span>
+                        </label>
+                      </div>
+
+                      {unit.doorHeightMm !== undefined && hasExposed && (
+                        <button
+                          onClick={() =>
+                            onChange({ exposedMatchesDoor: !unit.exposedMatchesDoor })
+                          }
+                          aria-pressed={!!unit.exposedMatchesDoor}
+                          className={`mt-1.5 w-full rounded-lg px-3 py-1.5 text-start text-[11px] font-medium transition-colors ${
+                            unit.exposedMatchesDoor
+                              ? 'bg-oak-600 text-white'
+                              : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                          }`}
+                        >
+                          הדופן הזרה בגובה הדלת
+                        </button>
+                      )}
+                    </>
+                  )}
 
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <button
@@ -436,30 +556,6 @@ export function UnitEditor({
                 onChange({ frontFinishId: c.finishId, finishId: c.finishId, frontMaterialId: c.materialId })
               }
               onApplyAll={(c) => onApplyChoiceAll('front', c)}
-              onAddFinish={() => setAddingFinish(true)}
-            />
-          )}
-
-          <PartChoiceRow
-            label="גוף"
-            finishes={allFinishes}
-            materials={materials}
-            value={{ finishId: unit.carcassFinishId, materialId: unit.carcassMaterialId }}
-            effective={choiceOf('carcass')}
-            onChange={(c) => onChange({ carcassFinishId: c.finishId, carcassMaterialId: c.materialId })}
-            onApplyAll={(c) => onApplyChoiceAll('carcass', c)}
-            onAddFinish={() => setAddingFinish(true)}
-          />
-
-          {(unit.backKind ?? 'thin') !== 'none' && (
-            <PartChoiceRow
-              label="גב"
-              finishes={allFinishes}
-              materials={materials}
-              value={{ finishId: unit.backFinishId, materialId: unit.backMaterialId }}
-              effective={choiceOf('back')}
-              onChange={(c) => onChange({ backFinishId: c.finishId, backMaterialId: c.materialId })}
-              onApplyAll={(c) => onApplyChoiceAll('back', c)}
               onAddFinish={() => setAddingFinish(true)}
             />
           )}

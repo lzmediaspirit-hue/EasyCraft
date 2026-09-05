@@ -452,6 +452,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
           project={project}
+          maxDoorHeightMm={maxDoorHeight(selected, units)}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
@@ -672,6 +673,26 @@ function Tool({
 }
 
 /** תת-כותרת בלי כפילות: שם החדר מוצג רק אם הוא שונה משם הפרויקט. */
+/**
+ * עד לאן דלת יכולה לרדת בלי להיכנס לארגז שמתחת.
+ *
+ * דלת אחת שמכסה שני ארגזים יורדת מתחתית שלה כלפי מטה, ולכן הגבול
+ * הוא הארגז הבא שנמצא באותו טווח רוחב — או הרצפה, כשאין כזה.
+ */
+function maxDoorHeight(unit: PlacedUnit, units: PlacedUnit[]): number {
+  const bodyH = Math.max(unit.heightMm - (unit.socleMm ?? 0), 0);
+  const below = units
+    .filter(
+      (u) =>
+        u.id !== unit.id &&
+        u.yMm + u.heightMm <= unit.yMm + 1 &&
+        u.xMm < unit.xMm + unit.widthMm &&
+        u.xMm + u.widthMm > unit.xMm,
+    )
+    .reduce((top, u) => Math.max(top, u.yMm + u.heightMm), 0);
+  return Math.max(bodyH, unit.yMm - below + bodyH);
+}
+
 function subtitle(name: string, roomKind: Project['roomKind'], wallCount: number): string {
   const room = roomDef(roomKind).label;
   const wallsText = wallCount === 1 ? 'קיר אחד' : `${wallCount} קירות`;

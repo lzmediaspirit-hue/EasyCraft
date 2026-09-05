@@ -1,6 +1,6 @@
 import { glyphDef } from '../catalog/glyphList';
 import { nestParts, type NestResult, type PartGrain } from './nesting';
-import { MATERIAL } from '../catalog/standards';
+import { DRAWER, MATERIAL, drawerDepth } from '../catalog/standards';
 import { countDrawers, countShelves, unitCells, unitZones, zoneCells } from '../catalog/zones';
 import type {
   Material,
@@ -298,22 +298,64 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     });
   }
 
-  // חזיתות מגירה, תא אחר תא — תא בתוך קושרת מקבל חזית צרה יותר
+  /*
+   * מגירות, תא אחר תא.
+   *
+   * החזית נספרת תמיד; תיבת המגירה תלויה במבנה שנבחר. מגירת עץ
+   * נבנית בנגרייה — תחתית, שתי דפנות וגב — ומגירת ברזל מגיעה עם
+   * דפנות מוכנות, ולכן נחתכים לה רק התחתית והגב.
+   */
   const gap = s.frontGapMm;
+  const boxKind = u.drawerBox ?? 'metal';
+  const boxDepth = drawerDepth(d);
   for (const z of zones) {
     for (const { content, share } of zoneCells(z)) {
-      if (content.kind !== 'drawers' || content.drawerStyle === 'inner') continue;
+      if (content.kind !== 'drawers') continue;
       const rows = content.drawers ?? 1;
       const cols = Math.max(content.drawerCols ?? 1, 1);
+      const qty = rows * cols;
+      // רוחב פנים התיבה — רוחב התא פחות מרווח המסילה משני הצדדים
+      const cellW = Math.max((innerW * share) / cols - 2 * DRAWER.sideClearMm, 0);
+
+      if (content.drawerStyle !== 'inner') {
+        parts.push({
+          role: 'front',
+          // חזית נראית — כיוון הסיבים חייב להיות אחיד בכל החזיתות
+          grain: 'height',
+          label: 'חזית מגירה',
+          widthMm: Math.max((carcassW * share) / cols - gap, 0),
+          heightMm: Math.max(z.heightMm / rows - gap, 0),
+          qty,
+        });
+      }
+
+      if (boxDepth <= 0 || cellW <= 0) continue;
       parts.push({
-        role: 'front',
-        // חזית נראית — כיוון הסיבים חייב להיות אחיד בכל החזיתות
-        grain: 'height',
-        label: 'חזית מגירה',
-        widthMm: Math.max((carcassW * share) / cols - gap, 0),
-        heightMm: Math.max(z.heightMm / rows - gap, 0),
-        qty: rows * cols,
+        role: 'carcass',
+        grain: 'free',
+        label: 'תחתית מגירה',
+        widthMm: cellW,
+        heightMm: boxDepth,
+        qty,
       });
+      parts.push({
+        role: 'carcass',
+        grain: 'free',
+        label: 'גב מגירה',
+        widthMm: cellW,
+        heightMm: DRAWER.sideHeightMm,
+        qty,
+      });
+      if (boxKind === 'wood') {
+        parts.push({
+          role: 'carcass',
+          grain: 'free',
+          label: 'דופן מגירה',
+          widthMm: boxDepth,
+          heightMm: DRAWER.sideHeightMm,
+          qty: qty * 2,
+        });
+      }
     }
   }
 
@@ -330,13 +372,19 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
       : 0;
   const frontW = Math.max(carcassW - blind, 0);
   // דלת זכוכית אינה לוח, ולכן היא נספרת בנפרד ולא בעמודות הפלטות
-  if (doors > 0 && coveredMm > 0 && frontW > 0 && !u.glassDoors) {
+  /*
+   * גובה הדלת יכול להיות גדול מהארגז: דלת אחת שמכסה שני ארגזים
+   * שייכת לאחד מהם, והמידה שלה אינה מידתו. כשלא נקבע גובה משלה
+   * היא מכסה בדיוק את מה שאינו מגירה חיצונית.
+   */
+  const doorH = u.doorHeightMm ?? coveredMm;
+  if (doors > 0 && doorH > 0 && frontW > 0 && !u.glassDoors) {
     parts.push({
       role: 'front',
       grain: 'height',
       label: 'דלת',
       widthMm: Math.max(frontW / doors - gap, 0),
-      heightMm: Math.max(coveredMm - gap, 0),
+      heightMm: Math.max(doorH - gap, 0),
       qty: doors,
     });
   }
@@ -344,6 +392,8 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   // דפנות זרות במידה החיצונית המלאה, ועמוקות מהארגז.
   // ברירת המחדל מכסה חזית סטנדרטית; נגר שעובד אחרת מזין מידה משלו.
   const panelDepth = u.exposedDepthMm ?? d + MATERIAL.exposedExtraMm;
+  // דופן שמתיישרת לדלת גבוהה מהארגז — אחרת נראה קו במפגש
+  const sideH = u.exposedMatchesDoor && u.doorHeightMm ? Math.max(u.doorHeightMm, h) : h;
   const panel = (heightMm: number): Part => ({
     role: 'exposed',
     grain: 'height',
@@ -352,8 +402,8 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     heightMm,
     qty: 1,
   });
-  if (e.start) parts.push(panel(h));
-  if (e.end) parts.push(panel(h));
+  if (e.start) parts.push(panel(sideH));
+  if (e.end) parts.push(panel(sideH));
   if (e.top) parts.push(panel(w));
   if (e.bottom) parts.push(panel(w));
 
