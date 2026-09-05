@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
-import { wallName } from '../projects/wallLayouts';
+import { wallLabel } from '../projects/wallLayouts';
 import { WallElevation, type MeasureAxis } from './WallElevation';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
@@ -13,6 +13,9 @@ import { SaleSheet } from '../projects/SaleSheet';
 import { useCurrentMember } from '../../workflow/useMember';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
+import { WallToolsSheet } from './WallToolsSheet';
+import { useViewOptions } from './viewOptions';
+import { history, useHistory } from './history';
 import { WallThumb } from './WallThumb';
 import { buildPlan, cornerZones, planUnits } from './plan';
 import { analyzeWall, nextFreeX } from './analysis';
@@ -23,6 +26,8 @@ import { QuickCalcButton } from '../../ui/QuickCalc';
 import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
+  CenterIcon,
+  CopyIcon,
   CubeIcon,
   DepthIcon,
   NestIcon,
@@ -30,9 +35,12 @@ import {
   InsideIcon,
   PlanIcon,
   PlusIcon,
+  RedoIcon,
   RulerIcon,
+  SlidersIcon,
+  UndoIcon,
 } from '../../ui/icons';
-import { cm, meters } from '../../ui/units';
+import { cm, meters, unitLabel } from '../../ui/units';
 import type { CatalogItem, PlacedUnit, Project } from '../../db/types';
 
 const PANEL_KEY = 'easycraft.panelRatio';
@@ -59,6 +67,9 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [iso, setIso] = useState(false);
   const [depthOpen, setDepthOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [wallToolsOpen, setWallToolsOpen] = useState(false);
+  /* מצב סרגל: מודדים את המרחק בין שני ארגזים שנבחרו */
+  const [rulerPair, setRulerPair] = useState<string[] | null>(null);
   const [inside, setInside] = useState(false);
   const [measure, setMeasure] = useState<MeasureAxis | null>(null);
   /*
@@ -88,6 +99,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const selected = units.find((u) => u.id === selectedId) ?? null;
   const me = useCurrentMember();
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
+  const view = useViewOptions();
+  const { canUndo, canRedo } = useHistory(projectId);
 
   /*
    * מעבר לקיר אחר מבטל בחירה, כדי שלא נערוך ארגז שלא רואים —
@@ -124,15 +137,44 @@ export function DesignScreen({ projectId }: { projectId: string }) {
 
   async function addItem(item: CatalogItem) {
     if (!wall) return;
-    const x = nextFreeX(units, item.level);
+    /*
+     * ארגז חדש לא נוחת בפינה שכבר תפוסה בידי הקיר השכן — אלא אם
+     * הוא ארגז פינתי, שנבנה בדיוק בשביל המקום הזה.
+     */
+    const from = item.level !== 'wall' && !item.corner ? (corners?.startMm ?? 0) : 0;
+    const x = Math.max(nextFreeX(units, item.level), from);
     // הארגז נכנס בתוך הקיר, ולא נדחף אל מעבר לקצה שלו
-    const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, 0);
+    const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, from);
+    await history.capture(projectId, `add:${Date.now()}`);
     const unit = await unitsRepo.add(projectId, wall.id, item, Math.min(x, maxX));
     setLibraryOpen(false);
     setSelectedId(unit.id);
   }
 
-  async function patchUnit(id: string, patch: Partial<PlacedUnit>) {
+  /**
+   * כל שינוי בארגז נרשם בהיסטוריה לפני שהוא קורה.
+   * `tag` מאחד רצף שינויים לפעולה אחת — גרירה שלמה היא צעד אחד
+   * ולא ארבעים, ולכן "בטל" מחזיר את הארגז למקום שממנו יצא.
+   */
+  async function duplicateSelected() {
+    if (!selected || !wall) return;
+    await history.capture(projectId, `dup:${Date.now()}`);
+    const x = Math.min(
+      nextFreeX(units, selected.level),
+      Math.max(wall.lengthMm - selected.widthMm, 0),
+    );
+    const copy = await unitsRepo.duplicate(selected.id, x);
+    if (copy) setSelectedId(copy.id);
+  }
+
+  async function centerWall() {
+    if (!wall) return;
+    await history.capture(projectId, `center:${Date.now()}`);
+    await unitsRepo.centerOnWall(wall.id, wall.lengthMm);
+  }
+
+  async function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
+    await history.capture(projectId, tag);
     await unitsRepo.update(id, patch);
   }
 
@@ -210,6 +252,67 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             }
             title="לחיצה נוספת מחליפה ציר"
           />
+          {/*
+            סרגל: מודדים את המרחק בין שני ארגזים. זו השאלה שנשאלת
+            בשטח — "כמה נשאר בין השניים" — ועד עכשיו היה צריך לחשב
+            אותה בראש משתי המידות.
+          */}
+          <Tool
+            active={rulerPair !== null}
+            onClick={() => {
+              setRulerPair((p) => (p === null ? [] : null));
+              setMeasure(null);
+              setSelectedId(null);
+            }}
+            icon={<RulerIcon className="size-4" />}
+            label="סרגל"
+            title="מרחק בין שני ארגזים"
+          />
+          <Tool
+            active={wallToolsOpen}
+            onClick={() => setWallToolsOpen(true)}
+            icon={<SlidersIcon className="size-4" />}
+            label="הקיר"
+            title="מידות הקיר ומה מוצג"
+          />
+        </div>
+
+        {/*
+          שורת פעולות על הארגזים: ביטול וחזרה, שכפול ומרכוז.
+          כולן נוגעות במה שכבר על הקיר, ולכן הן חיות יחד ולא בין
+          כלי התצוגה.
+        */}
+        <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <Tool
+            active={false}
+            disabled={!canUndo}
+            onClick={() => history.undo(projectId)}
+            icon={<UndoIcon className="size-4" />}
+            label="בטל"
+          />
+          <Tool
+            active={false}
+            disabled={!canRedo}
+            onClick={() => history.redo(projectId)}
+            icon={<RedoIcon className="size-4" />}
+            label="חזור"
+          />
+          <Tool
+            active={false}
+            disabled={!selected}
+            onClick={duplicateSelected}
+            icon={<CopyIcon className="size-4" />}
+            label="שכפול"
+            title="עותק של הארגז הנבחר"
+          />
+          <Tool
+            active={false}
+            disabled={units.length === 0}
+            onClick={centerWall}
+            icon={<CenterIcon className="size-4" />}
+            label="מרכוז"
+            title="ממרכז את הארגזים על הקיר"
+          />
         </div>
         <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
           {walls.length > 1 &&
@@ -224,7 +327,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
                 }`}
               >
                 <WallThumb wall={w} units={allUnits ?? []} active={i === wallIndex} />
-                {wallName(i)}
+                {wallLabel(w, i)}
               </button>
             ))}
           <button
@@ -273,7 +376,21 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             wall={wall}
             units={units}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            showHeight={view.heightLine}
+            rulerPair={rulerPair}
+            onSelect={(id) => {
+              // במצב סרגל הבחירה אוספת שני ארגזים ולא פותחת עורך
+              if (rulerPair) {
+                if (!id) return setRulerPair([]);
+                setRulerPair((p) => {
+                  const cur = p ?? [];
+                  if (cur.includes(id)) return cur.filter((x) => x !== id);
+                  return [...cur, id].slice(-2);
+                });
+                return;
+              }
+              setSelectedId(id);
+            }}
             inside={inside}
             measure={measure}
             corners={corners}
@@ -352,31 +469,42 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
             {analysis && (
               <>
+                {/* מה מוצג כאן נבחר במגירת הקיר; אין מחוון שאי אפשר לכבות */}
                 <div className="grid grid-cols-3 gap-2">
-                  <Stat
-                    label="שטח הקיר"
-                    value={((wall.lengthMm / 1000) * (wall.heightMm / 1000)).toFixed(2)}
-                    unit="מ״ר"
-                  />
-                  <Stat label="גובה הקיר" value={cm(wall.heightMm)} unit="ס״מ" />
-                  <Stat label="מטר רץ תחתון" value={meters(analysis.floorUsedMm)} unit="מ׳" />
-                  <Stat label="ארגזים" value={String(units.length)} />
-                  <Stat
-                    label={analysis.freeMm >= 0 ? 'נשאר על הקיר' : 'חריגה'}
-                    value={cm(Math.abs(analysis.freeMm))}
-                    unit="ס״מ"
-                    tone={analysis.freeMm < 0 ? 'bad' : 'ok'}
-                  />
-                  <Stat
-                    label="שטח חזיתות"
-                    value={(
-                      units.reduce((n, u) => n + (u.widthMm / 1000) * (u.heightMm / 1000), 0)
-                    ).toFixed(2)}
-                    unit="מ״ר"
-                  />
+                  {view.wallArea && (
+                    <Stat
+                      label="שטח הקיר"
+                      value={((wall.lengthMm / 1000) * (wall.heightMm / 1000)).toFixed(2)}
+                      unit="מ״ר"
+                    />
+                  )}
+                  {view.wallHeight && (
+                    <Stat label="גובה הקיר" value={cm(wall.heightMm)} unit={unitLabel()} />
+                  )}
+                  {view.floorMeters && (
+                    <Stat label="מטר רץ תחתון" value={meters(analysis.floorUsedMm)} unit="מ׳" />
+                  )}
+                  {view.unitCount && <Stat label="ארגזים" value={String(units.length)} />}
+                  {view.freeSpace && (
+                    <Stat
+                      label={analysis.freeMm >= 0 ? 'נשאר על הקיר' : 'חריגה'}
+                      value={cm(Math.abs(analysis.freeMm))}
+                      unit={unitLabel()}
+                      tone={analysis.freeMm < 0 ? 'bad' : 'ok'}
+                    />
+                  )}
+                  {view.frontArea && (
+                    <Stat
+                      label="שטח חזיתות"
+                      value={(
+                        units.reduce((n, u) => n + (u.widthMm / 1000) * (u.heightMm / 1000), 0)
+                      ).toFixed(2)}
+                      unit="מ״ר"
+                    />
+                  )}
                 </div>
 
-                {analysis.warnings.length > 0 && (
+                {view.warnings && analysis.warnings.length > 0 && (
                   <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
                     {analysis.warnings.map((w) => (
                       <li key={w} className="text-sm leading-snug text-amber-900">
@@ -418,6 +546,15 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             </button>
           </div>
         </>
+      )}
+
+      {wallToolsOpen && (
+        <WallToolsSheet
+          wall={wall}
+          index={wallIndex}
+          onChange={(patch) => wallsRepo.update(wall.id, patch)}
+          onClose={() => setWallToolsOpen(false)}
+        />
       )}
 
       {planOpen && (
@@ -502,6 +639,7 @@ function Tool({
   icon,
   label,
   title,
+  disabled,
 }: {
   active: boolean;
   onClick: () => void;
@@ -509,10 +647,13 @@ function Tool({
   label: string;
   /** תיאור הפעולה, כשהתווית לבדה לא מספרת מה תקרה */
   title?: string;
+  /** פעולה שאין לה על מה לפעול כרגע */
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
       /*
        * התווית הנראית היא חלק מהשם הנגיש. כשהיא לא נמצאת בו, מי
@@ -522,7 +663,7 @@ function Tool({
       title={title}
       className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
         active ? 'bg-stone-900 text-white' : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
-      }`}
+      } disabled:opacity-40`}
     >
       {icon}
       {label}

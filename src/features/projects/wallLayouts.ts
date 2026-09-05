@@ -25,3 +25,8 @@ const HEB = ['א', 'ב', 'ג', 'ד', 'ה', 'ו'];
 export function wallName(index: number): string {
   return `קיר ${HEB[index] ?? index + 1}׳`;
 }
+
+/** השם שהנגר נתן לקיר, ואם אין — השם לפי המיקום. */
+export function wallLabel(wall: { name?: string }, index: number): string {
+  return wall.name?.trim() || wallName(index);
+}

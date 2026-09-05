@@ -278,6 +278,44 @@ export const unitsRepo = {
   },
 
   /**
+   * משכפל ארגז לאותו קיר.
+   * הרוב המוחלט של קיר הוא אותו ארגז שוב ושוב במידה אחרת, ולבנות
+   * כל אחד מחדש מהספרייה זו עבודה שכבר נעשתה.
+   */
+  async duplicate(id: string, xMm: number): Promise<PlacedUnit | undefined> {
+    const source = await db.units.get(id);
+    if (!source) return undefined;
+    const now = Date.now();
+    const copy: PlacedUnit = {
+      ...source,
+      id: crypto.randomUUID(),
+      xMm,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.units.add(copy);
+    return copy;
+  },
+
+  /**
+   * ממרכז את הארגזים על הקיר.
+   * המרכוז נעשה על הקבוצה כולה ולא על כל ארגז בנפרד: המרווחים
+   * שביניהם הם החלטה של הנגר, וריכוזם באמצע לא אמור לשנות אותם.
+   */
+  async centerOnWall(wallId: string, wallLengthMm: number): Promise<void> {
+    const rows = await db.units.where('wallId').equals(wallId).toArray();
+    if (!rows.length) return;
+    const from = Math.min(...rows.map((u) => u.xMm));
+    const to = Math.max(...rows.map((u) => u.xMm + u.widthMm));
+    const offset = Math.round((wallLengthMm - (to - from)) / 2 - from);
+    if (offset === 0) return;
+    const now = Date.now();
+    await db.units.bulkPut(
+      rows.map((u) => ({ ...u, xMm: Math.max(u.xMm + offset, 0), updatedAt: now })),
+    );
+  },
+
+  /**
    * קובע גוון וחומר אחידים לחלק מסוים בכל הפרויקט.
    *
    * הבחירה נשמרת כברירת המחדל של הפרויקט, והחריגות שנקבעו בארגזים

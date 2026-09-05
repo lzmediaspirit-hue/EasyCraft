@@ -118,6 +118,8 @@ export interface Wall extends Entity {
   projectId: string;
   /** סדר הקיר בפרויקט, מתחיל ב-0 */
   index: number;
+  /** שם משלך לקיר. ריק = "קיר א׳" לפי המיקום */
+  name?: string;
   lengthMm: number;
   heightMm: number;
   features: WallFeature[];

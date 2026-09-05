@@ -569,24 +569,31 @@ export function UnitEditor({
           הצמדה לרצפה
         </button>
 
+        {/*
+          גובה הרגליים נגיש תמיד ולא רק לארגז שנעול לרצפה: גם ארון
+          שתלוי יכול לשבת על צוקל, וכששורה מופיעה ונעלמת לפי מתג אחר
+          צריך לנחש איפה היא. גובה מהרצפה מופיע רק כשיש מה להזיז.
+        */}
         <div className="min-w-0 flex-1">
-          {locked ? (
-            <NumBox
-              label="גובה רגליים"
-              value={unit.socleMm ?? 0}
-              /* הרגליים מרימות את גוף הארון, ולכן הגובה הכולל גדל איתן */
-              onChange={(mm) =>
-                onChange({
-                  socleMm: mm || undefined,
-                  heightMm: Math.max(unit.heightMm + mm - (unit.socleMm ?? 0), 50),
-                  yMm: 0,
-                })
-              }
-            />
-          ) : (
-            <NumBox label="גובה מהרצפה" value={unit.yMm} onChange={(mm) => onChange({ yMm: mm })} />
-          )}
+          <NumBox
+            label="גובה רגליים"
+            value={unit.socleMm ?? 0}
+            /* הרגליים מרימות את גוף הארון, ולכן הגובה הכולל גדל איתן */
+            onChange={(mm) =>
+              onChange({
+                socleMm: mm || undefined,
+                heightMm: Math.max(unit.heightMm + mm - (unit.socleMm ?? 0), 50),
+                ...(locked ? { yMm: 0 } : {}),
+              })
+            }
+          />
         </div>
+
+        {!locked && (
+          <div className="min-w-0 flex-1">
+            <NumBox label="גובה מהרצפה" value={unit.yMm} onChange={(mm) => onChange({ yMm: mm })} />
+          </div>
+        )}
       </div>
     </div>
 

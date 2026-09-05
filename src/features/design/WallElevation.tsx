@@ -35,6 +35,13 @@ type Props = {
   measure?: MeasureAxis | null;
   /** רוחב אזורי הפינה בשני קצות הקיר, שנתפסים בידי הקיר השכן */
   corners?: { startMm: number; endMm: number };
+  /** קו מידה אנכי לגובה הקיר */
+  showHeight?: boolean;
+  /**
+   * מצב סרגל: הארגזים שנבחרו למדידת המרחק ביניהם.
+   * `null` = הסרגל כבוי.
+   */
+  rulerPair?: string[] | null;
 };
 
 /**
@@ -52,6 +59,8 @@ export function WallElevation({
   finishHex,
   measure,
   corners,
+  showHeight,
+  rulerPair,
 }: Props) {
   /*
    * חיפוי קיר מצויר ראשון: הוא מכסה את הקיר, והארגזים עומדים לפניו.
@@ -74,12 +83,34 @@ export function WallElevation({
     /* המיקום האחרון, כדי להחליט על הצמדה בשחרור ולא תוך כדי */
   } | null>(null);
 
-  const padX = 120;
+  // כשקו הגובה מוצג צריך מקום לצידו, אחרת המידה נחתכת
+  const padX = showHeight ? 420 : 120;
   const padTop = 140;
   const padBottom = 340;
   const vbW = wall.lengthMm + padX * 2;
   const vbH = wall.heightMm + padTop + padBottom;
   const stroke = Math.max(wall.lengthMm / 420, 4);
+  /*
+   * המרחק הפנוי בין שני הארגזים שנבחרו לסרגל.
+   * נמדד מהפאה הפנימית של האחד לפאה הפנימית של השני — זה המרווח
+   * שבאמת קיים על הקיר, ולא המרחק בין נקודות ההתחלה שלהם.
+   */
+  const rulerSpan = (() => {
+    if (!rulerPair || rulerPair.length < 2) return null;
+    const [a, b] = rulerPair.map((id) => units.find((u) => u.id === id));
+    if (!a || !b) return null;
+    const left = a.xMm <= b.xMm ? a : b;
+    const right = left === a ? b : a;
+    const from = left.xMm + left.widthMm;
+    const to = right.xMm;
+    const mid = (u: PlacedUnit) => u.yMm + u.heightMm / 2;
+    return {
+      from: Math.min(from, to),
+      to: Math.max(from, to),
+      gap: Math.max(to - from, 0),
+      y: wall.heightMm - Math.round((mid(a) + mid(b)) / 2),
+    };
+  })();
   const fontSize = Math.max(wall.lengthMm / 40, 70);
 
   /** גובה המסך של נקודה שנמדדת מהרצפה. */
@@ -383,6 +414,70 @@ export function WallElevation({
       >
         {cm(wall.lengthMm)}
       </text>
+
+      {/* קו מידה אנכי — גובה הקיר, לצד הציור */}
+      {showHeight && (
+        <g pointerEvents="none">
+          <g stroke="#a8a29e" strokeWidth={stroke * 0.9}>
+            <line x1={-160} y1={0} x2={-160} y2={wall.heightMm} />
+            <line x1={-220} y1={0} x2={-100} y2={0} />
+            <line x1={-220} y1={wall.heightMm} x2={-100} y2={wall.heightMm} />
+          </g>
+          <text
+            x={-250}
+            y={wall.heightMm / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={Math.max(wall.lengthMm / 34, 90)}
+            fill="#78716c"
+            direction="ltr"
+            transform={`rotate(-90 ${-250} ${wall.heightMm / 2})`}
+          >
+            {cm(wall.heightMm)}
+          </text>
+        </g>
+      )}
+
+      {/*
+        סרגל: המרחק הפנוי בין שני ארגזים שנבחרו.
+        זו השאלה שנשאלת בשטח — "כמה נשאר ביניהם" — ועד עכשיו היה
+        צריך לחשב אותה בראש משתי המידות ומשני המיקומים.
+      */}
+      {rulerSpan && (
+        <g pointerEvents="none">
+          <line
+            x1={rulerSpan.from}
+            y1={rulerSpan.y}
+            x2={rulerSpan.to}
+            y2={rulerSpan.y}
+            stroke="#0f766e"
+            strokeWidth={stroke * 1.4}
+          />
+          {/* שני הקצוות עשויים ליפול על אותה נקודה כשאין מרווח בכלל */}
+          {[rulerSpan.from, rulerSpan.to].map((x, i) => (
+            <line
+              key={i}
+              x1={x}
+              y1={rulerSpan.y - 90}
+              x2={x}
+              y2={rulerSpan.y + 90}
+              stroke="#0f766e"
+              strokeWidth={stroke * 1.4}
+            />
+          ))}
+          <text
+            x={(rulerSpan.from + rulerSpan.to) / 2}
+            y={rulerSpan.y - 130}
+            textAnchor="middle"
+            fontSize={Math.max(wall.lengthMm / 34, 95)}
+            fontWeight={600}
+            fill="#0f766e"
+            direction="ltr"
+          >
+            {cm(rulerSpan.gap)}
+          </text>
+        </g>
+      )}
     </svg>
   );
 }
@@ -610,10 +705,13 @@ function nearest(value: number, targets: number[], limit: number): number {
 /**
  * מצמיד ארגז לקצות הקיר ולשכנים באותו מפלס.
  *
- * הפינה פתוחה לכל ארגז. קודם היא הייתה חסומה לכל מי שאינו ארגז
- * פינתי, אבל בפינה אמיתית אחד משני הקירות מקבל אותה — וזו החלטה
- * של הנגר, לא של האפליקציה. מה שכן: קצה הפינה הוא יעד הצמדה,
- * ואם שני הארונות באמת נכנסים זה בזה מבט העל מסמן את ההתנגשות.
+ * פינה פנויה פתוחה לכל ארגז — היא שייכת למי שיגיע אליה ראשון.
+ * פינה שכבר תפוסה בידי ארון של הקיר השכן חסומה, כי שני ארונות
+ * באותו מקום בחדר זו התנגשות ולא החלטה. ארגז פינתי מורשה להיכנס
+ * לשם בכל מקרה — זה בדיוק מה שהוא נבנה בשבילו.
+ *
+ * `corners` נמדד מהארונות שבאמת נוגעים בפינה המשותפת, ולכן קיר
+ * שכן ריק אינו חוסם כלום.
  */
 function snapX(
   x: number,
@@ -623,15 +721,11 @@ function snapX(
   corners: { startMm: number; endMm: number } | undefined,
   tol: number,
 ): number {
-  const min = 0;
-  const max = Math.max(wallLength - unit.widthMm, min);
+  const blocked = corners && unit.level !== 'wall' && !unit.corner;
+  const min = blocked ? corners.startMm : 0;
+  const max = Math.max((blocked ? wallLength - corners.endMm : wallLength) - unit.widthMm, min);
 
   const targets = [min, max];
-  // קצה אזור הפינה — נצמדים אליו מרצון, לא נעצרים בו בכפייה
-  if (corners && unit.level !== 'wall') {
-    if (corners.startMm > 0) targets.push(corners.startMm);
-    if (corners.endMm > 0) targets.push(wallLength - corners.endMm - unit.widthMm);
-  }
   for (const other of units) {
     if (other.id === unit.id || other.level !== unit.level) continue;
     targets.push(other.xMm + other.widthMm, other.xMm - unit.widthMm);
