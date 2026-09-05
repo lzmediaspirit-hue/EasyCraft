@@ -14,6 +14,7 @@ import { useCurrentMember } from '../../workflow/useMember';
 import { useEffectiveRole } from '../../workflow/viewRole';
 import { can } from '../../workflow/auth';
 import { UnitWorkSheet } from './UnitWorkSheet';
+import { BulkWorkSheet } from './BulkWorkSheet';
 import { FlowIcon } from '../../ui/icons';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
@@ -31,6 +32,7 @@ import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
   CenterIcon,
+  CheckIcon,
   CopyIcon,
   CubeIcon,
   DepthIcon,
@@ -81,6 +83,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
    */
   const [workMode, setWorkMode] = useState(false);
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [inside, setInside] = useState(false);
   const [measure, setMeasure] = useState<MeasureAxis | null>(null);
   /*
@@ -315,6 +318,18 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           כולן נוגעות במה שכבר על הקיר, ולכן הן חיות יחד ולא בין
           כלי התצוגה.
         */}
+        {workMode && (
+          <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            <Tool
+              active={bulkOpen}
+              onClick={() => setBulkOpen(true)}
+              icon={<CheckIcon className="size-4" />}
+              label="סימון מהיר"
+              title="לסמן שלב על כל הארגזים בקיר"
+            />
+          </div>
+        )}
+
         {editable && (
         <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <Tool
@@ -639,6 +654,18 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           role={role}
           onChange={(work) => patchUnit(workUnitId, { work }, `work:${workUnitId}`)}
           onClose={() => setWorkUnitId(null)}
+        />
+      )}
+
+      {bulkOpen && (
+        <BulkWorkSheet
+          units={units}
+          role={role}
+          onApply={async (changes) => {
+            await history.capture(projectId, `bulk:${Date.now()}`);
+            for (const c of changes) await unitsRepo.update(c.id, { work: c.work });
+          }}
+          onClose={() => setBulkOpen(false)}
         />
       )}
 

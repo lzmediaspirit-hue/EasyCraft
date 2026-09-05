@@ -1,12 +1,17 @@
 import { glyphDef } from '../catalog/glyphList';
 import { unitCells } from '../catalog/zones';
-import type { PlacedUnit, UnitWork, UserRole } from '../db/types';
+import type { PlacedUnit, TrackStage, UnitWork, UserRole, WorkTrack } from '../db/types';
 
 /**
  * מצב הארגז בייצור, ומה שמותר לכל תפקיד לסמן בו.
  *
+ * ארגז אינו דבר אחד שנע קדימה: הגוף נחתך, מקונט ומורכב בזמן אחד,
+ * החזיתות בזמן אחר, והדופן הזרה לפעמים מגיעה רק בהתקנה. לכן לכל
+ * אחד מסלול משלו — וארגז יכול לעמוד מותקן אצל הלקוח בלי חזיתות,
+ * וזה מצב חוקי ולא שגיאה.
+ *
  * הצבע על הקיר הוא הדוח: מי שנכנס למסך רואה בשנייה מה נתקע ומה
- * מוכן, בלי לפתוח רשימה. לכן הצבע נגזר מהסימונים ולא נשמר בנפרד —
+ * מוכן, בלי לפתוח רשימה. הצבע נגזר מהמסלולים ולא נשמר בנפרד —
  * מצב ששמור פעמיים מתפצל.
  */
 
@@ -19,6 +24,52 @@ export const WORK_TONES: Record<WorkTone, { fill: string; stroke: string; label:
   done: { fill: '#d1fae5', stroke: '#059669', label: 'מורכב' },
   issue: { fill: '#fecaca', stroke: '#dc2626', label: 'בעיה' },
 };
+
+/** שלב במסלול: מי מסמן אותו ומה הוא אומר. */
+export interface StageDef {
+  key: Exclude<TrackStage, 'none'>;
+  label: string;
+  /** מי רשאי לסמן אותו */
+  roles: UserRole[];
+}
+
+/**
+ * השרשרת המלאה.
+ *
+ * התכנת מוציא את הקבצים — זה סוף העבודה שלו — ומשם הנגר מסמן, כי
+ * הוא זה שמחזיק את הלוח ביד. אי אפשר לדלג: קנט לפני חיתוך אינו
+ * מצב שקיים בשטח, ולכן הוא גם לא מצב שאפשר לסמן.
+ */
+export const STAGE_CHAIN: StageDef[] = [
+  { key: 'ready', label: 'מוכן לחיתוך', roles: ['manager', 'planner'] },
+  { key: 'cut', label: 'נחתך', roles: ['manager', 'carpenter'] },
+  { key: 'edged', label: 'קנטים', roles: ['manager', 'carpenter'] },
+  { key: 'assembled', label: 'הורכב', roles: ['manager', 'carpenter'] },
+  { key: 'installed', label: 'הותקן', roles: ['manager', 'carpenter', 'installer'] },
+];
+
+/** מסלול בארגז: השם שלו, ואילו שלבים בכלל שייכים לו. */
+export interface TrackDef {
+  key: WorkTrack;
+  label: string;
+  /** השלב האחרון שיש לו משמעות במסלול הזה */
+  last: Exclude<TrackStage, 'none'>;
+  hint: string;
+}
+
+export const TRACKS: TrackDef[] = [
+  { key: 'carcass', label: 'גוף', last: 'installed', hint: 'הצדדים, התחתית והתקרה' },
+  /*
+   * הגב נחתך בנפרד כשהוא בעובי אחר, ומשם הוא כבר חלק מהגוף:
+   * לא מקנטים אותו ולא מרכיבים אותו לבד.
+   */
+  { key: 'back', label: 'גב', last: 'cut', hint: 'נחתך בנפרד, בעובי אחר' },
+  { key: 'fronts', label: 'חזיתות', last: 'installed', hint: 'דלתות וחזיתות מגירה' },
+  { key: 'panels', label: 'דפנות זרות', last: 'installed', hint: 'הצדדים הגלויים' },
+];
+
+export const stageIndex = (s: TrackStage): number =>
+  s === 'none' ? -1 : STAGE_CHAIN.findIndex((x) => x.key === s);
 
 /** האם לארגז יש חזיתות שצריך להתקין. */
 export function hasFronts(u: PlacedUnit): boolean {
@@ -34,94 +85,101 @@ export function hasPanels(u: PlacedUnit): boolean {
   return !!(e.start || e.end || e.top || e.bottom);
 }
 
-/**
- * ארגז נחשב מורכב כשיש עליו קנטים, הוא הורכב, והחזיתות והדפנות
- * הזרות שלו במקומן. ארגז בלי חזיתות או בלי דפנות זרות לא מחכה
- * להן — אחרת ארון פתוח לעולם לא היה מגיע לירוק.
- */
-export function isComplete(u: PlacedUnit): boolean {
-  const w = u.work ?? {};
-  if (!w.edged || !w.assembled) return false;
-  if (hasFronts(u) && !w.fronts) return false;
-  if (hasPanels(u) && !w.panels) return false;
-  return true;
-}
+/** לוח בודד אינו ארגז, ומכשיר חשמלי נקנה — לשניהם אין תהליך הרכבה. */
+export const tracksWork = (u: PlacedUnit): boolean => {
+  const def = glyphDef(u.glyph);
+  return !def.noCarcass && !def.standalone;
+};
 
-/** הצבע של הארגז על הקיר, לפי מה שסומן בו. */
-export function workTone(u: PlacedUnit): WorkTone {
-  const w = u.work ?? {};
-  if (w.issue) return 'issue';
-  if (w.installed || isComplete(u)) return 'done';
-  // כתום מרגע שיש קנטים — זה הרגע שבו הארגז עובר מהמסור לשולחן
-  if (w.edged || w.assembled) return 'assembly';
-  if (w.cut || w.filesReady) return 'cutting';
-  return 'idle';
-}
-
-/** תיאור קצר של מה שנעשה בארגז, לשורה ברשימה. */
-export function workSummary(u: PlacedUnit): string {
-  const w = u.work ?? {};
-  if (w.issue) return w.issue;
-  if (w.installed) return 'הותקן';
-  if (isComplete(u)) return 'מורכב ומוכן להתקנה';
-  const done = [
-    w.filesReady && 'קבצים',
-    w.cut && 'נחתך',
-    w.edged && 'קנטים',
-    w.assembled && 'הורכב',
-    w.fronts && 'חזיתות',
-    w.panels && 'דפנות',
-  ].filter(Boolean);
-  return done.length ? done.join(' · ') : 'עוד לא התחיל';
-}
-
-/** סימון בודד בארגז, והתפקידים שרשאים לגעת בו. */
-export interface WorkFlag {
-  key: keyof Omit<UnitWork, 'issue' | 'issueBy'>;
-  label: string;
-  hint: string;
-  roles: UserRole[];
-}
-
-/**
- * מי מסמן מה.
- *
- * התכנת מסמן שהקבצים מוכנים — זה סוף העבודה שלו. משם והלאה הנגר
- * מסמן, כי הוא זה שמחזיק את הארגז ביד. המנהל רואה הכול ויכול לתקן
- * הכול, כי הוא זה שנשאל כשמשהו לא מסתדר.
- */
-export const WORK_FLAGS: WorkFlag[] = [
-  {
-    key: 'filesReady',
-    label: 'קבצים מוכנים',
-    hint: 'קובצי החיתוך של הארגז מוכנים למסור',
-    roles: ['manager', 'planner'],
-  },
-  { key: 'cut', label: 'נחתך', hint: 'הלוחות של הארגז יצאו מהמסור', roles: ['manager', 'carpenter'] },
-  { key: 'edged', label: 'קנטים', hint: 'הקנטים הודבקו', roles: ['manager', 'carpenter'] },
-  { key: 'assembled', label: 'הורכב', hint: 'הגוף מורכב', roles: ['manager', 'carpenter'] },
-  { key: 'fronts', label: 'חזיתות', hint: 'הדלתות והמגירות מותקנות', roles: ['manager', 'carpenter'] },
-  { key: 'panels', label: 'דפנות זרות', hint: 'הדפנות הזרות במקומן', roles: ['manager', 'carpenter'] },
-  {
-    key: 'installed',
-    label: 'הותקן',
-    hint: 'הארגז עומד אצל הלקוח',
-    roles: ['manager', 'carpenter', 'installer'],
-  },
-];
-
-/** הסימונים שרלוונטיים לארגז הזה — ארגז בלי חזיתות לא מחכה להן. */
-export function flagsFor(u: PlacedUnit): WorkFlag[] {
-  return WORK_FLAGS.filter((f) => {
-    if (f.key === 'fronts') return hasFronts(u);
-    if (f.key === 'panels') return hasPanels(u);
+/** המסלולים שקיימים בארגז הזה. */
+export function tracksOf(u: PlacedUnit): TrackDef[] {
+  if (!tracksWork(u)) return [];
+  return TRACKS.filter((t) => {
+    if (t.key === 'fronts') return hasFronts(u);
+    if (t.key === 'panels') return hasPanels(u);
+    // גב דק הוא לוח אחר בעובי אחר, ולכן הוא נחתך בנפרד
+    if (t.key === 'back') return (u.backKind ?? 'thin') === 'thin';
     return true;
   });
 }
 
-/** האם התפקיד רשאי לסמן את הדגל הזה. */
-export const mayFlag = (flag: WorkFlag, role: UserRole | undefined): boolean =>
-  !!role && flag.roles.includes(role);
+export const stageOf = (u: PlacedUnit, track: WorkTrack): TrackStage =>
+  u.work?.tracks?.[track] ?? 'none';
 
-/** לוח בודד אינו ארגז, ולכן אין לו תהליך הרכבה. */
-export const tracksWork = (u: PlacedUnit): boolean => !glyphDef(u.glyph).noCarcass;
+/**
+ * האם מותר להעביר מסלול לשלב מסוים.
+ *
+ * שלוש מגבלות, וכולן מהשטח: אי אפשר לדלג שלב, אי אפשר לסמן שלב
+ * שאינו בתפקיד שלך, ואי אפשר להתקין חזיתות על ארגז שעוד לא עומד
+ * במקומו.
+ */
+export function canAdvance(
+  u: PlacedUnit,
+  track: TrackDef,
+  to: Exclude<TrackStage, 'none'>,
+  role: UserRole | undefined,
+): { ok: boolean; why?: string } {
+  const def = STAGE_CHAIN.find((s) => s.key === to)!;
+  if (!role || !def.roles.includes(role)) return { ok: false, why: 'לא בתפקיד שלך' };
+  if (stageIndex(to) > stageIndex(track.last)) return { ok: false, why: 'לא שייך למסלול הזה' };
+
+  const current = stageIndex(stageOf(u, track.key));
+  // צעד אחורה תמיד מותר: טעות בסימון היא דבר שקורה
+  if (stageIndex(to) <= current) return { ok: true };
+  if (stageIndex(to) > current + 1) return { ok: false, why: 'צריך לסמן את השלב שלפניו' };
+
+  if (to === 'installed' && track.key !== 'carcass') {
+    const body = stageOf(u, 'carcass');
+    if (stageIndex(body) < stageIndex('installed')) {
+      return { ok: false, why: 'הגוף עוד לא הותקן' };
+    }
+  }
+  return { ok: true };
+}
+
+/** מעביר מסלול לשלב, או מבטל אותו כשלוחצים על השלב הנוכחי. */
+export function withStage(
+  work: UnitWork | undefined,
+  track: WorkTrack,
+  to: Exclude<TrackStage, 'none'>,
+): UnitWork {
+  const tracks = { ...(work?.tracks ?? {}) };
+  const current = tracks[track] ?? 'none';
+  // לחיצה על השלב הנוכחי מחזירה אחורה — כך מתקנים סימון שגוי
+  tracks[track] = current === to ? (STAGE_CHAIN[stageIndex(to) - 1]?.key ?? 'none') : to;
+  return { ...work, tracks };
+}
+
+/** הצבע של הארגז על הקיר, לפי המסלול שהכי מפגר. */
+export function workTone(u: PlacedUnit): WorkTone {
+  if (u.work?.issue) return 'issue';
+  const tracks = tracksOf(u);
+  if (!tracks.length) return 'idle';
+  const stages = tracks.map((t) => stageIndex(stageOf(u, t.key)));
+  const min = Math.min(...stages);
+  const max = Math.max(...stages);
+  if (min < 0 && max < 0) return 'idle';
+  /*
+   * ירוק רק כשכל מסלול הגיע להרכבה או להתקנה. ארגז שעומד בשטח בלי
+   * חזיתות אינו מורכב — הוא רק מותקן, וזה מה שהווי מספר.
+   */
+  if (min >= stageIndex('assembled')) return 'done';
+  if (max >= stageIndex('edged')) return 'assembly';
+  if (max >= stageIndex('ready')) return 'cutting';
+  return 'idle';
+}
+
+/** האם הגוף כבר עומד אצל הלקוח — זה מה שהווי על הארגז מספר. */
+export const isInstalled = (u: PlacedUnit): boolean =>
+  stageOf(u, 'carcass') === 'installed';
+
+/** תיאור קצר של מה שנעשה בארגז, לשורה ברשימה. */
+export function workSummary(u: PlacedUnit): string {
+  if (u.work?.issue) return u.work.issue;
+  const tracks = tracksOf(u);
+  if (!tracks.length) return 'לא נספר בייצור';
+  const parts = tracks
+    .filter((t) => stageOf(u, t.key) !== 'none')
+    .map((t) => `${t.label}: ${STAGE_CHAIN[stageIndex(stageOf(u, t.key))].label}`);
+  return parts.length ? parts.join(' · ') : 'עוד לא התחיל';
+}

@@ -1,17 +1,27 @@
 import { useState } from 'react';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
-import { WORK_TONES, flagsFor, mayFlag, workSummary, workTone } from '../../workflow/unitWork';
+import {
+  STAGE_CHAIN,
+  WORK_TONES,
+  canAdvance,
+  stageIndex,
+  stageOf,
+  tracksOf,
+  withStage,
+  workSummary,
+  workTone,
+} from '../../workflow/unitWork';
 import { cm, unitLabel } from '../../ui/units';
 import type { PlacedUnit, UnitWork, UserRole } from '../../db/types';
 
 /**
  * מצב הארגז בייצור.
  *
- * מי שפותח את המגירה רואה קודם איפה הארגז עומד, ואז מה מותר לו
- * לסמן — התכנת מסמן שהקבצים מוכנים, הנגר מסמן קנטים, הרכבה
- * והתקנה, והמנהל יכול לתקן הכול. סימון שאינו שלי מוצג ולא נלחץ,
- * כדי שאדע מה כבר נעשה בלי שאוכל לשנות עובדות בשטח של מישהו אחר.
+ * לכל מסלול — גוף, גב, חזיתות, דפנות זרות — שרשרת משלו, ובכל
+ * שרשרת רואים איפה היא עומדת ומה השלב הבא. שלב שאינו בתפקיד שלך
+ * מוצג ולא נלחץ, כדי שתדע מה כבר נעשה בלי שתוכל לשנות עובדות
+ * בשטח של מישהו אחר.
  */
 export function UnitWorkSheet({
   unit,
@@ -24,11 +34,9 @@ export function UnitWorkSheet({
   onChange: (work: UnitWork) => void;
   onClose: () => void;
 }) {
-  const work = unit.work ?? {};
-  const [issue, setIssue] = useState(work.issue ?? '');
+  const [issue, setIssue] = useState(unit.work?.issue ?? '');
   const tone = WORK_TONES[workTone(unit)];
-
-  const set = (patch: Partial<UnitWork>) => onChange({ ...work, ...patch });
+  const tracks = tracksOf(unit);
 
   return (
     <Sheet title={unit.name} onClose={onClose} tall>
@@ -46,49 +54,55 @@ export function UnitWorkSheet({
           </span>
         </div>
 
-        <section>
-          <h3 className="mb-2 text-sm font-semibold text-stone-700">מה נעשה</h3>
-          <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
-            {flagsFor(unit).map((f) => {
-              const on = !!work[f.key];
-              const mine = mayFlag(f, role);
-              return (
-                <li key={f.key}>
-                  <button
-                    onClick={() => mine && set({ [f.key]: !on })}
-                    disabled={!mine}
-                    aria-pressed={on}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-start transition-colors enabled:hover:bg-stone-50 disabled:opacity-60"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-stone-800">{f.label}</span>
-                      <span className="block text-[11px] leading-snug text-stone-400">
-                        {mine ? f.hint : 'לא בתפקיד שלך'}
-                      </span>
-                    </span>
-                    <span
-                      className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
-                        on ? 'bg-oak-600' : 'bg-stone-300'
-                      }`}
-                    >
-                      <span
-                        className={`size-4 rounded-full bg-white transition-transform ${
-                          on ? '-translate-x-4' : ''
-                        }`}
-                      />
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        {tracks.length === 0 ? (
+          <p className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm leading-snug text-stone-500">
+            לפריט הזה אין תהליך ייצור — הוא נקנה או שהוא לוח בודד.
+          </p>
+        ) : (
+          tracks.map((t) => {
+            const current = stageOf(unit, t.key);
+            const at = stageIndex(current);
+            const steps = STAGE_CHAIN.slice(0, stageIndex(t.last) + 1);
+            return (
+              <section key={t.key}>
+                <h3 className="mb-1.5 flex items-baseline gap-2">
+                  <span className="text-sm font-semibold text-stone-700">{t.label}</span>
+                  <span className="text-[11px] text-stone-400">{t.hint}</span>
+                </h3>
+
+                <ol className="flex flex-wrap gap-1.5">
+                  {steps.map((step, i) => {
+                    const done = i <= at;
+                    const check = canAdvance(unit, t, step.key, role);
+                    return (
+                      <li key={step.key}>
+                        <button
+                          onClick={() => check.ok && onChange(withStage(unit.work, t.key, step.key))}
+                          disabled={!check.ok}
+                          aria-pressed={done}
+                          title={check.why}
+                          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                            done
+                              ? 'bg-oak-600 text-white'
+                              : 'bg-stone-100 text-stone-600 enabled:hover:bg-stone-200'
+                          } disabled:opacity-40`}
+                        >
+                          {step.label}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            );
+          })
+        )}
 
         {/*
           שאלה או בעיה צובעות את הארגז באדום על הקיר. זה מה שגורם
           למנהל לראות אותה בלי שמישהו יתקשר אליו.
         */}
-        <section>
+        <section className="border-t border-stone-100 pt-4">
           <Field label="שאלה או בעיה" hint="צובע את הארגז באדום">
             <input
               value={issue}
@@ -101,17 +115,17 @@ export function UnitWorkSheet({
           <div className="mt-2 flex gap-2">
             <PrimaryButton
               onClick={() => {
-                set({ issue: issue.trim() || undefined });
+                onChange({ ...unit.work, issue: issue.trim() || undefined });
                 onClose();
               }}
             >
               שמירה
             </PrimaryButton>
-            {work.issue && (
+            {unit.work?.issue && (
               <button
                 onClick={() => {
                   setIssue('');
-                  set({ issue: undefined });
+                  onChange({ ...unit.work, issue: undefined });
                 }}
                 className="shrink-0 rounded-2xl border border-stone-200 px-4 text-sm font-medium text-stone-600 transition-colors hover:border-oak-300"
               >

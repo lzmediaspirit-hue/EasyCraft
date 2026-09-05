@@ -4,7 +4,7 @@ import { glyphDef } from '../../catalog/glyphList';
 import { featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
-import { WORK_TONES, tracksWork, workTone } from '../../workflow/unitWork';
+import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /** מרחק הצמדה בין ארגזים ולקצות הקיר (מ"מ). */
@@ -350,7 +350,7 @@ export function WallElevation({
           >
             <rect width={u.widthMm} height={carcassH} fill={fill} stroke="transparent" />
             {/* ארגז שהותקן בשטח — וי באמצע, שרואים ממרחק */}
-            {work && u.work?.installed && (
+            {work && isInstalled(u) && (
               <path
                 d={`M ${u.widthMm * 0.34} ${carcassH * 0.52} L ${u.widthMm * 0.45} ${
                   carcassH * 0.64

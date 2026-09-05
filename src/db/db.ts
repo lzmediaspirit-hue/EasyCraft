@@ -315,3 +315,54 @@ db.version(11).stores({
   stages: 'id, projectId, key, status, assigneeId, scheduledAt',
   attachments: 'id, projectId, kind',
 });
+
+
+/**
+ * מצב הארגז מתפרק למסלולים.
+ *
+ * קודם היה דגל אחד לכל פעולה — נחתך, קונט, הורכב — כאילו הארגז
+ * הוא דבר אחד שנע קדימה. בפועל הגוף, החזיתות והדופן הזרה נעים
+ * בזמנים שונים, ולכן לכל אחד מסלול משלו. הדגלים הישנים נקראים
+ * כמסלול הגוף, ומה שסומן בחזיתות ובדפנות עובר למסלול שלהן.
+ */
+db.version(12)
+  .stores({
+    ...TABLES_V3,
+    boards: null,
+    materials: 'id, sortOrder',
+    finishes: 'id, sortOrder',
+    projectPrices: 'id, projectId, lineKey',
+    stock: 'id, finishId, materialId',
+    team: 'id, role, active, username',
+    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+    attachments: 'id, projectId, kind',
+  })
+  .upgrade((tx) =>
+    tx
+      .table('units')
+      .toCollection()
+      .modify((u: { work?: Record<string, unknown> }) => {
+        const w = u.work;
+        if (!w || w.tracks) return;
+        const carcass = w.installed
+          ? 'installed'
+          : w.assembled
+            ? 'assembled'
+            : w.edged
+              ? 'edged'
+              : w.cut
+                ? 'cut'
+                : w.filesReady
+                  ? 'ready'
+                  : undefined;
+        u.work = {
+          issue: w.issue,
+          issueBy: w.issueBy,
+          tracks: {
+            ...(carcass ? { carcass } : {}),
+            ...(w.fronts ? { fronts: 'installed' } : {}),
+            ...(w.panels ? { panels: 'installed' } : {}),
+          },
+        };
+      }),
+  );
