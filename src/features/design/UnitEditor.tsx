@@ -107,6 +107,14 @@ export function UnitEditor({
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
   const [addingFinish, setAddingFinish] = useState(false);
+  /**
+   * גובה הדלת מוסתר מאחורי עיפרון.
+   * ארגז שכבר נמשכה בו דלת נפתח פתוח, אחרת מי ששינה קודם לא היה
+   * מוצא את מה ששינה.
+   */
+  const [growOpen, setGrowOpen] = useState(
+    (unit.doorGrowTopMm ?? 0) !== 0 || (unit.doorGrowBottomMm ?? 0) !== 0,
+  );
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
   /*
@@ -352,6 +360,52 @@ export function UnitEditor({
         container ? (
           <>
             <InteriorEditor unit={unit} onChange={onChange} />
+
+            {/*
+              דלת נתפסת על משהו. בארגז רחב עם ארבע דלתות אין על מה
+              לתלות את השתיים האמצעיות, ולכן נדרשת קושרת ביניהן —
+              וזה מה שמחלק את הארגז לתאים. ברירת המחדל נגזרת ממספר
+              הדלתות, ואפשר לשנות.
+
+              הקושרת היא לוח בגוף הארון, ורואים אותה רק כשהחזיתות
+              מוסתרות — ולכן גם מגדירים אותה כאן, מול מה שהיא עושה.
+            */}
+            {(unit.doors ?? 0) >= 2 && (
+              <>
+                <Row label="תאים בין הדלתות" hint="הקושרות שהדלתות נתפסות עליהן">
+                  {Array.from({ length: unit.doors ?? 1 }, (_, i) => i + 1).map((n) => (
+                    <Pill
+                      key={n}
+                      active={cells === n}
+                      onClick={() => onChange({ doorCells: n })}
+                    >
+                      {n}
+                    </Pill>
+                  ))}
+                </Row>
+                {cells > 1 && (
+                  <button
+                    onClick={() => onChange({ doubleDividers: !unit.doubleDividers })}
+                    aria-pressed={!!unit.doubleDividers}
+                    className={`mt-1.5 w-full rounded-lg px-3 py-1.5 text-start text-[11px] font-medium transition-colors ${
+                      unit.doubleDividers
+                        ? 'bg-oak-600 text-white'
+                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                  >
+                    קושרת בעובי כפול
+                    <span
+                      className={`block text-[10px] font-normal ${
+                        unit.doubleDividers ? 'text-white/70' : 'text-stone-400'
+                      }`}
+                    >
+                      שני לוחות זה על זה — לארגז ארוך או כבד
+                    </span>
+                  </button>
+                )}
+              </>
+            )}
+
             <Row label="גב">
               {BACKS.map((bk) => (
                 <Pill
@@ -449,57 +503,33 @@ export function UnitEditor({
                         {o.label}
                       </Pill>
                     ))}
+                    {/* העיפרון פותח את גובה הדלת, שהוא היוצא מן הכלל */}
+                    <button
+                      onClick={() => setGrowOpen((v) => !v)}
+                      aria-pressed={growOpen}
+                      aria-label="גובה הדלת"
+                      title="גובה הדלת"
+                      className={`grid size-7 shrink-0 place-items-center rounded-lg transition-colors ${
+                        growOpen
+                          ? 'bg-oak-600 text-white'
+                          : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                      }`}
+                    >
+                      <PencilIcon className="size-4" />
+                    </button>
                   </Row>
-
-                  {/*
-                    דלת נתפסת על משהו. בארגז רחב עם ארבע דלתות אין
-                    על מה לתלות את השתיים האמצעיות, ולכן נדרשת
-                    קושרת ביניהן — וזה מה שמחלק את הארגז לתאים.
-                    ברירת המחדל נגזרת ממספר הדלתות, ואפשר לשנות.
-                  */}
-                  {(unit.doors ?? 0) >= 2 && (
-                    <>
-                      <Row label="תאים בין הדלתות" hint="הקושרות שהדלתות נתפסות עליהן">
-                        {Array.from({ length: unit.doors ?? 1 }, (_, i) => i + 1).map((n) => (
-                          <Pill
-                            key={n}
-                            active={cells === n}
-                            onClick={() => onChange({ doorCells: n })}
-                          >
-                            {n}
-                          </Pill>
-                        ))}
-                      </Row>
-                      {cells > 1 && (
-                        <button
-                          onClick={() => onChange({ doubleDividers: !unit.doubleDividers })}
-                          aria-pressed={!!unit.doubleDividers}
-                          className={`mt-1.5 w-full rounded-lg px-3 py-1.5 text-start text-[11px] font-medium transition-colors ${
-                            unit.doubleDividers
-                              ? 'bg-oak-600 text-white'
-                              : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                          }`}
-                        >
-                          קושרת בעובי כפול
-                          <span
-                            className={`block text-[10px] font-normal ${
-                              unit.doubleDividers ? 'text-white/70' : 'text-stone-400'
-                            }`}
-                          >
-                            שני לוחות זה על זה — לארגז ארוך או כבד
-                          </span>
-                        </button>
-                      )}
-                    </>
-                  )}
 
                   {/*
                     הדלת גדלה מהארגז כלפי מעלה או כלפי מטה, ולא
                     "גובה דלת" אחד: השאלה בשטח היא תמיד לאיזה כיוון
                     היא נמשכת, ומה יש שם. כל כיוון מוגבל למה שפנוי,
                     כדי שהיא לא תיכנס לארגז השכן.
+
+                    ברוב הארגזים הדלת בגובה הגוף ואין מה לגעת בזה,
+                    ולכן השורה מוסתרת מאחורי העיפרון שליד מנגנון
+                    הפתיחה. ארגז שכבר נמשכה בו דלת פותח אותה מעצמו.
                   */}
-                  {(unit.doors ?? 0) > 0 && (
+                  {growOpen && (
                     <>
                       <Row
                         label="הדלת מעבר לארגז"
@@ -701,8 +731,13 @@ export function UnitEditor({
         <button
           onClick={() =>
             /* תחתית הארגז היא yMm, והרגליים כלולות בגובה — ולכן ארגז
-               שנצמד לרצפה יושב על 0 ולא על גובה הרגליים */
-            onChange({ floorLocked: !locked, ...(locked ? {} : { yMm: 0 }) })
+               שנצמד לרצפה יושב על 0 ולא על גובה הרגליים.
+               ארגז שמשוחרר מהרצפה תלוי, ורגליים לארגז תלוי אין: הן
+               נשארות בגובה שנשמר ומקצרות את הגוף בלי שרואים למה. */
+            onChange({
+              floorLocked: !locked,
+              ...(locked ? { socleMm: 0 } : { yMm: 0 }),
+            })
           }
           aria-pressed={locked}
           className={`flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-start text-sm font-medium transition-colors ${

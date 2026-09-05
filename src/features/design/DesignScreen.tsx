@@ -844,10 +844,15 @@ function Tool({
 
 /** תת-כותרת בלי כפילות: שם החדר מוצג רק אם הוא שונה משם הפרויקט. */
 /**
- * כמה מקום פנוי יש מעל הארגז או מתחתיו, באותו טווח רוחב.
+ * כמה מקום פנוי יש מעל הדלת או מתחתיה, באותו טווח רוחב.
  *
  * זה מה שמגביל דלת שנמשכת מעבר לארגז: היא יכולה לכסות את מה שאין
  * בו ארגז אחר, ולעצור לפני התקרה או הרצפה.
+ *
+ * הדלת אינה מתחילה בתחתית הארגז אלא מעל הרגליים, ולכן הרגליים עצמן
+ * הן מקום פנוי כלפי מטה — זו בדיוק הדלת שמכסה את הסוקל. מדידה
+ * מתחתית הארגז החזירה אפס לכל ארגז שעומד על הרצפה, ו"למטה" פשוט
+ * לא זז.
  */
 function freeRoom(
   unit: PlacedUnit,
@@ -859,10 +864,11 @@ function freeRoom(
     (u) => u.id !== unit.id && u.xMm < unit.xMm + unit.widthMm && u.xMm + u.widthMm > unit.xMm,
   );
   if (dir === 'down') {
+    const doorBottom = unit.yMm + (unit.socleMm ?? 0);
     const top = overlaps
       .filter((u) => u.yMm + u.heightMm <= unit.yMm + 1)
       .reduce((n, u) => Math.max(n, u.yMm + u.heightMm), 0);
-    return Math.max(unit.yMm - top, 0);
+    return Math.max(doorBottom - top, 0);
   }
   const myTop = unit.yMm + unit.heightMm;
   const bottom = overlaps

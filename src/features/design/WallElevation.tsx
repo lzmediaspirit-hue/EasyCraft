@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
+import { doorCells, unitZones } from '../../catalog/zones';
 import { featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
@@ -386,7 +387,13 @@ export function WallElevation({
                 drawerStyle={u.drawerStyle}
                 glassDoors={u.glassDoors}
                 shelfGapsMm={u.shelfGapsMm}
-                zones={u.zones}
+                /*
+                  הקושרות שהדלתות נתפסות עליהן הן חלק מהאזורים, ולכן
+                  הציור צריך את האזורים המחושבים ולא את מה שנשמר.
+                  בלי זה ארגז שלא חולק ידנית נצייר בלי הקושרת, ומי
+                  שמסתיר את החזיתות לא רואה על מה הדלתות תלויות.
+                */
+                zones={u.zones?.length || doorCells(u) > 1 ? unitZones(u) : undefined}
                 opening={u.opening}
                 corner={u.corner}
                 blindMm={u.blindMm}
