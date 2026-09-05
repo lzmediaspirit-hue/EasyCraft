@@ -4,6 +4,7 @@ import { MeasureInput } from '../../ui/MeasureInput';
 import { VIEW_OPTION_LABELS, viewOptions, useViewOptions } from './viewOptions';
 import { unitLabel } from '../../ui/units';
 import { wallName } from '../projects/wallLayouts';
+import { WallFeaturesDesigner } from '../projects/WallFeaturesDesigner';
 import type { Wall } from '../../db/types';
 
 /**
@@ -55,6 +56,27 @@ export function WallToolsSheet({
             הארגזים לא זזים כשהקיר משתנה. מי שחורג מהקיר החדש יסומן
             באזהרה.
           </p>
+        </section>
+
+        {/*
+          חלון או שקע לא תמיד ידועים ביצירת הפרויקט — לפעמים מגלים
+          אותם רק במדידה בשטח. אותו עורך גרירה יושב גם כאן, כדי
+          שאפשר יהיה להוסיף אותם בלי לחזור לאשף.
+        */}
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-stone-700">מה יש על הקיר</h3>
+          <WallFeaturesDesigner
+            features={wall.features}
+            wallLengthMm={wall.lengthMm}
+            wallHeightMm={wall.heightMm}
+            onAdd={(f) => onChange({ features: [...wall.features, f] })}
+            onPatch={(id, patch) =>
+              onChange({
+                features: wall.features.map((f) => (f.id === id ? { ...f, ...patch } : f)),
+              })
+            }
+            onRemove={(id) => onChange({ features: wall.features.filter((f) => f.id !== id) })}
+          />
         </section>
 
         <section>

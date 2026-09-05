@@ -4,7 +4,7 @@ import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field'
 import { cmToMm, mmToCm } from '../../ui/units';
 import { ROOMS, roomDef } from '../../catalog/rooms';
 import { WALL_LAYOUTS, wallName } from './wallLayouts';
-import { WallFeaturesEditor } from './WallFeaturesEditor';
+import { WallFeaturesDesigner } from './WallFeaturesDesigner';
 import { RoomShapeEditor, shapeWalls, type ShapePoint } from './RoomShapeEditor';
 import { ProjectFinishesStep } from './ProjectFinishesStep';
 import { projectsRepo, type NewWallInput } from './projectsRepo';
@@ -369,7 +369,7 @@ export function NewProjectWizard({
             <section key={i}>
               <h3 className="mb-2 text-sm font-semibold text-stone-700">{wallName(i)}</h3>
 
-              <WallFeaturesEditor
+              <WallFeaturesDesigner
                 features={features[i] ?? []}
                 wallLengthMm={cmToMm(Number(lengthsCm[i]) || 0)}
                 wallHeightMm={heightMm}
