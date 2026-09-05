@@ -101,7 +101,7 @@ export function PartChoiceRow({
                     materialId: ok ? effective.materialId : first?.id,
                   });
                 }}
-                title={f.note ? `${f.name} · ${f.note}` : f.name}
+                title={f.textures?.length ? `${f.name} · ${f.textures.join(' ')}` : f.name}
                 className={`flex items-center gap-1.5 rounded-lg py-1 pe-2.5 ps-1 text-sm font-medium transition-colors ${
                   effective.finishId === f.id
                     ? 'bg-oak-600 text-white'

@@ -166,7 +166,9 @@ function ProjectCard({
               <span className="min-w-0 flex-1 truncate text-stone-700">
                 {line.finish?.name ?? 'בלי גוון'}
                 <span className="text-stone-500"> · {line.material.name}</span>
-                {line.finish?.note && <span className="text-stone-400"> · {line.finish.note}</span>}
+                {!!line.finish?.textures?.length && (
+                  <span className="text-stone-400"> · {line.finish.textures.join(' ')}</span>
+                )}
               </span>
               <span className="num shrink-0 font-semibold text-stone-800">{line.sheets}</span>
               <span className="shrink-0 text-[10px] text-stone-400">

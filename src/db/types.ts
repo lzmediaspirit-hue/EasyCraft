@@ -457,8 +457,12 @@ export interface MaterialPrice {
  */
 export interface Finish extends Entity {
   name: string;
-  /** תיאור קצר של הצבע — לא חובה */
-  note?: string;
+  /**
+   * המרקם של הפני שטח — מט, טאץ׳, יער, סטון.
+   * זו לא הערה חופשית אלא רשימה קצרה שחוזרת על עצמה אצל כל ספק,
+   * ולכן היא נבחרת ולא נכתבת. הרשימה עצמה ניתנת להרחבה.
+   */
+  textures?: string[];
   /**
    * לגוון יש כיוון סיבים שמחייב ניסור בכיוון קבוע.
    * זה מאפיין של הגוון ולא של החומר: אותו MDF יכול להגיע בלכה
@@ -478,6 +482,9 @@ export interface Finish extends Entity {
   edgeConsumerPerM?: number;
   sortOrder: number;
 }
+
+/** מרקמי פני שטח שמגיעים עם האפליקציה. אפשר להוסיף עליהם. */
+export const BUILTIN_TEXTURES = ['טפ', 'מט', 'יער', 'סטון', 'טרוונטין'];
 
 /** בחירת גוון וחומר לחלק מסוים. */
 export interface PartChoice {

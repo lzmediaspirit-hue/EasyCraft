@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
-import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
-import { TrashIcon } from '../../ui/icons';
+import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
+import { CopyIcon, PlusIcon, TrashIcon } from '../../ui/icons';
+import { BUILTIN_TEXTURES } from '../../db/types';
 import type { Finish, MaterialPrice } from '../../db/types';
 
 /**
@@ -16,8 +17,12 @@ import type { Finish, MaterialPrice } from '../../db/types';
  */
 export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClose: () => void }) {
   const materials = useLiveQuery(() => materialsRepo.list(), []);
+  const finishes = useLiveQuery(() => finishesRepo.all(), []);
   const [name, setName] = useState(finish?.name ?? '');
-  const [note, setNote] = useState(finish?.note ?? '');
+  const [textures, setTextures] = useState<string[]>(finish?.textures ?? []);
+  /** מרקם שהמשתמש הוסיף בעצמו, מעבר לרשימה שמגיעה עם האפליקציה */
+  const [newTexture, setNewTexture] = useState('');
+  const [copying, setCopying] = useState(false);
   const [hex, setHex] = useState(finish?.hex ?? '#d9b483');
   const [hasGrain, setHasGrain] = useState(finish?.hasGrain ?? false);
   const [prices, setPrices] = useState<Record<string, { factory: string; consumer: string }>>(() => {
@@ -61,7 +66,7 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
     await finishesRepo.save({
       id: finish?.id,
       name: name.trim(),
-      note: note.trim() || undefined,
+      textures: textures.length ? textures : undefined,
       hex,
       hasGrain,
       prices: out,
@@ -130,14 +135,50 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
           />
         </Field>
 
-        <Field label="תיאור קצר" hint="לא חובה">
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            onFocus={selectOnFocus}
-            className={inputClass}
-            placeholder="למשל: מט, גוון חם"
-          />
+        {/*
+          מרקם נבחר ולא נכתב: הרשימה חוזרת על עצמה אצל כל ספק, וטקסט
+          חופשי היה יוצר חמש כתיבות שונות לאותו דבר. מי שחסר לו מרקם
+          מוסיף אותו, והוא נשמר לגוון הזה.
+        */}
+        <Field group label="מרקם" hint="אפשר לבחור כמה">
+          <div className="flex flex-wrap gap-1.5">
+            {[...new Set([...BUILTIN_TEXTURES, ...textures])].map((t) => (
+              <Chip
+                key={t}
+                active={textures.includes(t)}
+                onClick={() =>
+                  setTextures((prev) =>
+                    prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+                  )
+                }
+              >
+                {t}
+              </Chip>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            <input
+              value={newTexture}
+              onChange={(e) => setNewTexture(e.target.value)}
+              onFocus={selectOnFocus}
+              aria-label="מרקם חדש"
+              placeholder="מרקם נוסף"
+              className={`${inputClass} flex-1`}
+            />
+            <button
+              onClick={() => {
+                const t = newTexture.trim();
+                if (!t) return;
+                setTextures((prev) => (prev.includes(t) ? prev : [...prev, t]));
+                setNewTexture('');
+              }}
+              disabled={!newTexture.trim()}
+              aria-label="הוספת מרקם"
+              className="shrink-0 rounded-xl bg-stone-100 px-3 text-stone-600 transition-colors hover:bg-stone-200 disabled:opacity-40"
+            >
+              <PlusIcon className="size-5" />
+            </button>
+          </div>
         </Field>
 
         {/*
@@ -176,8 +217,68 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
         </button>
 
         <section className="border-t border-stone-100 pt-5">
-          <h3 className="text-sm font-semibold text-stone-700">מחיר לפלטה, לפי חומר</h3>
-          <p className="mt-0.5 mb-3 text-xs leading-snug text-stone-500">
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold text-stone-700">מחיר לפלטה, לפי חומר</h3>
+            {/*
+              רוב הגוונים אצל אותו ספק חולקים מחירון: העתקה מגוון
+              קיים חוסכת הקלדה של אותם מספרים שוב ושוב, ומשאירה
+              מקום לתקן את מה שבאמת שונה.
+            */}
+            {(finishes ?? []).some((f) => f.id !== finish?.id) && (
+              <button
+                onClick={() => setCopying((v) => !v)}
+                aria-expanded={copying}
+                className="flex shrink-0 items-center gap-1 rounded-lg bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-200 hover:text-oak-700"
+              >
+                <CopyIcon className="size-3.5" />
+                העתקה מגוון אחר
+              </button>
+            )}
+          </div>
+
+          {copying && (
+            <ul className="mb-3 space-y-1.5 rounded-xl border border-oak-200 bg-oak-50/60 p-2">
+              {(finishes ?? [])
+                .filter((f) => f.id !== finish?.id)
+                .map((f) => (
+                  <li key={f.id}>
+                    <button
+                      onClick={() => {
+                        const next: Record<string, { factory: string; consumer: string }> = {};
+                        for (const [id, v] of Object.entries(f.prices ?? {})) {
+                          next[id] = {
+                            factory: v.factoryPrice !== undefined ? String(v.factoryPrice) : '',
+                            consumer: v.consumerPrice !== undefined ? String(v.consumerPrice) : '',
+                          };
+                        }
+                        setPrices(next);
+                        setEdgeFactory(
+                          f.edgeFactoryPerM !== undefined ? String(f.edgeFactoryPerM) : '',
+                        );
+                        setEdgeConsumer(
+                          f.edgeConsumerPerM !== undefined ? String(f.edgeConsumerPerM) : '',
+                        );
+                        setCopying(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-start transition-colors hover:ring-1 hover:ring-oak-300"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-5 shrink-0 rounded border border-black/10"
+                        style={{ background: f.hex }}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm text-stone-800">
+                        {f.name}
+                      </span>
+                      <span className="num shrink-0 text-[11px] text-stone-500">
+                        {Object.keys(f.prices ?? {}).length} חומרים
+                      </span>
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          )}
+          <p className="-mt-1 mb-3 text-xs leading-snug text-stone-500">
             אותו גוון עולה אחרת על כל חומר. חומר שנשאר ריק לא יוצע לגוון
             הזה כשבונים ארגז.
           </p>
