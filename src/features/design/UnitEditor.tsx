@@ -12,7 +12,7 @@ import { FinishSheet } from '../settings/FinishSheet';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
-import { BookmarkIcon, CloseIcon, PencilIcon, TrashIcon } from '../../ui/icons';
+import { BookmarkIcon, CloseIcon, CopyIcon, PencilIcon, TrashIcon } from '../../ui/icons';
 import { DRAWER_BOXES } from '../../db/types';
 import type {
   BackKind,
@@ -76,6 +76,7 @@ export function UnitEditor({
   roomBelow = 0,
   onChange,
   onApplyChoiceAll,
+  onDuplicate,
   onEdit,
   onRemove,
   onClose,
@@ -94,6 +95,8 @@ export function UnitEditor({
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
+  /** עותק של הארגז הזה על אותו קיר */
+  onDuplicate: () => void;
   onEdit: () => void;
   onRemove: () => void;
   onClose: () => void;
@@ -214,6 +217,14 @@ export function UnitEditor({
           className="rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
         >
           <BookmarkIcon className="size-5" />
+        </button>
+        <button
+          onClick={onDuplicate}
+          aria-label="שכפול הארגז"
+          title="עותק של הארגז הזה"
+          className="rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
+        >
+          <CopyIcon className="size-5" />
         </button>
         <button
           onClick={onEdit}

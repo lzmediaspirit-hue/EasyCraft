@@ -15,6 +15,7 @@ import { useEffectiveRole } from '../../workflow/viewRole';
 import { can } from '../../workflow/auth';
 import { UnitWorkSheet } from './UnitWorkSheet';
 import { BulkWorkSheet } from './BulkWorkSheet';
+import { ProjectFinishesSheet } from './ProjectFinishesSheet';
 import { FlowIcon } from '../../ui/icons';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
@@ -33,7 +34,7 @@ import {
   CalcIcon,
   CenterIcon,
   CheckIcon,
-  CopyIcon,
+  ChevronIcon,
   CubeIcon,
   DepthIcon,
   NestIcon,
@@ -43,6 +44,7 @@ import {
   PlusIcon,
   RedoIcon,
   RulerIcon,
+  TagIcon,
   SlidersIcon,
   UndoIcon,
 } from '../../ui/icons';
@@ -84,6 +86,9 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [workToggle, setWorkToggle] = useState(false);
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [finishesOpen, setFinishesOpen] = useState(false);
+  /* מחווני הקיר מתקפלים, וההדמיה תופסת את מה שהתפנה */
+  const [statsOpen, setStatsOpen] = useState(true);
   const [inside, setInside] = useState(false);
   const [measure, setMeasure] = useState<MeasureAxis | null>(null);
   /*
@@ -358,12 +363,11 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             label="חזור"
           />
           <Tool
-            active={false}
-            disabled={!selected}
-            onClick={duplicateSelected}
-            icon={<CopyIcon className="size-4" />}
-            label="שכפול"
-            title="עותק של הארגז הנבחר"
+            active={finishesOpen}
+            onClick={() => setFinishesOpen(true)}
+            icon={<TagIcon className="size-4" />}
+            label="גוון לכולם"
+            title="גוון לכל החזיתות, הגופים או הדפנות"
           />
           <Tool
             active={false}
@@ -520,6 +524,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
+          onDuplicate={duplicateSelected}
           onEdit={() => setEditOpen(true)}
           onRemove={async () => {
             await unitsRepo.remove(selected.id);
@@ -531,7 +536,27 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         </>
       ) : (
         <>
-          <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+          {/*
+            המחוונים מתקפלים, וההדמיה תופסת את מה שהתפנה. מי שרק
+            מסדר ארגזים לא צריך את המספרים על המסך, וקיר גדול יותר
+            שווה יותר מארבעה מלבנים עם נתונים.
+          */}
+          <button
+            onClick={() => setStatsOpen((v) => !v)}
+            aria-expanded={statsOpen}
+            className="mx-4 mt-1 flex shrink-0 items-center justify-center gap-1.5 rounded-lg py-1 text-[11px] font-medium text-stone-400 transition-colors hover:bg-stone-200/60 hover:text-stone-600"
+          >
+            <ChevronIcon
+              className={`size-3.5 transition-transform ${statsOpen ? '-rotate-90' : 'rotate-90'}`}
+            />
+            {statsOpen ? 'הסתרת הנתונים' : 'הצגת הנתונים'}
+          </button>
+
+          <main
+            className={`overflow-y-auto px-4 pb-2 ${
+              statsOpen ? 'min-h-0 flex-1' : 'shrink-0'
+            }`}
+          >
             {/*
               בקשת עריכה של התכנת מגיעה לכאן ולא להתראה נפרדת: המנהל
               רואה אותה על הקיר שעליו היא מדברת.
@@ -564,7 +589,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
               </div>
             )}
 
-            {analysis && role === 'manager' && (
+            {statsOpen && analysis && role === 'manager' && (
               <>
                 {/* מה מוצג כאן נבחר במגירת הקיר; אין מחוון שאי אפשר לכבות */}
                 <div className="grid grid-cols-3 gap-2">
@@ -613,7 +638,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
               </>
             )}
 
-            {units.length === 0 && (
+            {statsOpen && units.length === 0 && (
               <p className="mt-6 text-center text-[15px] text-stone-500">
                 הקיר ריק. פתח את הספרייה והוסף את הארגז הראשון.
               </p>
@@ -671,6 +696,14 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           role={role}
           onChange={(work) => patchUnit(workUnitId, { work }, `work:${workUnitId}`)}
           onClose={() => setWorkUnitId(null)}
+        />
+      )}
+
+      {finishesOpen && (
+        <ProjectFinishesSheet
+          project={project}
+          onApply={(part, choice) => unitsRepo.setChoiceForProject(projectId, part, choice)}
+          onClose={() => setFinishesOpen(false)}
         />
       )}
 
