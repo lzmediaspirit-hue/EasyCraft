@@ -81,7 +81,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
    * שנעשה בהם — ובלי כלי עריכה. מי שעומד ליד המסור לא אמור להזיז
    * ארגז בטעות.
    */
-  const [workMode, setWorkMode] = useState(false);
+  const [workToggle, setWorkToggle] = useState(false);
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [inside, setInside] = useState(false);
@@ -114,6 +114,12 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const me = useCurrentMember();
   const role = useEffectiveRole(me?.role);
   const mayEdit = can.design(role, project);
+  /*
+   * מי שאינו מנהל רואה את מסך התהליך ולא את מסך התכנון. זה לא
+   * מסך אחר — אלה אותם ארגזים באותם מקומות — אבל זו השאלה שהוא
+   * בא לענות עליה: מה נשאר לעשות, ולא איך לסדר מחדש.
+   */
+  const workMode = role !== 'manager' || workToggle;
   /** כלי עריכה מוצגים רק למי שמותר לו, ורק כשלא במצב תהליך עבודה */
   const editable = mayEdit && !workMode;
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
@@ -225,30 +231,33 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             icon={<NestIcon className="size-4" />}
             label="ניסור"
           />
-          <Tool
-            active={depthOpen}
-            onClick={() => setDepthOpen(true)}
-            icon={<DepthIcon className="size-4" />}
-            label="עומק אחיד"
-          />
+          {editable && (
+            <Tool
+              active={depthOpen}
+              onClick={() => setDepthOpen(true)}
+              icon={<DepthIcon className="size-4" />}
+              label="עומק אחיד"
+            />
+          )}
           {/*
             אחרי המכירה יש מה לעקוב אחריו. לפניה הארגזים עוד זזים,
             ומצב עבודה על קיר שאינו סגור רק מבלבל.
           */}
-          {!!project.soldAt && (
-            <Tool
-              active={workMode}
-              onClick={() => {
-                setWorkMode((v) => !v);
-                setSelectedId(null);
-                setRulerPair(null);
-                setMeasure(null);
-              }}
-              icon={<FlowIcon className="size-4" />}
-              label={workMode ? 'תהליך' : 'תכנון'}
-              title={workMode ? 'חזרה למצב תכנון' : 'מצב תהליך עבודה'}
-            />
-          )}
+          {!!project.soldAt &&
+            role === 'manager' && (
+              <Tool
+                active={workMode}
+                onClick={() => {
+                  setWorkToggle((v) => !v);
+                  setSelectedId(null);
+                  setRulerPair(null);
+                  setMeasure(null);
+                }}
+                icon={<FlowIcon className="size-4" />}
+                label={workMode ? 'תהליך' : 'תכנון'}
+                title={workMode ? 'חזרה למצב תכנון' : 'מצב תהליך עבודה'}
+              />
+            )}
         </div>
 
         <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
@@ -304,13 +313,15 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             label="סרגל"
             title="מרחק בין שני ארגזים"
           />
-          <Tool
-            active={wallToolsOpen}
-            onClick={() => setWallToolsOpen(true)}
-            icon={<SlidersIcon className="size-4" />}
-            label="הקיר"
-            title="מידות הקיר ומה מוצג"
-          />
+          {role === 'manager' && (
+            <Tool
+              active={wallToolsOpen}
+              onClick={() => setWallToolsOpen(true)}
+              icon={<SlidersIcon className="size-4" />}
+              label="הקיר"
+              title="מידות הקיר ומה מוצג"
+            />
+          )}
         </div>
 
         {/*
@@ -553,7 +564,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
               </div>
             )}
 
-            {analysis && (
+            {analysis && role === 'manager' && (
               <>
                 {/* מה מוצג כאן נבחר במגירת הקיר; אין מחוון שאי אפשר לכבות */}
                 <div className="grid grid-cols-3 gap-2">
@@ -637,13 +648,19 @@ export function DesignScreen({ projectId }: { projectId: string }) {
               הראשית, לא בין כלי התצוגה. פתיחת הפרויקט עצמה נעשית
               מתוכו — אחרי שרואים מה זה עולה.
             */}
-            <button
-              onClick={() => setMaterialsOpen(true)}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
-            >
-              <CalcIcon />
-              חישוב פרויקט
-            </button>
+            {/*
+              חישוב ומחיר הם עניין של המנהל. התכנת והנגר צריכים את
+              הארגזים ואת מה שנשאר לעשות בהם, לא את מה שזה עולה.
+            */}
+            {role === 'manager' && (
+              <button
+                onClick={() => setMaterialsOpen(true)}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
+              >
+                <CalcIcon />
+                חישוב פרויקט
+              </button>
+            )}
           </div>
         </>
       )}

@@ -88,7 +88,7 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
               הספרייה נגישה גם בלי פרויקט פתוח: בונים ומתחזקים אותה
               בזמן שקט, כדי שבפגישה עם הלקוח רק בוחרים ממנה.
             */}
-            {!archived && (
+            {!archived && role === 'manager' && (
               <button
                 onClick={() => setLibraryOpen(true)}
                 aria-label="ספריית המוצרים"
@@ -124,6 +124,7 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
                 )}
               </button>
             )}
+            {role === 'manager' && (
             <button
               onClick={() => nav.push({ name: 'settings' })}
               aria-label="הגדרות"
@@ -131,6 +132,7 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
             >
               <SettingsIcon />
             </button>
+            )}
           </span>
         </div>
 

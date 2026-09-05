@@ -1,5 +1,5 @@
 import { db } from '../db/db';
-import { STAGES } from './stages';
+import { STAGES, stageDef } from './stages';
 import type {
   Attachment,
   AttachmentKind,
@@ -85,8 +85,18 @@ export const stagesRepo = {
   async start(projectId: string): Promise<void> {
     const stages = await stagesRepo.ensure(projectId, false);
     if (stages.some((s) => s.status !== 'waiting')) return;
-    const first = stages[0];
-    if (first) await stagesRepo.update(first.id, { status: 'active', startedAt: Date.now() });
+    const now = Date.now();
+    /*
+     * שלבים שנסגרים מעצמם נסגרים כאן, והתהליך נפתח על הראשון
+     * שבאמת מחכה למישהו. המנהל שסגר עסקה כבר העביר את ההנחיות.
+     */
+    let i = 0;
+    while (i < stages.length && stageDef(stages[i].key).autoDone) {
+      await stagesRepo.update(stages[i].id, { status: 'done', startedAt: now, doneAt: now });
+      i += 1;
+    }
+    const first = stages[i];
+    if (first) await stagesRepo.update(first.id, { status: 'active', startedAt: now });
   },
 
   /** האם התהליך כבר התחיל. */
