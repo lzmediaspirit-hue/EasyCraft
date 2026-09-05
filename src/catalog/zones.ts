@@ -122,13 +122,59 @@ export function unitCells(u: FlatSource): { content: ZoneContent; share: number 
 
 type FlatSource = Pick<
   PlacedUnit,
-  'glyph' | 'heightMm' | 'shelves' | 'shelfGapsMm' | 'drawers' | 'drawerCols' | 'drawerStyle' | 'zones'
->;
+  | 'glyph'
+  | 'heightMm'
+  | 'shelves'
+  | 'shelfGapsMm'
+  | 'drawers'
+  | 'drawerCols'
+  | 'drawerStyle'
+  | 'zones'
+> &
+  Partial<Pick<PlacedUnit, 'doors' | 'doorCells' | 'doubleDividers'>>;
+
+/**
+ * לכמה תאים הארגז מתחלק בקושרות, כשלא נקבע במפורש.
+ *
+ * דלת נתפסת על משהו: על צד הארגז או על קושרת. עד שתי דלתות יש
+ * לכל אחת צד משלה; משלוש והלאה חייבת להיות קושרת ביניהן, ולכן
+ * ארבע דלתות מקבלות קושרת אחת במרכז ושני תאים.
+ */
+export function doorCells(u: FlatSource): number {
+  if (u.doorCells !== undefined) return Math.max(u.doorCells, 1);
+  const doors = u.doors ?? 0;
+  return doors >= 3 ? Math.ceil(doors / 2) : 1;
+}
+
+/**
+ * מחלק אזור לתאים לפי הקושרות שהדלתות מחייבות.
+ * אזור שכבר חולק ידנית לא נוגעים בו — הבחירה של הנגר גוברת — ואזור
+ * של מגירות חיצוניות גם לא, כי שם החלוקה נעשית בעמודות המגירה.
+ */
+function splitByDoors(zones: Zone[], n: number): Zone[] {
+  if (n < 2) return zones;
+  return zones.map((z) => {
+    if (zoneColumns(z).length) return z;
+    if (z.kind === 'drawers' && z.drawerStyle !== 'inner') return z;
+    const { columns: _drop, id, heightMm, fixedHeight, ...content } = z;
+    return {
+      id,
+      heightMm,
+      fixedHeight,
+      ...content,
+      columns: Array.from({ length: n }, (_, i) => ({
+        ...content,
+        id: `${id}-door-${i}`,
+        widthShare: 1 / n,
+      })),
+    };
+  });
+}
 
 /** קורא את הארון כרשימת אזורים, בין אם הוגדרו במפורש ובין אם לא. */
 export function unitZones(u: FlatSource): Zone[] {
-  if (u.zones?.length) return normalizeHeights(u.zones, u.heightMm);
-  return derive(u);
+  const base = u.zones?.length ? normalizeHeights(u.zones, u.heightMm) : derive(u);
+  return splitByDoors(base, doorCells(u));
 }
 
 /** האם הארון מחולק ידנית ליותר מאזור אחד. */

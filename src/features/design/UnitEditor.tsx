@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
-import { MAX_BODY_MM, isContainer, unitCells } from '../../catalog/zones';
+import { MAX_BODY_MM, doorCells, isContainer, unitCells } from '../../catalog/zones';
 import { MATERIAL, drawerDepth } from '../../catalog/standards';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
 import { partChoice } from '../../costing/boards';
@@ -140,6 +140,7 @@ export function UnitEditor({
     );
   const hasExposed = !!(exposed.start || exposed.end || exposed.top || exposed.bottom);
   const hasDrawers = unitCells(unit).some(({ content: c }) => c.kind === 'drawers');
+  const cells = doorCells(unit);
   const growTop = unit.doorGrowTopMm ?? 0;
   const growBottom = unit.doorGrowBottomMm ?? 0;
 
@@ -438,6 +439,48 @@ export function UnitEditor({
                       </Pill>
                     ))}
                   </Row>
+
+                  {/*
+                    דלת נתפסת על משהו. בארגז רחב עם ארבע דלתות אין
+                    על מה לתלות את השתיים האמצעיות, ולכן נדרשת
+                    קושרת ביניהן — וזה מה שמחלק את הארגז לתאים.
+                    ברירת המחדל נגזרת ממספר הדלתות, ואפשר לשנות.
+                  */}
+                  {(unit.doors ?? 0) >= 2 && (
+                    <>
+                      <Row label="תאים בין הדלתות" hint="הקושרות שהדלתות נתפסות עליהן">
+                        {Array.from({ length: unit.doors ?? 1 }, (_, i) => i + 1).map((n) => (
+                          <Pill
+                            key={n}
+                            active={cells === n}
+                            onClick={() => onChange({ doorCells: n })}
+                          >
+                            {n}
+                          </Pill>
+                        ))}
+                      </Row>
+                      {cells > 1 && (
+                        <button
+                          onClick={() => onChange({ doubleDividers: !unit.doubleDividers })}
+                          aria-pressed={!!unit.doubleDividers}
+                          className={`mt-1.5 w-full rounded-lg px-3 py-1.5 text-start text-[11px] font-medium transition-colors ${
+                            unit.doubleDividers
+                              ? 'bg-oak-600 text-white'
+                              : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                          }`}
+                        >
+                          קושרת בעובי כפול
+                          <span
+                            className={`block text-[10px] font-normal ${
+                              unit.doubleDividers ? 'text-white/70' : 'text-stone-400'
+                            }`}
+                          >
+                            שני לוחות זה על זה — לארגז ארוך או כבד
+                          </span>
+                        </button>
+                      )}
+                    </>
+                  )}
 
                   {/*
                     הדלת גדלה מהארגז כלפי מעלה או כלפי מטה, ולא
@@ -822,6 +865,8 @@ function Pill({
   return (
     <button
       onClick={onClick}
+      /* בורר ולא מתג, אבל קורא מסך צריך לדעת מה נבחר */
+      aria-pressed={active}
       className={`num min-w-9 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
         active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
       }`}
