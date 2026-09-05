@@ -597,6 +597,26 @@ export interface StockItem extends Entity {
   edgeInStock?: boolean;
 }
 
+/**
+ * פלטות שפרויקט כבר צרך מהמלאי.
+ *
+ * נוצרת ברגע שכל החלקים של שורת גוון+חומר בפרויקט סומנו כנחתכים:
+ * מאותו רגע הלוחות אינם במחסן אלא בארגזים. הרשומה נשמרת כדי שאפשר
+ * יהיה גם להחזיר — סימון חיתוך שבוטל מחזיר את הפלטות למלאי, ובלי
+ * זיכרון של כמה ירדו ההחזרה הייתה ניחוש.
+ *
+ * היא גם התשובה ל"לאן הלכו הלוחות": כל רשומה מצביעה על פרויקט אחד.
+ */
+export interface Consumption extends Entity {
+  projectId: string;
+  /** מזהה שורת הלוחות: `finishId:materialId` */
+  lineKey: string;
+  finishId?: string;
+  materialId: string;
+  /** כמה פלטות ירדו מהמלאי בגלל השורה הזו */
+  sheets: number;
+}
+
 /** מחיר לוח שנקבע אחרת עבור פרויקט מסוים. */
 export interface ProjectPrice extends Entity {
   projectId: string;

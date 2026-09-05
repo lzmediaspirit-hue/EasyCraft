@@ -26,6 +26,7 @@ import { WallThumb } from './WallThumb';
 import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
 import { analyzeWall, nextFreeX } from './analysis';
 import { finishesRepo } from '../../materials/materialsRepo';
+import { syncConsumption } from '../../materials/consumption';
 import { roomDef } from '../../catalog/rooms';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { QuickCalcButton } from '../../ui/QuickCalc';
@@ -701,7 +702,11 @@ export function DesignScreen({
         <UnitWorkSheet
           unit={(allUnits ?? []).find((u) => u.id === workUnitId)!}
           role={role}
-          onChange={(work) => patchUnit(workUnitId, { work }, `work:${workUnitId}`)}
+          onChange={async (work) => {
+            await patchUnit(workUnitId, { work }, `work:${workUnitId}`);
+            /* סימון חיתוך הוא מה שמוריד פלטות מהמלאי — בלי הזנה נוספת */
+            await syncConsumption(projectId);
+          }}
           onClose={() => setWorkUnitId(null)}
         />
       )}
@@ -721,6 +726,7 @@ export function DesignScreen({
           onApply={async (changes) => {
             await history.capture(projectId, `bulk:${Date.now()}`);
             for (const c of changes) await unitsRepo.update(c.id, { work: c.work });
+            await syncConsumption(projectId);
           }}
           onClose={() => setBulkOpen(false)}
         />

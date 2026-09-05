@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
 import { customersRepo } from '../customers/customersRepo';
+import { consumptionRepo } from '../../materials/consumption';
 import {
   finishesRepo,
   materialsRepo,
@@ -37,6 +38,12 @@ export function StockScreen() {
     async () => (projects ? projectsRepo.summaries(projects.map((p) => p.id)) : {}),
     [projects],
   );
+
+  /*
+   * מה כבר נחתך ולאיזה פרויקט. הלוחות האלה כבר ירדו מהמלאי, וזו
+   * התשובה ל"לאן הלכו": מי שרואה שהמלאי ירד רוצה לדעת בשביל מי.
+   */
+  const used = useLiveQuery(() => consumptionRepo.all(), []);
 
   const [materialId, setMaterialId] = useState<string | null>(null);
   const [texture, setTexture] = useState<string | null>(null);
@@ -82,14 +89,26 @@ export function StockScreen() {
           const item = at(f.id, m.id);
           const have = item?.sheets ?? 0;
           const ordered = item?.ordered ?? 0;
+          /*
+             מה שכבר נחתך ירד מהמלאי, ולכן הוא גם ירד מ"צריך":
+             לספור אותו פעמיים היה מציג חוסר שכבר סופק.
+          */
+          const cut = (used ?? [])
+            .filter((c) => c.lineKey === key)
+            .reduce((a, c) => a + c.sheets, 0);
+          const cutFor = (used ?? []).filter((c) => c.lineKey === key).length;
+          const left = Math.max(need.sold - cut, 0);
           return {
             finish: f,
             material: m,
             have,
             ordered,
             ...need,
+            sold: left,
+            cut,
+            cutFor,
             edge: !!item?.edgeInStock,
-            missing: Math.max(need.sold - have - ordered, 0),
+            missing: Math.max(left - have - ordered, 0),
           };
         }),
     )
@@ -224,6 +243,14 @@ export function StockScreen() {
                         {r.material.name}
                         {/* המרקם הוא מה שמפריד בין שני לוחות באותו שם */}
                         {r.finish.texture && <span> · {r.finish.texture}</span>}
+                        {/* מה שכבר נחתך: הלוחות יצאו מהמחסן ונכנסו לפרויקטים */}
+                        {r.cut > 0 && (
+                          <span className="num text-emerald-700">
+                            {' · נחתך '}
+                            {r.cut}
+                            {r.cutFor > 1 ? ` ב-${r.cutFor} פרויקטים` : ''}
+                          </span>
+                        )}
                         {r.missing > 0 && (
                           <span className="num font-semibold text-red-600"> · חסר {r.missing}</span>
                         )}

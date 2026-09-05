@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type {
   Attachment,
   CatalogItem,
+  Consumption,
   Customer,
   Finish,
   Material,
@@ -34,6 +35,7 @@ export const db = new Dexie('easycraft') as Dexie & {
   team: EntityTable<TeamMember, 'id'>;
   stages: EntityTable<ProjectStage, 'id'>;
   attachments: EntityTable<Attachment, 'id'>;
+  consumption: EntityTable<Consumption, 'id'>;
 };
 
 db.version(1).stores({
@@ -396,3 +398,24 @@ db.version(13)
         delete f.textures;
       }),
   );
+
+/**
+ * מה כל פרויקט צרך מהמלאי.
+ *
+ * עד כאן המלאי היה מספר שמישהו מעדכן ביד, ומה שנחתך פשוט נעלם
+ * ממנו כשנזכרו. עכשיו יש רשומה: כשכל החלקים של גוון+חומר בפרויקט
+ * מסומנים כנחתכים, הפלטות יורדות מהמלאי, והרשומה זוכרת כמה ובשביל
+ * מי — כדי שאפשר יהיה גם להחזיר וגם לענות "לאן הלכו הלוחות".
+ */
+db.version(14).stores({
+  ...TABLES_V3,
+  boards: null,
+  materials: 'id, sortOrder',
+  finishes: 'id, sortOrder',
+  projectPrices: 'id, projectId, lineKey',
+  stock: 'id, finishId, materialId',
+  team: 'id, role, active, username',
+  stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+  attachments: 'id, projectId, kind',
+  consumption: 'id, projectId, lineKey',
+});
