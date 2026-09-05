@@ -269,6 +269,7 @@ export function WallElevation({
         return (
           <g
             key={u.id}
+            data-unit-id={u.id}
             transform={`translate(${u.xMm} ${flip(u.yMm + u.heightMm)})`}
             onPointerDown={(e) => beginDrag(e, u)}
             onPointerMove={moveDrag}
@@ -639,7 +640,14 @@ function snapX(
   return Math.round(Math.min(Math.max(snapped, min), max));
 }
 
-/** מצמיד גובה לרצפה, לתקרה, ולקצוות של ארגזים אחרים. */
+/**
+ * מצמיד גובה לתקרה ולקצוות של ארגזים אחרים.
+ *
+ * הרצפה אינה יעד הצמדה כאן במכוון. הפונקציה נקראת רק לארגז שהנעילה
+ * לרצפה שלו כבויה — כלומר למי שביקש במפורש להרים אותו — ומגנט לרצפה
+ * החזיר אותו לשם בכל פעם. מי שרוצה אותו על הרצפה מדליק את הנעילה,
+ * וזה מוריד אותו לאפס בדיוק.
+ */
 function snapY(
   y: number,
   unit: PlacedUnit,
@@ -648,14 +656,11 @@ function snapY(
   tol: number,
 ): number {
   const ceiling = wallHeight - unit.heightMm;
-  // הרצפה היא 0: תחתית הארגז כוללת את הרגליים, ולכן אין יעד נפרד להן
-  const targets = [0, ceiling];
+  const targets = [ceiling];
   for (const other of units) {
     if (other.id === unit.id) continue;
     targets.push(other.yMm, other.yMm + other.heightMm, other.yMm - unit.heightMm);
   }
-  // הרצפה מושכת חזק יותר מכל יעד אחר — לשם רוב הארגזים אמורים לרדת
-  if (y < tol * 2) return 0;
   const snapped = nearest(y, targets, tol);
   return Math.round(Math.min(Math.max(snapped, 0), Math.max(ceiling, 0)));
 }

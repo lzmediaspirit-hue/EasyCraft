@@ -44,16 +44,20 @@ function QuickCalcSheet({ onClose }: { onClose: () => void }) {
   return (
     <Sheet title="מחשבון" onClose={onClose}>
       <div className="space-y-3">
-        <div className="rounded-2xl bg-stone-900 px-4 py-3 text-white">
-          <input
-            value={expr}
-            onChange={(e) => setExpr(e.target.value.replace(/[^0-9+\-−*×/÷.() ]/g, ''))}
-            autoFocus
-            inputMode="decimal"
-            aria-label="תרגיל"
-            placeholder="0"
-            className="num block w-full bg-transparent text-end text-2xl font-semibold placeholder:text-white/30 focus:outline-none"
-          />
+        {/*
+          התצוגה היא טקסט ולא שדה הקלדה: מקלדת המכשיר כיסתה חצי מסך
+          בדיוק כשצריך לראות את התרגיל ואת המקשים. המקלדת כאן היא
+          המקשים שמתחת.
+        */}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label="תרגיל"
+          className="rounded-2xl bg-stone-900 px-4 py-3 text-white"
+        >
+          <div className="num min-h-9 text-end text-2xl font-semibold break-all">
+            {expr === '' ? <span className="text-white/30">0</span> : expr}
+          </div>
           <div className="num mt-1 text-end text-sm text-white/50">
             {expr.trim() === '' ? ' ' : live === null ? 'תרגיל לא שלם' : `= ${live}`}
           </div>
@@ -63,6 +67,9 @@ function QuickCalcSheet({ onClose }: { onClose: () => void }) {
           {KEYS.map((k) => (
             <button
               key={k}
+              /* המקש לא לוקח מיקוד, ולכן שדה שהיה פתוח לפני המחשבון
+                 לא מחזיר את המקלדת באמצע החישוב */
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => press(k)}
               className={`num rounded-xl py-3.5 text-lg font-semibold transition-colors ${
                 k === '='

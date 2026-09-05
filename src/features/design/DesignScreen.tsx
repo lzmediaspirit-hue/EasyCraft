@@ -324,7 +324,13 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           className="flex shrink-0 flex-col [&>div:first-child]:min-h-0 [&>div:first-child]:flex-1"
           style={{ height: `${panelRatio * 100}dvh` }}
         >
+        {/*
+          מפתח לפי מזהה הארגז: בלעדיו הלוח נשאר מורכב במעבר בין
+          ארגזים, ושדה מידה שהיה פתוח היה כותב את הערך שלו לתוך
+          הארגז הבא שנבחר.
+        */}
         <UnitEditor
+          key={selected.id}
           unit={selected}
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
