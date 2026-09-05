@@ -260,6 +260,21 @@ export const stockRepo = {
   },
 };
 
+/**
+ * ההזמנה הגיעה: מה שהיה בדרך עובר למלאי.
+ * פעולה אחת ולא שתי הקלדות — מי שפורק משאית לא אמור לחשב הפרשים.
+ */
+export async function receiveOrder(finishId: string, materialId: string): Promise<void> {
+  const rows = await db.stock.toArray();
+  const item = rows.find((r) => r.finishId === finishId && r.materialId === materialId);
+  if (!item || item.ordered <= 0) return;
+  await db.stock.update(item.id, {
+    sheets: item.sheets + item.ordered,
+    ordered: 0,
+    updatedAt: Date.now(),
+  });
+}
+
 /** מפתח שורת התמחור: אותו גוון על שני חומרים הוא שתי שורות הזמנה. */
 export function lineKey(choice: PartChoice): string {
   return `${choice.finishId ?? ''}:${choice.materialId ?? ''}`;

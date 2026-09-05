@@ -2,12 +2,18 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
 import { customersRepo } from '../customers/customersRepo';
-import { finishesRepo, materialsRepo, stockRepo } from '../../materials/materialsRepo';
+import {
+  finishesRepo,
+  materialsRepo,
+  receiveOrder,
+  stockRepo,
+} from '../../materials/materialsRepo';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { selectOnFocus } from '../../ui/Field';
 import { CheckIcon } from '../../ui/icons';
 import type { ProjectCosting } from '../../costing/boards';
-import type { Finish, Material } from '../../db/types';
+
+type SortKey = 'finish' | 'material' | 'missing';
 
 /**
  * מלאי הפלטות בעסק.
@@ -16,8 +22,10 @@ import type { Finish, Material } from '../../db/types';
  * היום": כמה פלטות דורשים הפרויקטים שכבר נמכרו, כמה מהן מונחות
  * בנגרייה, כמה כבר בדרך — והשאר הוא מה שחסר.
  *
- * פרויקט שעוד לא נמכר נספר בנפרד: הוא הצעה, לא התחייבות, ולהזמין
- * חומר לפיו זה להמר.
+ * הכול בטבלה אחת ולא בכרטיסים, כי זו רשימת הזמנה: העין רצה על
+ * עמודה ומשווה מספרים, ולא קוראת כרטיס אחרי כרטיס. מיון וסינון לפי
+ * חומר ולפי מרקם, כי ככה מזמינים — כל הסנדוויץ׳ מספק אחד, וכל
+ * גוני היער באותה שיחה.
  */
 export function StockScreen() {
   const materials = useLiveQuery(() => materialsRepo.list(), []);
@@ -29,6 +37,10 @@ export function StockScreen() {
     async () => (projects ? projectsRepo.summaries(projects.map((p) => p.id)) : {}),
     [projects],
   );
+
+  const [materialId, setMaterialId] = useState<string | null>(null);
+  const [texture, setTexture] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortKey>('finish');
   const [onlyNeeded, setOnlyNeeded] = useState(false);
 
   /**
@@ -55,33 +67,45 @@ export function StockScreen() {
 
   if (!materials || !finishes || !stock) return null;
 
-  const at = (finishId: string, materialId: string) =>
-    stock.find((s) => s.finishId === finishId && s.materialId === materialId);
+  const at = (f: string, m: string) => stock.find((s) => s.finishId === f && s.materialId === m);
+  const textures = [...new Set(finishes.flatMap((f) => f.textures ?? []))];
 
-  /*
-   * שורה מוצגת לכל צירוף שיש לו מחיר. טבלה מלאה של כל גוון כפול כל
-   * חומר הייתה רובה אפסים, ומה שאין לו מחיר גם לא מוזמן.
-   */
-  const rows = finishes.flatMap((f) =>
-    materials
-      .filter((m) => f.prices?.[m.id] !== undefined)
-      .map((m) => {
-        const key = `${f.id}:${m.id}`;
-        const need = demand.get(key) ?? { sold: 0, quoted: 0 };
-        const item = at(f.id, m.id);
-        const have = item?.sheets ?? 0;
-        const ordered = item?.ordered ?? 0;
-        return {
-          finish: f,
-          material: m,
-          have,
-          ordered,
-          ...need,
-          missing: Math.max(need.sold - have - ordered, 0),
-        };
-      })
-      .filter((r) => !onlyNeeded || r.missing > 0),
-  );
+  const rows = finishes
+    .flatMap((f) =>
+      materials
+        .filter((m) => f.prices?.[m.id] !== undefined)
+        .map((m) => {
+          const key = `${f.id}:${m.id}`;
+          const need = demand.get(key) ?? { sold: 0, quoted: 0 };
+          const item = at(f.id, m.id);
+          const have = item?.sheets ?? 0;
+          const ordered = item?.ordered ?? 0;
+          return {
+            finish: f,
+            material: m,
+            have,
+            ordered,
+            ...need,
+            edge: !!item?.edgeInStock,
+            missing: Math.max(need.sold - have - ordered, 0),
+          };
+        }),
+    )
+    .filter((r) => !materialId || r.material.id === materialId)
+    .filter((r) => !texture || r.finish.textures?.includes(texture))
+    .filter((r) => !onlyNeeded || r.missing > 0)
+    .sort((a, b) => {
+      if (sort === 'missing') return b.missing - a.missing || a.finish.name.localeCompare(b.finish.name, 'he');
+      if (sort === 'material') {
+        return (
+          a.material.sortOrder - b.material.sortOrder ||
+          a.finish.name.localeCompare(b.finish.name, 'he')
+        );
+      }
+      return (
+        a.finish.name.localeCompare(b.finish.name, 'he') || a.material.sortOrder - b.material.sortOrder
+      );
+    });
 
   const totals = rows.reduce(
     (a, r) => ({
@@ -96,133 +120,203 @@ export function StockScreen() {
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
       <ScreenHeader title="מלאי לוחות" subtitle="מה יש, מה בדרך ומה חסר" />
 
-      <main className="flex-1 space-y-4 px-5 pt-4 pb-10">
+      <main className="flex-1 space-y-3 px-4 pt-4 pb-10">
         <div className="grid grid-cols-3 gap-2">
           <Total label="במלאי" value={totals.have} />
           <Total label="הוזמן" value={totals.ordered} />
           <Total label="חסר" value={totals.missing} tone={totals.missing > 0} />
         </div>
 
-        <button
-          onClick={() => setOnlyNeeded((v) => !v)}
-          aria-pressed={onlyNeeded}
-          className={`w-full rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-            onlyNeeded ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-          }`}
-        >
-          רק מה שחסר
-        </button>
+        {/* סינון לפי חומר — ככה מזמינים: כל הסנדוויץ׳ מספק אחד */}
+        <Filters
+          label="חומר"
+          options={materials.map((m) => ({ key: m.id, label: m.name }))}
+          value={materialId}
+          onChange={setMaterialId}
+        />
+
+        {textures.length > 0 && (
+          <Filters
+            label="מרקם"
+            options={textures.map((t) => ({ key: t, label: t }))}
+            value={texture}
+            onChange={setTexture}
+          />
+        )}
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-medium text-stone-500">מיון</span>
+          {(
+            [
+              ['finish', 'גוון'],
+              ['material', 'חומר'],
+              ['missing', 'חסר'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSort(key)}
+              aria-pressed={sort === key}
+              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                sort === key ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            onClick={() => setOnlyNeeded((v) => !v)}
+            aria-pressed={onlyNeeded}
+            className={`ms-auto rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+              onlyNeeded ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600'
+            }`}
+          >
+            רק מה שחסר
+          </button>
+        </div>
 
         {rows.length === 0 ? (
           <p className="pt-10 text-center text-sm text-stone-500">
-            {onlyNeeded ? 'לא חסר כלום.' : 'אין עדיין גוונים עם מחיר לחומר.'}
+            {onlyNeeded ? 'לא חסר כלום.' : 'אין גוונים שמתאימים לסינון.'}
           </p>
         ) : (
-          <ul className="space-y-2">
-            {rows.map((r) => (
-              <StockRow
-                key={`${r.finish.id}:${r.material.id}`}
-                finish={r.finish}
-                material={r.material}
-                have={r.have}
-                ordered={r.ordered}
-                sold={r.sold}
-                quoted={r.quoted}
-                missing={r.missing}
-                edgeInStock={!!at(r.finish.id, r.material.id)?.edgeInStock}
-                onChange={(patch) => stockRepo.set(r.finish.id, r.material.id, patch)}
-              />
-            ))}
-          </ul>
+          <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+            <div className="grid grid-cols-[1fr_2.6rem_3.4rem_4.2rem] items-center gap-1 border-b border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[10px] font-medium text-stone-500">
+              <span>גוון · חומר</span>
+              <span className="text-center">צריך</span>
+              <span className="text-center">מלאי</span>
+              <span className="text-center">הוזמן</span>
+            </div>
+            <ul className="divide-y divide-stone-200/80">
+              {rows.map((r) => (
+                <li
+                  key={`${r.finish.id}:${r.material.id}`}
+                  className="grid grid-cols-[1fr_2.6rem_3.4rem_4.2rem] items-center gap-1 px-2.5 py-2"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      aria-hidden="true"
+                      className="size-5 shrink-0 rounded border border-black/10"
+                      style={{ background: r.finish.hex }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-stone-900">
+                        {r.finish.name}
+                      </span>
+                      <span className="block truncate text-[10px] text-stone-500">
+                        {r.material.name}
+                        {r.missing > 0 && (
+                          <span className="num font-semibold text-red-600"> · חסר {r.missing}</span>
+                        )}
+                      </span>
+                    </span>
+                  </span>
+
+                  <span className="num text-center text-sm text-stone-700">
+                    {r.sold || <span className="text-stone-300">0</span>}
+                    {r.quoted > 0 && (
+                      <span className="block text-[9px] text-stone-400">+{r.quoted}</span>
+                    )}
+                  </span>
+
+                  <Cell
+                    label={`במלאי ${r.finish.name} ${r.material.name}`}
+                    value={r.have}
+                    onChange={(v) => stockRepo.set(r.finish.id, r.material.id, { sheets: v })}
+                  />
+
+                  <span className="flex items-center gap-0.5">
+                    <Cell
+                      label={`הוזמן ${r.finish.name} ${r.material.name}`}
+                      value={r.ordered}
+                      onChange={(v) => stockRepo.set(r.finish.id, r.material.id, { ordered: v })}
+                    />
+                    {/* ההזמנה הגיעה: מה שהיה בדרך עובר למלאי בלחיצה */}
+                    {r.ordered > 0 && (
+                      <button
+                        onClick={() => receiveOrder(r.finish.id, r.material.id)}
+                        aria-label={`ההזמנה הגיעה — ${r.finish.name} ${r.material.name}`}
+                        title="ההזמנה הגיעה"
+                        className="grid size-6 shrink-0 place-items-center rounded-md bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100"
+                      >
+                        <CheckIcon className="size-3.5" />
+                      </button>
+                    )}
+                  </span>
+
+                  {/*
+                    קנט תואם הוא פריט נפרד אצל הספק ונגמר בלי קשר
+                    ללוחות. נגר שמגלה בשולחן שאין קנט בגוון עוצר את
+                    כל הארגז, ולכן הוא יושב באותה שורה.
+                  */}
+                  <button
+                    onClick={() =>
+                      stockRepo.set(r.finish.id, r.material.id, { edgeInStock: !r.edge })
+                    }
+                    aria-pressed={r.edge}
+                    className={`col-span-4 mt-1 rounded-lg px-2 py-1 text-start text-[11px] font-medium transition-colors ${
+                      r.edge
+                        ? 'bg-emerald-50 text-emerald-800'
+                        : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                    }`}
+                  >
+                    {r.edge ? '✓ יש קנט תואם' : '— אין קנט תואם'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         <p className="text-xs leading-snug text-stone-500">
-          "צריך" נספר מפרויקטים שכבר נמכרו. הצעות שעוד לא נסגרו מוצגות
-          בנפרד — להזמין חומר לפיהן זה להמר.
+          "צריך" נספר מפרויקטים שכבר נמכרו; המספר הקטן מתחתיו הוא מה
+          שדורשות הצעות שעוד לא נסגרו. להזמין חומר לפיהן זה להמר.
         </p>
       </main>
     </div>
   );
 }
 
-function StockRow({
-  finish,
-  material,
-  have,
-  ordered,
-  sold,
-  quoted,
-  missing,
-  edgeInStock,
+function Filters({
+  label,
+  options,
+  value,
   onChange,
 }: {
-  finish: Finish;
-  material: Material;
-  have: number;
-  ordered: number;
-  sold: number;
-  quoted: number;
-  missing: number;
-  edgeInStock: boolean;
-  onChange: (patch: { sheets?: number; ordered?: number; edgeInStock?: boolean }) => void;
+  label: string;
+  options: { key: string; label: string }[];
+  value: string | null;
+  onChange: (v: string | null) => void;
 }) {
   return (
-    <li className="rounded-2xl border border-stone-200 bg-white p-3">
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="size-6 shrink-0 rounded-lg border border-black/10"
-          style={{ background: finish.hex }}
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold text-stone-900">
-            {finish.name}
-            <span className="font-normal text-stone-500"> · {material.name}</span>
-          </span>
-          <span className="num block truncate text-[11px] text-stone-500">
-            צריך {sold}
-            {quoted > 0 && <span className="text-stone-400"> · בהצעות {quoted}</span>}
-          </span>
-        </span>
-        {missing > 0 && (
-          <span className="num shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
-            חסר {missing}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-2.5 grid grid-cols-2 gap-2">
-        <CountBox label="במלאי" value={have} onChange={(v) => onChange({ sheets: v })} />
-        <CountBox label="הוזמן" value={ordered} onChange={(v) => onChange({ ordered: v })} />
-      </div>
-
-      {/*
-        קנט תואם הוא פריט נפרד אצל הספק, והוא נגמר בלי קשר ללוחות.
-        נגר שמגלה בשולחן שאין קנט בגוון עוצר את כל הארגז.
-      */}
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] font-medium text-stone-500">{label}</span>
       <button
-        onClick={() => onChange({ edgeInStock: !edgeInStock })}
-        aria-pressed={edgeInStock}
-        className={`mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-start text-sm font-medium transition-colors ${
-          edgeInStock
-            ? 'bg-emerald-50 text-emerald-800'
-            : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+        onClick={() => onChange(null)}
+        aria-pressed={value === null}
+        className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+          value === null ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'
         }`}
       >
-        <span
-          className={`grid size-5 shrink-0 place-items-center rounded-full ${
-            edgeInStock ? 'bg-emerald-600 text-white' : 'bg-stone-300 text-stone-500'
+        הכול
+      </button>
+      {options.map((o) => (
+        <button
+          key={o.key}
+          onClick={() => onChange(value === o.key ? null : o.key)}
+          aria-pressed={value === o.key}
+          className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+            value === o.key ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'
           }`}
         >
-          {edgeInStock ? <CheckIcon className="size-3.5" /> : <span className="text-xs">—</span>}
-        </span>
-        {edgeInStock ? 'יש קנט תואם' : 'אין קנט תואם'}
-      </button>
-    </li>
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
-function CountBox({
+function Cell({
   label,
   value,
   onChange,
@@ -232,19 +326,16 @@ function CountBox({
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="block rounded-xl bg-stone-100 px-3 py-2">
-      <span className="block text-[11px] text-stone-500">{label}</span>
-      <input
-        value={value || ''}
-        onChange={(e) => onChange(Math.max(Number(e.target.value) || 0, 0))}
-        onFocus={selectOnFocus}
-        type="number"
-        inputMode="numeric"
-        placeholder="0"
-        aria-label={label}
-        className="num w-full bg-transparent text-base font-medium text-stone-900 placeholder:text-stone-300 focus:outline-none"
-      />
-    </label>
+    <input
+      value={value || ''}
+      onChange={(e) => onChange(Math.max(Number(e.target.value) || 0, 0))}
+      onFocus={selectOnFocus}
+      type="number"
+      inputMode="numeric"
+      placeholder="0"
+      aria-label={label}
+      className="num w-full min-w-0 rounded-md bg-stone-100 py-1 text-center text-sm font-medium text-stone-900 placeholder:text-stone-300 focus:bg-white focus:ring-1 focus:ring-oak-400 focus:outline-none"
+    />
   );
 }
 
