@@ -3,7 +3,8 @@ import { useSyncExternalStore } from 'react';
 export type Route =
   | { name: 'customers' }
   | { name: 'projects'; customerId: string }
-  | { name: 'design'; projectId: string }
+  /** `work` פותח את ההדמיה ישר במצב מעקב תהליך עבודה */
+  | { name: 'design'; projectId: string; work?: boolean }
   | { name: 'workflow'; projectId: string }
   | { name: 'archive' }
   | { name: 'tasks' }

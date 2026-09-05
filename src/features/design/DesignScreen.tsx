@@ -63,7 +63,14 @@ const clampRatio = (r: number) => Math.min(Math.max(r, 0.2), 0.85);
  * הפריסה היא עמודה: הכותרת, ההדמיה שנשארת גלויה, ולוח העריכה שתופס
  * את מה שנשאר. כך בטלפון הלוח לא מכסה את הקיר שעליו עובדים.
  */
-export function DesignScreen({ projectId }: { projectId: string }) {
+export function DesignScreen({
+  projectId,
+  /** נכנסים ישר למעקב תהליך העבודה — ככה מגיעים לכאן מרשימת התהליכים */
+  startInWork,
+}: {
+  projectId: string;
+  startInWork?: boolean;
+}) {
   const [wallIndex, setWallIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -83,7 +90,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
    * שנעשה בהם — ובלי כלי עריכה. מי שעומד ליד המסור לא אמור להזיז
    * ארגז בטעות.
    */
-  const [workToggle, setWorkToggle] = useState(false);
+  const [workToggle, setWorkToggle] = useState(!!startInWork);
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [finishesOpen, setFinishesOpen] = useState(false);

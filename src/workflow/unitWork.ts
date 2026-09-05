@@ -183,3 +183,27 @@ export function workSummary(u: PlacedUnit): string {
     .map((t) => `${t.label}: ${STAGE_CHAIN[stageIndex(stageOf(u, t.key))].label}`);
   return parts.length ? parts.join(' · ') : 'עוד לא התחיל';
 }
+
+/**
+ * כמה מהעבודה בפרויקט כבר נעשתה, כשבר בין 0 ל-1.
+ *
+ * נמדד לפי המסלולים ולא לפי הארגזים: ארגז שהגוף שלו הותקן והחזיתות
+ * עוד לא נחתכו אינו "חצי", אלא בדיוק מה שהמסלולים אומרים. כל מסלול
+ * נספר עד השלב האחרון שלו — לגב זה חיתוך, ולגוף התקנה — כי מסלול
+ * שהגיע לסופו סיים את חלקו גם אם הוא קצר משכניו.
+ *
+ * ארגזים שאינם נספרים בייצור, כמו מכשירי חשמל ולוחות בודדים,
+ * יוצאים מהחשבון לגמרי: הם לא עבודה שאפשר להתקדם בה.
+ */
+export function workProgress(units: PlacedUnit[]): number {
+  let done = 0;
+  let total = 0;
+  for (const u of units) {
+    for (const t of tracksOf(u)) {
+      const last = stageIndex(t.last);
+      total += last + 1;
+      done += Math.min(stageIndex(stageOf(u, t.key)) + 1, last + 1);
+    }
+  }
+  return total > 0 ? done / total : 0;
+}

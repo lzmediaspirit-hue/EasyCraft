@@ -44,7 +44,7 @@ function screen(route: ReturnType<typeof useRoute>) {
     case 'projects':
       return <ProjectsScreen customerId={route.customerId} />;
     case 'design':
-      return <DesignScreen projectId={route.projectId} />;
+      return <DesignScreen projectId={route.projectId} startInWork={route.work} />;
     case 'workflow':
       return <WorkflowScreen projectId={route.projectId} />;
     case 'tasks':

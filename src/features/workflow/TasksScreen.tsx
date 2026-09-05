@@ -1,5 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { projectsRepo } from '../projects/projectsRepo';
+import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
+import { ProjectThumb } from './ProjectThumb';
+import { workProgress } from '../../workflow/unitWork';
 import { customersRepo } from '../customers/customersRepo';
 import { stagesRepo, teamRepo } from '../../workflow/workflowRepo';
 import { useCurrentMember } from '../../workflow/useMember';
@@ -7,6 +9,16 @@ import { ROLE_LABEL, canOwn, stageDef } from '../../workflow/stages';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { nav } from '../../nav/navigation';
 import { ChevronIcon } from '../../ui/icons';
+import type { PlacedUnit, Wall } from '../../db/types';
+
+/** צורת הפרויקט: הקירות והארגזים שעליהם. */
+interface Shape {
+  walls: Wall[];
+  units: PlacedUnit[];
+}
+
+/** ריק יציב, כדי שהרינדור הראשון לא ייצור מפה חדשה בכל פעם */
+const NO_SHAPES: Map<string, Shape> = new Map();
 
 /**
  * מה פתוח עכשיו בעסק.
@@ -21,6 +33,27 @@ export function TasksScreen() {
   const projects = useLiveQuery(() => projectsRepo.all(), []);
   const customers = useLiveQuery(() => customersRepo.list(), []);
   const team = useLiveQuery(() => teamRepo.list(), []);
+  /*
+   * הקירות והארגזים של כל התהליכים הפתוחים, בשאילתה אחת.
+   * שורה ברשימה אינה טקסט אלא הפרויקט עצמו: הנגר מזהה את המטבח שלו
+   * לפי הצורה ולפי כמה כבר נעשה בו, ולא לפי השם.
+   */
+  const shapes =
+    useLiveQuery(async () => {
+      const ids = [
+        ...new Set(
+          (await stagesRepo.all()).filter((s) => s.status === 'active').map((s) => s.projectId),
+        ),
+      ];
+      const out = new Map<string, Shape>();
+      for (const id of ids) {
+        out.set(id, {
+          walls: await wallsRepo.listForProject(id),
+          units: await unitsRepo.listForProject(id),
+        });
+      }
+      return out;
+    }, []) ?? NO_SHAPES;
 
   const active = (stages ?? []).filter((s) => s.status === 'active');
   const mine = me ? active.filter((s) => canOwn(me.role, stageDef(s.key).role)) : [];
@@ -32,12 +65,22 @@ export function TasksScreen() {
     const c = customers?.find((x) => x.id === p?.customerId);
     const who = team?.find((m) => m.id === s.assigneeId);
     const def = stageDef(s.key);
+    const shape = shapes.get(s.projectId);
+    const pct = shape ? Math.round(workProgress(shape.units) * 100) : 0;
     return (
       <li key={s.id}>
         <button
-          onClick={() => nav.push({ name: 'workflow', projectId: s.projectId })}
-          className="flex w-full items-center gap-2 rounded-2xl border border-stone-200 bg-white p-3 text-start transition-colors hover:border-oak-400"
+          /*
+            הלחיצה פותחת את ההדמיה במצב מעקב, ולא רשימת שלבים: שם
+            רואים איזה ארגז נתקע ואיפה הוא עומד בחדר, וזו השאלה
+            האמיתית כשפותחים תהליך פתוח.
+          */
+          onClick={() => nav.push({ name: 'design', projectId: s.projectId, work: true })}
+          className="flex w-full items-center gap-2.5 rounded-2xl border border-stone-200 bg-white p-3 text-start transition-colors hover:border-oak-400"
         >
+          {shape && shape.walls.length > 0 && (
+            <ProjectThumb walls={shape.walls} units={shape.units} />
+          )}
           <span className="min-w-0 flex-1">
             <span className="block truncate font-medium text-stone-900">
               {p?.name ?? 'פרויקט'}
@@ -47,6 +90,18 @@ export function TasksScreen() {
               {def.label} ·{' '}
               {who?.name ?? (def.role === 'customer' ? 'הלקוח' : ROLE_LABEL[def.role])}
             </span>
+            {/* פס ההתקדמות הוא הדוח: כמה מהעבודה בפרויקט כבר נעשתה */}
+            {shape && shape.units.length > 0 && (
+              <span className="mt-1.5 flex items-center gap-1.5">
+                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100">
+                  <span
+                    className="block h-full rounded-full bg-oak-600 transition-[width]"
+                    style={{ width: `${pct}%` }}
+                  />
+                </span>
+                <span className="num text-[11px] font-semibold text-stone-500">{pct}%</span>
+              </span>
+            )}
           </span>
           {s.scheduledAt && (
             <span className="num shrink-0 text-xs font-medium text-stone-500">
