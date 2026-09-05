@@ -72,7 +72,8 @@ export function UnitEditor({
   unit,
   inside,
   project,
-  maxDoorHeightMm,
+  roomAbove = 0,
+  roomBelow = 0,
   onChange,
   onApplyChoiceAll,
   onEdit,
@@ -85,10 +86,11 @@ export function UnitEditor({
   /** הפרויקט, לברירות המחדל של הגוון והחומר */
   project?: Project;
   /**
-   * הגובה המרבי שדלת יכולה להגיע אליו בלי להתנגש בארגז שמתחת.
+   * כמה מקום פנוי יש לדלת לגדול אליו, למעלה ולמטה.
    * נמדד בהדמיה, כי רק שם יודעים מי השכנים.
    */
-  maxDoorHeightMm?: number;
+  roomAbove?: number;
+  roomBelow?: number;
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
@@ -138,6 +140,8 @@ export function UnitEditor({
     );
   const hasExposed = !!(exposed.start || exposed.end || exposed.top || exposed.bottom);
   const hasDrawers = unitCells(unit).some(({ content: c }) => c.kind === 'drawers');
+  const growTop = unit.doorGrowTopMm ?? 0;
+  const growBottom = unit.doorGrowBottomMm ?? 0;
 
   /*
    * ברוחב מוצגות גם המידות של הפריט וגם מידות התקן עד 120 ס"מ:
@@ -150,7 +154,14 @@ export function UnitEditor({
       : axis === 'h'
         ? HEIGHTS
         : DEPTHS;
-  const currentValue = axis === 'w' ? unit.widthMm : axis === 'h' ? unit.heightMm : unit.depthMm;
+  /*
+   * העומק שמוצג תלוי במה שרואים: בתצוגת חזית זה העומק הכולל, עם
+   * החזית; בתצוגת פנים זה עומק הגוף בלבד. מה שנשמר הוא תמיד עומק
+   * הגוף, כי זו המידה שממנה נחתכים הצדדים.
+   */
+  const depthShift = !inside && hasFronts ? MATERIAL.frontMm : 0;
+  const currentValue =
+    axis === 'w' ? unit.widthMm : axis === 'h' ? unit.heightMm : unit.depthMm + depthShift;
 
   /*
    * המידה הפעילה נגללת למרכז השורה.
@@ -170,7 +181,13 @@ export function UnitEditor({
   const axisLabel = axis === 'w' ? 'רוחב' : axis === 'h' ? 'גובה' : 'עומק';
 
   const applyStandard = (mm: number) =>
-    onChange(axis === 'w' ? { widthMm: mm } : axis === 'h' ? { heightMm: mm } : { depthMm: mm });
+    onChange(
+      axis === 'w'
+        ? { widthMm: mm }
+        : axis === 'h'
+          ? { heightMm: mm }
+          : { depthMm: Math.max(mm - depthShift, 50) },
+    );
 
   function toggleSide(key: keyof ExposedSides) {
     onChange({ exposed: { ...exposed, [key]: !exposed[key] } });
@@ -241,8 +258,8 @@ export function UnitEditor({
         <AxisTab
           active={axis === 'd'}
           onSelect={() => setAxis('d')}
-          label="עומק"
-          value={unit.depthMm}
+          label={inside ? 'עומק הגוף' : 'עומק'}
+          value={unit.depthMm + depthShift}
         />
       </div>
 
@@ -423,45 +440,32 @@ export function UnitEditor({
                   </Row>
 
                   {/*
-                    גובה הדלת יכול להיות שונה מגובה הארגז: דלת אחת
-                    שמכסה שני ארגזים שייכת לאחד מהם, והמידה שלה אינה
-                    מידתו. ברירת המחדל היא הארגז עצמו.
+                    הדלת גדלה מהארגז כלפי מעלה או כלפי מטה, ולא
+                    "גובה דלת" אחד: השאלה בשטח היא תמיד לאיזה כיוון
+                    היא נמשכת, ומה יש שם. כל כיוון מוגבל למה שפנוי,
+                    כדי שהיא לא תיכנס לארגז השכן.
                   */}
                   {(unit.doors ?? 0) > 0 && (
                     <>
-                      <div className="mt-3 flex items-center gap-1.5">
-                        <span className="w-20 shrink-0 text-[11px] font-medium text-stone-500">
-                          גובה הדלת
-                          {maxDoorHeightMm !== undefined && maxDoorHeightMm > bodyH && (
-                            <span className="num block text-[10px] font-normal text-stone-400">
-                              עד {cm(maxDoorHeightMm)}
-                            </span>
-                          )}
-                        </span>
-                        <Pill
-                          active={unit.doorHeightMm === undefined}
-                          onClick={() =>
-                            onChange({ doorHeightMm: undefined, exposedMatchesDoor: undefined })
-                          }
-                        >
-                          כגובה הארגז
-                        </Pill>
-                        <label className="flex flex-1 items-center gap-1 rounded-lg bg-stone-100 px-2 py-1">
-                          <MeasureInput
-                            value={unit.doorHeightMm ?? bodyH}
-                            onChange={(mm) => onChange({ doorHeightMm: mm })}
-                            minMm={100}
-                            maxMm={maxDoorHeightMm}
-                            ariaLabel="גובה הדלת"
-                            className="num w-full bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
-                          />
-                          <span className="shrink-0 text-[10px] text-stone-400">
-                            {unitLabel()}
-                          </span>
-                        </label>
-                      </div>
+                      <Row
+                        label="הדלת מעבר לארגז"
+                        hint={`גובה הדלת ${cm(bodyH + growTop + growBottom)} ${unitLabel()}`}
+                      >
+                        <Grow
+                          label="למעלה"
+                          value={growTop}
+                          max={roomAbove}
+                          onChange={(mm) => onChange({ doorGrowTopMm: mm || undefined })}
+                        />
+                        <Grow
+                          label="למטה"
+                          value={growBottom}
+                          max={roomBelow}
+                          onChange={(mm) => onChange({ doorGrowBottomMm: mm || undefined })}
+                        />
+                      </Row>
 
-                      {unit.doorHeightMm !== undefined && hasExposed && (
+                      {(growTop !== 0 || growBottom !== 0) && hasExposed && (
                         <button
                           onClick={() =>
                             onChange({ exposedMatchesDoor: !unit.exposedMatchesDoor })
@@ -666,30 +670,27 @@ export function UnitEditor({
         </button>
 
         {/*
-          גובה הרגליים נגיש תמיד ולא רק לארגז שנעול לרצפה: גם ארון
-          שתלוי יכול לשבת על צוקל, וכששורה מופיעה ונעלמת לפי מתג אחר
-          צריך לנחש איפה היא. גובה מהרצפה מופיע רק כשיש מה להזיז.
+          רגליים יש רק לארגז שעומד על הרצפה. ארון תלוי לא נשען על
+          כלום, ושורת "גובה רגליים" אצלו היא שאלה בלי משמעות.
         */}
         <div className="min-w-0 flex-1">
-          <NumBox
-            label="גובה רגליים"
-            value={unit.socleMm ?? 0}
-            /* הרגליים מרימות את גוף הארון, ולכן הגובה הכולל גדל איתן */
-            onChange={(mm) =>
-              onChange({
-                socleMm: mm || undefined,
-                heightMm: Math.max(unit.heightMm + mm - (unit.socleMm ?? 0), 50),
-                ...(locked ? { yMm: 0 } : {}),
-              })
-            }
-          />
-        </div>
-
-        {!locked && (
-          <div className="min-w-0 flex-1">
+          {locked ? (
+            <NumBox
+              label="גובה רגליים"
+              value={unit.socleMm ?? 0}
+              /* הרגליים מרימות את גוף הארון, ולכן הגובה הכולל גדל איתן */
+              onChange={(mm) =>
+                onChange({
+                  socleMm: mm || undefined,
+                  heightMm: Math.max(unit.heightMm + mm - (unit.socleMm ?? 0), 50),
+                  yMm: 0,
+                })
+              }
+            />
+          ) : (
             <NumBox label="גובה מהרצפה" value={unit.yMm} onChange={(mm) => onChange({ yMm: mm })} />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
 
@@ -729,6 +730,7 @@ function AxisTab({
     <button
       onClick={onSelect}
       aria-pressed={active}
+      data-axis={label}
       className={`min-w-0 flex-1 rounded-xl px-2 py-1.5 transition-colors ${
         active ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
       }`}
@@ -738,6 +740,53 @@ function AxisTab({
         {cm(value)}
       </span>
     </button>
+  );
+}
+
+/**
+ * כמה הדלת נמשכת לכיוון אחד. צעדים של 5 ס"מ, כי זו המידה שבה
+ * מדברים בשטח, ומספר מדויק נכנס בשדה עצמו.
+ */
+function Grow({
+  label,
+  value,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  /** המקום הפנוי לכיוון הזה */
+  max: number;
+  onChange: (mm: number) => void;
+}) {
+  const step = 50;
+  return (
+    <span className="flex items-center gap-1 rounded-lg bg-stone-100 px-1.5 py-1">
+      <span className="px-1 text-[11px] text-stone-500">{label}</span>
+      <button
+        onClick={() => onChange(Math.max(value - step, -200))}
+        aria-label={`הפחתה ${label}`}
+        className="grid size-6 place-items-center rounded-md bg-white text-stone-600 transition-colors hover:text-oak-700"
+      >
+        −
+      </button>
+      <MeasureInput
+        value={value}
+        onChange={onChange}
+        minMm={-200}
+        maxMm={max}
+        ariaLabel={`הדלת ${label}`}
+        className="num w-10 bg-transparent text-center text-sm font-medium text-stone-900 focus:outline-none"
+      />
+      <button
+        onClick={() => onChange(Math.min(value + step, max))}
+        disabled={value >= max}
+        aria-label={`הוספה ${label}`}
+        className="grid size-6 place-items-center rounded-md bg-white text-stone-600 transition-colors hover:text-oak-700 disabled:opacity-40"
+      >
+        +
+      </button>
+    </span>
   );
 }
 

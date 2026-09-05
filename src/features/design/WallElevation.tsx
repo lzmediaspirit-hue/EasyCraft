@@ -135,7 +135,16 @@ export function WallElevation({
      */
     const ctm = svgRef.current?.getScreenCTM();
     if (!ctm || !ctm.a) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    /*
+     * תפיסת המצביע היא נוחות ולא תנאי: יש דפדפנים שזורקים כאן על
+     * אלמנט SVG פנימי, וכשזה קרה הגרירה בעכבר פשוט לא התחילה.
+     * מטפלי התנועה יושבים על ה-SVG עצמו, ולכן היא עובדת גם בלעדיה.
+     */
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // אין תפיסה — ה-SVG עדיין מקבל את התנועה
+    }
     drag.current = {
       id: unit.id,
       startX: e.clientX,
@@ -170,7 +179,13 @@ export function WallElevation({
      * לגרור לגובה, וארגז שנח על הרצפה תוך כדי לא אומר שהחליט
      * להינעל אליה — נעילה חוזרת שם הפכה את המתג לחסר משמעות.
      */
-    if (drag.current) e.currentTarget.releasePointerCapture(e.pointerId);
+    if (drag.current) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // לא נתפס מלכתחילה
+      }
+    }
     drag.current = null;
   }
 
@@ -182,6 +197,15 @@ export function WallElevation({
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onSelect(null);
       }}
+      /*
+       * התנועה והשחרור יושבים על ה-SVG ולא על הארגז: כך הגרירה
+       * ממשיכה גם כשהמצביע יוצא מהמלבן הקטן, וגם כשתפיסת המצביע
+       * לא נתמכת.
+       */
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerLeave={endDrag}
+      onPointerCancel={endDrag}
     >
       <rect x={0} y={0} width={wall.lengthMm} height={wall.heightMm} fill="#faf9f7" />
       <rect
@@ -322,9 +346,6 @@ export function WallElevation({
             data-unit-id={u.id}
             transform={`translate(${u.xMm} ${flip(u.yMm + u.heightMm)})`}
             onPointerDown={(e) => (work ? onSelect(u.id) : beginDrag(e, u))}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
             className={measure || work ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
           >
             <rect width={u.widthMm} height={carcassH} fill={fill} stroke="transparent" />
@@ -421,17 +442,21 @@ export function WallElevation({
       */}
       {!inside &&
         units
-          .filter((u) => u.doorHeightMm && u.doorHeightMm > u.heightMm - (u.socleMm ?? 0))
+          .filter((u) => (u.doorGrowTopMm ?? 0) !== 0 || (u.doorGrowBottomMm ?? 0) !== 0)
           .map((u) => {
             const socle = u.socleMm ?? 0;
-            const top = flip(u.yMm + u.heightMm);
+            const growTop = u.doorGrowTopMm ?? 0;
+            const growBottom = u.doorGrowBottomMm ?? 0;
+            // הדלת נמדדת מגוף הארגז — הרגליים אינן מכוסות בה
+            const bottom = u.yMm + socle - growBottom;
+            const top = u.yMm + u.heightMm + growTop;
             return (
               <rect
                 key={`door-${u.id}`}
                 x={u.xMm}
-                y={top}
+                y={flip(top)}
                 width={u.widthMm}
-                height={Math.max(u.doorHeightMm! - socle, 0)}
+                height={Math.max(top - bottom, 0)}
                 fill="none"
                 stroke="#a06236"
                 strokeWidth={stroke * 1.2}

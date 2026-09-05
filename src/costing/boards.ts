@@ -169,6 +169,13 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   const t = s.carcassThicknessMm;
   const ft = MATERIAL.frontMm;
 
+  /*
+   * מכשיר חשמלי נקנה ולא נחתך: מקרר, תנור, מדיח וקולט אדים תופסים
+   * מקום על הקיר, אבל אין להם חלקים בפלטות. מי שבונה סביבם עמודה
+   * מוסיף אותה כארגז נפרד.
+   */
+  if (glyphDef(u.glyph).standalone) return [];
+
   // לוח בודד — נספר לפי המישור שבו הוא מונח
   const flat = glyphDef(u.glyph).noCarcass;
   if (flat) {
@@ -374,10 +381,10 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   // דלת זכוכית אינה לוח, ולכן היא נספרת בנפרד ולא בעמודות הפלטות
   /*
    * גובה הדלת יכול להיות גדול מהארגז: דלת אחת שמכסה שני ארגזים
-   * שייכת לאחד מהם, והמידה שלה אינה מידתו. כשלא נקבע גובה משלה
-   * היא מכסה בדיוק את מה שאינו מגירה חיצונית.
+   * שייכת לאחד מהם, והמידה שלה אינה מידתו. כברירת מחדל היא מכסה
+   * בדיוק את מה שאינו מגירה חיצונית.
    */
-  const doorH = u.doorHeightMm ?? coveredMm;
+  const doorH = coveredMm + (u.doorGrowTopMm ?? 0) + (u.doorGrowBottomMm ?? 0);
   if (doors > 0 && doorH > 0 && frontW > 0 && !u.glassDoors) {
     parts.push({
       role: 'front',
@@ -393,7 +400,8 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   // ברירת המחדל מכסה חזית סטנדרטית; נגר שעובד אחרת מזין מידה משלו.
   const panelDepth = u.exposedDepthMm ?? d + MATERIAL.exposedExtraMm;
   // דופן שמתיישרת לדלת גבוהה מהארגז — אחרת נראה קו במפגש
-  const sideH = u.exposedMatchesDoor && u.doorHeightMm ? Math.max(u.doorHeightMm, h) : h;
+  const grown = (u.doorGrowTopMm ?? 0) + (u.doorGrowBottomMm ?? 0);
+  const sideH = u.exposedMatchesDoor && grown > 0 ? h + grown : h;
   const panel = (heightMm: number): Part => ({
     role: 'exposed',
     grain: 'height',

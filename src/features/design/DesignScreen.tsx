@@ -489,7 +489,8 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
           project={project}
-          maxDoorHeightMm={maxDoorHeight(selected, units)}
+          roomAbove={freeRoom(selected, units, wall.heightMm, 'up')}
+          roomBelow={freeRoom(selected, units, wall.heightMm, 'down')}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
@@ -766,23 +767,31 @@ function Tool({
 
 /** תת-כותרת בלי כפילות: שם החדר מוצג רק אם הוא שונה משם הפרויקט. */
 /**
- * עד לאן דלת יכולה לרדת בלי להיכנס לארגז שמתחת.
+ * כמה מקום פנוי יש מעל הארגז או מתחתיו, באותו טווח רוחב.
  *
- * דלת אחת שמכסה שני ארגזים יורדת מתחתית שלה כלפי מטה, ולכן הגבול
- * הוא הארגז הבא שנמצא באותו טווח רוחב — או הרצפה, כשאין כזה.
+ * זה מה שמגביל דלת שנמשכת מעבר לארגז: היא יכולה לכסות את מה שאין
+ * בו ארגז אחר, ולעצור לפני התקרה או הרצפה.
  */
-function maxDoorHeight(unit: PlacedUnit, units: PlacedUnit[]): number {
-  const bodyH = Math.max(unit.heightMm - (unit.socleMm ?? 0), 0);
-  const below = units
-    .filter(
-      (u) =>
-        u.id !== unit.id &&
-        u.yMm + u.heightMm <= unit.yMm + 1 &&
-        u.xMm < unit.xMm + unit.widthMm &&
-        u.xMm + u.widthMm > unit.xMm,
-    )
-    .reduce((top, u) => Math.max(top, u.yMm + u.heightMm), 0);
-  return Math.max(bodyH, unit.yMm - below + bodyH);
+function freeRoom(
+  unit: PlacedUnit,
+  units: PlacedUnit[],
+  wallHeightMm: number,
+  dir: 'up' | 'down',
+): number {
+  const overlaps = units.filter(
+    (u) => u.id !== unit.id && u.xMm < unit.xMm + unit.widthMm && u.xMm + u.widthMm > unit.xMm,
+  );
+  if (dir === 'down') {
+    const top = overlaps
+      .filter((u) => u.yMm + u.heightMm <= unit.yMm + 1)
+      .reduce((n, u) => Math.max(n, u.yMm + u.heightMm), 0);
+    return Math.max(unit.yMm - top, 0);
+  }
+  const myTop = unit.yMm + unit.heightMm;
+  const bottom = overlaps
+    .filter((u) => u.yMm >= myTop - 1)
+    .reduce((n, u) => Math.min(n, u.yMm), wallHeightMm);
+  return Math.max(bottom - myTop, 0);
 }
 
 /**

@@ -279,7 +279,7 @@ export function WallIso({
 
       // פנים: מדפים וקושרות, לפי התאים
       const bands = zoneBands(unitZones({ ...u, heightMm: h }), h);
-      for (const { zone, top, bottom } of bands) {
+      bands.forEach(({ zone, top, bottom }, bi) => {
         // מפתח הציור נגזר גם מהאזור: אותו גובה יחסי חוזר בכמה אזורים
         const zk = `${u.id}-${zone.id}`;
         // zoneBands עובד בקואורדינטות ציור (y כלפי מטה); כאן y כלפי מעלה
@@ -347,6 +347,15 @@ export function WallIso({
           }
         });
 
+        /*
+         * חוצץ בין אזורים — מדף קבוע שמחלק את הארון לשניים.
+         * הוא נספר כלוח בחישוב, ולכן הוא צריך להיראות כלוח ולא
+         * כקו: שני תאים זה אומר שיש ביניהם משהו.
+         */
+        if (bi > 0) {
+          add(box(v, tf, x + t, zBottom - t, 0, w - 2 * t, t, d, carcassTone, `${zk}-sep`));
+        }
+
         // חזית: לוח שמכסה את הפתח, כשלא מסתכלים פנימה
         const allOuterDrawers = cells.every(
           (c) => c.content.kind === 'drawers' && c.content.drawerStyle !== 'inner',
@@ -370,7 +379,7 @@ export function WallIso({
             );
           }
         }
-      }
+      });
 
       // דפנות זרות
       const e = u.exposed ?? {};

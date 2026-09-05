@@ -25,6 +25,12 @@ export interface GlyphDef {
    */
   appliance?: boolean;
   /**
+   * המוצר עצמו, ולא ארגז שנבנה סביבו.
+   * מקרר, תנור, מדיח וקולט אדים תופסים מקום על הקיר אבל לא נחתכים
+   * מפלטות — הם נקנים. לכן הם לא נספרים בחומר.
+   */
+  standalone?: boolean;
+  /**
    * חיפוי קיר: לוח שנצמד לקיר ויושב מאחורי הארגזים.
    * הוא מכסה קיר, ולא ניצב לפניו, ולכן גם בציור הוא מצויר ראשון.
    */
@@ -44,11 +50,11 @@ export const GLYPHS: GlyphDef[] = [
   { key: 'carousel', label: 'סחרחרה', appliance: true },
   { key: 'sink', label: 'כיור', appliance: true },
   { key: 'hob', label: 'כיריים', drawers: true, appliance: true },
-  { key: 'oven', label: 'תנור', appliance: true },
-  { key: 'ovenMicro', label: 'תנור ומיקרוגל', appliance: true },
-  { key: 'fridge', label: 'מקרר', appliance: true },
-  { key: 'dishwasher', label: 'מדיח', appliance: true },
-  { key: 'hood', label: 'קולט אדים', appliance: true },
+  { key: 'oven', label: 'תנור', appliance: true, standalone: true },
+  { key: 'ovenMicro', label: 'תנור ומיקרוגל', appliance: true, standalone: true },
+  { key: 'fridge', label: 'מקרר', appliance: true, standalone: true },
+  { key: 'dishwasher', label: 'מדיח', appliance: true, standalone: true },
+  { key: 'hood', label: 'קולט אדים', appliance: true, standalone: true },
   { key: 'pantry', label: 'מזווה', shelves: true },
   { key: 'hang', label: 'תלייה' },
   { key: 'hangDouble', label: 'תלייה כפולה' },
