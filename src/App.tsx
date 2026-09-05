@@ -7,6 +7,7 @@ import { WorkflowScreen } from './features/workflow/WorkflowScreen';
 import { CalendarScreen } from './features/workflow/CalendarScreen';
 import { TasksScreen } from './features/workflow/TasksScreen';
 import { TeamScreen } from './features/team/TeamScreen';
+import { StockScreen } from './features/stock/StockScreen';
 import { seedCatalog } from './catalog/catalogRepo';
 import { seedMaterials } from './materials/materialsRepo';
 import { seedAdmin } from './workflow/auth';
@@ -52,6 +53,8 @@ function screen(route: ReturnType<typeof useRoute>) {
       return <CalendarScreen />;
     case 'team':
       return <TeamScreen />;
+    case 'stock':
+      return <StockScreen />;
     case 'settings':
       return <SettingsScreen />;
   }

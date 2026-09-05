@@ -1,5 +1,12 @@
 import { db } from '../db/db';
-import type { Finish, Material, PartChoice, ProjectPrice, Settings } from '../db/types';
+import type {
+  Finish,
+  Material,
+  PartChoice,
+  ProjectPrice,
+  Settings,
+  StockItem,
+} from '../db/types';
 
 /** הגדרות ברירת מחדל, עד שהמשתמש משנה אותן במסך ההגדרות. */
 export const DEFAULT_SETTINGS: Settings = {
@@ -208,6 +215,48 @@ export const finishesRepo = {
 
   async remove(id: string): Promise<void> {
     await db.finishes.delete(id);
+  },
+};
+
+export const stockRepo = {
+  async all(): Promise<StockItem[]> {
+    return db.stock.toArray();
+  },
+
+  /**
+   * קובע כמה יש וכמה הוזמן לצירוף של גוון וחומר.
+   * שורה שהתרוקנה לגמרי נמחקת — מלאי אפס בלי הזמנה הוא פשוט "אין",
+   * ורשומה ריקה רק מלכלכת את הרשימה.
+   */
+  async set(
+    finishId: string,
+    materialId: string,
+    patch: { sheets?: number; ordered?: number; edgeInStock?: boolean },
+  ): Promise<void> {
+    const rows = await db.stock.toArray();
+    const existing = rows.find((r) => r.finishId === finishId && r.materialId === materialId);
+    const now = Date.now();
+    const next = {
+      sheets: patch.sheets ?? existing?.sheets ?? 0,
+      ordered: patch.ordered ?? existing?.ordered ?? 0,
+      edgeInStock: patch.edgeInStock ?? existing?.edgeInStock,
+    };
+    const empty = next.sheets === 0 && next.ordered === 0 && !next.edgeInStock;
+
+    if (existing) {
+      if (empty) await db.stock.delete(existing.id);
+      else await db.stock.update(existing.id, { ...next, updatedAt: now });
+      return;
+    }
+    if (empty) return;
+    await db.stock.add({
+      id: crypto.randomUUID(),
+      finishId,
+      materialId,
+      ...next,
+      createdAt: now,
+      updatedAt: now,
+    });
   },
 };
 

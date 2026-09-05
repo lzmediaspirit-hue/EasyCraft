@@ -8,6 +8,7 @@ import type {
   PlacedUnit,
   Project,
   ProjectPrice,
+  StockItem,
   ProjectStage,
   Settings,
   TeamMember,
@@ -26,6 +27,7 @@ export const db = new Dexie('easycraft') as Dexie & {
   units: EntityTable<PlacedUnit, 'id'>;
   catalog: EntityTable<CatalogItem, 'id'>;
   materials: EntityTable<Material, 'id'>;
+  stock: EntityTable<StockItem, 'id'>;
   finishes: EntityTable<Finish, 'id'>;
   projectPrices: EntityTable<ProjectPrice, 'id'>;
   settings: EntityTable<Settings, 'id'>;
@@ -295,3 +297,21 @@ db.version(10)
         s.defaultBackKind ??= 'thin';
       });
   });
+
+
+/**
+ * מלאי פלטות.
+ * נספר לפי אותה שורה שבה מוזמנים — גוון על חומר — ולא לפי אחד מהם
+ * לבדו, כי זה הצירוף שמגיע מהספק.
+ */
+db.version(11).stores({
+  ...TABLES_V3,
+  boards: null,
+  materials: 'id, sortOrder',
+  finishes: 'id, sortOrder',
+  projectPrices: 'id, projectId, lineKey',
+  stock: 'id, finishId, materialId',
+  team: 'id, role, active, username',
+  stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+  attachments: 'id, projectId, kind',
+});

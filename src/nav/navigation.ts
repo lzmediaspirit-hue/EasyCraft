@@ -9,6 +9,7 @@ export type Route =
   | { name: 'tasks' }
   | { name: 'calendar' }
   | { name: 'team' }
+  | { name: 'stock' }
   | { name: 'settings' };
 
 /**

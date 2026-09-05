@@ -557,6 +557,24 @@ export interface PartChoice {
   materialId?: string;
 }
 
+/**
+ * מלאי פלטות בעסק, לצירוף של גוון וחומר.
+ *
+ * המלאי נספר לפי אותה שורה שבה מוזמנים: "לבן על סנדוויץ׳" הוא פריט
+ * אחד, ו"לבן על MDF" הוא פריט אחר לגמרי — הם מגיעים ממחסן אחר
+ * ובמחיר אחר, וספירה משותפת שלהם לא אומרת כלום.
+ */
+export interface StockItem extends Entity {
+  finishId: string;
+  materialId: string;
+  /** פלטות שמונחות בנגרייה */
+  sheets: number;
+  /** פלטות שהוזמנו ועוד לא הגיעו */
+  ordered: number;
+  /** יש קנט תואם לגוון הזה במלאי */
+  edgeInStock?: boolean;
+}
+
 /** מחיר לוח שנקבע אחרת עבור פרויקט מסוים. */
 export interface ProjectPrice extends Entity {
   projectId: string;

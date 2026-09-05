@@ -12,6 +12,7 @@ import {
   ArchiveIcon,
   BackIcon,
   BoxesIcon,
+  NestIcon,
   ChevronIcon,
   DotsIcon,
   PhoneIcon,
@@ -95,6 +96,17 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
                 className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
               >
                 <BoxesIcon />
+              </button>
+            )}
+            {/* מלאי הלוחות — מה צריך להזמין היום, לפי הפרויקטים */}
+            {!archived && (
+              <button
+                onClick={() => nav.push({ name: 'stock' })}
+                aria-label="מלאי לוחות"
+                title="מלאי לוחות"
+                className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
+              >
+                <NestIcon />
               </button>
             )}
             {!archived && (
