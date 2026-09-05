@@ -11,6 +11,10 @@ import { MaterialsSheet } from './MaterialsSheet';
 import { NestingSheet } from './NestingSheet';
 import { SaleSheet } from '../projects/SaleSheet';
 import { useCurrentMember } from '../../workflow/useMember';
+import { useEffectiveRole } from '../../workflow/viewRole';
+import { can } from '../../workflow/auth';
+import { UnitWorkSheet } from './UnitWorkSheet';
+import { FlowIcon } from '../../ui/icons';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
 import { WallToolsSheet } from './WallToolsSheet';
@@ -41,7 +45,7 @@ import {
   UndoIcon,
 } from '../../ui/icons';
 import { cm, meters, unitLabel } from '../../ui/units';
-import type { CatalogItem, PlacedUnit, Project } from '../../db/types';
+import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
 
 const PANEL_KEY = 'easycraft.panelRatio';
 
@@ -70,6 +74,13 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   const [wallToolsOpen, setWallToolsOpen] = useState(false);
   /* מצב סרגל: מודדים את המרחק בין שני ארגזים שנבחרו */
   const [rulerPair, setRulerPair] = useState<string[] | null>(null);
+  /*
+   * מצב תהליך עבודה: אותם ארגזים באותם מקומות, אבל צבועים לפי מה
+   * שנעשה בהם — ובלי כלי עריכה. מי שעומד ליד המסור לא אמור להזיז
+   * ארגז בטעות.
+   */
+  const [workMode, setWorkMode] = useState(false);
+  const [workUnitId, setWorkUnitId] = useState<string | null>(null);
   const [inside, setInside] = useState(false);
   const [measure, setMeasure] = useState<MeasureAxis | null>(null);
   /*
@@ -98,6 +109,10 @@ export function DesignScreen({ projectId }: { projectId: string }) {
   );
   const selected = units.find((u) => u.id === selectedId) ?? null;
   const me = useCurrentMember();
+  const role = useEffectiveRole(me?.role);
+  const mayEdit = can.design(role, project);
+  /** כלי עריכה מוצגים רק למי שמותר לו, ורק כשלא במצב תהליך עבודה */
+  const editable = mayEdit && !workMode;
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
   const view = useViewOptions();
   const { canUndo, canRedo } = useHistory(projectId);
@@ -213,6 +228,24 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             icon={<DepthIcon className="size-4" />}
             label="עומק אחיד"
           />
+          {/*
+            אחרי המכירה יש מה לעקוב אחריו. לפניה הארגזים עוד זזים,
+            ומצב עבודה על קיר שאינו סגור רק מבלבל.
+          */}
+          {!!project.soldAt && (
+            <Tool
+              active={workMode}
+              onClick={() => {
+                setWorkMode((v) => !v);
+                setSelectedId(null);
+                setRulerPair(null);
+                setMeasure(null);
+              }}
+              icon={<FlowIcon className="size-4" />}
+              label={workMode ? 'תהליך' : 'תכנון'}
+              title={workMode ? 'חזרה למצב תכנון' : 'מצב תהליך עבודה'}
+            />
+          )}
         </div>
 
         <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
@@ -282,6 +315,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           כולן נוגעות במה שכבר על הקיר, ולכן הן חיות יחד ולא בין
           כלי התצוגה.
         */}
+        {editable && (
         <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <Tool
             active={false}
@@ -314,6 +348,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             title="ממרכז את הארגזים על הקיר"
           />
         </div>
+        )}
         <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
           {walls.length > 1 &&
             walls.map((w, i) => (
@@ -378,7 +413,9 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             selectedId={selectedId}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
+            work={workMode}
             onSelect={(id) => {
+              if (workMode) return setWorkUnitId(id);
               // במצב סרגל הבחירה אוספת שני ארגזים ולא פותחת עורך
               if (rulerPair) {
                 if (!id) return setRulerPair([]);
@@ -401,7 +438,7 @@ export function DesignScreen({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      {selected ? (
+      {selected && editable ? (
         <>
         {/* ידית גרירה שקובעת כמה מהמסך תופס לוח העריכה */}
         <div
@@ -468,6 +505,38 @@ export function DesignScreen({ projectId }: { projectId: string }) {
       ) : (
         <>
           <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+            {/*
+              בקשת עריכה של התכנת מגיעה לכאן ולא להתראה נפרדת: המנהל
+              רואה אותה על הקיר שעליו היא מדברת.
+            */}
+            {role === 'manager' && project.editRequest && (
+              <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm leading-snug text-amber-900">
+                  התכנת ביקש לפתוח את ההדמיה לעריכה
+                  {project.editRequest.note && <span> — {project.editRequest.note}</span>}.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() =>
+                      projectsRepo.update(projectId, {
+                        editGrantedAt: Date.now(),
+                        editRequest: undefined,
+                      })
+                    }
+                    className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-medium text-white"
+                  >
+                    פתיחה לעריכה
+                  </button>
+                  <button
+                    onClick={() => projectsRepo.update(projectId, { editRequest: undefined })}
+                    className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-stone-600 ring-1 ring-stone-200"
+                  >
+                    דחייה
+                  </button>
+                </div>
+              </div>
+            )}
+
             {analysis && (
               <>
                 {/* מה מוצג כאן נבחר במגירת הקיר; אין מחוון שאי אפשר לכבות */}
@@ -525,13 +594,27 @@ export function DesignScreen({ projectId }: { projectId: string }) {
           </main>
 
           <div className="shrink-0 px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-            <button
-              onClick={() => setLibraryOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"
-            >
-              <PlusIcon />
-              הוספת ארגז
-            </button>
+            {editable ? (
+              <button
+                onClick={() => setLibraryOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"
+              >
+                <PlusIcon />
+                הוספת ארגז
+              </button>
+            ) : (
+              <EditGate
+                project={project}
+                role={role}
+                workMode={workMode}
+                onRequest={(note) =>
+                  projectsRepo.update(projectId, {
+                    editRequest: { at: Date.now(), by: me?.id, note },
+                  })
+                }
+                onRevoke={() => projectsRepo.update(projectId, { editGrantedAt: undefined })}
+              />
+            )}
 
             {/*
               חישוב הוא סוף העבודה על הקיר ולכן הוא יושב ליד הפעולה
@@ -547,6 +630,15 @@ export function DesignScreen({ projectId }: { projectId: string }) {
             </button>
           </div>
         </>
+      )}
+
+      {workUnitId && (
+        <UnitWorkSheet
+          unit={(allUnits ?? []).find((u) => u.id === workUnitId)!}
+          role={role}
+          onChange={(work) => patchUnit(workUnitId, { work }, `work:${workUnitId}`)}
+          onClose={() => setWorkUnitId(null)}
+        />
       )}
 
       {wallToolsOpen && (
@@ -691,6 +783,70 @@ function maxDoorHeight(unit: PlacedUnit, units: PlacedUnit[]): number {
     )
     .reduce((top, u) => Math.max(top, u.yMm + u.heightMm), 0);
   return Math.max(bodyH, unit.yMm - below + bodyH);
+}
+
+/**
+ * מה מוצג במקום כפתור ההוספה למי שאינו עורך.
+ *
+ * ההדמיה היא מה שהלקוח אישר, ולכן שינוי שלה אחרי האישור עובר דרך
+ * המנהל. התכנת מבקש, המנהל פותח — ומה שנפתח אפשר גם לסגור.
+ */
+function EditGate({
+  project,
+  role,
+  workMode,
+  onRequest,
+  onRevoke,
+}: {
+  project: Project;
+  role?: UserRole;
+  workMode: boolean;
+  onRequest: (note?: string) => void;
+  onRevoke: () => void;
+}) {
+  if (workMode) {
+    return (
+      <p className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-center text-sm leading-snug text-stone-500">
+        מצב תהליך עבודה. הקשה על ארגז מראה איפה הוא עומד ומה נשאר לעשות בו.
+      </p>
+    );
+  }
+
+  if (role === 'manager') {
+    return (
+      <button
+        onClick={onRevoke}
+        className="w-full rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900"
+      >
+        חזרה למצב תכנון
+      </button>
+    );
+  }
+
+  if (role !== 'planner') {
+    return (
+      <p className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-center text-sm leading-snug text-stone-500">
+        ההדמיה לצפייה בלבד בתפקיד הזה.
+      </p>
+    );
+  }
+
+  if (project.editRequest) {
+    return (
+      <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm leading-snug text-amber-900">
+        נשלחה בקשה לפתוח את ההדמיה לעריכה. המנהל צריך לאשר אותה.
+      </p>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => onRequest()}
+      className="w-full rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
+    >
+      בקשת אישור לעריכה
+    </button>
+  );
 }
 
 function subtitle(name: string, roomKind: Project['roomKind'], wallCount: number): string {

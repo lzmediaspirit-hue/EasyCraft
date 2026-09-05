@@ -4,6 +4,7 @@ import { glyphDef } from '../../catalog/glyphList';
 import { featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
+import { WORK_TONES, tracksWork, workTone } from '../../workflow/unitWork';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /** מרחק הצמדה בין ארגזים ולקצות הקיר (מ"מ). */
@@ -42,6 +43,12 @@ type Props = {
    * `null` = הסרגל כבוי.
    */
   rulerPair?: string[] | null;
+  /**
+   * מצב תהליך עבודה: הארגזים נצבעים לפי מה שנעשה בהם, ולא לפי
+   * הגוון שנבחר להם. הגרירה מכובה — מי שעומד ליד המסור לא אמור
+   * להזיז ארגז בטעות.
+   */
+  work?: boolean;
 };
 
 /**
@@ -61,6 +68,7 @@ export function WallElevation({
   corners,
   showHeight,
   rulerPair,
+  work,
 }: Props) {
   /*
    * חיפוי קיר מצויר ראשון: הוא מכסה את הקיר, והארגזים עומדים לפניו.
@@ -285,10 +293,21 @@ export function WallElevation({
          */
         const frontFinish = u.frontFinishId ?? u.finishId;
         const shownFinish = inside ? u.carcassFinishId : frontFinish;
-        const hex = shownFinish ? finishHex[shownFinish] : undefined;
+        /*
+         * במצב תהליך עבודה הצבע הוא הדוח: מי שנכנס למסך רואה מיד
+         * מה נתקע ומה מוכן, ולכן הגוון שנבחר ללקוח נדחק הצידה.
+         */
+        const tone = work && tracksWork(u) ? WORK_TONES[workTone(u)] : null;
+        const hex = tone ? tone.fill : shownFinish ? finishHex[shownFinish] : undefined;
         // גוון כהה מחייב קווים בהירים, אחרת האיור נבלע בו
         const dark = hex ? isDark(hex) : false;
-        const lineColor = dark ? '#f5f5f4' : selected ? '#814c2e' : '#78716c';
+        const lineColor = tone
+          ? tone.stroke
+          : dark
+            ? '#f5f5f4'
+            : selected
+              ? '#814c2e'
+              : '#78716c';
         const fill = hex ?? (selected ? '#f4e9d8' : '#ffffff');
         // הגובה כולל את הרגליים; הגוף עצמו מתחיל מעליהן
         const carcassH = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
@@ -302,13 +321,27 @@ export function WallElevation({
             key={u.id}
             data-unit-id={u.id}
             transform={`translate(${u.xMm} ${flip(u.yMm + u.heightMm)})`}
-            onPointerDown={(e) => beginDrag(e, u)}
+            onPointerDown={(e) => (work ? onSelect(u.id) : beginDrag(e, u))}
             onPointerMove={moveDrag}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
-            className={measure ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
+            className={measure || work ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
           >
             <rect width={u.widthMm} height={carcassH} fill={fill} stroke="transparent" />
+            {/* ארגז שהותקן בשטח — וי באמצע, שרואים ממרחק */}
+            {work && u.work?.installed && (
+              <path
+                d={`M ${u.widthMm * 0.34} ${carcassH * 0.52} L ${u.widthMm * 0.45} ${
+                  carcassH * 0.64
+                } L ${u.widthMm * 0.68} ${carcassH * 0.36}`}
+                fill="none"
+                stroke="#059669"
+                strokeWidth={stroke * 2.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                pointerEvents="none"
+              />
+            )}
             {/* פנים הארון: הגב נראה מאחורי המדפים והמגירות */}
             {inside && backFill && (
               <rect

@@ -182,6 +182,13 @@ export const can = {
   sell: (role?: UserRole) => role === 'manager',
   /** לשנות הגדרות עסק — לוחות, גוונים וחישוב */
   settings: (role?: UserRole) => role === 'manager',
-  /** לערוך את ההדמיה */
-  design: (role?: UserRole) => role === 'manager' || role === 'planner',
+  /**
+   * לערוך את ההדמיה.
+   *
+   * המנהל תמיד; התכנת רק בפרויקט שנפתח לו לעריכה. ההדמיה היא מה
+   * שהלקוח אישר, ושינוי שלה אחרי האישור הוא שינוי בהזמנה — ולכן
+   * הוא עובר דרך המנהל ולא נעשה בשקט.
+   */
+  design: (role?: UserRole, project?: { editGrantedAt?: number }) =>
+    role === 'manager' || (role === 'planner' && !!project?.editGrantedAt),
 };

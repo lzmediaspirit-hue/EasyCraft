@@ -5,6 +5,8 @@ import { NewCustomerSheet } from './NewCustomerSheet';
 import { normalizePhone } from './phone';
 import { WorkBar } from '../workflow/WorkBar';
 import { LibrarySheet } from '../design/LibrarySheet';
+import { useCurrentMember } from '../../workflow/useMember';
+import { ROLE_LABELS, viewRole, viewableRoles, useEffectiveRole } from '../../workflow/viewRole';
 import type { Customer } from '../../db/types';
 import {
   ArchiveIcon,
@@ -32,6 +34,10 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
   );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [roleOpen, setRoleOpen] = useState(false);
+  const me = useCurrentMember();
+  const role = useEffectiveRole(me?.role);
+  const roles = viewableRoles(me?.role);
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState<string | null>(null);
 
@@ -115,6 +121,56 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
             </button>
           </span>
         </div>
+
+        {/*
+          מצב תצוגה לפי תפקיד.
+          לפני שיש משתמש לכל אחד בנגרייה, המנהל צריך לראות מה הנגר
+          יראה ומה התכנת יראה. זו תצוגה ולא הרשאה: אפשר לרדת בתפקיד
+          ולא לעלות בו.
+        */}
+        {!archived && roles.length > 1 && (
+          <div className="mt-3">
+            <button
+              onClick={() => setRoleOpen((v) => !v)}
+              aria-expanded={roleOpen}
+              className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-start text-sm transition-colors ${
+                role !== me?.role
+                  ? 'bg-oak-100 text-oak-900 ring-1 ring-oak-300'
+                  : 'bg-stone-200/60 text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              <UsersIcon className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate font-medium">
+                תצוגה של {ROLE_LABELS[role ?? 'manager']}
+              </span>
+              {role !== me?.role && (
+                <span className="shrink-0 text-[11px] text-oak-700">לא התפקיד שלך</span>
+              )}
+            </button>
+
+            {roleOpen && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {roles.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => {
+                      viewRole.set(r === me?.role ? null : r);
+                      setRoleOpen(false);
+                    }}
+                    aria-pressed={role === r}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                      role === r
+                        ? 'bg-oak-600 text-white'
+                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                  >
+                    {ROLE_LABELS[r]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {showSearch && (
           <div className="relative mt-3">

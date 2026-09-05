@@ -50,6 +50,13 @@ export interface Project extends Entity {
    * ואותן חזיתות, ולבחור אותם מחדש בכל ארגז זו עבודה כפולה.
    */
   defaults?: Partial<Record<PartRole, PartChoice>>;
+  /**
+   * בקשת התכנת לפתוח את ההדמיה לעריכה, והאישור של המנהל.
+   * ההדמיה היא מה שהלקוח אישר; שינוי שלה אחריו הוא שינוי בהזמנה,
+   * ולכן הוא עובר דרך המנהל ולא נעשה בשקט.
+   */
+  editRequest?: { at: number; by?: string; note?: string };
+  editGrantedAt?: number;
   /** מתי נמכר. עד אז תהליך העבודה סגור */
   soldAt?: number;
   /** תשלום אחד או בתשלומים */
@@ -135,6 +142,34 @@ export interface Wall extends Entity {
 /* ארגזים על הקיר                                                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * מצב הארגז בתהליך העבודה.
+ *
+ * התהליך של הפרויקט מתאר שלבים; זה מתאר ארגז. הם לא אותו דבר:
+ * בקיר אחד יש ארגז שכבר קונט וארגז שעוד לא נחתך, ומי שעומד ליד
+ * המסור צריך לדעת מי מהם.
+ */
+export interface UnitWork {
+  /** התכנת סימן שקובצי החיתוך מוכנים */
+  filesReady?: boolean;
+  /** נחתך במסור */
+  cut?: boolean;
+  /** יש עליו קנטים */
+  edged?: boolean;
+  /** הגוף הורכב */
+  assembled?: boolean;
+  /** החזיתות הותקנו */
+  fronts?: boolean;
+  /** הדפנות הזרות הותקנו */
+  panels?: boolean;
+  /** הותקן אצל הלקוח */
+  installed?: boolean;
+  /** שאלה או בעיה שמישהו רשם על הארגז */
+  issue?: string;
+  /** מי רשם אותה */
+  issueBy?: string;
+}
+
 /** מפלס ההתקנה — קובע את הגובה שבו הארגז יושב על הקיר. */
 export type UnitLevel = 'floor' | 'wall' | 'tall';
 
@@ -214,6 +249,8 @@ export interface PlacedUnit extends Entity {
    * צריכה להגיע לאותו גובה, אחרת נראה קו.
    */
   exposedMatchesDoor?: boolean;
+  /** מצב הארגז בתהליך העבודה — נפרד מהעיצוב שלו */
+  work?: UnitWork;
   /** ידיות על החזיתות */
   handles?: boolean;
   /** דלתות זכוכית במקום חזית מלאה */
