@@ -326,15 +326,20 @@ export function DesignScreen({
             הדמיה ללקוח: אותו חדר בלי שפת השרטוט. זו לא עוד תצוגה
             אלא רגע אחר — יושבים מול הלקוח ומראים לו מה הוא מקבל —
             ולכן היא נפתחת במסך מלא ולא כמצב של הסרגל.
+
+            והיא של המנהל, כמו החישוב: התכנת והנגר באו לראות מה נשאר
+            לעשות, לא למכור.
           */}
-          <Tool
-            active={presentOpen}
-            onClick={() => setPresentOpen(true)}
-            icon={<EyeIcon className="size-4" />}
-            label="ללקוח"
-            title="הדמיה להצגה ללקוח"
-            disabled={units.length === 0}
-          />
+          {role === 'manager' && (
+            <Tool
+              active={presentOpen}
+              onClick={() => setPresentOpen(true)}
+              icon={<EyeIcon className="size-4" />}
+              label="ללקוח"
+              title="הדמיה להצגה ללקוח"
+              disabled={units.length === 0}
+            />
+          )}
           {/*
             לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
             עומק וכיבוי. קודם היה בורר ציר בשורה נפרדת שגזל מקום
