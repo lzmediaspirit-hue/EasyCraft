@@ -419,3 +419,38 @@ db.version(14).stores({
   attachments: 'id, projectId, kind',
   consumption: 'id, projectId, lineKey',
 });
+
+/**
+ * לחומר יש סוג, ולא רק שם.
+ *
+ * לכל חלק בארגז יש חומר שהוא נבנה ממנו: הגוף מסנדוויץ׳, החזיתות
+ * מ-MDF, הגב מדיקט. עד עכשיו ברירת המחדל הייתה "החומר הראשון
+ * ברשימה" — מה שנתן גב מסנדוויץ׳ וחזית מסנדוויץ׳ באותה נשימה.
+ * החומרים שנזרעו מזוהים לפי שמם; חומר שהנגר הוסיף בעצמו נשאר
+ * בלי סוג, ופשוט לא נבחר אוטומטית.
+ */
+db.version(15)
+  .stores({
+    ...TABLES_V3,
+    boards: null,
+    materials: 'id, sortOrder',
+    finishes: 'id, sortOrder',
+    projectPrices: 'id, projectId, lineKey',
+    stock: 'id, finishId, materialId',
+    team: 'id, role, active, username',
+    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+    attachments: 'id, projectId, kind',
+    consumption: 'id, projectId, lineKey',
+  })
+  .upgrade((tx) =>
+    tx
+      .table('materials')
+      .toCollection()
+      .modify((m: { name?: string; kind?: string }) => {
+        if (m.kind) return;
+        const n = (m.name ?? '').toLowerCase();
+        if (n.includes('mdf')) m.kind = 'mdf';
+        else if (n.includes('דיקט')) m.kind = 'ply';
+        else if (n.includes('סנדוויץ')) m.kind = 'sandwich';
+      }),
+  );

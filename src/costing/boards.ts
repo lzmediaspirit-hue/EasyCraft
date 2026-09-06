@@ -2,6 +2,7 @@ import { glyphDef } from '../catalog/glyphList';
 import { nestParts, type NestResult, type PartGrain } from './nesting';
 import { DRAWER, MATERIAL, drawerDepth } from '../catalog/standards';
 import { countDrawers, countShelves, unitCells, unitZones, zoneCells } from '../catalog/zones';
+import { materialForRole } from '../db/types';
 import type {
   Material,
   PartChoice,
@@ -610,12 +611,8 @@ export function projectCosting(
    * לגב. זה ניחוש, אבל הוא שומר על פרויקט ישן מתומחר במקום
    * להשאיר אותו ריק.
    */
-  const fallbackMaterial = (role: PartRole): string | undefined => {
-    if (!materials.length) return undefined;
-    if (role === 'back') return materials[materials.length - 1].id;
-    if (role === 'carcass') return materials[0].id;
-    return (materials[1] ?? materials[0]).id;
-  };
+  const fallbackMaterial = (role: PartRole): string | undefined =>
+    materialForRole(role, materials)?.id;
 
   const resolve = (u: PlacedUnit, role: PartRole) => {
     const choice = partChoice(u, role, project);

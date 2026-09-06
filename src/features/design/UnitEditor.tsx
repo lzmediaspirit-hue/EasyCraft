@@ -490,6 +490,7 @@ export function UnitEditor({
             */}
           <PartChoiceRow
               label="גוף"
+              role="carcass"
               finishes={allFinishes}
               materials={materials}
               value={{ finishId: unit.carcassFinishId, materialId: unit.carcassMaterialId }}
@@ -502,6 +503,7 @@ export function UnitEditor({
             {(unit.backKind ?? 'thin') !== 'none' && (
               <PartChoiceRow
                 label="גב"
+              role="back"
                 finishes={allFinishes}
                 materials={materials}
                 value={{ finishId: unit.backFinishId, materialId: unit.backMaterialId }}
@@ -676,6 +678,7 @@ export function UnitEditor({
           {hasFronts && (
             <PartChoiceRow
               label="חזיתות"
+              role="front"
               finishes={allFinishes}
               materials={materials}
               value={{ finishId: unit.frontFinishId ?? unit.finishId, materialId: unit.frontMaterialId }}
@@ -691,6 +694,7 @@ export function UnitEditor({
           {hasExposed && (
             <PartChoiceRow
               label="דפנות זרות"
+              role="exposed"
               finishes={allFinishes}
               materials={materials}
               value={{ finishId: unit.exposedFinishId, materialId: unit.exposedMaterialId }}

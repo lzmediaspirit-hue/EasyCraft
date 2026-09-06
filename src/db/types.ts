@@ -503,7 +503,51 @@ export interface Material extends Entity {
    * העובי האמיתי נקבע מול הלוח הפיזי ומשתנה בין משלוחים.
    */
   thicknessMm?: number;
+  /**
+   * מה החומר הזה, מעבר לשם שניתן לו.
+   *
+   * לכל חלק בארגז יש חומר שהוא נבנה ממנו כברירת מחדל: הגוף
+   * מסנדוויץ׳, החזיתות והדפנות הזרות מ-MDF, והגב מדיקט. השם לבדו
+   * לא מספיק כדי לדעת את זה — נגר יכול לקרוא לחומר "לבן 18" —
+   * ולכן הסוג נשמר בנפרד. חומר שהמשתמש הוסיף בעצמו נשאר בלי סוג,
+   * והוא פשוט לא ייבחר אוטומטית.
+   */
+  kind?: MaterialKind;
   sortOrder: number;
+}
+
+/** סוגי החומר שמערכת ברירות המחדל מכירה. */
+export type MaterialKind = 'sandwich' | 'mdf' | 'ply';
+
+/**
+ * החומר שכל חלק נבנה ממנו כברירת מחדל.
+ * הגב מקבל דיקט, ואם אין — סנדוויץ׳, כי זו החלופה שנגר באמת בוחר.
+ */
+export const DEFAULT_MATERIAL_KIND: Record<PartRole, MaterialKind[]> = {
+  carcass: ['sandwich'],
+  front: ['mdf'],
+  exposed: ['mdf'],
+  back: ['ply', 'sandwich'],
+};
+
+/**
+ * החומר שמתאים לחלק, מתוך מה שזמין.
+ *
+ * `allowed` מצמצם לרשימה שהגוון באמת קיים עליה. כשהחומר המועדף
+ * אינו שם נופלים לחלופה שנגר באמת בוחר, ורק אחריה למה שיש — כי
+ * חלק בלי חומר אינו מתומחר בכלל.
+ */
+export function materialForRole(
+  role: PartRole,
+  materials: Material[],
+  allowed?: (m: Material) => boolean,
+): Material | undefined {
+  const pool = allowed ? materials.filter(allowed) : materials;
+  for (const kind of DEFAULT_MATERIAL_KIND[role]) {
+    const hit = pool.find((m) => m.kind === kind);
+    if (hit) return hit;
+  }
+  return pool[0];
 }
 
 /** גבהים נפוצים של פלטה, במ"מ. הרוחב תמיד 1220. */

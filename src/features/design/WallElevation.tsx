@@ -32,6 +32,12 @@ const STEP = 10;
  */
 export const CORNER_START = 'corner:start';
 export const CORNER_END = 'corner:end';
+/** קצוות הסרגל האנכי: הרצפה והתקרה, כמו שהפינות הן קצוות האופקי. */
+export const EDGE_FLOOR = 'edge:floor';
+export const EDGE_CEILING = 'edge:ceiling';
+
+/** מה הסרגל מודד — מרווח לרוחב הקיר או לגובהו. */
+export type RulerAxis = 'w' | 'h';
 
 export type MeasureAxis = 'w' | 'h' | 'd';
 
@@ -56,6 +62,8 @@ type Props = {
    * `null` = הסרגל כבוי.
    */
   rulerPair?: string[] | null;
+  /** הציר שהסרגל מודד בו */
+  rulerAxis?: RulerAxis;
   /**
    * מצב תהליך עבודה: הארגזים נצבעים לפי מה שנעשה בהם, ולא לפי
    * הגוון שנבחר להם. הגרירה מכובה — מי שעומד ליד המסור לא אמור
@@ -81,6 +89,7 @@ export function WallElevation({
   corners,
   showHeight,
   rulerPair,
+  rulerAxis = 'w',
   work,
 }: Props) {
   /*
@@ -119,30 +128,40 @@ export function WallElevation({
   const rulerSpan = (() => {
     if (!rulerPair || rulerPair.length < 2) return null;
     /*
-     * קצה הסרגל הוא ארגז או פינת קיר. פינה היא נקודה ולא מלבן,
-     * ולכן שתי הפאות שלה זהות — וכל השאר מתנהג בדיוק אותו דבר.
+     * קצה הסרגל הוא ארגז או קצה של הקיר. קצה הוא נקודה ולא מלבן,
+     * ולכן שתי הפאות שלו זהות — וכל השאר מתנהג בדיוק אותו דבר.
+     * `near` ו-`far` הן שתי הפאות בציר הנמדד, ו-`mid` הוא המרכז
+     * בציר השני — שם הסרגל יצויר.
      */
     const at = (id: string) => {
-      if (id === CORNER_START) return { left: 0, right: 0, mid: wall.heightMm / 2 };
-      if (id === CORNER_END) {
-        return { left: wall.lengthMm, right: wall.lengthMm, mid: wall.heightMm / 2 };
+      if (rulerAxis === 'w') {
+        if (id === CORNER_START) return { near: 0, far: 0, mid: wall.heightMm / 2 };
+        if (id === CORNER_END) {
+          return { near: wall.lengthMm, far: wall.lengthMm, mid: wall.heightMm / 2 };
+        }
+        const u = units.find((x) => x.id === id);
+        return u
+          ? { near: u.xMm, far: u.xMm + u.widthMm, mid: u.yMm + u.heightMm / 2 }
+          : null;
+      }
+      if (id === EDGE_FLOOR) return { near: 0, far: 0, mid: wall.lengthMm / 2 };
+      if (id === EDGE_CEILING) {
+        return { near: wall.heightMm, far: wall.heightMm, mid: wall.lengthMm / 2 };
       }
       const u = units.find((x) => x.id === id);
-      return u
-        ? { left: u.xMm, right: u.xMm + u.widthMm, mid: u.yMm + u.heightMm / 2 }
-        : null;
+      return u ? { near: u.yMm, far: u.yMm + u.heightMm, mid: u.xMm + u.widthMm / 2 } : null;
     };
     const [a, b] = rulerPair.map(at);
     if (!a || !b) return null;
-    const left = a.left <= b.left ? a : b;
-    const right = left === a ? b : a;
-    const from = left.right;
-    const to = right.left;
+    const first = a.near <= b.near ? a : b;
+    const second = first === a ? b : a;
+    const from = first.far;
+    const to = second.near;
     return {
       from: Math.min(from, to),
       to: Math.max(from, to),
       gap: Math.max(to - from, 0),
-      y: wall.heightMm - Math.round((a.mid + b.mid) / 2),
+      mid: Math.round((a.mid + b.mid) / 2),
     };
   })();
   const fontSize = Math.max(wall.lengthMm / 40, 70);
@@ -569,21 +588,29 @@ export function WallElevation({
       */}
       {rulerPair && (
         <g>
-          {[
-            { id: CORNER_START, x: 0 },
-            { id: CORNER_END, x: wall.lengthMm },
-          ].map(({ id, x }) => {
-            const on = rulerPair.includes(id);
-            const w = Math.max(wall.lengthMm / 50, 60);
+          {(rulerAxis === 'w'
+            ? [
+                { id: CORNER_START, x: 0, y: 0, w: 0, h: wall.heightMm },
+                { id: CORNER_END, x: wall.lengthMm, y: 0, w: 0, h: wall.heightMm },
+              ]
+            : [
+                { id: EDGE_FLOOR, x: 0, y: wall.heightMm, w: wall.lengthMm, h: 0 },
+                { id: EDGE_CEILING, x: 0, y: 0, w: wall.lengthMm, h: 0 },
+              ]
+          ).map((t) => {
+            const on = rulerPair.includes(t.id);
+            // רצועה דקה, רחבה מספיק כדי לפגוע בה באצבע
+            const band = Math.max(wall.lengthMm / 50, 60);
+            const vertical = rulerAxis === 'w';
             return (
               <rect
-                key={id}
-                data-corner={id}
-                x={x === 0 ? 0 : x - w}
-                y={0}
-                width={w}
-                height={wall.heightMm}
-                fill={on ? '#0f766e' : '#0f766e'}
+                key={t.id}
+                data-corner={t.id}
+                x={vertical ? (t.x === 0 ? 0 : t.x - band) : 0}
+                y={vertical ? 0 : t.y === 0 ? 0 : t.y - band}
+                width={vertical ? band : wall.lengthMm}
+                height={vertical ? wall.heightMm : band}
+                fill="#0f766e"
                 fillOpacity={on ? 0.35 : 0.1}
                 stroke="#0f766e"
                 strokeWidth={on ? stroke * 1.4 : stroke * 0.7}
@@ -591,7 +618,7 @@ export function WallElevation({
                 className="cursor-pointer"
                 onPointerDown={(e) => {
                   e.stopPropagation();
-                  onSelect(id);
+                  onSelect(t.id);
                 }}
               />
             );
@@ -599,41 +626,76 @@ export function WallElevation({
         </g>
       )}
 
-      {rulerSpan && (
-        <g pointerEvents="none">
-          <line
-            x1={rulerSpan.from}
-            y1={rulerSpan.y}
-            x2={rulerSpan.to}
-            y2={rulerSpan.y}
-            stroke="#0f766e"
-            strokeWidth={stroke * 1.4}
-          />
-          {/* שני הקצוות עשויים ליפול על אותה נקודה כשאין מרווח בכלל */}
-          {[rulerSpan.from, rulerSpan.to].map((x, i) => (
+      {rulerSpan &&
+        (rulerAxis === 'w' ? (
+          <g pointerEvents="none">
             <line
-              key={i}
-              x1={x}
-              y1={rulerSpan.y - 90}
-              x2={x}
-              y2={rulerSpan.y + 90}
+              x1={rulerSpan.from}
+              y1={flip(rulerSpan.mid)}
+              x2={rulerSpan.to}
+              y2={flip(rulerSpan.mid)}
               stroke="#0f766e"
               strokeWidth={stroke * 1.4}
             />
-          ))}
-          <text
-            x={(rulerSpan.from + rulerSpan.to) / 2}
-            y={rulerSpan.y - 130}
-            textAnchor="middle"
-            fontSize={Math.max(wall.lengthMm / 34, 95)}
-            fontWeight={600}
-            fill="#0f766e"
-            direction="ltr"
-          >
-            {cm(rulerSpan.gap)}
-          </text>
-        </g>
-      )}
+            {/* שני הקצוות עשויים ליפול על אותה נקודה כשאין מרווח בכלל */}
+            {[rulerSpan.from, rulerSpan.to].map((x, i) => (
+              <line
+                key={i}
+                x1={x}
+                y1={flip(rulerSpan.mid) - 90}
+                x2={x}
+                y2={flip(rulerSpan.mid) + 90}
+                stroke="#0f766e"
+                strokeWidth={stroke * 1.4}
+              />
+            ))}
+            <text
+              x={(rulerSpan.from + rulerSpan.to) / 2}
+              y={flip(rulerSpan.mid) - 130}
+              textAnchor="middle"
+              fontSize={Math.max(wall.lengthMm / 34, 95)}
+              fontWeight={600}
+              fill="#0f766e"
+              direction="ltr"
+            >
+              {cm(rulerSpan.gap)}
+            </text>
+          </g>
+        ) : (
+          <g pointerEvents="none">
+            <line
+              x1={rulerSpan.mid}
+              y1={flip(rulerSpan.from)}
+              x2={rulerSpan.mid}
+              y2={flip(rulerSpan.to)}
+              stroke="#0f766e"
+              strokeWidth={stroke * 1.4}
+            />
+            {[rulerSpan.from, rulerSpan.to].map((y, i) => (
+              <line
+                key={i}
+                x1={rulerSpan.mid - 90}
+                y1={flip(y)}
+                x2={rulerSpan.mid + 90}
+                y2={flip(y)}
+                stroke="#0f766e"
+                strokeWidth={stroke * 1.4}
+              />
+            ))}
+            {/* התווית יושבת לצד הקו, כי מעליו היא נופלת על הארגז */}
+            <text
+              x={rulerSpan.mid + 130}
+              y={flip((rulerSpan.from + rulerSpan.to) / 2)}
+              dominantBaseline="middle"
+              fontSize={Math.max(wall.lengthMm / 34, 95)}
+              fontWeight={600}
+              fill="#0f766e"
+              direction="ltr"
+            >
+              {cm(rulerSpan.gap)}
+            </text>
+          </g>
+        ))}
     </svg>
   );
 }

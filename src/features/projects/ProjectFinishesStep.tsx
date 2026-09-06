@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
-import { PART_ROLES } from '../../db/types';
+import { PART_ROLES, materialForRole } from '../../db/types';
 import type { PartChoice, PartRole } from '../../db/types';
 
 /**
@@ -50,10 +50,19 @@ export function ProjectFinishesStep({
                 <button
                   key={f.id}
                   onClick={() => {
-                    const first = materials.find((m) => f.prices?.[m.id] !== undefined);
+                    /*
+                      החומר נבחר לפי החלק ולא לפי סדר הרשימה: גוף
+                      מסנדוויץ׳, חזיתות ודפנות זרות מ-MDF, גב מדיקט.
+                      אם הגוון לא קיים על החומר הזה — מה שיש.
+                    */
+                    const pick = materialForRole(
+                      role.key,
+                      materials,
+                      (m) => f.prices?.[m.id] !== undefined,
+                    );
                     onChange({
                       ...value,
-                      [role.key]: { finishId: f.id, materialId: first?.id },
+                      [role.key]: { finishId: f.id, materialId: pick?.id },
                     });
                   }}
                   className={`flex items-center gap-1.5 rounded-lg py-1 pe-2.5 ps-1 text-sm font-medium transition-colors ${

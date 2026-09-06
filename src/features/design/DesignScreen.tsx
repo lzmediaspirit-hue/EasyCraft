@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { wallLabel } from '../projects/wallLayouts';
-import { WallElevation, collides, type MeasureAxis } from './WallElevation';
+import { WallElevation, collides, type MeasureAxis, type RulerAxis } from './WallElevation';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
@@ -86,6 +86,12 @@ export function DesignScreen({
   const [wallToolsOpen, setWallToolsOpen] = useState(false);
   /* מצב סרגל: מודדים את המרחק בין שני ארגזים שנבחרו */
   const [rulerPair, setRulerPair] = useState<string[] | null>(null);
+  /*
+   * הסרגל מודד מרווח, ומרווח הוא תמיד בציר אחד: "כמה נשאר בין
+   * הארונות" ו"כמה נשאר עד התקרה" הן שתי שאלות שונות, ולכן הציר
+   * נבחר במפורש ולא נגזר ממה שנבחר.
+   */
+  const [rulerAxis, setRulerAxis] = useState<RulerAxis>('w');
   /*
    * מצב תהליך עבודה: אותם ארגזים באותם מקומות, אבל צבועים לפי מה
    * שנעשה בהם — ובלי כלי עריכה. מי שעומד ליד המסור לא אמור להזיז
@@ -340,8 +346,30 @@ export function DesignScreen({
             }}
             icon={<RulerIcon className="size-4" />}
             label="סרגל"
-            title="מרחק בין שני ארגזים או עד פינה"
+            title="מרחק בין שני ארגזים או עד קצה הקיר"
           />
+          {/*
+            הציר נבחר לפני המדידה ולא נגזר ממנה: שני ארגזים זה על זה
+            אפשר למדוד גם לרוחב וגם לגובה, ורק הנגר יודע מה הוא שאל.
+          */}
+          {rulerPair !== null &&
+            (['w', 'h'] as const).map((ax) => (
+              <button
+                key={ax}
+                onClick={() => {
+                  setRulerAxis(ax);
+                  setRulerPair([]);
+                }}
+                aria-pressed={rulerAxis === ax}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  rulerAxis === ax
+                    ? 'bg-teal-700 text-white'
+                    : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
+                }`}
+              >
+                {ax === 'w' ? 'רוחב' : 'גובה'}
+              </button>
+            ))}
         </div>
 
         {/*
@@ -458,6 +486,7 @@ export function DesignScreen({
             selectedId={selectedId}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
+            rulerAxis={rulerAxis}
             work={workMode}
             onSelect={(id) => {
               if (workMode) return setWorkUnitId(id);

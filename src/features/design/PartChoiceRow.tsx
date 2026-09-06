@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PencilIcon, PlusIcon } from '../../ui/icons';
-import type { Finish, Material, PartChoice } from '../../db/types';
+import { materialForRole } from '../../db/types';
+import type { Finish, Material, PartChoice, PartRole } from '../../db/types';
 
 /**
  * הגוון והחומר של חלק אחד בארגז.
@@ -15,6 +16,7 @@ import type { Finish, Material, PartChoice } from '../../db/types';
  */
 export function PartChoiceRow({
   label,
+  role,
   finishes,
   materials,
   value,
@@ -24,6 +26,8 @@ export function PartChoiceRow({
   onAddFinish,
 }: {
   label: string;
+  /** איזה חלק זה — קובע לאיזה חומר נופלים כשהגוון מתחלף */
+  role: PartRole;
   finishes: Finish[];
   materials: Material[];
   /** מה שנקבע לארגז הזה. ריק = מה שנקבע לפרויקט */
@@ -95,10 +99,14 @@ export function PartChoiceRow({
                    * מחיר.
                    */
                   const ok = f.prices?.[effective.materialId ?? ''] !== undefined;
-                  const first = materials.find((m) => f.prices?.[m.id] !== undefined);
+                  const pick = materialForRole(
+                    role,
+                    materials,
+                    (m) => f.prices?.[m.id] !== undefined,
+                  );
                   onChange({
                     finishId: f.id,
-                    materialId: ok ? effective.materialId : first?.id,
+                    materialId: ok ? effective.materialId : pick?.id,
                   });
                 }}
                 title={f.texture ? `${f.name} · ${f.texture}` : f.name}
