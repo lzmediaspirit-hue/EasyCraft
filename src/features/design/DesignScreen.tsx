@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { wallLabel } from '../projects/wallLayouts';
-import { WallElevation, type MeasureAxis } from './WallElevation';
+import { WallElevation, collides, type MeasureAxis } from './WallElevation';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
@@ -24,7 +24,7 @@ import { useViewOptions } from './viewOptions';
 import { history, useHistory } from './history';
 import { WallThumb } from './WallThumb';
 import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
-import { analyzeWall, nextFreeX } from './analysis';
+import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { syncConsumption } from '../../materials/consumption';
 import { roomDef } from '../../catalog/rooms';
@@ -183,9 +183,30 @@ export function DesignScreen({
     // הארגז נכנס בתוך הקיר, ולא נדחף אל מעבר לקצה שלו
     const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, from);
     await history.capture(projectId, `add:${Date.now()}`);
-    const unit = await unitsRepo.add(projectId, wall.id, item, Math.min(x, maxX));
+    const unit = await unitsRepo.add(projectId, wall.id, item, freeX(Math.min(x, maxX), maxX, item));
     setLibraryOpen(false);
     setSelectedId(unit.id);
+  }
+
+  /**
+   * המקום הפנוי הראשון מ-`from` ימינה, שבו הארגז לא נופל על אחר.
+   *
+   * המפלס לבדו לא מספיק: ארון גבוה תופס גם את מקומו של העליון
+   * שמעליו, וארגז חדש שנחת עליו היה נועל את שניהם. כשאין מקום פנוי
+   * בכלל הוא נוחת איפה שביקשנו — עדיף ארגז שרואים וצריך להזיז מאשר
+   * לחיצה שלא עשתה כלום.
+   */
+  function freeX(from: number, maxX: number, item: CatalogItem): number {
+    const probe = {
+      id: 'new',
+      glyph: item.glyph,
+      widthMm: item.defaultWidthMm,
+      heightMm: item.defaultHeightMm,
+    };
+    for (let x = from; x <= maxX; x += 50) {
+      if (!collides(probe, x, item.defaultYMm, units)) return x;
+    }
+    return from;
   }
 
   /**
@@ -529,6 +550,8 @@ export function DesignScreen({
           project={project}
           roomAbove={freeRoom(selected, units, wall.heightMm, 'up')}
           roomBelow={freeRoom(selected, units, wall.heightMm, 'down')}
+          fillWidth={fillSpan(selected, units, wall, 'w')}
+          fillHeight={fillSpan(selected, units, wall, 'h')}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }

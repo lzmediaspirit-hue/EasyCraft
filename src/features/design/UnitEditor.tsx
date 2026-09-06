@@ -74,6 +74,8 @@ export function UnitEditor({
   project,
   roomAbove = 0,
   roomBelow = 0,
+  fillWidth,
+  fillHeight,
   onChange,
   onApplyChoiceAll,
   onDuplicate,
@@ -92,6 +94,12 @@ export function UnitEditor({
    */
   roomAbove?: number;
   roomBelow?: number;
+  /**
+   * הרווח שהארגז יושב בתוכו — איפה הוא מתחיל וכמה הוא גדול.
+   * גם הוא נמדד בהדמיה, מאותה סיבה.
+   */
+  fillWidth?: { startMm: number; sizeMm: number };
+  fillHeight?: { startMm: number; sizeMm: number };
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
@@ -174,6 +182,17 @@ export function UnitEditor({
   const depthShift = !inside && hasFronts ? MATERIAL.frontMm : 0;
   const currentValue =
     axis === 'w' ? unit.widthMm : axis === 'h' ? unit.heightMm : unit.depthMm + depthShift;
+  /*
+   * הרווח שהארגז יושב בתוכו. לעומק אין מה להשלים — הוא נמדד מהקיר
+   * החוצה ולא בין שכנים — וארגז שכבר ממלא את הרווח בדיוק אינו צריך
+   * השלמה.
+   */
+  const span = axis === 'w' ? fillWidth : axis === 'h' ? fillHeight : undefined;
+  const spanStart = axis === 'w' ? unit.xMm : unit.yMm;
+  const fill =
+    span && span.sizeMm > 50 && (span.sizeMm !== currentValue || span.startMm !== spanStart)
+      ? span
+      : null;
 
   /*
    * המידה הפעילה נגללת למרכז השורה.
@@ -298,6 +317,27 @@ export function UnitEditor({
       */}
       <div className="mt-2 flex items-center gap-1.5">
         <div ref={chipRow} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-1">
+          {/*
+            השלמה: "קיר בגובה 3 מטר, ארגז של 240 — כמה נשאר למעלה".
+            במקום לחסר בראש, הארגז נכנס בדיוק לרווח שהוא יושב בו —
+            גם נצמד לתחילתו וגם מקבל את מידתו. השבב נושא את המידה
+            עצמה, כדי שרואים מראש מה הוא יעשה.
+          */}
+          {fill && (
+            <button
+              onClick={() => {
+                setTyping(false);
+                onChange(
+                  axis === 'w'
+                    ? { xMm: fill.startMm, widthMm: fill.sizeMm }
+                    : { yMm: fill.startMm, heightMm: fill.sizeMm },
+                );
+              }}
+              className="shrink-0 rounded-full bg-oak-100 px-3 py-1.5 text-sm font-medium text-oak-800 transition-colors hover:bg-oak-200"
+            >
+              השלמה <span className="num">{cm(fill.sizeMm)}</span>
+            </button>
+          )}
           {options.map((mm) => (
             <button
               key={mm}

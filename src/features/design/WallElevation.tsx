@@ -172,13 +172,18 @@ export function WallElevation({
     // סף ההצמדה במ"מ, שקול למרחק קבוע על המסך בכל קנה מידה
     const tol = Math.max(SNAP, SNAP_PX * d.scale);
     const x = snapX(rawX, unit, units, wall.lengthMm, corners, tol);
-    const y = d.locked ? d.originY : snapY(rawY, unit, units, wall.heightMm, tol);
+    // הגובה נמדד ביחס למקום שאליו הארגז הולך, ולא למקום שממנו יצא
+    const y = d.locked ? d.originY : snapY(rawY, unit, units, wall.heightMm, tol, x);
     /*
      * שני ארגזים לא עומדים באותו מקום. כשהיעד תפוס מנסים קודם
      * להזיז רק בציר אחד — כך גרירה לאורך קיר מלא עדיין זזה במקום
      * להיתקע — ואם גם זה תפוס, הארגז נשאר איפה שהוא.
+     *
+     * ארגז שכבר חופף במקום שהוא עומד בו הוא היוצא מן הכלל: חסימה
+     * שם הייתה נועלת אותו שם לתמיד, ודווקא ממנו צריך לצאת.
      */
-    const at = (nx: number, ny: number) => !collides(unit, nx, ny, units);
+    const stuck = collides(unit, unit.xMm, unit.yMm, units);
+    const at = (nx: number, ny: number) => stuck || !collides(unit, nx, ny, units);
     const [fx, fy] = at(x, y)
       ? [x, y]
       : at(x, unit.yMm)
@@ -426,6 +431,8 @@ export function WallElevation({
                 opening={u.opening}
                 corner={u.corner}
                 blindMm={u.blindMm}
+                growTopMm={inside ? 0 : (u.doorGrowTopMm ?? 0)}
+                growBottomMm={inside ? 0 : (u.doorGrowBottomMm ?? 0)}
                 stroke={selected ? stroke * 1.7 : stroke}
                 inside={inside}
               />
@@ -470,37 +477,6 @@ export function WallElevation({
           </text>
         );
       })}
-
-      {/*
-        דלת שגבוהה מהארגז — כשדלת אחת מכסה שניים.
-        מצוירת כמסגרת מעל מה שהיא באמת מכסה, כדי שרואים מיד אם היא
-        מגיעה למקום שכבר תפוס.
-      */}
-      {!inside &&
-        units
-          .filter((u) => (u.doorGrowTopMm ?? 0) !== 0 || (u.doorGrowBottomMm ?? 0) !== 0)
-          .map((u) => {
-            const socle = u.socleMm ?? 0;
-            const growTop = u.doorGrowTopMm ?? 0;
-            const growBottom = u.doorGrowBottomMm ?? 0;
-            // הדלת נמדדת מגוף הארגז — הרגליים אינן מכוסות בה
-            const bottom = u.yMm + socle - growBottom;
-            const top = u.yMm + u.heightMm + growTop;
-            return (
-              <rect
-                key={`door-${u.id}`}
-                x={u.xMm}
-                y={flip(top)}
-                width={u.widthMm}
-                height={Math.max(top - bottom, 0)}
-                fill="none"
-                stroke="#a06236"
-                strokeWidth={stroke * 1.2}
-                strokeDasharray={`${stroke * 4} ${stroke * 3}`}
-                pointerEvents="none"
-              />
-            );
-          })}
 
       {/*
         מדידה מוצגת על כל הארגזים בבת אחת: כשמודדים קיר רוצים לראות
@@ -835,7 +811,12 @@ function nearest(value: number, targets: number[], limit: number): number {
  * נגיעה אינה חפיפה — ארגז שנצמד לשכן חולק איתו קו, וזה בדיוק מה
  * שההצמדה נועדה לעשות.
  */
-function collides(unit: PlacedUnit, x: number, y: number, units: PlacedUnit[]): boolean {
+export function collides(
+  unit: Pick<PlacedUnit, 'id' | 'glyph' | 'widthMm' | 'heightMm'>,
+  x: number,
+  y: number,
+  units: PlacedUnit[],
+): boolean {
   if (glyphDef(unit.glyph).cladding) return false;
   const right = x + unit.widthMm;
   const top = y + unit.heightMm;
@@ -898,13 +879,25 @@ function snapY(
   units: PlacedUnit[],
   wallHeight: number,
   tol: number,
+  /** ה-x שאליו הארגז הולך — לפיו נקבע על מי הוא יכול לנוח */
+  atX: number,
 ): number {
   const ceiling = wallHeight - unit.heightMm;
   const targets = [ceiling];
+  /*
+   * ארגז יכול לנוח על שכנו גם כשהוא גבוה מהמקום שנשאר — קיר של 3
+   * מטר, ארון של 240, ועליון של 70 שלא נכנס. לחסום אותו שם היה
+   * אומר שאי אפשר להניח אותו במקום שהוא שייך לו; מוטב שיישב שם,
+   * יבלוט, וכפתור ההשלמה יקצר אותו בלחיצה.
+   */
+  let rest = 0;
   for (const other of units) {
     if (other.id === unit.id) continue;
     targets.push(other.yMm, other.yMm + other.heightMm, other.yMm - unit.heightMm);
+    const sameRun = other.xMm < atX + unit.widthMm && other.xMm + other.widthMm > atX;
+    if (sameRun) rest = Math.max(rest, other.yMm + other.heightMm);
   }
   const snapped = nearest(y, targets, tol);
-  return Math.round(Math.min(Math.max(snapped, 0), Math.max(ceiling, 0)));
+  const maxY = Math.min(Math.max(ceiling, rest), Math.max(wallHeight - 50, 0));
+  return Math.round(Math.min(Math.max(snapped, 0), Math.max(maxY, 0)));
 }

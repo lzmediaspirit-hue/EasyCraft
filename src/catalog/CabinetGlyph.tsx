@@ -45,6 +45,10 @@ export type GlyphProps = {
   corner?: CornerKind;
   /** רוחב החלק החסום בפינה מתה */
   blindMm?: number;
+  /** כמה החזית נמשכת מעל הגוף */
+  growTopMm?: number;
+  /** כמה החזית נמשכת מתחת לגוף, על הרגליים */
+  growBottomMm?: number;
 };
 
 export function CabinetGlyph({
@@ -64,6 +68,8 @@ export function CabinetGlyph({
   opening = 'hinge',
   corner,
   blindMm = 0,
+  growTopMm = 0,
+  growBottomMm = 0,
 }: GlyphProps) {
   // ארגזי נגרות הם מלבנים; עיגול קל בלבד, שלא ייראה כמו רהיט מצויר
   const r = Math.min(8, Math.min(w, h) * 0.015);
@@ -94,6 +100,8 @@ export function CabinetGlyph({
         opening,
         corner,
         blindMm,
+        growTop: growTopMm,
+        growBottom: growBottomMm,
       })}
     </g>
   );
@@ -123,6 +131,9 @@ type Ctx = {
   opening: OpeningMech;
   corner?: CornerKind;
   blindMm: number;
+  /** החזית נמשכת מעבר לגוף — כלפי מעלה וכלפי מטה */
+  growTop: number;
+  growBottom: number;
 };
 
 function details(c: Ctx) {
@@ -593,11 +604,24 @@ function hangersAt(w: number, rodY: number, drop: number, t: number, key: string
 }
 
 /** דלתות: קווי הפרדה אנכיים וידיות בצד הפתיחה. */
-function doorPanels(c: Ctx, top: number, bottom: number, n: number, key = '') {
+function doorPanels(c: Ctx, rawTop: number, rawBottom: number, n: number, key = '') {
   const { w, t } = c;
   if (n < 1) return [];
   const out = [];
+  /*
+   * דלת שנמשכת מעבר לגוף מצוירת בגודל שלה ולא בגודל הארגז.
+   * הצמיחה חלה רק על הקצה שנוגע בקצה הארגז: אזור דלתות שיושב
+   * מתחת למגירות לא גדל כלפי מעלה, כי אין לו לאן.
+   */
+  const gTop = rawTop <= 0 ? c.growTop : 0;
+  const gBottom = rawBottom >= c.h ? c.growBottom : 0;
+  const top = rawTop - gTop;
+  const bottom = rawBottom + gBottom;
   const zoneH = bottom - top;
+  // בלי מסגרת משלה, דלת שחורגת מהארגז לא נראית בכלל
+  if (gTop || gBottom) {
+    out.push(<rect key={`${key}face`} x={0} y={top} width={w} height={zoneH} strokeWidth={t} />);
+  }
   const panelW = w / n;
   const hy1 = top + zoneH * 0.44;
   const hy2 = top + zoneH * 0.56;
