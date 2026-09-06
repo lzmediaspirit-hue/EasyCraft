@@ -274,24 +274,19 @@ export function DesignScreen({
             />
           )}
           {/*
-            אחרי המכירה יש מה לעקוב אחריו. לפניה הארגזים עוד זזים,
-            ומצב עבודה על קיר שאינו סגור רק מבלבל.
+            אחרי המכירה הכפתור הראשי שמתחת להדמיה הופך למתג
+            תכנון/תהליך, והחישוב עובר לכאן. הוא עדיין נחוץ — מחיר
+            משתנה גם אחרי המכירה — אבל הוא כבר לא הפעולה הראשית.
           */}
-          {!!project.soldAt &&
-            role === 'manager' && (
-              <Tool
-                active={workMode}
-                onClick={() => {
-                  setWorkToggle((v) => !v);
-                  setSelectedId(null);
-                  setRulerPair(null);
-                  setMeasure(null);
-                }}
-                icon={<FlowIcon className="size-4" />}
-                label={workMode ? 'תהליך' : 'תכנון'}
-                title={workMode ? 'חזרה למצב תכנון' : 'מצב תהליך עבודה'}
-              />
-            )}
+          {!!project.soldAt && role === 'manager' && (
+            <Tool
+              active={materialsOpen}
+              onClick={() => setMaterialsOpen(true)}
+              icon={<CalcIcon className="size-4" />}
+              label="חישוב"
+              title="חומרים ומחיר"
+            />
+          )}
         </div>
 
         <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
@@ -332,9 +327,9 @@ export function DesignScreen({
             title="לחיצה נוספת מחליפה ציר"
           />
           {/*
-            סרגל: מודדים את המרחק בין שני ארגזים. זו השאלה שנשאלת
-            בשטח — "כמה נשאר בין השניים" — ועד עכשיו היה צריך לחשב
-            אותה בראש משתי המידות.
+            סרגל: מודדים את המרחק בין שני ארגזים, או בין ארגז לפינת
+            הקיר. אלה השאלות שנשאלות בשטח — "כמה נשאר בין השניים"
+            ו"כמה עד הפינה" — ועד עכשיו היה צריך לחשב אותן בראש.
           */}
           <Tool
             active={rulerPair !== null}
@@ -345,17 +340,8 @@ export function DesignScreen({
             }}
             icon={<RulerIcon className="size-4" />}
             label="סרגל"
-            title="מרחק בין שני ארגזים"
+            title="מרחק בין שני ארגזים או עד פינה"
           />
-          {role === 'manager' && (
-            <Tool
-              active={wallToolsOpen}
-              onClick={() => setWallToolsOpen(true)}
-              icon={<SlidersIcon className="size-4" />}
-              label="הקיר"
-              title="מידות הקיר ומה מוצג"
-            />
-          )}
         </div>
 
         {/*
@@ -572,16 +558,34 @@ export function DesignScreen({
             מסדר ארגזים לא צריך את המספרים על המסך, וקיר גדול יותר
             שווה יותר מארבעה מלבנים עם נתונים.
           */}
-          <button
-            onClick={() => setStatsOpen((v) => !v)}
-            aria-expanded={statsOpen}
-            className="mx-4 mt-1 flex shrink-0 items-center justify-center gap-1.5 rounded-lg py-1 text-[11px] font-medium text-stone-400 transition-colors hover:bg-stone-200/60 hover:text-stone-600"
-          >
-            <ChevronIcon
-              className={`size-3.5 transition-transform ${statsOpen ? '-rotate-90' : 'rotate-90'}`}
-            />
-            {statsOpen ? 'הסתרת הנתונים' : 'הצגת הנתונים'}
-          </button>
+          <div className="mx-4 mt-1 flex shrink-0 items-center gap-1.5">
+            <button
+              onClick={() => setStatsOpen((v) => !v)}
+              aria-expanded={statsOpen}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1 text-[11px] font-medium text-stone-400 transition-colors hover:bg-stone-200/60 hover:text-stone-600"
+            >
+              <ChevronIcon
+                className={`size-3.5 transition-transform ${statsOpen ? '-rotate-90' : 'rotate-90'}`}
+              />
+              {statsOpen ? 'הסתרת הנתונים' : 'הצגת הנתונים'}
+            </button>
+            {/*
+              הגדרות הקיר יושבות ליד נתוני הקיר ולא בין כלי התצוגה:
+              מי שרואה שאורך הקיר לא נכון רוצה לתקן אותו במקום שבו
+              המספר מוצג, ולא לחפש כפתור בסרגל למעלה.
+            */}
+            {role === 'manager' && (
+              <button
+                onClick={() => setWallToolsOpen(true)}
+                aria-pressed={wallToolsOpen}
+                title="מידות הקיר ומה מוצג"
+                className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-stone-500 transition-colors hover:bg-stone-200/60 hover:text-stone-700"
+              >
+                <SlidersIcon className="size-3.5" />
+                הגדרות הקיר
+              </button>
+            )}
+          </div>
 
           <main
             className={`overflow-y-auto px-4 pb-2 ${
@@ -700,23 +704,43 @@ export function DesignScreen({
             )}
 
             {/*
-              חישוב הוא סוף העבודה על הקיר ולכן הוא יושב ליד הפעולה
-              הראשית, לא בין כלי התצוגה. פתיחת הפרויקט עצמה נעשית
-              מתוכו — אחרי שרואים מה זה עולה.
-            */}
-            {/*
+              הכפתור הראשי מתחת להדמיה הוא מה שנשאר לעשות עכשיו.
+              לפני המכירה זה החישוב — סוף העבודה על הקיר, ומתוכו
+              נפתח הפרויקט אחרי שרואים מה זה עולה. אחרי המכירה
+              הארגזים כבר סגורים והשאלה היא איפה הם עומדים, ולכן
+              הכפתור הופך למתג בין תכנון לתהליך.
+
               חישוב ומחיר הם עניין של המנהל. התכנת והנגר צריכים את
               הארגזים ואת מה שנשאר לעשות בהם, לא את מה שזה עולה.
             */}
-            {role === 'manager' && (
-              <button
-                onClick={() => setMaterialsOpen(true)}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
-              >
-                <CalcIcon />
-                חישוב פרויקט
-              </button>
-            )}
+            {role === 'manager' &&
+              (project.soldAt ? (
+                <button
+                  onClick={() => {
+                    setWorkToggle((v) => !v);
+                    setSelectedId(null);
+                    setRulerPair(null);
+                    setMeasure(null);
+                  }}
+                  aria-pressed={workMode}
+                  className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 py-3.5 text-base font-semibold transition-colors ${
+                    workMode
+                      ? 'border-oak-600 bg-oak-600 text-white hover:bg-oak-700'
+                      : 'border-stone-900 bg-white text-stone-900 hover:bg-stone-100'
+                  }`}
+                >
+                  <FlowIcon className="size-5" />
+                  {workMode ? 'תהליך עבודה' : 'תכנון'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setMaterialsOpen(true)}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
+                >
+                  <CalcIcon />
+                  חישוב פרויקט
+                </button>
+              ))}
           </div>
         </>
       )}

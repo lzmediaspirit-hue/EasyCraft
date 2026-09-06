@@ -23,6 +23,16 @@ const SNAP_PX = 18;
 /** גרירה חופשית נוחתת על סנטימטרים שלמים, לא על מידות שבורות. */
 const STEP = 10;
 
+/**
+ * פינות הקיר כקצה סרגל.
+ *
+ * "כמה נשאר מהארון עד הפינה" היא שאלה שנשאלת בשטח לא פחות מ"כמה
+ * בין שני הארונות", ולכן הפינה נבחרת בדיוק כמו ארגז — עם מזהה
+ * משלה, שאינו יכול להתנגש במזהה אמיתי.
+ */
+export const CORNER_START = 'corner:start';
+export const CORNER_END = 'corner:end';
+
 export type MeasureAxis = 'w' | 'h' | 'd';
 
 type Props = {
@@ -108,18 +118,31 @@ export function WallElevation({
    */
   const rulerSpan = (() => {
     if (!rulerPair || rulerPair.length < 2) return null;
-    const [a, b] = rulerPair.map((id) => units.find((u) => u.id === id));
+    /*
+     * קצה הסרגל הוא ארגז או פינת קיר. פינה היא נקודה ולא מלבן,
+     * ולכן שתי הפאות שלה זהות — וכל השאר מתנהג בדיוק אותו דבר.
+     */
+    const at = (id: string) => {
+      if (id === CORNER_START) return { left: 0, right: 0, mid: wall.heightMm / 2 };
+      if (id === CORNER_END) {
+        return { left: wall.lengthMm, right: wall.lengthMm, mid: wall.heightMm / 2 };
+      }
+      const u = units.find((x) => x.id === id);
+      return u
+        ? { left: u.xMm, right: u.xMm + u.widthMm, mid: u.yMm + u.heightMm / 2 }
+        : null;
+    };
+    const [a, b] = rulerPair.map(at);
     if (!a || !b) return null;
-    const left = a.xMm <= b.xMm ? a : b;
+    const left = a.left <= b.left ? a : b;
     const right = left === a ? b : a;
-    const from = left.xMm + left.widthMm;
-    const to = right.xMm;
-    const mid = (u: PlacedUnit) => u.yMm + u.heightMm / 2;
+    const from = left.right;
+    const to = right.left;
     return {
       from: Math.min(from, to),
       to: Math.max(from, to),
       gap: Math.max(to - from, 0),
-      y: wall.heightMm - Math.round((mid(a) + mid(b)) / 2),
+      y: wall.heightMm - Math.round((a.mid + b.mid) / 2),
     };
   })();
   const fontSize = Math.max(wall.lengthMm / 40, 70);
@@ -540,6 +563,42 @@ export function WallElevation({
         זו השאלה שנשאלת בשטח — "כמה נשאר ביניהם" — ועד עכשיו היה
         צריך לחשב אותה בראש משתי המידות ומשני המיקומים.
       */}
+      {/*
+        יעדי הפינות, רק כשהסרגל פתוח: רצועה דקה בכל קצה של הקיר,
+        רחבה מספיק כדי לפגוע בה באצבע.
+      */}
+      {rulerPair && (
+        <g>
+          {[
+            { id: CORNER_START, x: 0 },
+            { id: CORNER_END, x: wall.lengthMm },
+          ].map(({ id, x }) => {
+            const on = rulerPair.includes(id);
+            const w = Math.max(wall.lengthMm / 50, 60);
+            return (
+              <rect
+                key={id}
+                data-corner={id}
+                x={x === 0 ? 0 : x - w}
+                y={0}
+                width={w}
+                height={wall.heightMm}
+                fill={on ? '#0f766e' : '#0f766e'}
+                fillOpacity={on ? 0.35 : 0.1}
+                stroke="#0f766e"
+                strokeWidth={on ? stroke * 1.4 : stroke * 0.7}
+                strokeDasharray={on ? undefined : `${stroke * 3} ${stroke * 3}`}
+                className="cursor-pointer"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onSelect(id);
+                }}
+              />
+            );
+          })}
+        </g>
+      )}
+
       {rulerSpan && (
         <g pointerEvents="none">
           <line

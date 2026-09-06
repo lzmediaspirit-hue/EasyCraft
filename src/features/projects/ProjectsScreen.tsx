@@ -10,6 +10,7 @@ import { ScreenHeader } from '../../ui/ScreenHeader';
 import { BoxesIcon, ChevronIcon, PlusIcon, TagIcon } from '../../ui/icons';
 import { stagesRepo, currentStage } from '../../workflow/workflowRepo';
 import { useCurrentMember } from '../../workflow/useMember';
+import { useEffectiveRole } from '../../workflow/viewRole';
 import { STAGES, stageDef } from '../../workflow/stages';
 import { projectQuote, paymentStatus } from '../../costing/pricing';
 import { shekels } from '../../ui/units';
@@ -31,6 +32,8 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
   const stages = useLiveQuery(() => stagesRepo.all(), []);
   const allUnits = useLiveQuery(() => db.units.toArray(), []);
   const me = useCurrentMember();
+  /* גם תצוגה של תפקיד אחר מסתירה מחיר — זו כל הנקודה שלה */
+  const role = useEffectiveRole(me?.role);
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
@@ -52,6 +55,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
                 boards={summaries?.[project.id]}
                 units={(allUnits ?? []).filter((u) => u.projectId === project.id)}
                 stages={(stages ?? []).filter((x) => x.projectId === project.id)}
+                isManager={role === 'manager'}
                 onSale={() => setSaleFor(project)}
               />
             ))}
@@ -85,7 +89,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
           project={saleFor}
           units={(allUnits ?? []).filter((u) => u.projectId === saleFor.id)}
           costing={summaries?.[saleFor.id]}
-          isManager={me?.role === 'manager'}
+          isManager={role === 'manager'}
           onClose={() => setSaleFor(null)}
         />
       )}
@@ -106,12 +110,15 @@ function ProjectCard({
   boards,
   units,
   stages,
+  isManager,
   onSale,
 }: {
   project: Project;
   boards?: ProjectCosting;
   units: PlacedUnit[];
   stages: ProjectStage[];
+  /** מחיר ותשלומים הם עניין של המנהל, ולא של מי שמייצר */
+  isManager: boolean;
   onSale: () => void;
 }) {
   const room = roomDef(project.roomKind);
@@ -134,20 +141,32 @@ function ProjectCard({
             {project.roomKind === 'custom' ? 'חדר בהגדרה אישית' : room.label}
           </span>
         </span>
-        <span className="shrink-0 text-end">
-          <span className="num block text-base font-bold text-stone-900">
-            {quote.amount > 0 ? shekels(quote.amount) : '—'}
-          </span>
-          {sold && (
-            <span
-              className={`num block text-[10px] ${
-                pay.fullyPaid ? 'text-oak-700' : 'text-amber-700'
-              }`}
-            >
-              {pay.fullyPaid ? 'שולם' : `נותר ${shekels(pay.due)}`}
+        {/*
+          מה שהמנהל רואה כאן הוא כסף. התכנת והנגר רואים במקומו את
+          מצב הייצור — כמה ארגזים ואיפה הם עומדים — כי זו השאלה
+          שלהם, ומחיר הוא בין המנהל ללקוח.
+        */}
+        {isManager ? (
+          <span className="shrink-0 text-end">
+            <span className="num block text-base font-bold text-stone-900">
+              {quote.amount > 0 ? shekels(quote.amount) : '—'}
             </span>
-          )}
-        </span>
+            {sold && (
+              <span
+                className={`num block text-[10px] ${
+                  pay.fullyPaid ? 'text-oak-700' : 'text-amber-700'
+                }`}
+              >
+                {pay.fullyPaid ? 'שולם' : `נותר ${shekels(pay.due)}`}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className="shrink-0 text-end">
+            <span className="num block text-base font-bold text-stone-900">{units.length}</span>
+            <span className="block text-[10px] text-stone-400">ארגזים</span>
+          </span>
+        )}
         <ChevronIcon className="size-4 shrink-0 text-stone-300" />
       </button>
 
@@ -181,6 +200,7 @@ function ProjectCard({
 
       {/* מכירה, ואחריה מצב התהליך */}
       <div className="flex items-center gap-2 border-t border-stone-100 px-3 py-2">
+        {isManager && (
         <button
           onClick={onSale}
           className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
@@ -192,6 +212,7 @@ function ProjectCard({
           <TagIcon className="size-3.5" />
           {sold ? 'תשלומים' : 'מכירה'}
         </button>
+        )}
 
         {sold && stages.length > 0 && (
           <button
