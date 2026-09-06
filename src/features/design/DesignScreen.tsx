@@ -19,13 +19,15 @@ import { ProjectFinishesSheet } from './ProjectFinishesSheet';
 import { FlowIcon } from '../../ui/icons';
 import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
+import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
 import { useViewOptions } from './viewOptions';
 import { history, useHistory } from './history';
 import { WallThumb } from './WallThumb';
 import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
-import { finishesRepo } from '../../materials/materialsRepo';
+import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
+import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumption';
 import { roomDef } from '../../catalog/rooms';
 import { ScreenHeader } from '../../ui/ScreenHeader';
@@ -34,6 +36,7 @@ import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
   CenterIcon,
+  EyeIcon,
   CheckIcon,
   ChevronIcon,
   CubeIcon,
@@ -83,6 +86,8 @@ export function DesignScreen({
   const [iso, setIso] = useState(false);
   const [depthOpen, setDepthOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  /* הדמיה נקייה להצגה ללקוח, בלי קווי השרטוט */
+  const [presentOpen, setPresentOpen] = useState(false);
   const [wallToolsOpen, setWallToolsOpen] = useState(false);
   /* מצב סרגל: מודדים את המרחק בין שני ארגזים שנבחרו */
   const [rulerPair, setRulerPair] = useState<string[] | null>(null);
@@ -119,6 +124,12 @@ export function DesignScreen({
   const project = useLiveQuery(() => projectsRepo.get(projectId), [projectId]);
   const walls = useLiveQuery(() => wallsRepo.listForProject(projectId), [projectId]);
   const allUnits = useLiveQuery(() => unitsRepo.listForProject(projectId), [projectId]);
+  const customer = useLiveQuery(
+    () => customersRepo.get(project?.customerId ?? ''),
+    [project?.customerId],
+  );
+  const allFinishes = useLiveQuery(() => finishesRepo.all(), []);
+  const allMaterials = useLiveQuery(() => materialsRepo.list(), []);
   const finishHex = useLiveQuery(async () => {
     const all = await finishesRepo.all();
     return Object.fromEntries(all.map((f) => [f.id, f.hex]));
@@ -309,6 +320,19 @@ export function DesignScreen({
             onClick={() => setPlanOpen((v) => !v)}
             icon={<PlanIcon className="size-4" />}
             label="מבט על"
+          />
+          {/*
+            הדמיה ללקוח: אותו חדר בלי שפת השרטוט. זו לא עוד תצוגה
+            אלא רגע אחר — יושבים מול הלקוח ומראים לו מה הוא מקבל —
+            ולכן היא נפתחת במסך מלא ולא כמצב של הסרגל.
+          */}
+          <Tool
+            active={presentOpen}
+            onClick={() => setPresentOpen(true)}
+            icon={<EyeIcon className="size-4" />}
+            label="ללקוח"
+            title="הדמיה להצגה ללקוח"
+            disabled={units.length === 0}
           />
           {/*
             לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
@@ -814,6 +838,19 @@ export function DesignScreen({
           index={wallIndex}
           onChange={(patch) => wallsRepo.update(wall.id, patch)}
           onClose={() => setWallToolsOpen(false)}
+        />
+      )}
+
+      {presentOpen && (
+        <PresentSheet
+          project={project}
+          customer={customer}
+          walls={walls}
+          units={allUnits ?? []}
+          finishes={allFinishes ?? []}
+          materials={allMaterials ?? []}
+          finishHex={finishHex ?? {}}
+          onClose={() => setPresentOpen(false)}
         />
       )}
 

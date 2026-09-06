@@ -123,6 +123,7 @@ export function WallIso({
   onSelect,
   inside,
   finishHex,
+  present = false,
 }: {
   walls: Wall[];
   /** כל הארגזים בפרויקט — המבט הזה מציג את החדר כולו */
@@ -134,6 +135,14 @@ export function WallIso({
   /** חזיתות מוסתרות — רואים את הגוף והמדפים */
   inside: boolean;
   finishHex: Record<string, string>;
+  /**
+   * תצוגת הצגה: אותו חדר, בלי שרטוט.
+   *
+   * הקווים בין הלוחות, שמות הקירות וסימון הארגז הנבחר הם שפה של
+   * נגר. הלקוח לא קורא שרטוט — הוא רוצה לראות איך זה ייראה — ולכן
+   * במצב הזה נשארים רק המשטחים, עם אור, צל וקרקע.
+   */
+  present?: boolean;
 }) {
   const t = MATERIAL.carcassMm;
   /*
@@ -449,42 +458,100 @@ export function WallIso({
         orbit.current = null;
       }}
     >
+      {/*
+        תצוגת הצגה: אור רך מלמעלה, קרקע שמתבהרת אל האופק, וצל מתחת
+        לכל מה שעומד. שלושת אלה הם מה שהופך מלבנים צבועים לחדר.
+      */}
+      {present && (
+        <defs>
+          <linearGradient id="iso-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f7f5f2" />
+            <stop offset="100%" stopColor="#e8e4de" />
+          </linearGradient>
+          <linearGradient id="iso-floor" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#e6e1da" />
+            <stop offset="100%" stopColor="#cfc8bd" />
+          </linearGradient>
+          <linearGradient id="iso-light" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.22" />
+            <stop offset="55%" stopColor="#ffffff" stopOpacity="0" />
+            <stop offset="100%" stopColor="#000000" stopOpacity="0.12" />
+          </linearGradient>
+          <filter id="iso-shadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy={vbH / 90} stdDeviation={vbW / 260} floodOpacity="0.22" />
+          </filter>
+        </defs>
+      )}
+      {present && (
+        <rect x={minX} y={minY} width={vbW} height={vbH} fill="url(#iso-sky)" />
+      )}
+
       {backdrops.map((b) => (
         <g key={b.key}>
-          <polygon points={b.floor} fill="#f0efec" />
+          <polygon points={b.floor} fill={present ? 'url(#iso-floor)' : '#f0efec'} />
           {b.wall && (
             <polygon
               points={b.wall}
-              fill={b.active ? '#faf8f5' : '#f4f3f1'}
-              stroke={b.active ? '#d6d3d1' : '#e7e5e4'}
+              fill={present ? '#f2efea' : b.active ? '#faf8f5' : '#f4f3f1'}
+              stroke={present ? 'none' : b.active ? '#d6d3d1' : '#e7e5e4'}
               strokeWidth={stroke}
             />
           )}
           {/* קו הבסיס מראה איפה הקיר עומד, גם כשהמישור שלו לא מצויר */}
-          <polyline
-            points={b.base}
-            fill="none"
-            stroke={b.active ? '#a8a29e' : '#d6d3d1'}
-            strokeWidth={stroke * 1.4}
-            strokeLinecap="round"
-          />
+          {!present && (
+            <polyline
+              points={b.base}
+              fill="none"
+              stroke={b.active ? '#a8a29e' : '#d6d3d1'}
+              strokeWidth={stroke * 1.4}
+              strokeLinecap="round"
+            />
+          )}
         </g>
       ))}
 
-      {faces.map((f) => (
-        <polygon
-          key={f.key}
-          points={f.points}
-          fill={f.fill}
-          stroke={f.unitId === selectedId ? '#a06236' : '#57534e'}
-          strokeWidth={f.unitId === selectedId ? stroke * 1.6 : stroke * 0.7}
-          strokeLinejoin="round"
-          data-unit={f.unitId}
-          className={f.unitId ? 'cursor-pointer' : undefined}
-        />
-      ))}
+      <g filter={present ? 'url(#iso-shadow)' : undefined}>
+        {faces.map((f) => (
+          <polygon
+            key={f.key}
+            points={f.points}
+            fill={f.fill}
+            /*
+              בהצגה הקו בין לוח ללוח נעלם: הוא מה שהופך רהיט לשרטוט.
+              נשאר קו דק מאוד בגוון המשטח עצמו, כדי שפאה בהירה על
+              רקע בהיר עדיין תיראה.
+            */
+            stroke={
+              present
+                ? 'rgba(87,83,78,0.18)'
+                : f.unitId === selectedId
+                  ? '#a06236'
+                  : '#57534e'
+            }
+            strokeWidth={
+              present ? stroke * 0.35 : f.unitId === selectedId ? stroke * 1.6 : stroke * 0.7
+            }
+            strokeLinejoin="round"
+            data-unit={f.unitId}
+            className={f.unitId && !present ? 'cursor-pointer' : undefined}
+          />
+        ))}
+      </g>
 
-      {marks.map((m) => (
+      {/* שכבת האור: מבהירה למעלה ומכהה למטה, על כל התמונה בבת אחת */}
+      {present && (
+        <rect
+          x={minX}
+          y={minY}
+          width={vbW}
+          height={vbH}
+          fill="url(#iso-light)"
+          pointerEvents="none"
+        />
+      )}
+
+      {!present &&
+        marks.map((m) => (
         <g key={`mark-${m.key}`} pointerEvents="none">
           <path
             d={m.arrow}
@@ -505,7 +572,7 @@ export function WallIso({
             {m.label}
           </text>
         </g>
-      ))}
+        ))}
     </svg>
 
     {/* חזרה לזווית ההתחלתית, אחרי שהסתובבנו למקום שקשה לחזור ממנו */}

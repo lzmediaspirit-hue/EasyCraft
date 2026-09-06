@@ -379,3 +379,12 @@ export const SlidersIcon = ({ className = 'size-5' }: P) => (
     <circle cx="10" cy="17" r="2" />
   </svg>
 );
+
+/** הדמיה להצגה ללקוח — עין, כי זו השאלה "איך זה ייראה". */
+export const EyeIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
