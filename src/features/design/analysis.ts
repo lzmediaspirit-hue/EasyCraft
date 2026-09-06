@@ -4,13 +4,24 @@ import { MAX_BODY_MM } from '../../catalog/zones';
 import { glyphDef } from '../../catalog/glyphList';
 import { cm } from '../../ui/units';
 
+/**
+ * התראה אחת, ומי היא מדברת עליו.
+ *
+ * התראה בלי ארגז היא טקסט שצריך לחפש לפיו על הקיר. `unitIds` הוא
+ * מה שהופך אותה לכפתור: לוחצים, והארגז שיש בו הבעיה נבחר.
+ */
+export interface WallWarning {
+  text: string;
+  unitIds: string[];
+}
+
 export interface WallAnalysis {
   /** אורך תפוס על הרצפה (תחתונים ועמודות) */
   floorUsedMm: number;
   /** אורך תפוס במפלס העליון */
   wallUsedMm: number;
   freeMm: number;
-  warnings: string[];
+  warnings: WallWarning[];
 }
 
 /**
@@ -20,21 +31,30 @@ export interface WallAnalysis {
 export function analyzeWall(
   wall: Wall,
   units: PlacedUnit[],
-  /** שמות ארונות שמתנגשים בפועל בארון של קיר אחר, ממבט העל */
-  clashing: string[] = [],
+  /** ארונות שמתנגשים בפועל בארון של קיר אחר, ממבט העל */
+  clashing: { id: string; name: string }[] = [],
 ): WallAnalysis {
   const floor = units.filter((u) => u.level !== 'wall');
   const upper = units.filter((u) => u.level === 'wall');
 
   const floorUsedMm = floor.reduce((sum, u) => sum + u.widthMm, 0);
   const wallUsedMm = upper.reduce((sum, u) => sum + u.widthMm, 0);
-  const warnings: string[] = [];
+  const warnings: WallWarning[] = [];
+  /** מי חורג בפועל מקצה הקיר — אליו מצביעה ההתראה */
+  const past = (group: PlacedUnit[]) =>
+    group.filter((u) => u.xMm + u.widthMm > wall.lengthMm + 1).map((u) => u.id);
 
   if (floorUsedMm > wall.lengthMm) {
-    warnings.push(`התחתונים חורגים מהקיר ב-${cm(floorUsedMm - wall.lengthMm)} ס"מ`);
+    warnings.push({
+      text: `התחתונים חורגים מהקיר ב-${cm(floorUsedMm - wall.lengthMm)} ס"מ`,
+      unitIds: past(floor),
+    });
   }
   if (wallUsedMm > wall.lengthMm) {
-    warnings.push(`העליונים חורגים מהקיר ב-${cm(wallUsedMm - wall.lengthMm)} ס"מ`);
+    warnings.push({
+      text: `העליונים חורגים מהקיר ב-${cm(wallUsedMm - wall.lengthMm)} ס"מ`,
+      unitIds: past(upper),
+    });
   }
 
   for (const group of [floor, upper]) {
@@ -43,7 +63,7 @@ export function analyzeWall(
       const prev = sorted[i - 1];
       const cur = sorted[i];
       if (cur.xMm < prev.xMm + prev.widthMm - 1) {
-        warnings.push(`${prev.name} ו${cur.name} חופפים`);
+        warnings.push({ text: `${prev.name} ו${cur.name} חופפים`, unitIds: [prev.id, cur.id] });
         break;
       }
     }
@@ -54,21 +74,24 @@ export function analyzeWall(
 
     // שקע או נקודת מים שנבלעים לגמרי מאחורי ארגז
     if (f.kind === 'socket' || f.kind === 'water') {
-      const covered = units.some((u) => contains(u, f));
-      if (covered) warnings.push(`${label} מוסתר מאחורי ארגז`);
+      const covered = units.find((u) => contains(u, f));
+      if (covered) warnings.push({ text: `${label} מוסתר מאחורי ארגז`, unitIds: [covered.id] });
       continue;
     }
 
     // חלון, דלת או נישה שארגז נכנס לתוכם — גם חפיפה חלקית היא בעיה
     const blocking = units.find((u) => overlaps(u, f));
-    if (blocking) warnings.push(`${blocking.name} חוסם את ה${label}`);
+    if (blocking) warnings.push({ text: `${blocking.name} חוסם את ה${label}`, unitIds: [blocking.id] });
   }
 
   // ארון גבוה מדי — קשה להרים, להוביל ולהתקין
   for (const u of units) {
     const bodyH = u.heightMm - (u.socleMm ?? 0);
     if (bodyH > MAX_BODY_MM) {
-      warnings.push(`${u.name} בגובה ${cm(bodyH)} ס"מ — מעל ${cm(MAX_BODY_MM)} עדיף לפצל`);
+      warnings.push({
+        text: `${u.name} בגובה ${cm(bodyH)} ס"מ — מעל ${cm(MAX_BODY_MM)} עדיף לפצל`,
+        unitIds: [u.id],
+      });
     }
   }
 
@@ -77,8 +100,8 @@ export function analyzeWall(
    * הפינה פתוחה לכל ארגז; מה שאסור זה ששני ארונות יתפסו את אותו
    * מקום בחדר — וזה נמדד במבט העל, על המלבנים עצמם.
    */
-  for (const name of clashing) {
-    warnings.push(`${name} מתנגש בארון על הקיר השכן`);
+  for (const c of clashing) {
+    warnings.push({ text: `${c.name} מתנגש בארון על הקיר השכן`, unitIds: [c.id] });
   }
 
   return { floorUsedMm, wallUsedMm, freeMm: wall.lengthMm - floorUsedMm, warnings };

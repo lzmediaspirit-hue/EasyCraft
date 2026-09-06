@@ -181,11 +181,12 @@ export function DesignScreen({
   const clashing = useMemo(() => {
     if (!wall || !walls || walls.length < 2) return [];
     const boxes = planUnits(buildPlan(walls, allUnits ?? []), allUnits ?? []);
-    return [
-      ...new Set(
-        boxes.filter((b) => b.clash && b.unit.wallId === wall.id).map((b) => b.unit.name),
-      ),
-    ];
+    const seen = new Map<string, { id: string; name: string }>();
+    for (const b of boxes) {
+      if (!b.clash || b.unit.wallId !== wall.id) continue;
+      seen.set(b.unit.id, { id: b.unit.id, name: b.unit.name });
+    }
+    return [...seen.values()];
   }, [walls, wall, allUnits]);
   const analysis = wall ? analyzeWall(wall, units, clashing) : null;
 
@@ -714,13 +715,29 @@ export function DesignScreen({
                   )}
                 </div>
 
+                {/*
+                  התראה מצביעה על ארגז, ולכן היא כפתור: לוחצים,
+                  והארגז נבחר, מסומן על הקיר ונפתח לעריכה — במקום
+                  לחפש לפי השם מי מבין הארגזים הוא זה.
+                */}
                 {view.warnings && analysis.warnings.length > 0 && (
                   <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                    {analysis.warnings.map((w) => (
-                      <li key={w} className="text-sm leading-snug text-amber-900">
-                        {w}
-                      </li>
-                    ))}
+                    {analysis.warnings.map((w) =>
+                      w.unitIds.length > 0 ? (
+                        <li key={w.text}>
+                          <button
+                            onClick={() => setSelectedId(w.unitIds[0])}
+                            className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"
+                          >
+                            {w.text}
+                          </button>
+                        </li>
+                      ) : (
+                        <li key={w.text} className="text-sm leading-snug text-amber-900">
+                          {w.text}
+                        </li>
+                      ),
+                    )}
                   </ul>
                 )}
               </>
