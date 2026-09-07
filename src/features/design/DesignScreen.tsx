@@ -50,6 +50,7 @@ import {
   RulerIcon,
   TagIcon,
   SlidersIcon,
+  WallsIcon,
   UndoIcon,
 } from '../../ui/icons';
 import { cm, meters, unitLabel } from '../../ui/units';
@@ -107,7 +108,13 @@ export function DesignScreen({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [finishesOpen, setFinishesOpen] = useState(false);
   /* מחווני הקיר מתקפלים, וההדמיה תופסת את מה שהתפנה */
-  const [statsOpen, setStatsOpen] = useState(true);
+  /*
+   * הנתונים מתחילים סגורים. מי שפותח הדמיה בא לראות את הקיר, לא
+   * ארבעה מלבנים עם מספרים — והם רחוקים לחיצה אחת.
+   */
+  const [statsOpen, setStatsOpen] = useState(false);
+  /* שורת הקירות תופסת מקום בקיר אחד; המתג מפנה אותו */
+  const [wallsOpen, setWallsOpen] = useState(true);
   const [inside, setInside] = useState(false);
   const [measure, setMeasure] = useState<MeasureAxis | null>(null);
   /*
@@ -262,7 +269,38 @@ export function DesignScreen({
       <ScreenHeader
         title={project.name}
         subtitle={subtitle(project.name, project.roomKind, walls.length)}
-        action={<QuickCalcButton />}
+        action={
+          <span className="flex items-center gap-1">
+            {/*
+              ההדמיה ללקוח היא הדבר היחיד כאן שמיועד למישהו אחר,
+              ולכן היא אייקון בפינה ולא כפתור בסרגל הכלים.
+            */}
+            {role === 'manager' && (
+              <button
+                onClick={() => setPresentOpen(true)}
+                disabled={units.length === 0}
+                aria-label="הדמיה ללקוח"
+                title="הדמיה להצגה ללקוח"
+                className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-oak-700 disabled:opacity-40"
+              >
+                <EyeIcon />
+              </button>
+            )}
+            {/* שורת הקירות תופסת שורה שלמה, וברוב הזמן לא נוגעים בה */}
+            <button
+              onClick={() => setWallsOpen((v) => !v)}
+              aria-pressed={wallsOpen}
+              aria-label="שורת הקירות"
+              title={wallsOpen ? 'הסתרת שורת הקירות' : 'הצגת שורת הקירות'}
+              className={`rounded-full p-2 transition-colors hover:bg-stone-200/70 ${
+                wallsOpen ? 'text-stone-600' : 'text-stone-400'
+              }`}
+            >
+              <WallsIcon />
+            </button>
+            <QuickCalcButton />
+          </span>
+        }
       >
         {/*
           שתי שורות ולא אחת: השורה הראשונה היא מה שעושים על הקיר
@@ -323,24 +361,6 @@ export function DesignScreen({
             icon={<PlanIcon className="size-4" />}
             label="מבט על"
           />
-          {/*
-            הדמיה ללקוח: אותו חדר בלי שפת השרטוט. זו לא עוד תצוגה
-            אלא רגע אחר — יושבים מול הלקוח ומראים לו מה הוא מקבל —
-            ולכן היא נפתחת במסך מלא ולא כמצב של הסרגל.
-
-            והיא של המנהל, כמו החישוב: התכנת והנגר באו לראות מה נשאר
-            לעשות, לא למכור.
-          */}
-          {role === 'manager' && (
-            <Tool
-              active={presentOpen}
-              onClick={() => setPresentOpen(true)}
-              icon={<EyeIcon className="size-4" />}
-              label="ללקוח"
-              title="הדמיה להצגה ללקוח"
-              disabled={units.length === 0}
-            />
-          )}
           {/*
             לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
             עומק וכיבוי. קודם היה בורר ציר בשורה נפרדת שגזל מקום
@@ -437,13 +457,6 @@ export function DesignScreen({
             label="חזור"
           />
           <Tool
-            active={finishesOpen}
-            onClick={() => setFinishesOpen(true)}
-            icon={<TagIcon className="size-4" />}
-            label="גוון לכולם"
-            title="גוון לכל החזיתות, הגופים או הדפנות"
-          />
-          <Tool
             active={false}
             disabled={units.length === 0}
             onClick={centerWall}
@@ -451,8 +464,16 @@ export function DesignScreen({
             label="מרכוז"
             title="ממרכז את הארגזים על הקיר"
           />
+          <Tool
+            active={finishesOpen}
+            onClick={() => setFinishesOpen(true)}
+            icon={<TagIcon className="size-4" />}
+            label="גוון לכולם"
+            title="גוון לכל החזיתות, הגופים או הדפנות"
+          />
         </div>
         )}
+        {wallsOpen && (
         <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
           {walls.length > 1 &&
             walls.map((w, i) => (
@@ -482,6 +503,7 @@ export function DesignScreen({
             קיר
           </button>
         </div>
+        )}
       </ScreenHeader>
 
       {/*

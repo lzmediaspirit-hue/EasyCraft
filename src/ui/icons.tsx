@@ -399,3 +399,13 @@ export const PaletteIcon = ({ className = 'size-5' }: P) => (
     <circle cx="15.5" cy="9" r="1.1" />
   </svg>
 );
+
+/** שורת הקירות — שלושה קירות זה לצד זה, כמו הלשוניות עצמן. */
+export const WallsIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="3" y="7" width="5" height="10" rx="1" />
+    <rect x="9.5" y="7" width="5" height="10" rx="1" />
+    <rect x="16" y="7" width="5" height="10" rx="1" />
+  </svg>
+);
