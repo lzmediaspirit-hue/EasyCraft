@@ -1,5 +1,15 @@
 import { useRef, useState } from 'react';
 import { cm, count, unitLabel } from '../../ui/units';
+import {
+  CloseIcon,
+  CornerIcon,
+  MinusIcon,
+  PencilIcon,
+  PlusIcon,
+  RedoIcon,
+  TrashIcon,
+  UndoIcon,
+} from '../../ui/icons';
 
 /** נקודה בקווי החדר, במ"מ. */
 export interface ShapePoint {
@@ -58,17 +68,77 @@ export function RoomShapeEditor({
   const svgRef = useRef<SVGSVGElement>(null);
   const [snap, setSnap] = useState(true);
   /*
+   * העיפרון: בלעדיו כל קיר נמתח בגרירה, וזו תנועה אחת ארוכה לכל
+   * קיר. איתו נגיעה מספיקה — נוגעים בפינה אחרי פינה והחדר נבנה,
+   * וזה מה שנוח באצבע. הבחירה למחיקה עוברת אז לנגיעה ארוכה יותר
+   * על הקיר עצמו, ולכן שני המצבים לא נדרסים זה על זה.
+   */
+  const [pencil, setPencil] = useState(true);
+  /*
+   * זום. חדר גדול נכנס בקושי לרשת, וחדר קטן מצויר בפינה שלה. אין
+   * גרירה של התצוגה במכוון: המבט מתמרכז על מה שכבר שורטט, ולכן
+   * הזום תמיד מסתכל על העבודה ולא על פינה ריקה.
+   */
+  const [zoom, setZoom] = useState(1);
+  /*
+   * היסטוריה מקומית לשרטוט. "בטל" של האשף כולו היה מוציא מהשלב,
+   * ומי שמשרטט רוצה לבטל קיר אחד — לא את השרטוט.
+   */
+  const past = useRef<ShapePoint[][]>([]);
+  const future = useRef<ShapePoint[][]>([]);
+  const [, bumpHistory] = useState(0);
+
+  /** משנה את הצורה ורושם את הקודמת בהיסטוריה. */
+  function commit(next: ShapePoint[]) {
+    past.current = [...past.current, points];
+    future.current = [];
+    bumpHistory((n) => n + 1);
+    onChange(next);
+  }
+
+  function undo() {
+    const prev = past.current[past.current.length - 1];
+    if (!prev) return;
+    past.current = past.current.slice(0, -1);
+    future.current = [points, ...future.current];
+    setPicked(null);
+    bumpHistory((n) => n + 1);
+    onChange(prev);
+  }
+
+  function redo() {
+    const next = future.current[0];
+    if (!next) return;
+    future.current = future.current.slice(1);
+    past.current = [...past.current, points];
+    setPicked(null);
+    bumpHistory((n) => n + 1);
+    onChange(next);
+  }
+  /*
    * הקיר נמתח בגרירה ולא נוצר בשתי נגיעות.
    * נגיעה־נגיעה אילצה לכוון נקודה, לשחרר, ולכוון שוב; גרירה מנקודה
    * לנקודה היא אותה תנועה שעושים עם מטר בשטח — מותחים עד לאן שצריך
    * ומשחררים.
    */
-  const [drag, setDrag] = useState<{
+  type Drag = {
     /** המקום שנגעו בו, כדי להבחין בין נגיעה לגרירה */
     press: ShapePoint;
     from: ShapePoint;
     to: ShapePoint;
-  } | null>(null);
+  };
+  /*
+   * הגרירה חיה ב-ref ולא רק במצב: נגיעה קצרה מסיימת את עצמה באותו
+   * פריים שבו היא התחילה, ואז מטפל השחרור עוד קורא את המצב הישן —
+   * ריק — והנגיעה נבלעה. ה-ref נכון תמיד; המצב קיים רק כדי לצייר
+   * את הקיר שנמתח.
+   */
+  const dragRef = useRef<Drag | null>(null);
+  const [drag, setDragState] = useState<Drag | null>(null);
+  const setDrag = (d: Drag | null) => {
+    dragRef.current = d;
+    setDragState(d);
+  };
   /** הקיר שנגעו בו, לפני שמחליטים אם למחוק אותו */
   const [picked, setPicked] = useState<number | null>(null);
 
@@ -128,14 +198,30 @@ export function RoomShapeEditor({
     };
   });
 
-  const stroke = AREA_MM / 220;
+  const stroke = (AREA_MM / 220) / zoom;
+
+  /*
+   * חלון התצוגה. הוא מתמרכז על מה שכבר שורטט — ובחדר ריק על מרכז
+   * הרשת — כדי שהתקרבות תמיד תסתכל על העבודה.
+   */
+  const span = AREA_MM / zoom;
+  const focus = points.length
+    ? {
+        x: (Math.min(...points.map((p) => p.x)) + Math.max(...points.map((p) => p.x))) / 2,
+        y: (Math.min(...points.map((p) => p.y)) + Math.max(...points.map((p) => p.y))) / 2,
+      }
+    : { x: AREA_MM / 2, y: AREA_MM / 2 };
+  const view = {
+    x: Math.min(Math.max(focus.x - span / 2, 0), Math.max(AREA_MM - span, 0)),
+    y: Math.min(Math.max(focus.y - span / 2, 0), Math.max(AREA_MM - span, 0)),
+  };
 
   return (
     <div className="space-y-3">
       <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${AREA_MM} ${AREA_MM}`}
+          viewBox={`${view.x} ${view.y} ${span} ${span}`}
           className="block w-full touch-none select-none"
           onPointerDown={(e) => {
             if (closed) return;
@@ -151,13 +237,14 @@ export function RoomShapeEditor({
             setDrag({ press: raw, from, to: resolve(raw, points.length ? from : null) });
           }}
           onPointerMove={(e) => {
-            if (!drag) return;
+            const d = dragRef.current;
+            if (!d) return;
             const raw = at(e);
-            if (raw) setDrag({ ...drag, to: resolve(raw, drag.from) });
+            if (raw) setDrag({ ...d, to: resolve(raw, d.from) });
           }}
           onPointerUp={(e) => {
             e.currentTarget.releasePointerCapture(e.pointerId);
-            const d = drag;
+            const d = dragRef.current;
             setDrag(null);
             if (!d) return;
             const raw = at(e);
@@ -168,6 +255,18 @@ export function RoomShapeEditor({
              * הקודם — ושכבת בחירה מעליו הייתה חוסמת כל גרירה שנייה.
              */
             if (raw && Math.hypot(raw.x - d.press.x, raw.y - d.press.y) < TAP_MM) {
+              /*
+               * עם העיפרון נגיעה מוסיפה פינה — פינה אחרי פינה, וזה
+               * מה שנוח באצבע. בלעדיו נגיעה בוחרת קיר למחיקה, וזו
+               * הייתה ההתנהגות היחידה עד עכשיו.
+               */
+              if (pencil) {
+                const to = resolve(raw, points.length ? d.from : null);
+                if (points.length && d.from.x === to.x && d.from.y === to.y) return;
+                setPicked(null);
+                commit(points.length ? [...points, to] : [to]);
+                return;
+              }
               setPicked(nearestSegment(points, raw));
               return;
             }
@@ -175,11 +274,11 @@ export function RoomShapeEditor({
             const last = next[next.length - 2];
             // גרירה שלא זזה לא מוסיפה קיר באורך אפס
             if (last && last.x === d.to.x && last.y === d.to.y) {
-              if (!points.length) onChange([d.from]);
+              if (!points.length) commit([d.from]);
               return;
             }
             setPicked(null);
-            onChange(next);
+            commit(next);
           }}
           onPointerCancel={() => setDrag(null)}
         >
@@ -238,65 +337,153 @@ export function RoomShapeEditor({
         </svg>
       </div>
 
+      {/*
+        סרגל הכלים של השרטוט. הכלים הם אייקונים כי הם חוזרים על עצמם
+        עשרות פעמים בשרטוט אחד, ושורה של מילים הייתה נגללת הצידה
+        בדיוק כשצריך אותה.
+      */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <button
+        <ShapeTool
+          label="בטל"
+          onClick={undo}
+          disabled={past.current.length === 0}
+          icon={<UndoIcon className="size-4" />}
+        />
+        <ShapeTool
+          label="חזור"
+          onClick={redo}
+          disabled={future.current.length === 0}
+          icon={<RedoIcon className="size-4" />}
+        />
+
+        <span className="mx-0.5 h-6 w-px bg-stone-200" />
+
+        <ShapeTool
+          label="ציור בנגיעה"
+          active={pencil}
+          onClick={() => {
+            setPencil((v) => !v);
+            setPicked(null);
+          }}
+          icon={<PencilIcon className="size-4" />}
+        />
+        <ShapeTool
+          label="הצמדה ל־90°"
+          active={snap}
           onClick={() => setSnap((v) => !v)}
-          aria-pressed={snap}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-            snap ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-          }`}
-        >
-          הצמדה ל־90°
-        </button>
-        <button
-          onClick={() => onChange(points.slice(0, -1))}
-          disabled={points.length === 0}
-          className="rounded-lg bg-stone-100 px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-200 disabled:opacity-40"
-        >
-          ביטול פינה
-        </button>
+          icon={<CornerIcon className="size-4" />}
+        />
+
+        <span className="mx-0.5 h-6 w-px bg-stone-200" />
+
+        <ShapeTool
+          label="התרחקות"
+          onClick={() => setZoom((z) => Math.max(z / 1.4, 0.6))}
+          disabled={zoom <= 0.6}
+          icon={<MinusIcon className="size-4" />}
+        />
+        <ShapeTool
+          label="התקרבות"
+          onClick={() => setZoom((z) => Math.min(z * 1.4, 4))}
+          disabled={zoom >= 4}
+          icon={<PlusIcon className="size-4" />}
+        />
+
+        <span className="mx-0.5 h-6 w-px bg-stone-200" />
+
         {/*
-          מחיקת קיר שאינו האחרון מחברת את שכניו: מוציאים את הפינה
-          שביניהם, והשרשרת נשארת רציפה.
+          מחיקה: קיר שנבחר, ואם לא נבחר — הפינה האחרונה. שני
+          הכפתורים היו אותה כוונה בשני מקומות, ומי שמשרטט לוחץ
+          "מחק" ומצפה שהדבר האחרון ייעלם.
         */}
-        {picked !== null && (
-          <button
-            onClick={() => {
+        <ShapeTool
+          label={picked !== null ? 'מחיקת הקיר שנבחר' : 'מחיקת הפינה האחרונה'}
+          tone={picked !== null ? 'danger' : undefined}
+          disabled={points.length === 0}
+          onClick={() => {
+            if (picked !== null) {
               const next = [...points];
               next.splice(picked + 1, 1);
               setPicked(null);
-              onChange(next.length >= 2 ? next : []);
-            }}
-            className="rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
-          >
-            מחיקת הקיר שנבחר
-          </button>
-        )}
-        <button
-          onClick={() => onChange([])}
+              commit(next.length >= 2 ? next : []);
+              return;
+            }
+            commit(points.slice(0, -1));
+          }}
+          icon={<TrashIcon className="size-4" />}
+        />
+        <ShapeTool
+          label="מחיקת הכול"
           disabled={points.length === 0}
-          className="rounded-lg bg-stone-100 px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-200 disabled:opacity-40"
-        >
-          מחיקה
-        </button>
-        {points.length > 2 && !closed && (
-          <button
-            onClick={() => onChange([...points, { ...points[0] }])}
-            className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-stone-800"
-          >
-            סגירת החדר
-          </button>
-        )}
+          onClick={() => {
+            setPicked(null);
+            commit([]);
+          }}
+          icon={<CloseIcon className="size-4" />}
+        />
+
       </div>
+
+      {/* סגירת החדר היא סוף השרטוט ולא עוד כלי, ולכן היא שורה לעצמה */}
+      {points.length > 2 && !closed && (
+        <button
+          onClick={() => commit([...points, { ...points[0] }])}
+          className="w-full rounded-lg bg-stone-900 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-800"
+        >
+          סגירת החדר
+        </button>
+      )}
 
       <p className="text-xs leading-snug text-stone-500">
         {points.length === 0
-          ? 'גרירה על הרשת מותחת את הקיר הראשון.'
+          ? pencil
+            ? 'נגיעה על הרשת מניחה את הפינה הראשונה. גרירה מותחת קיר שלם.'
+            : 'גרירה על הרשת מותחת את הקיר הראשון.'
           : closed
             ? `החדר סגור. ${count(segs.length, 'קיר אחד', 'קירות')}, המידות ב${unitLabel()}.`
-            : `${count(segs.filter((s) => !s.isPreview).length, 'קיר אחד', 'קירות')} עד כה. גרירה נוספת מותחת את הבא; נגיעה בקיר מסמנת אותו למחיקה.`}
+            : `${count(segs.filter((s) => !s.isPreview).length, 'קיר אחד', 'קירות')} עד כה. ${
+                pencil
+                  ? 'נגיעה מוסיפה פינה, גרירה מותחת קיר.'
+                  : 'גרירה מותחת את הקיר הבא; נגיעה בקיר מסמנת אותו למחיקה.'
+              }`}
       </p>
     </div>
+  );
+}
+
+/** כלי אחד בסרגל השרטוט: אייקון, ושם שנשמע כשמקריאים את המסך. */
+function ShapeTool({
+  label,
+  icon,
+  onClick,
+  active,
+  disabled,
+  tone,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  tone?: 'danger';
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={`grid size-9 place-items-center rounded-lg transition-colors disabled:opacity-30 ${
+        active
+          ? 'bg-oak-600 text-white'
+          : tone === 'danger'
+            ? 'bg-red-50 text-red-700 hover:bg-red-100'
+            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+      }`}
+    >
+      {icon}
+    </button>
   );
 }
 

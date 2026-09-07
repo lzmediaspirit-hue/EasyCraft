@@ -409,3 +409,20 @@ export const WallsIcon = ({ className = 'size-5' }: P) => (
     <rect x="16" y="7" width="5" height="10" rx="1" />
   </svg>
 );
+
+/** הפחתה — התרחקות בשרטוט. */
+export const MinusIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" className={className} aria-hidden="true">
+    <path d="M5 12h14" />
+  </svg>
+);
+
+/** פינה ישרה — ההצמדה ל-90 מעלות בשרטוט החדר. */
+export const CornerIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M5 5v14h14" />
+    <path d="M9 19v-4h4" />
+  </svg>
+);
