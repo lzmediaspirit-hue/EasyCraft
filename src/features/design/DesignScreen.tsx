@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
-import { wallLabel } from '../projects/wallLayouts';
-import { WallElevation, collides, type MeasureAxis, type RulerAxis } from './WallElevation';
+import { WallElevation, collides } from './WallElevation';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
@@ -22,60 +21,27 @@ import { PlanView } from './PlanView';
 import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
 import { useViewOptions } from './viewOptions';
+import { useDesignView } from './designView';
+import { DesignToolbar } from './DesignToolbar';
+import type { SheetName } from './sheets';
 import { history, useHistory } from './history';
-import { WallThumb } from './WallThumb';
 import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo, materialsRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumption';
-import { roomDef } from '../../catalog/rooms';
-import { ScreenHeader } from '../../ui/ScreenHeader';
-import { QuickCalcButton } from '../../ui/QuickCalc';
 import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
-  CenterIcon,
-  EyeIcon,
-  CheckIcon,
   ChevronIcon,
-  CubeIcon,
-  DepthIcon,
-  NestIcon,
-  FrontsIcon,
-  InsideIcon,
-  PlanIcon,
   PlusIcon,
-  RedoIcon,
-  RulerIcon,
-  TagIcon,
   SlidersIcon,
-  WallsIcon,
-  UndoIcon,
 } from '../../ui/icons';
 import { cm, meters, unitLabel } from '../../ui/units';
 import { readPref, writePref } from '../../ui/prefs';
 import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
 
 const PANEL_KEY = 'easycraft.panelRatio';
-
-/**
- * המגירות שאפשר לפתוח מהמסך הזה.
- * אחת בכל רגע: כולן מכסות את המסך, ושתיים פתוחות יחד הן מצב שלא
- * קיים בממשק — רק בקוד שהחזיק דגל לכל אחת.
- */
-type SheetName =
-  | 'library'
-  | 'edit'
-  | 'materials'
-  | 'nesting'
-  | 'sale'
-  | 'depth'
-  | 'plan'
-  | 'present'
-  | 'wallTools'
-  | 'bulk'
-  | 'finishes';
 
 /** גובה הלוח נשאר בתחום שמשאיר את הקיר גלוי ואת הלוח שימושי. */
 const clampRatio = (r: number) => Math.min(Math.max(r, 0.2), 0.85);
@@ -95,6 +61,10 @@ export function DesignScreen({
   projectId: string;
   startInWork?: boolean;
 }) {
+  /* איך מסתכלים על הקיר — שבעה מצבים שהם דבר אחד */
+  const design = useDesignView();
+  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen } = design.view;
+
   const [wallIndex, setWallIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /*
@@ -104,16 +74,6 @@ export function DesignScreen({
    */
   const [sheet, setSheet] = useState<SheetName | null>(null);
   const closeSheet = () => setSheet(null);
-  /* חזית שטוחה לעבודה מדויקת, ומבט תלת-ממדי להבנת המבנה ולהצגה ללקוח */
-  const [iso, setIso] = useState(false);
-  /* מצב סרגל: מודדים את המרחק בין שני ארגזים שנבחרו */
-  const [rulerPair, setRulerPair] = useState<string[] | null>(null);
-  /*
-   * הסרגל מודד מרווח, ומרווח הוא תמיד בציר אחד: "כמה נשאר בין
-   * הארונות" ו"כמה נשאר עד התקרה" הן שתי שאלות שונות, ולכן הציר
-   * נבחר במפורש ולא נגזר ממה שנבחר.
-   */
-  const [rulerAxis, setRulerAxis] = useState<RulerAxis>('w');
   /*
    * מצב תהליך עבודה: אותם ארגזים באותם מקומות, אבל צבועים לפי מה
    * שנעשה בהם — ובלי כלי עריכה. מי שעומד ליד המסור לא אמור להזיז
@@ -122,15 +82,6 @@ export function DesignScreen({
   const [workToggle, setWorkToggle] = useState(!!startInWork);
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
   /* מחווני הקיר מתקפלים, וההדמיה תופסת את מה שהתפנה */
-  /*
-   * הנתונים מתחילים סגורים. מי שפותח הדמיה בא לראות את הקיר, לא
-   * ארבעה מלבנים עם מספרים — והם רחוקים לחיצה אחת.
-   */
-  const [statsOpen, setStatsOpen] = useState(false);
-  /* שורת הקירות תופסת מקום בקיר אחד; המתג מפנה אותו */
-  const [wallsOpen, setWallsOpen] = useState(true);
-  const [inside, setInside] = useState(false);
-  const [measure, setMeasure] = useState<MeasureAxis | null>(null);
   /*
    * גובה לוח העריכה, כחלק מגובה המסך.
    * לוח הגדרות ארוך היה מכסה את הקיר, וקצר מדי מחייב גלילה בלי סוף.
@@ -281,245 +232,25 @@ export function DesignScreen({
 
   return (
     <div className="mx-auto flex h-dvh w-full max-w-lg flex-col overflow-hidden bg-stone-50">
-      <ScreenHeader
-        title={project.name}
-        subtitle={subtitle(project.name, project.roomKind, walls.length)}
-        action={
-          <span className="flex items-center gap-1">
-            {/*
-              ההדמיה ללקוח היא הדבר היחיד כאן שמיועד למישהו אחר,
-              ולכן היא אייקון בפינה ולא כפתור בסרגל הכלים.
-            */}
-            {role === 'manager' && (
-              <button
-                onClick={() => setSheet('present')}
-                disabled={units.length === 0}
-                aria-label="הדמיה ללקוח"
-                title="הדמיה להצגה ללקוח"
-                className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-oak-700 disabled:opacity-40"
-              >
-                <EyeIcon />
-              </button>
-            )}
-            {/* שורת הקירות תופסת שורה שלמה, וברוב הזמן לא נוגעים בה */}
-            <button
-              onClick={() => setWallsOpen((v) => !v)}
-              aria-pressed={wallsOpen}
-              aria-label="שורת הקירות"
-              title={wallsOpen ? 'הסתרת שורת הקירות' : 'הצגת שורת הקירות'}
-              className={`rounded-full p-2 transition-colors hover:bg-stone-200/70 ${
-                wallsOpen ? 'text-stone-600' : 'text-stone-400'
-              }`}
-            >
-              <WallsIcon />
-            </button>
-            <QuickCalcButton />
-          </span>
-        }
-      >
-        {/*
-          שתי שורות ולא אחת: השורה הראשונה היא מה שעושים על הקיר
-          שעובדים עליו, והשנייה היא איך מסתכלים עליו. שורה אחת
-          ארוכה נגללה הצידה, וכפתור שצריך לגלול אליו הוא כפתור
-          שלא לוחצים עליו.
-        */}
-        <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-          <Tool
-            active={inside}
-            onClick={() => setInside((v) => !v)}
-            icon={inside ? <InsideIcon className="size-4" /> : <FrontsIcon className="size-4" />}
-            label={inside ? 'פנים' : 'חזית'}
-            title={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
-          />
-          <Tool
-            active={sheet === 'nesting'}
-            onClick={() => setSheet('nesting')}
-            icon={<NestIcon className="size-4" />}
-            label="ניסור"
-          />
-          {editable && (
-            <Tool
-              active={sheet === 'depth'}
-              onClick={() => setSheet('depth')}
-              icon={<DepthIcon className="size-4" />}
-              label="עומק אחיד"
-            />
-          )}
-          {/*
-            אחרי המכירה הכפתור הראשי שמתחת להדמיה הופך למתג
-            תכנון/תהליך, והחישוב עובר לכאן. הוא עדיין נחוץ — מחיר
-            משתנה גם אחרי המכירה — אבל הוא כבר לא הפעולה הראשית.
-          */}
-          {!!project.soldAt && role === 'manager' && (
-            <Tool
-              active={sheet === 'materials'}
-              onClick={() => setSheet('materials')}
-              icon={<CalcIcon className="size-4" />}
-              label="חישוב"
-              title="חומרים ומחיר"
-            />
-          )}
-        </div>
-
-        <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-          <Tool
-            active={iso}
-            onClick={() => setIso((v) => !v)}
-            icon={<CubeIcon className="size-4" />}
-            label={iso ? 'תלת־ממד' : 'שטוח'}
-            title={iso ? 'חזרה לציור חזית' : 'מבט תלת־ממדי'}
-          />
-          {/* מבט על זמין תמיד: משם גם מוסיפים קיר לחדר */}
-          <Tool
-            active={sheet === 'plan'}
-            onClick={() => setSheet((cur) => (cur === 'plan' ? null : 'plan'))}
-            icon={<PlanIcon className="size-4" />}
-            label="מבט על"
-          />
-          {/*
-            לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
-            עומק וכיבוי. קודם היה בורר ציר בשורה נפרדת שגזל מקום
-            מהציור, ובטלפון הוא נחתך.
-          */}
-          <Tool
-            active={measure !== null}
-            onClick={() =>
-              setMeasure((m) => (m === null ? 'w' : m === 'w' ? 'h' : m === 'h' ? 'd' : null))
-            }
-            icon={<RulerIcon className="size-4" />}
-            label={
-              measure === null
-                ? 'מדידה'
-                : measure === 'w'
-                  ? 'רוחב'
-                  : measure === 'h'
-                    ? 'גובה'
-                    : 'עומק'
-            }
-            title="לחיצה נוספת מחליפה ציר"
-          />
-          {/*
-            סרגל: מודדים את המרחק בין שני ארגזים, או בין ארגז לפינת
-            הקיר. אלה השאלות שנשאלות בשטח — "כמה נשאר בין השניים"
-            ו"כמה עד הפינה" — ועד עכשיו היה צריך לחשב אותן בראש.
-          */}
-          <Tool
-            active={rulerPair !== null}
-            onClick={() => {
-              setRulerPair((p) => (p === null ? [] : null));
-              setMeasure(null);
-              setSelectedId(null);
-            }}
-            icon={<RulerIcon className="size-4" />}
-            label="סרגל"
-            title="מרחק בין שני ארגזים או עד קצה הקיר"
-          />
-          {/*
-            הציר נבחר לפני המדידה ולא נגזר ממנה: שני ארגזים זה על זה
-            אפשר למדוד גם לרוחב וגם לגובה, ורק הנגר יודע מה הוא שאל.
-          */}
-          {rulerPair !== null &&
-            (['w', 'h'] as const).map((ax) => (
-              <button
-                key={ax}
-                onClick={() => {
-                  setRulerAxis(ax);
-                  setRulerPair([]);
-                }}
-                aria-pressed={rulerAxis === ax}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  rulerAxis === ax
-                    ? 'bg-teal-700 text-white'
-                    : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
-                }`}
-              >
-                {ax === 'w' ? 'רוחב' : 'גובה'}
-              </button>
-            ))}
-        </div>
-
-        {/*
-          שורת פעולות על הארגזים: ביטול וחזרה, שכפול ומרכוז.
-          כולן נוגעות במה שכבר על הקיר, ולכן הן חיות יחד ולא בין
-          כלי התצוגה.
-        */}
-        {workMode && (
-          <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-            <Tool
-              active={sheet === 'bulk'}
-              onClick={() => setSheet('bulk')}
-              icon={<CheckIcon className="size-4" />}
-              label="סימון מהיר"
-              title="לסמן שלב על כל הארגזים בקיר"
-            />
-          </div>
-        )}
-
-        {editable && (
-        <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-          <Tool
-            active={false}
-            disabled={!canUndo}
-            onClick={() => history.undo(projectId)}
-            icon={<UndoIcon className="size-4" />}
-            label="בטל"
-          />
-          <Tool
-            active={false}
-            disabled={!canRedo}
-            onClick={() => history.redo(projectId)}
-            icon={<RedoIcon className="size-4" />}
-            label="חזור"
-          />
-          <Tool
-            active={false}
-            disabled={units.length === 0}
-            onClick={centerWall}
-            icon={<CenterIcon className="size-4" />}
-            label="מרכוז"
-            title="ממרכז את הארגזים על הקיר"
-          />
-          <Tool
-            active={sheet === 'finishes'}
-            onClick={() => setSheet('finishes')}
-            icon={<TagIcon className="size-4" />}
-            label="גוון לכולם"
-            title="גוון לכל החזיתות, הגופים או הדפנות"
-          />
-        </div>
-        )}
-        {wallsOpen && (
-        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
-          {walls.length > 1 &&
-            walls.map((w, i) => (
-              <button
-                key={w.id}
-                onClick={() => setWallIndex(i)}
-                className={`flex shrink-0 items-center gap-2 rounded-full ps-2.5 pe-4 py-1.5 text-sm font-medium transition-colors ${
-                  i === wallIndex
-                    ? 'bg-stone-900 text-white'
-                    : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
-                }`}
-              >
-                <WallThumb wall={w} units={allUnits ?? []} active={i === wallIndex} />
-                {wallLabel(w, i)}
-              </button>
-            ))}
-          <button
-            onClick={async () => {
-              await wallsRepo.add(projectId);
-              setWallIndex(walls.length);
-            }}
-            aria-label="קיר נוסף"
-            title="קיר נוסף"
-            className="flex shrink-0 items-center gap-1 rounded-full border border-dashed border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
-          >
-            <PlusIcon className="size-4" />
-            קיר
-          </button>
-        </div>
-        )}
-      </ScreenHeader>
+      <DesignToolbar
+        project={project}
+        walls={walls}
+        wallIndex={wallIndex}
+        onWallIndex={setWallIndex}
+        units={units}
+        allUnits={allUnits ?? []}
+        role={role}
+        editable={editable}
+        workMode={workMode}
+        design={design}
+        sheet={sheet}
+        onSheet={setSheet}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        projectId={projectId}
+        onCenter={centerWall}
+        onClearSelection={() => setSelectedId(null)}
+      />
 
       {/*
         ההדמיה תופסת את מה שנשאר אחרי לוח העריכה, ולכן גרירת הלוח
@@ -558,16 +289,8 @@ export function DesignScreen({
             work={workMode}
             onSelect={(id) => {
               if (workMode) return setWorkUnitId(id);
-              // במצב סרגל הבחירה אוספת שני ארגזים ולא פותחת עורך
-              if (rulerPair) {
-                if (!id) return setRulerPair([]);
-                setRulerPair((p) => {
-                  const cur = p ?? [];
-                  if (cur.includes(id)) return cur.filter((x) => x !== id);
-                  return [...cur, id].slice(-2);
-                });
-                return;
-              }
+              // במצב סרגל הבחירה אוספת שני קצוות ולא פותחת עורך
+              if (rulerPair) return design.pickRulerEnd(id);
               setSelectedId(id);
             }}
             inside={inside}
@@ -658,7 +381,7 @@ export function DesignScreen({
           */}
           <div className="mx-4 mt-1 flex shrink-0 items-center gap-1.5">
             <button
-              onClick={() => setStatsOpen((v) => !v)}
+              onClick={() => design.toggle('statsOpen')}
               aria-expanded={statsOpen}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1 text-[11px] font-medium text-stone-400 transition-colors hover:bg-stone-200/60 hover:text-stone-600"
             >
@@ -759,32 +482,37 @@ export function DesignScreen({
                   )}
                 </div>
 
-                {/*
-                  התראה מצביעה על ארגז, ולכן היא כפתור: לוחצים,
-                  והארגז נבחר, מסומן על הקיר ונפתח לעריכה — במקום
-                  לחפש לפי השם מי מבין הארגזים הוא זה.
-                */}
-                {view.warnings && analysis.warnings.length > 0 && (
-                  <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                    {analysis.warnings.map((w) =>
-                      w.unitIds.length > 0 ? (
-                        <li key={w.text}>
-                          <button
-                            onClick={() => setSelectedId(w.unitIds[0])}
-                            className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"
-                          >
-                            {w.text}
-                          </button>
-                        </li>
-                      ) : (
-                        <li key={w.text} className="text-sm leading-snug text-amber-900">
-                          {w.text}
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                )}
               </>
+            )}
+
+            {/*
+              ההתראות אינן מחוון אלא בעיה, ולכן הן מחוץ למחווני הקיר
+              ומוצגות גם כשהם סגורים: מחוון אפשר לא לראות, שקע
+              שנחסם — לא.
+
+              התראה מצביעה על ארגז, ולכן היא כפתור: לוחצים, והארגז
+              נבחר, מסומן על הקיר ונפתח לעריכה — במקום לחפש לפי השם
+              מי מבין הארגזים הוא זה.
+            */}
+            {analysis && role === 'manager' && view.warnings && analysis.warnings.length > 0 && (
+              <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                {analysis.warnings.map((w) =>
+                  w.unitIds.length > 0 ? (
+                    <li key={w.text}>
+                      <button
+                        onClick={() => setSelectedId(w.unitIds[0])}
+                        className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"
+                      >
+                        {w.text}
+                      </button>
+                    </li>
+                  ) : (
+                    <li key={w.text} className="text-sm leading-snug text-amber-900">
+                      {w.text}
+                    </li>
+                  ),
+                )}
+              </ul>
             )}
 
             {statsOpen && units.length === 0 && (
@@ -833,8 +561,7 @@ export function DesignScreen({
                   onClick={() => {
                     setWorkToggle((v) => !v);
                     setSelectedId(null);
-                    setRulerPair(null);
-                    setMeasure(null);
+                    design.clearTools();
                   }}
                   aria-pressed={workMode}
                   className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 py-3.5 text-base font-semibold transition-colors ${
@@ -994,43 +721,6 @@ export function DesignScreen({
 
 /* ------------------------------------------------------------------ */
 
-function Tool({
-  active,
-  onClick,
-  icon,
-  label,
-  title,
-  disabled,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  /** תיאור הפעולה, כשהתווית לבדה לא מספרת מה תקרה */
-  title?: string;
-  /** פעולה שאין לה על מה לפעול כרגע */
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      aria-pressed={active}
-      /*
-       * התווית הנראית היא חלק מהשם הנגיש. כשהיא לא נמצאת בו, מי
-       * שמפעיל את האפליקציה בקול אומר "שטוח" ושום כפתור לא נענה.
-       */
-      aria-label={title ? `${label} — ${title}` : undefined}
-      title={title}
-      className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-        active ? 'bg-stone-900 text-white' : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
-      } disabled:opacity-40`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
 
 /** תת-כותרת בלי כפילות: שם החדר מוצג רק אם הוא שונה משם הפרויקט. */
 /**
@@ -1131,11 +821,6 @@ function EditGate({
   );
 }
 
-function subtitle(name: string, roomKind: Project['roomKind'], wallCount: number): string {
-  const room = roomDef(roomKind).label;
-  const wallsText = wallCount === 1 ? 'קיר אחד' : `${wallCount} קירות`;
-  return name.trim() === room ? wallsText : `${room} · ${wallsText}`;
-}
 
 function Stat({
   label,

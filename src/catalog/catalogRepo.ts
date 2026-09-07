@@ -1,5 +1,5 @@
 import { db } from '../db/db';
-import type { CatalogItem, CatalogGroup, RoomKind } from '../db/types';
+import type { CatalogItem, RoomKind } from '../db/types';
 import { SEED_CATALOG, type SeedItem } from './builtins';
 
 /**
@@ -73,47 +73,19 @@ export const catalogRepo = {
     return db.catalog.get(id);
   },
 
-  async saveCustom(input: {
-    id?: string;
-    rooms: RoomKind[];
-    group: CatalogGroup;
-    name: string;
-    glyph: string;
-    doors?: number;
-    drawers?: number;
-    drawerCols?: number;
-    shelves?: number;
-    zones?: CatalogItem['zones'];
-    opening?: CatalogItem['opening'];
-    corner?: CatalogItem['corner'];
-    blindMm?: number;
-    panelThicknessMm?: number;
-    drawerStyle?: CatalogItem['drawerStyle'];
-    exposed?: CatalogItem['exposed'];
-    backKind?: CatalogItem['backKind'];
-    handles?: boolean;
-    glassDoors?: boolean;
-    led?: CatalogItem['led'];
-    shelfGapsMm?: number[];
-    carcassFinishId?: string;
-    carcassMaterialId?: string;
-    frontFinishId?: string;
-    frontMaterialId?: string;
-    exposedFinishId?: string;
-    exposedMaterialId?: string;
-    backFinishId?: string;
-    backMaterialId?: string;
-    common?: boolean;
-    level: CatalogItem['level'];
-    defaultWidthMm: number;
-    widthOptionsMm: number[];
-    defaultHeightMm: number;
-    defaultDepthMm: number;
-    defaultYMm: number;
-    socleMm?: number;
-    counterMm?: number;
-    note?: string;
-  }): Promise<string> {
+  /**
+   * שומר ארגז שהמשתמש בנה, או מעדכן אחד קיים.
+   *
+   * הקלט נגזר מ-`CatalogItem` ולא מתואר מחדש: שלושים שדות שהועתקו
+   * ביד נשארו מאחור בכל פעם שנוסף מאפיין לארגז, והתוצאה הייתה
+   * מאפיין שנשמר בספרייה אבל לא היה ניתן לשמירה מהטופס.
+   */
+  async saveCustom(
+    input: Omit<
+      CatalogItem,
+      'id' | 'createdAt' | 'updatedAt' | 'isBuiltin' | 'sortOrder'
+    > & { id?: string },
+  ): Promise<string> {
     const now = Date.now();
     if (input.id) {
       const { id, ...rest } = input;
