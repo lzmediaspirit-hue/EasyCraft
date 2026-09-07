@@ -454,3 +454,47 @@ db.version(15)
         else if (n.includes('סנדוויץ')) m.kind = 'sandwich';
       }),
   );
+
+/**
+ * החומר יודע לאילו חלקים הוא משמש.
+ *
+ * `kind` היה סיווג פנימי — סנדוויץ׳, MDF, דיקט — והקוד גזר ממנו
+ * לאיזה חלק כל חומר הולך. זו החלטה של הנגרייה ולא של הקוד, ולכן
+ * היא עוברת לנתונים עצמם: לכל חומר רשימת החלקים שהוא משמש להם,
+ * והיא נקבעת בהגדרות. הסיווג הישן מתורגם פעם אחת ונמחק.
+ */
+db.version(16)
+  .stores({
+    ...TABLES_V3,
+    boards: null,
+    materials: 'id, sortOrder',
+    finishes: 'id, sortOrder',
+    projectPrices: 'id, projectId, lineKey',
+    stock: 'id, finishId, materialId',
+    team: 'id, role, active, username',
+    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
+    attachments: 'id, projectId, kind',
+    consumption: 'id, projectId, lineKey',
+  })
+  .upgrade((tx) =>
+    tx
+      .table('materials')
+      .toCollection()
+      .modify((m: { name?: string; kind?: string; roles?: string[] }) => {
+        if (!m.roles) {
+          const kind =
+            m.kind ??
+            (/mdf/i.test(m.name ?? '')
+              ? 'mdf'
+              : /דיקט/.test(m.name ?? '')
+                ? 'ply'
+                : /סנדוויץ/.test(m.name ?? '')
+                  ? 'sandwich'
+                  : undefined);
+          if (kind === 'sandwich') m.roles = ['carcass'];
+          else if (kind === 'mdf') m.roles = ['front', 'exposed'];
+          else if (kind === 'ply') m.roles = ['back'];
+        }
+        delete m.kind;
+      }),
+  );

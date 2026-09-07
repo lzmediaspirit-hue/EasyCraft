@@ -515,38 +515,29 @@ export interface Material extends Entity {
    */
   thicknessMm?: number;
   /**
-   * מה החומר הזה, מעבר לשם שניתן לו.
+   * לאילו חלקים בארגז החומר הזה משמש.
    *
-   * לכל חלק בארגז יש חומר שהוא נבנה ממנו כברירת מחדל: הגוף
-   * מסנדוויץ׳, החזיתות והדפנות הזרות מ-MDF, והגב מדיקט. השם לבדו
-   * לא מספיק כדי לדעת את זה — נגר יכול לקרוא לחומר "לבן 18" —
-   * ולכן הסוג נשמר בנפרד. חומר שהמשתמש הוסיף בעצמו נשאר בלי סוג,
-   * והוא פשוט לא ייבחר אוטומטית.
+   * הגוף נבנה מסנדוויץ׳, החזיתות והדפנות הזרות מ-MDF, הגב מדיקט —
+   * וזו החלטה של הנגרייה, לא של הקוד. היא נקבעת פעם אחת בהגדרות
+   * החומר, ומשם היא קובעת שני דברים: איזה חומר נבחר לחלק, ואילו
+   * גוונים בכלל מוצעים לו. חומר בלי שיוך אינו מוצע לאף חלק
+   * אוטומטית, אבל אפשר לבחור בו ביד.
    */
-  kind?: MaterialKind;
+  roles?: PartRole[];
   sortOrder: number;
 }
 
-/** סוגי החומר שמערכת ברירות המחדל מכירה. */
-export type MaterialKind = 'sandwich' | 'mdf' | 'ply';
-
-/**
- * החומר שכל חלק נבנה ממנו כברירת מחדל.
- * הגב מקבל דיקט, ואם אין — סנדוויץ׳, כי זו החלופה שנגר באמת בוחר.
- */
-export const DEFAULT_MATERIAL_KIND: Record<PartRole, MaterialKind[]> = {
-  carcass: ['sandwich'],
-  front: ['mdf'],
-  exposed: ['mdf'],
-  back: ['ply', 'sandwich'],
-};
+/** החומרים שמשמשים לחלק מסוים, לפי הסדר שנקבע להם. */
+export function materialsForRole(role: PartRole, materials: Material[]): Material[] {
+  return materials.filter((m) => m.roles?.includes(role));
+}
 
 /**
  * החומר שמתאים לחלק, מתוך מה שזמין.
  *
- * `allowed` מצמצם לרשימה שהגוון באמת קיים עליה. כשהחומר המועדף
- * אינו שם נופלים לחלופה שנגר באמת בוחר, ורק אחריה למה שיש — כי
- * חלק בלי חומר אינו מתומחר בכלל.
+ * `allowed` מצמצם לרשימה שהגוון באמת קיים עליה. כשאין חומר משויך
+ * שעונה על התנאי נופלים למה שיש — חלק בלי חומר אינו מתומחר בכלל,
+ * וזה גרוע יותר מחומר שאינו האידיאלי.
  */
 export function materialForRole(
   role: PartRole,
@@ -554,11 +545,25 @@ export function materialForRole(
   allowed?: (m: Material) => boolean,
 ): Material | undefined {
   const pool = allowed ? materials.filter(allowed) : materials;
-  for (const kind of DEFAULT_MATERIAL_KIND[role]) {
-    const hit = pool.find((m) => m.kind === kind);
-    if (hit) return hit;
-  }
-  return pool[0];
+  return materialsForRole(role, pool)[0] ?? pool[0];
+}
+
+/**
+ * הגוונים שאפשר להציע לחלק.
+ *
+ * גוון קיים על חומר רק אם נקבע לו מחיר עליו, ולכן "גוונים של
+ * סנדוויץ׳" הם בדיוק אלה שמתומחרים על חומר שמשויך לגוף. כשאין
+ * חומר משויך לחלק מוצגים כל הגוונים — רשימה ריקה היא מבוי סתום.
+ */
+export function finishesForRole(
+  role: PartRole,
+  finishes: Finish[],
+  materials: Material[],
+): Finish[] {
+  const pool = materialsForRole(role, materials);
+  if (!pool.length) return finishes;
+  const fit = finishes.filter((f) => pool.some((m) => f.prices?.[m.id] !== undefined));
+  return fit.length ? fit : finishes;
 }
 
 /** גבהים נפוצים של פלטה, במ"מ. הרוחב תמיד 1220. */

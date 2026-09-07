@@ -388,3 +388,14 @@ export const EyeIcon = ({ className = 'size-5' }: P) => (
     <circle cx="12" cy="12" r="3" />
   </svg>
 );
+
+/** גוונים — לוח צבעים, כי זו הבחירה שהלקוח עושה בעיניים. */
+export const PaletteIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M12 3a9 9 0 0 0 0 18c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.5-1.1-.3-.3-.4-.6-.4-1 0-.8.7-1.4 1.5-1.4H16a5 5 0 0 0 5-5c0-4.4-4-8-9-8Z" />
+    <circle cx="7.5" cy="11.5" r="1.1" />
+    <circle cx="11" cy="7.5" r="1.1" />
+    <circle cx="15.5" cy="9" r="1.1" />
+  </svg>
+);

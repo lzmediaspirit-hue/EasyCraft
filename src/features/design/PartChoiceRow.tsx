@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PencilIcon, PlusIcon } from '../../ui/icons';
-import { materialForRole } from '../../db/types';
+import { finishesForRole, materialForRole } from '../../db/types';
 import type { Finish, Material, PartChoice, PartRole } from '../../db/types';
 
 /**
@@ -41,6 +41,11 @@ export function PartChoiceRow({
   const [open, setOpen] = useState(false);
 
   const finish = finishes.find((f) => f.id === effective.finishId);
+  /*
+   * לגוף מוצעים רק גוונים שקיימים על החומר שמשויך לגוף, ולחזיתות רק
+   * אלה של חומר החזיתות. השיוך נקבע בהגדרות החומר.
+   */
+  const offered = finishesForRole(role, finishes, materials);
   const material = materials.find((m) => m.id === effective.materialId);
   // חומר זמין לגוון רק אם נקבע לו מחיר עליו
   const available = finish ? materials.filter((m) => finish.prices?.[m.id] !== undefined) : materials;
@@ -88,7 +93,7 @@ export function PartChoiceRow({
           </span>
 
           <div className="flex flex-wrap gap-1.5">
-            {finishes.map((f) => (
+            {offered.map((f) => (
               <button
                 key={f.id}
                 onClick={() => {

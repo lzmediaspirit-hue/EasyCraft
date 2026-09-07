@@ -58,9 +58,30 @@ export const DEFAULT_SETTINGS: Settings = {
  * הרשימה קצרה ובקושי משתנה — מה שגדל הוא רשימת הגוונים.
  */
 const SEED_MATERIALS: Omit<Material, 'id' | 'createdAt' | 'updatedAt'>[] = [
-  { name: 'סנדוויץ׳', kind: 'sandwich', sheetWidthMm: 1220, sheetHeightMm: 2440, thicknessMm: 18, sortOrder: 0 },
-  { name: 'MDF', kind: 'mdf', sheetWidthMm: 1220, sheetHeightMm: 2440, thicknessMm: 18, sortOrder: 1 },
-  { name: 'דיקט 5 מ״מ', kind: 'ply', sheetWidthMm: 1220, sheetHeightMm: 2440, thicknessMm: 5, sortOrder: 2 },
+  {
+    name: 'סנדוויץ׳',
+    roles: ['carcass'],
+    sheetWidthMm: 1220,
+    sheetHeightMm: 2440,
+    thicknessMm: 18,
+    sortOrder: 0,
+  },
+  {
+    name: 'MDF',
+    roles: ['front', 'exposed'],
+    sheetWidthMm: 1220,
+    sheetHeightMm: 2440,
+    thicknessMm: 18,
+    sortOrder: 1,
+  },
+  {
+    name: 'דיקט 5 מ״מ',
+    roles: ['back'],
+    sheetWidthMm: 1220,
+    sheetHeightMm: 2440,
+    thicknessMm: 5,
+    sortOrder: 2,
+  },
 ];
 
 /**

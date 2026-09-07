@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
-import { PART_ROLES, materialForRole } from '../../db/types';
+import { PART_ROLES, finishesForRole, materialForRole } from '../../db/types';
 import type { PartChoice, PartRole } from '../../db/types';
 
 /**
@@ -41,12 +41,18 @@ export function ProjectFinishesStep({
         const available = finish
           ? materials.filter((m) => finish.prices?.[m.id] !== undefined)
           : [];
+        /*
+          לגוף מוצעים רק גוונים שקיימים על החומר שמשויך לגוף, לחזיתות
+          רק אלה של חומר החזיתות. השיוך נקבע בהגדרות החומר, ולכן זו
+          החלטה של הנגרייה ולא כלל שנקבע בקוד.
+        */
+        const offered = finishesForRole(role.key, finishes, materials);
         return (
           <section key={role.key}>
             <h3 className="mb-1.5 text-sm font-semibold text-stone-700">{role.label}</h3>
 
             <div className="flex flex-wrap gap-1.5">
-              {finishes.map((f) => (
+              {offered.map((f) => (
                 <button
                   key={f.id}
                   onClick={() => {

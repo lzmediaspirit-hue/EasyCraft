@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
 import { projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
-import { TagIcon } from '../../ui/icons';
+import { PaletteIcon, TagIcon } from '../../ui/icons';
 import { selectOnFocus } from '../../ui/Field';
 import { cm, shekels } from '../../ui/units';
 
@@ -14,11 +14,14 @@ import { cm, shekels } from '../../ui/units';
 export function MaterialsSheet({
   projectId,
   onStart,
+  onPickFinishes,
   onClose,
 }: {
   projectId: string;
   /** מעבר למכירה ולפתיחת תהליך העבודה */
   onStart?: () => void;
+  /** בחירת הגוונים לפרויקט — ההחלטה האחרונה בהצעה */
+  onPickFinishes?: () => void;
   onClose: () => void;
 }) {
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
@@ -239,6 +242,22 @@ export function MaterialsSheet({
             הסכום מכסה חומר גלם ואביזרים. עבודה ורווח נקבעים במסך המכירה,
             שם גם נסגר המחיר ללקוח.
           </p>
+
+          {/*
+            הגוונים נבחרים כאן, בסוף ההצעה, ולא בפתיחת הפרויקט.
+            בפגישה מסדרים קודם את הארגזים ורואים מה זה עולה; הצבע
+            הוא ההחלטה האחרונה, ולפעמים היא מתקבלת רק אחרי שהמספר
+            על השולחן.
+          */}
+          {onPickFinishes && (
+            <button
+              onClick={onPickFinishes}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
+            >
+              <PaletteIcon />
+              הגוונים לפרויקט
+            </button>
+          )}
 
           {/*
             מכאן ממשיכים: אחרי שרואים מה זה עולה, פותחים את המכירה

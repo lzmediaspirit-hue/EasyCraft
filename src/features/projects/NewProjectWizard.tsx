@@ -7,7 +7,6 @@ import { ROOMS, roomDef } from '../../catalog/rooms';
 import { WALL_LAYOUTS, wallName } from './wallLayouts';
 import { WallFeaturesDesigner } from './WallFeaturesDesigner';
 import { RoomShapeEditor, shapeWalls, type ShapePoint } from './RoomShapeEditor';
-import { ProjectFinishesStep } from './ProjectFinishesStep';
 import { projectsRepo, type NewWallInput } from './projectsRepo';
 import { settingsRepo } from '../../materials/materialsRepo';
 import { DEFAULT_WALL_HEIGHT, DEFAULT_WALL_LENGTH } from '../../catalog/standards';
@@ -18,7 +17,7 @@ import {
   KitchenIcon,
   LivingIcon,
 } from '../../ui/icons';
-import type { PartChoice, PartRole, RoomKind, WallFeature } from '../../db/types';
+import type { RoomKind, WallFeature } from '../../db/types';
 
 type Step =
   | 'room'
@@ -28,7 +27,6 @@ type Step =
   | 'order'
   | 'condition'
   | 'dims'
-  | 'finishes'
   | 'features';
 
 /** מנרמל זווית לטווח (-180, 180]. */
@@ -82,7 +80,6 @@ export function NewProjectWizard({
   const [startIndex, setStartIndex] = useState(0);
   const [reversed, setReversed] = useState(false);
   const [turns, setTurns] = useState<number[]>([]);
-  const [defaults, setDefaults] = useState<Partial<Record<PartRole, PartChoice>>>({});
   const [saving, setSaving] = useState(false);
   /*
    * מידות הקיר שהעסק עובד בהן. נטענות פעם אחת ורק לשדות שעוד לא
@@ -157,10 +154,8 @@ export function NewProjectWizard({
         return () => setStep(turns.length ? 'order' : 'layout');
       case 'dims':
         return () => setStep('condition');
-      case 'finishes':
-        return () => setStep('dims');
       case 'features':
-        return () => setStep('finishes');
+        return () => setStep('dims');
     }
   }
 
@@ -189,7 +184,6 @@ export function NewProjectWizard({
       name: name.trim() || roomDef(roomKind).label,
       roomKind,
       walls,
-      defaults,
     });
     onCreated(project.id);
   }
@@ -226,7 +220,6 @@ export function NewProjectWizard({
     order: 'סדר הקירות',
     condition: 'מה יש על הקיר?',
     dims: 'מידות הקירות',
-    finishes: 'גוונים לפרויקט',
     features: 'סימון על הקיר',
   };
 
@@ -254,12 +247,8 @@ export function NewProjectWizard({
     ) : step === 'order' ? (
       <PrimaryButton onClick={acceptShape}>המשך</PrimaryButton>
     ) : step === 'dims' ? (
-      <PrimaryButton disabled={!dimsValid} onClick={() => setStep('finishes')}>
-        המשך לגוונים
-      </PrimaryButton>
-    ) : step === 'finishes' ? (
       <PrimaryButton
-        disabled={saving}
+        disabled={!dimsValid || saving}
         onClick={() => (marksFeatures ? setStep('features') : save())}
       >
         {marksFeatures ? 'המשך לסימונים' : 'יצירת הפרויקט'}
@@ -337,10 +326,6 @@ export function NewProjectWizard({
           onReverse={() => setReversed((v) => !v)}
           onStart={(i) => setStartIndex((prev) => (prev + i) % Math.max(ordered.length, 1))}
         />
-      )}
-
-      {step === 'finishes' && (
-        <ProjectFinishesStep value={defaults} onChange={setDefaults} />
       )}
 
       {step === 'condition' && (

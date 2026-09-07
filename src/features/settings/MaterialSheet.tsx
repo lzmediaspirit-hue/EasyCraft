@@ -3,9 +3,9 @@ import { materialsRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { TrashIcon } from '../../ui/icons';
-import { SHEET_HEIGHTS_MM, SHEET_WIDTH_MM } from '../../db/types';
+import { PART_ROLES, SHEET_HEIGHTS_MM, SHEET_WIDTH_MM } from '../../db/types';
 import { cm, unitLabel } from '../../ui/units';
-import type { Material } from '../../db/types';
+import type { Material, PartRole } from '../../db/types';
 
 /**
  * חומר גלם.
@@ -28,6 +28,11 @@ export function MaterialSheet({
     material?.thicknessMm !== undefined ? String(material.thicknessMm) : '',
   );
   const [sheetHeight, setSheetHeight] = useState(material?.sheetHeightMm ?? SHEET_HEIGHTS_MM[0]);
+  /*
+   * לאילו חלקים החומר משמש. זו ההחלטה שקובעת אילו גוונים מוצעים
+   * לגוף ואילו לחזיתות — ולכן היא נקבעת כאן, פעם אחת, ולא בכל ארגז.
+   */
+  const [roles, setRoles] = useState<PartRole[]>(material?.roles ?? []);
 
   const canSave = name.trim().length > 0;
 
@@ -38,6 +43,7 @@ export function MaterialSheet({
       thicknessMm: thickness.trim() ? Number(thickness) : undefined,
       sheetWidthMm: SHEET_WIDTH_MM,
       sheetHeightMm: sheetHeight,
+      roles: roles.length ? roles : undefined,
     });
     onSaved?.(id);
     onClose();
@@ -91,6 +97,33 @@ export function MaterialSheet({
             placeholder="—"
             className={`${inputClass} num text-end placeholder:text-stone-300`}
           />
+        </Field>
+
+        {/*
+          החומר שכל חלק נבנה ממנו הוא החלטה של הנגרייה: הגוף
+          מסנדוויץ׳, החזיתות מ-MDF, הגב מדיקט. מה שנבחר כאן קובע גם
+          איזה חומר נבחר אוטומטית לחלק, וגם אילו גוונים בכלל מוצעים
+          לו — כי גוון קיים על חומר רק אם נקבע לו מחיר עליו.
+        */}
+        <Field group label="משמש ל" hint="אפשר כמה">
+          <div className="flex flex-wrap gap-1.5">
+            {PART_ROLES.map((r) => (
+              <Chip
+                key={r.key}
+                active={roles.includes(r.key)}
+                onClick={() =>
+                  setRoles((prev) =>
+                    prev.includes(r.key) ? prev.filter((x) => x !== r.key) : [...prev, r.key],
+                  )
+                }
+              >
+                {r.label}
+              </Chip>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-stone-400">
+            חומר בלי שיוך לא ייבחר אוטומטית, אבל אפשר לבחור בו ביד.
+          </p>
         </Field>
 
         {/*

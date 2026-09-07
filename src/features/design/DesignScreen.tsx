@@ -933,6 +933,7 @@ export function DesignScreen({
       {materialsOpen && (
         <MaterialsSheet
           projectId={projectId}
+          onPickFinishes={() => setFinishesOpen(true)}
           onStart={() => {
             setMaterialsOpen(false);
             setSaleOpen(true);
