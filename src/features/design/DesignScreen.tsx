@@ -54,9 +54,28 @@ import {
   UndoIcon,
 } from '../../ui/icons';
 import { cm, meters, unitLabel } from '../../ui/units';
+import { readPref, writePref } from '../../ui/prefs';
 import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
 
 const PANEL_KEY = 'easycraft.panelRatio';
+
+/**
+ * המגירות שאפשר לפתוח מהמסך הזה.
+ * אחת בכל רגע: כולן מכסות את המסך, ושתיים פתוחות יחד הן מצב שלא
+ * קיים בממשק — רק בקוד שהחזיק דגל לכל אחת.
+ */
+type SheetName =
+  | 'library'
+  | 'edit'
+  | 'materials'
+  | 'nesting'
+  | 'sale'
+  | 'depth'
+  | 'plan'
+  | 'present'
+  | 'wallTools'
+  | 'bulk'
+  | 'finishes';
 
 /** גובה הלוח נשאר בתחום שמשאיר את הקיר גלוי ואת הלוח שימושי. */
 const clampRatio = (r: number) => Math.min(Math.max(r, 0.2), 0.85);
@@ -78,18 +97,15 @@ export function DesignScreen({
 }) {
   const [wallIndex, setWallIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [materialsOpen, setMaterialsOpen] = useState(false);
-  const [nestingOpen, setNestingOpen] = useState(false);
-  const [saleOpen, setSaleOpen] = useState(false);
+  /*
+   * מגירה אחת פתוחה בכל רגע. אחד־עשר דגלים נפרדים תיארו מצב אחד —
+   * "מה פתוח" — ואפשרו לשניים להיפתח יחד; זה גם הפך "לסגור הכול"
+   * לאחת־עשרה קריאות במקום אחת.
+   */
+  const [sheet, setSheet] = useState<SheetName | null>(null);
+  const closeSheet = () => setSheet(null);
   /* חזית שטוחה לעבודה מדויקת, ומבט תלת-ממדי להבנת המבנה ולהצגה ללקוח */
   const [iso, setIso] = useState(false);
-  const [depthOpen, setDepthOpen] = useState(false);
-  const [planOpen, setPlanOpen] = useState(false);
-  /* הדמיה נקייה להצגה ללקוח, בלי קווי השרטוט */
-  const [presentOpen, setPresentOpen] = useState(false);
-  const [wallToolsOpen, setWallToolsOpen] = useState(false);
   /* מצב סרגל: מודדים את המרחק בין שני ארגזים שנבחרו */
   const [rulerPair, setRulerPair] = useState<string[] | null>(null);
   /*
@@ -105,8 +121,6 @@ export function DesignScreen({
    */
   const [workToggle, setWorkToggle] = useState(!!startInWork);
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
-  const [bulkOpen, setBulkOpen] = useState(false);
-  const [finishesOpen, setFinishesOpen] = useState(false);
   /* מחווני הקיר מתקפלים, וההדמיה תופסת את מה שהתפנה */
   /*
    * הנתונים מתחילים סגורים. מי שפותח הדמיה בא לראות את הקיר, לא
@@ -123,7 +137,7 @@ export function DesignScreen({
    * לכן הגובה נגרר, ונשמר כדי שהעבודה הבאה תתחיל באותה חלוקה.
    */
   const [panelRatio, setPanelRatio] = useState(() => {
-    const saved = Number(localStorage.getItem(PANEL_KEY));
+    const saved = Number(readPref(PANEL_KEY));
     return Number.isFinite(saved) && saved > 0 ? clampRatio(saved) : 0.45;
   });
   const dragPanel = useRef<{ startY: number; startRatio: number } | null>(null);
@@ -149,6 +163,7 @@ export function DesignScreen({
     [allUnits, wall],
   );
   const selected = units.find((u) => u.id === selectedId) ?? null;
+  const workUnit = (allUnits ?? []).find((u) => u.id === workUnitId) ?? null;
   const me = useCurrentMember();
   const role = useEffectiveRole(me?.role);
   const mayEdit = can.design(role, project);
@@ -210,7 +225,7 @@ export function DesignScreen({
     const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, from);
     await history.capture(projectId, `add:${Date.now()}`);
     const unit = await unitsRepo.add(projectId, wall.id, item, freeX(Math.min(x, maxX), maxX, item));
-    setLibraryOpen(false);
+    closeSheet();
     setSelectedId(unit.id);
   }
 
@@ -277,7 +292,7 @@ export function DesignScreen({
             */}
             {role === 'manager' && (
               <button
-                onClick={() => setPresentOpen(true)}
+                onClick={() => setSheet('present')}
                 disabled={units.length === 0}
                 aria-label="הדמיה ללקוח"
                 title="הדמיה להצגה ללקוח"
@@ -317,15 +332,15 @@ export function DesignScreen({
             title={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
           />
           <Tool
-            active={nestingOpen}
-            onClick={() => setNestingOpen(true)}
+            active={sheet === 'nesting'}
+            onClick={() => setSheet('nesting')}
             icon={<NestIcon className="size-4" />}
             label="ניסור"
           />
           {editable && (
             <Tool
-              active={depthOpen}
-              onClick={() => setDepthOpen(true)}
+              active={sheet === 'depth'}
+              onClick={() => setSheet('depth')}
               icon={<DepthIcon className="size-4" />}
               label="עומק אחיד"
             />
@@ -337,8 +352,8 @@ export function DesignScreen({
           */}
           {!!project.soldAt && role === 'manager' && (
             <Tool
-              active={materialsOpen}
-              onClick={() => setMaterialsOpen(true)}
+              active={sheet === 'materials'}
+              onClick={() => setSheet('materials')}
               icon={<CalcIcon className="size-4" />}
               label="חישוב"
               title="חומרים ומחיר"
@@ -356,8 +371,8 @@ export function DesignScreen({
           />
           {/* מבט על זמין תמיד: משם גם מוסיפים קיר לחדר */}
           <Tool
-            active={planOpen}
-            onClick={() => setPlanOpen((v) => !v)}
+            active={sheet === 'plan'}
+            onClick={() => setSheet((cur) => (cur === 'plan' ? null : 'plan'))}
             icon={<PlanIcon className="size-4" />}
             label="מבט על"
           />
@@ -431,8 +446,8 @@ export function DesignScreen({
         {workMode && (
           <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
             <Tool
-              active={bulkOpen}
-              onClick={() => setBulkOpen(true)}
+              active={sheet === 'bulk'}
+              onClick={() => setSheet('bulk')}
               icon={<CheckIcon className="size-4" />}
               label="סימון מהיר"
               title="לסמן שלב על כל הארגזים בקיר"
@@ -465,8 +480,8 @@ export function DesignScreen({
             title="ממרכז את הארגזים על הקיר"
           />
           <Tool
-            active={finishesOpen}
-            onClick={() => setFinishesOpen(true)}
+            active={sheet === 'finishes'}
+            onClick={() => setSheet('finishes')}
             icon={<TagIcon className="size-4" />}
             label="גוון לכולם"
             title="גוון לכל החזיתות, הגופים או הדפנות"
@@ -586,14 +601,14 @@ export function DesignScreen({
           onPointerUp={(e) => {
             e.currentTarget.releasePointerCapture(e.pointerId);
             dragPanel.current = null;
-            localStorage.setItem(PANEL_KEY, String(panelRatio));
+            writePref(PANEL_KEY, String(panelRatio));
           }}
           onKeyDown={(e) => {
             if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
             e.preventDefault();
             const next = clampRatio(panelRatio + (e.key === 'ArrowUp' ? 0.05 : -0.05));
             setPanelRatio(next);
-            localStorage.setItem(PANEL_KEY, String(next));
+            writePref(PANEL_KEY, String(next));
           }}
           className="flex shrink-0 cursor-ns-resize touch-none justify-center py-2"
         >
@@ -625,7 +640,7 @@ export function DesignScreen({
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
           onDuplicate={duplicateSelected}
-          onEdit={() => setEditOpen(true)}
+          onEdit={() => setSheet('edit')}
           onRemove={async () => {
             await unitsRepo.remove(selected.id);
             setSelectedId(null);
@@ -659,8 +674,8 @@ export function DesignScreen({
             */}
             {role === 'manager' && (
               <button
-                onClick={() => setWallToolsOpen(true)}
-                aria-pressed={wallToolsOpen}
+                onClick={() => setSheet('wallTools')}
+                aria-pressed={sheet === 'wallTools'}
                 title="מידות הקיר ומה מוצג"
                 className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-stone-500 transition-colors hover:bg-stone-200/60 hover:text-stone-700"
               >
@@ -782,7 +797,7 @@ export function DesignScreen({
           <div className="shrink-0 px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             {editable ? (
               <button
-                onClick={() => setLibraryOpen(true)}
+                onClick={() => setSheet('library')}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"
               >
                 <PlusIcon />
@@ -833,7 +848,7 @@ export function DesignScreen({
                 </button>
               ) : (
                 <button
-                  onClick={() => setMaterialsOpen(true)}
+                  onClick={() => setSheet('materials')}
                   className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
                 >
                   <CalcIcon />
@@ -844,12 +859,17 @@ export function DesignScreen({
         </>
       )}
 
-      {workUnitId && (
+      {/*
+        הארגז נמצא לפני הפתיחה ולא נכפה בסימן קריאה: ארגז יכול
+        להימחק בזמן שהמגירה שלו פתוחה — בביטול פעולה, למשל — ואז
+        המגירה קיבלה undefined וקרסה.
+      */}
+      {workUnit && (
         <UnitWorkSheet
-          unit={(allUnits ?? []).find((u) => u.id === workUnitId)!}
+          unit={workUnit}
           role={role}
           onChange={async (work) => {
-            await patchUnit(workUnitId, { work }, `work:${workUnitId}`);
+            await patchUnit(workUnit.id, { work }, `work:${workUnit.id}`);
             /* סימון חיתוך הוא מה שמוריד פלטות מהמלאי — בלי הזנה נוספת */
             await syncConsumption(projectId);
           }}
@@ -857,15 +877,15 @@ export function DesignScreen({
         />
       )}
 
-      {finishesOpen && (
+      {sheet === 'finishes' && (
         <ProjectFinishesSheet
           project={project}
           onApply={(part, choice) => unitsRepo.setChoiceForProject(projectId, part, choice)}
-          onClose={() => setFinishesOpen(false)}
+          onClose={closeSheet}
         />
       )}
 
-      {bulkOpen && (
+      {sheet === 'bulk' && (
         <BulkWorkSheet
           units={units}
           role={role}
@@ -874,20 +894,20 @@ export function DesignScreen({
             for (const c of changes) await unitsRepo.update(c.id, { work: c.work });
             await syncConsumption(projectId);
           }}
-          onClose={() => setBulkOpen(false)}
+          onClose={closeSheet}
         />
       )}
 
-      {wallToolsOpen && (
+      {sheet === 'wallTools' && (
         <WallToolsSheet
           wall={wall}
           index={wallIndex}
           onChange={(patch) => wallsRepo.update(wall.id, patch)}
-          onClose={() => setWallToolsOpen(false)}
+          onClose={closeSheet}
         />
       )}
 
-      {presentOpen && (
+      {sheet === 'present' && (
         <PresentSheet
           project={project}
           customer={customer}
@@ -896,12 +916,12 @@ export function DesignScreen({
           finishes={allFinishes ?? []}
           materials={allMaterials ?? []}
           finishHex={finishHex ?? {}}
-          onClose={() => setPresentOpen(false)}
+          onClose={closeSheet}
         />
       )}
 
-      {planOpen && (
-        <Sheet title="מבט על החדר" onClose={() => setPlanOpen(false)} tall>
+      {sheet === 'plan' && (
+        <Sheet title="מבט על החדר" onClose={closeSheet} tall>
           <PlanView
             walls={walls}
             units={allUnits ?? []}
@@ -923,52 +943,49 @@ export function DesignScreen({
         </Sheet>
       )}
 
-      {depthOpen && (
+      {sheet === 'depth' && (
         <DepthSheet
           currentMm={selected?.depthMm ?? units[0]?.depthMm ?? 580}
-          onClose={() => setDepthOpen(false)}
+          onClose={closeSheet}
           onApply={async (mm, onlyFloor) => {
             await unitsRepo.setDepthForProject(projectId, mm, onlyFloor);
-            setDepthOpen(false);
+            closeSheet();
           }}
         />
       )}
 
-      {editOpen && selected && (
-        <UnitEditSheet unit={selected} onClose={() => setEditOpen(false)} />
+      {sheet === 'edit' && selected && (
+        <UnitEditSheet unit={selected} onClose={closeSheet} />
       )}
 
-      {saleOpen && (
+      {sheet === 'sale' && (
         <SaleSheet
           project={project}
           units={allUnits ?? []}
           costing={costing}
           isManager={me?.role === 'manager'}
-          onClose={() => setSaleOpen(false)}
+          onClose={closeSheet}
         />
       )}
 
-      {nestingOpen && (
-        <NestingSheet projectId={projectId} onClose={() => setNestingOpen(false)} />
+      {sheet === 'nesting' && (
+        <NestingSheet projectId={projectId} onClose={closeSheet} />
       )}
 
-      {materialsOpen && (
+      {sheet === 'materials' && (
         <MaterialsSheet
           projectId={projectId}
-          onPickFinishes={() => setFinishesOpen(true)}
-          onStart={() => {
-            setMaterialsOpen(false);
-            setSaleOpen(true);
-          }}
-          onClose={() => setMaterialsOpen(false)}
+          onPickFinishes={() => setSheet('finishes')}
+          onStart={() => setSheet('sale')}
+          onClose={closeSheet}
         />
       )}
 
-      {libraryOpen && (
+      {sheet === 'library' && (
         <LibrarySheet
           roomKind={project.roomKind}
           onAdd={addItem}
-          onClose={() => setLibraryOpen(false)}
+          onClose={closeSheet}
         />
       )}
     </div>

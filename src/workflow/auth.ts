@@ -1,3 +1,4 @@
+import { clearPref, readPref, writePref } from '../ui/prefs';
 import { db } from '../db/db';
 import type { TeamMember, UserRole } from '../db/types';
 
@@ -92,26 +93,14 @@ const listeners = new Set<() => void>();
  */
 export const session = {
   memberId(): string | null {
-    try {
-      return localStorage.getItem(SESSION_KEY);
-    } catch {
-      return null;
-    }
+    return readPref(SESSION_KEY);
   },
   signIn(memberId: string) {
-    try {
-      localStorage.setItem(SESSION_KEY, memberId);
-    } catch {
-      // אחסון חסום — החיבור יחזיק עד רענון
-    }
+    writePref(SESSION_KEY, memberId);
     listeners.forEach((l) => l());
   },
   signOut() {
-    try {
-      localStorage.removeItem(SESSION_KEY);
-    } catch {
-      // כלום לנקות
-    }
+    clearPref(SESSION_KEY);
     listeners.forEach((l) => l());
   },
   subscribe(l: () => void): () => void {

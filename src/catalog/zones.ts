@@ -51,10 +51,6 @@ export function isContainer(glyph: string): boolean {
   return CONTAINERS.has(glyph);
 }
 
-export function newZone(kind: ZoneKind, heightMm: number): Zone {
-  return { id: crypto.randomUUID(), heightMm, ...contentDefaults(kind, heightMm) };
-}
-
 /** ערכי פתיחה סבירים לתוכן, לפי הסוג והגובה שיש לו. */
 export function contentDefaults(kind: ZoneKind, heightMm: number): ZoneContent {
   if (kind === 'shelves') return { kind, shelves: Math.max(autoShelves(heightMm), 1) };
@@ -175,11 +171,6 @@ function splitByDoors(zones: Zone[], n: number): Zone[] {
 export function unitZones(u: FlatSource): Zone[] {
   const base = u.zones?.length ? normalizeHeights(u.zones, u.heightMm) : derive(u);
   return splitByDoors(base, doorCells(u));
-}
-
-/** האם הארון מחולק ידנית ליותר מאזור אחד. */
-export function isZoned(u: FlatSource): boolean {
-  return (u.zones?.length ?? 0) > 1;
 }
 
 /**
@@ -329,15 +320,6 @@ export function countShelves(u: FlatSource): number {
 }
 
 /** סך מוטות התלייה בארון. */
-export function countRods(u: FlatSource): number {
-  return unitCells(u).filter(({ content: c }) => c.kind === 'rod').length;
-}
-
-/** סך הקושרות האנכיות בארון — כל אחת היא לוח בפני עצמו. */
-export function countDividers(u: FlatSource): number {
-  return unitZones(u).reduce((n, z) => n + Math.max(zoneColumns(z).length - 1, 0), 0);
-}
-
 /**
  * מסיר עמודה אחת מהאזור, ומחלק את הרוחב שלה בין הנותרות.
  * כשנשארת עמודה אחת אין יותר קושרת, והאזור חוזר להיות תא יחיד.

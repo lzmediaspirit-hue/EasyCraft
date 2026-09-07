@@ -1,3 +1,4 @@
+import { readPref, writePref } from './prefs';
 /**
  * יחידות מידה.
  *
@@ -15,22 +16,14 @@ const listeners = new Set<() => void>();
 let unit: DisplayUnit = read();
 
 function read(): DisplayUnit {
-  try {
-    return localStorage.getItem(KEY) === 'mm' ? 'mm' : 'cm';
-  } catch {
-    return 'cm';
-  }
+  return readPref(KEY) === 'mm' ? 'mm' : 'cm';
 }
 
 export const displayUnit = {
   get: (): DisplayUnit => unit,
   set(next: DisplayUnit) {
     unit = next;
-    try {
-      localStorage.setItem(KEY, next);
-    } catch {
-      // אחסון חסום — הבחירה תחזיק עד רענון
-    }
+    writePref(KEY, next);
     listeners.forEach((l) => l());
   },
   subscribe(l: () => void): () => void {

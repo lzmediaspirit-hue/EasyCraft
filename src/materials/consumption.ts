@@ -1,6 +1,7 @@
 import { db } from '../db/db';
-import { partChoice, projectCosting, unitParts } from '../costing/boards';
-import { materialsRepo, finishesRepo, settingsRepo, projectPricesRepo } from './materialsRepo';
+import { partChoice, unitParts } from '../costing/boards';
+import { settingsRepo } from './materialsRepo';
+import { projectsRepo } from '../features/projects/projectsRepo';
 import { stageIndex, stageOf, tracksOf } from '../workflow/unitWork';
 import type { PartSettings } from '../costing/boards';
 import type { Consumption, PartRole, PlacedUnit, Project, WorkTrack } from '../db/types';
@@ -90,15 +91,12 @@ export const consumptionRepo = {
  * שלה בוטל מקבלת את הפלטות בחזרה.
  */
 export async function syncConsumption(projectId: string): Promise<void> {
-  const [units, materials, settings, overrides, finishes, project] = await Promise.all([
+  const [costing, units, settings, project] = await Promise.all([
+    projectsRepo.costing(projectId),
     db.units.where('projectId').equals(projectId).toArray(),
-    materialsRepo.list(),
     settingsRepo.get(),
-    projectPricesRepo.listForProject(projectId),
-    finishesRepo.all(),
     db.projects.get(projectId),
   ]);
-  const costing = projectCosting(units, materials, settings, overrides, finishes, project);
   const cut = cutLines(units, settings, project);
   const existing = await db.consumption.where('projectId').equals(projectId).toArray();
   const now = Date.now();

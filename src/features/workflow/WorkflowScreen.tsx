@@ -35,6 +35,7 @@ export function WorkflowScreen({ projectId }: { projectId: string }) {
   const attachments = useLiveQuery(() => attachmentsRepo.listForProject(projectId), [projectId]);
   const me = useCurrentMember();
   const [openStage, setOpenStage] = useState<StageKey | null>(null);
+  const openStageRow = (stages ?? []).find((s) => s.key === openStage) ?? null;
 
   // פרויקט שנוצר לפני שהתהליך היה קיים מקבל אותו בכניסה הראשונה
   useEffect(() => {
@@ -97,10 +98,11 @@ export function WorkflowScreen({ projectId }: { projectId: string }) {
         </button>
       </main>
 
-      {openStage && (
+      {/* השלב נמצא לפני הפתיחה: שלב שנעלם בזמן שהמגירה פתוחה קרס */}
+      {openStageRow && (
         <StageSheet
           projectId={projectId}
-          stage={stages.find((s) => s.key === openStage)!}
+          stage={openStageRow}
           team={team ?? []}
           me={me ?? null}
           onClose={() => setOpenStage(null)}

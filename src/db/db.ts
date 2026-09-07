@@ -306,7 +306,14 @@ db.version(10)
  * נספר לפי אותה שורה שבה מוזמנים — גוון על חומר — ולא לפי אחד מהם
  * לבדו, כי זה הצירוף שמגיע מהספק.
  */
-db.version(11).stores({
+/*
+ * מפת הטבלאות מגרסה 11 ואילך.
+ *
+ * כל גרסה חדשה חזרה על אותה מפה במלואה, ומספיק היה לשכוח שורה אחת
+ * כדי לאבד אינדקס. עכשיו יש שם אחד: גרסה שמשנה מבנה מוסיפה לו,
+ * וגרסה שרק מהגרת נתונים משתמשת בו כמו שהוא.
+ */
+const TABLES_V11 = {
   ...TABLES_V3,
   boards: null,
   materials: 'id, sortOrder',
@@ -316,7 +323,12 @@ db.version(11).stores({
   team: 'id, role, active, username',
   stages: 'id, projectId, key, status, assigneeId, scheduledAt',
   attachments: 'id, projectId, kind',
-});
+} as const;
+
+/** מגרסה 14 נוספה טבלת הצריכה — מה שכל פרויקט הוריד מהמלאי. */
+const TABLES_V14 = { ...TABLES_V11, consumption: 'id, projectId, lineKey' } as const;
+
+db.version(11).stores(TABLES_V11);
 
 
 /**
@@ -328,17 +340,7 @@ db.version(11).stores({
  * כמסלול הגוף, ומה שסומן בחזיתות ובדפנות עובר למסלול שלהן.
  */
 db.version(12)
-  .stores({
-    ...TABLES_V3,
-    boards: null,
-    materials: 'id, sortOrder',
-    finishes: 'id, sortOrder',
-    projectPrices: 'id, projectId, lineKey',
-    stock: 'id, finishId, materialId',
-    team: 'id, role, active, username',
-    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
-    attachments: 'id, projectId, kind',
-  })
+  .stores(TABLES_V11)
   .upgrade((tx) =>
     tx
       .table('units')
@@ -378,17 +380,7 @@ db.version(12)
  * נשמר, כי הוא זה שנבחר קודם.
  */
 db.version(13)
-  .stores({
-    ...TABLES_V3,
-    boards: null,
-    materials: 'id, sortOrder',
-    finishes: 'id, sortOrder',
-    projectPrices: 'id, projectId, lineKey',
-    stock: 'id, finishId, materialId',
-    team: 'id, role, active, username',
-    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
-    attachments: 'id, projectId, kind',
-  })
+  .stores(TABLES_V11)
   .upgrade((tx) =>
     tx
       .table('finishes')
@@ -407,18 +399,7 @@ db.version(13)
  * מסומנים כנחתכים, הפלטות יורדות מהמלאי, והרשומה זוכרת כמה ובשביל
  * מי — כדי שאפשר יהיה גם להחזיר וגם לענות "לאן הלכו הלוחות".
  */
-db.version(14).stores({
-  ...TABLES_V3,
-  boards: null,
-  materials: 'id, sortOrder',
-  finishes: 'id, sortOrder',
-  projectPrices: 'id, projectId, lineKey',
-  stock: 'id, finishId, materialId',
-  team: 'id, role, active, username',
-  stages: 'id, projectId, key, status, assigneeId, scheduledAt',
-  attachments: 'id, projectId, kind',
-  consumption: 'id, projectId, lineKey',
-});
+db.version(14).stores(TABLES_V14);
 
 /**
  * לחומר יש סוג, ולא רק שם.
@@ -430,18 +411,7 @@ db.version(14).stores({
  * בלי סוג, ופשוט לא נבחר אוטומטית.
  */
 db.version(15)
-  .stores({
-    ...TABLES_V3,
-    boards: null,
-    materials: 'id, sortOrder',
-    finishes: 'id, sortOrder',
-    projectPrices: 'id, projectId, lineKey',
-    stock: 'id, finishId, materialId',
-    team: 'id, role, active, username',
-    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
-    attachments: 'id, projectId, kind',
-    consumption: 'id, projectId, lineKey',
-  })
+  .stores(TABLES_V14)
   .upgrade((tx) =>
     tx
       .table('materials')
@@ -464,18 +434,7 @@ db.version(15)
  * והיא נקבעת בהגדרות. הסיווג הישן מתורגם פעם אחת ונמחק.
  */
 db.version(16)
-  .stores({
-    ...TABLES_V3,
-    boards: null,
-    materials: 'id, sortOrder',
-    finishes: 'id, sortOrder',
-    projectPrices: 'id, projectId, lineKey',
-    stock: 'id, finishId, materialId',
-    team: 'id, role, active, username',
-    stages: 'id, projectId, key, status, assigneeId, scheduledAt',
-    attachments: 'id, projectId, kind',
-    consumption: 'id, projectId, lineKey',
-  })
+  .stores(TABLES_V14)
   .upgrade((tx) =>
     tx
       .table('materials')

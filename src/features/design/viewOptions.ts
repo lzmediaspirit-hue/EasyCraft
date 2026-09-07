@@ -1,3 +1,4 @@
+import { readPref, writePref } from '../../ui/prefs';
 import { useSyncExternalStore } from 'react';
 
 /**
@@ -49,9 +50,10 @@ const listeners = new Set<() => void>();
 
 function read(): ViewOptions {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = readPref(KEY);
     return raw ? { ...DEFAULTS, ...JSON.parse(raw) } : DEFAULTS;
   } catch {
+    // מה שנשמר אינו JSON תקין — חוזרים לברירת המחדל
     return DEFAULTS;
   }
 }
@@ -64,11 +66,7 @@ export const viewOptions = {
   toggle(key: keyof ViewOptions) {
     value = { ...value, [key]: !value[key] };
     snapshot = JSON.stringify(value);
-    try {
-      localStorage.setItem(KEY, snapshot);
-    } catch {
-      // אחסון חסום — הבחירה תחזיק עד רענון
-    }
+    writePref(KEY, snapshot);
     listeners.forEach((l) => l());
   },
   subscribe(l: () => void): () => void {

@@ -12,10 +12,3 @@ export function normalizePhone(raw: string): string {
 export function isValidPhone(normalized: string): boolean {
   return /^0\d{8,9}$/.test(normalized);
 }
-
-/** תצוגה: 050-1234567 לנייד, 03-1234567 לקווי. */
-export function formatPhone(normalized: string): string {
-  if (normalized.length === 10) return `${normalized.slice(0, 3)}-${normalized.slice(3)}`;
-  if (normalized.length === 9) return `${normalized.slice(0, 2)}-${normalized.slice(2)}`;
-  return normalized;
-}

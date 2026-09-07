@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { unitZones, zoneBands, zoneColumns } from '../../catalog/zones';
 import { shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
+import { shade } from '../../ui/color';
 import { MATERIAL } from '../../catalog/standards';
 import { buildPlan } from './plan';
 import { wallName } from '../projects/wallLayouts';
@@ -105,15 +106,6 @@ function box(
   ];
 }
 
-function shade(hex: string, factor: number): string {
-  const v = hex.replace('#', '');
-  if (v.length < 6) return hex;
-  const ch = (i: number) =>
-    Math.round(Math.min(parseInt(v.slice(i, i + 2), 16) * factor, 255))
-      .toString(16)
-      .padStart(2, '0');
-  return `#${ch(0)}${ch(2)}${ch(4)}`;
-}
 
 export function WallIso({
   walls,
