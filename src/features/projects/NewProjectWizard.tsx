@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { cmToMm, mmToCm } from '../../ui/units';
@@ -8,7 +9,9 @@ import { WallFeaturesDesigner } from './WallFeaturesDesigner';
 import { RoomShapeEditor, shapeWalls, type ShapePoint } from './RoomShapeEditor';
 import { ProjectFinishesStep } from './ProjectFinishesStep';
 import { projectsRepo, type NewWallInput } from './projectsRepo';
+import { settingsRepo } from '../../materials/materialsRepo';
 import { DEFAULT_WALL_HEIGHT, DEFAULT_WALL_LENGTH } from '../../catalog/standards';
+import { DEFAULT_TURN_DEG } from '../design/plan';
 import {
   BedroomIcon,
   CustomRoomIcon,
@@ -60,8 +63,19 @@ export function NewProjectWizard({
   const [name, setName] = useState('');
   const [wallCount, setWallCount] = useState(1);
   const [marksFeatures, setMarksFeatures] = useState(false);
-  const [heightCm, setHeightCm] = useState(String(mmToCm(DEFAULT_WALL_HEIGHT)));
+  /*
+   * מידות לכל קיר בנפרד. חדר אמיתי אינו קופסה: יש בו קיר עם תקרה
+   * משופעת, יש חלל שנפתח, ויש קיר נמוך שמפריד. גובה אחד לכל החדר
+   * הכריח את מי שיש לו קיר אחר לתקן אותו אחר כך בהדמיה.
+   */
+  const [heightsCm, setHeightsCm] = useState<string[]>([String(mmToCm(DEFAULT_WALL_HEIGHT))]);
   const [lengthsCm, setLengthsCm] = useState<string[]>([String(mmToCm(DEFAULT_WALL_LENGTH))]);
+  /*
+   * לאיזה צד פונים הקירות הבאים. בפריסה מוכנה כל הפינות זהות, והשאלה
+   * היחידה היא אם הקיר השני יוצא שמאלה או ימינה — וזו שאלה שנשאלת
+   * מול החדר, לא בקוד.
+   */
+  const [turnSide, setTurnSide] = useState<'left' | 'right'>('right');
   const [features, setFeatures] = useState<WallFeature[][]>([[]]);
   /* צורת חדר שמשרטטים, כשהפריסות המוכנות לא מתארות אותו */
   const [shape, setShape] = useState<ShapePoint[]>([]);
@@ -70,6 +84,18 @@ export function NewProjectWizard({
   const [turns, setTurns] = useState<number[]>([]);
   const [defaults, setDefaults] = useState<Partial<Record<PartRole, PartChoice>>>({});
   const [saving, setSaving] = useState(false);
+  /*
+   * מידות הקיר שהעסק עובד בהן. נטענות פעם אחת ורק לשדות שעוד לא
+   * נגעו בהם: מי שכבר הקליד מידה לא רוצה שהיא תיעלם מתחת לידיים.
+   */
+  const settings = useLiveQuery(() => settingsRepo.get(), []);
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !settings) return;
+    seeded.current = true;
+    setHeightsCm([String(mmToCm(settings.defaults.wallHeightMm))]);
+    setLengthsCm([String(mmToCm(settings.defaults.wallLengthMm))]);
+  }, [settings]);
 
   /* ---- הקירות שנגזרים מהשרטוט, לפי הסדר שנבחר ---- */
   const drawn = shapeWalls(shape);
@@ -101,8 +127,10 @@ export function NewProjectWizard({
     }
     setTurns([]);
     setWallCount(walls);
-    setLengthsCm((prev) =>
-      Array.from({ length: walls }, (_, i) => prev[i] ?? String(mmToCm(DEFAULT_WALL_LENGTH))),
+    /* קיר שנוסף מקבל את אותה מידה שהקיר הראשון נפתח בה */
+    setLengthsCm((prev) => Array.from({ length: walls }, (_, i) => prev[i] ?? prev[0] ?? ''));
+    setHeightsCm((prev) =>
+      Array.from({ length: walls }, (_, i) => prev[i] ?? prev[0] ?? ''),
     );
     setFeatures((prev) => Array.from({ length: walls }, (_, i) => prev[i] ?? []));
     setStep('condition');
@@ -138,9 +166,9 @@ export function NewProjectWizard({
 
   /* ---- שמירה ---- */
 
-  const heightMm = cmToMm(Number(heightCm) || 0);
+  const heightAt = (i: number) => cmToMm(Number(heightsCm[i] ?? heightsCm[0]) || 0);
   const dimsValid =
-    heightMm >= 1500 &&
+    Array.from({ length: wallCount }, (_, i) => heightAt(i)).every((h) => h >= 1500) &&
     lengthsCm.slice(0, wallCount).every((l) => cmToMm(Number(l) || 0) >= 300);
 
   async function save() {
@@ -148,10 +176,13 @@ export function NewProjectWizard({
     setSaving(true);
     const walls: NewWallInput[] = Array.from({ length: wallCount }, (_, i) => ({
       lengthMm: cmToMm(Number(lengthsCm[i]) || 0),
-      heightMm,
+      heightMm: heightAt(i),
       features: features[i] ?? [],
-      // פנייה נשמרת רק לחדר ששורטט; פריסה מוכנה היא תמיד פינות ישרות
-      turnDeg: turns[i],
+      /*
+       * חדר ששורטט מביא את הפניות שלו. בפריסה מוכנה כל הפינות ישרות,
+       * והבחירה היחידה היא לאיזה צד — שמאלה או ימינה.
+       */
+      turnDeg: turns[i] ?? (turnSide === 'right' ? DEFAULT_TURN_DEG : -DEFAULT_TURN_DEG),
     }));
     const project = await projectsRepo.create({
       customerId,
@@ -328,38 +359,87 @@ export function NewProjectWizard({
       )}
 
       {step === 'dims' && (
-        <div className="space-y-5">
-          <Field label="גובה החדר" hint='ס"מ'>
-            <input
-              value={heightCm}
-              onChange={(e) => setHeightCm(e.target.value)}
-              onFocus={selectOnFocus}
-              type="number"
-              inputMode="numeric"
-              className={`${inputClass} num text-end`}
-            />
-          </Field>
+        <div className="space-y-4">
+          {/*
+            מידות לכל קיר בנפרד: חדר אמיתי אינו קופסה, ויש בו קיר
+            שנמוך מהשאר או ארוך מהשאר. גובה אחד לכל החדר הכריח לתקן
+            את החריג אחר כך.
+          */}
+          {Array.from({ length: wallCount }, (_, i) => (
+            <div key={i} className="rounded-2xl border border-stone-200 bg-white p-3">
+              <h3 className="mb-2 text-sm font-semibold text-stone-700">{wallName(i)}</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="אורך" hint='ס"מ'>
+                  <input
+                    value={lengthsCm[i] ?? ''}
+                    onChange={(e) =>
+                      setLengthsCm((prev) => {
+                        const next = [...prev];
+                        next[i] = e.target.value;
+                        return next;
+                      })
+                    }
+                    onFocus={selectOnFocus}
+                    type="number"
+                    inputMode="numeric"
+                    aria-label={`אורך ${wallName(i)}`}
+                    className={`${inputClass} num text-end`}
+                  />
+                </Field>
+                <Field label="גובה" hint='ס"מ'>
+                  <input
+                    value={heightsCm[i] ?? heightsCm[0] ?? ''}
+                    onChange={(e) =>
+                      setHeightsCm((prev) => {
+                        const next = Array.from(
+                          { length: Math.max(prev.length, i + 1) },
+                          (_, k) => prev[k] ?? prev[0] ?? '',
+                        );
+                        next[i] = e.target.value;
+                        return next;
+                      })
+                    }
+                    onFocus={selectOnFocus}
+                    type="number"
+                    inputMode="numeric"
+                    aria-label={`גובה ${wallName(i)}`}
+                    className={`${inputClass} num text-end`}
+                  />
+                </Field>
+              </div>
+            </div>
+          ))}
 
-          <div className="space-y-4 border-t border-stone-100 pt-5">
-            {Array.from({ length: wallCount }, (_, i) => (
-              <Field key={i} label={`אורך ${wallName(i)}`} hint='ס"מ'>
-                <input
-                  value={lengthsCm[i] ?? ''}
-                  onChange={(e) =>
-                    setLengthsCm((prev) => {
-                      const next = [...prev];
-                      next[i] = e.target.value;
-                      return next;
-                    })
-                  }
-                  onFocus={selectOnFocus}
-                  type="number"
-                  inputMode="numeric"
-                  className={`${inputClass} num text-end`}
-                />
-              </Field>
-            ))}
-          </div>
+          {/*
+            לאיזה צד יוצא הקיר הבא. בפריסה מוכנה כל הפינות ישרות,
+            והשאלה היחידה היא הכיוון — וזו שאלה שנשאלת מול החדר.
+          */}
+          {wallCount > 1 && drawn.length === 0 && (
+            <div className="rounded-2xl border border-stone-200 bg-white p-3">
+              <h3 className="mb-1.5 text-sm font-semibold text-stone-700">
+                {wallCount === 2 ? 'לאן פונה הקיר השני' : 'לאן פונים הקירות'}
+              </h3>
+              <div className="flex gap-1.5">
+                {(['right', 'left'] as const).map((side) => (
+                  <button
+                    key={side}
+                    onClick={() => setTurnSide(side)}
+                    aria-pressed={turnSide === side}
+                    className={`flex-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                      turnSide === side
+                        ? 'bg-oak-600 text-white'
+                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                  >
+                    {side === 'right' ? 'ימינה' : 'שמאלה'}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11px] leading-snug text-stone-400">
+                עומדים מול {wallName(0)} — ומשם החדר ממשיך לכיוון שנבחר.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -372,7 +452,7 @@ export function NewProjectWizard({
               <WallFeaturesDesigner
                 features={features[i] ?? []}
                 wallLengthMm={cmToMm(Number(lengthsCm[i]) || 0)}
-                wallHeightMm={heightMm}
+                wallHeightMm={heightAt(i)}
                 onAdd={(f) => addFeature(i, f)}
                 onPatch={(id, patch) => patchFeature(i, id, patch)}
                 onRemove={(id) => removeFeature(i, id)}

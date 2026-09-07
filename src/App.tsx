@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CustomersScreen } from './features/customers/CustomersScreen';
 import { ProjectsScreen } from './features/projects/ProjectsScreen';
 import { DesignScreen } from './features/design/DesignScreen';
+import { DefaultsScreen } from './features/settings/DefaultsScreen';
 import { SettingsScreen } from './features/settings/SettingsScreen';
 import { WorkflowScreen } from './features/workflow/WorkflowScreen';
 import { CalendarScreen } from './features/workflow/CalendarScreen';
@@ -57,5 +58,7 @@ function screen(route: ReturnType<typeof useRoute>) {
       return <StockScreen />;
     case 'settings':
       return <SettingsScreen />;
+    case 'defaults':
+      return <DefaultsScreen />;
   }
 }

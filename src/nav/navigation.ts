@@ -11,7 +11,8 @@ export type Route =
   | { name: 'calendar' }
   | { name: 'team' }
   | { name: 'stock' }
-  | { name: 'settings' };
+  | { name: 'settings' }
+  | { name: 'defaults' };
 
 /**
  * ניווט מבוסס מחסנית. כל מסך נדחף למחסנית וכפתור "חזור" שולף אותו,

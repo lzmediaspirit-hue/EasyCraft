@@ -1,4 +1,5 @@
 import { db } from '../db/db';
+import { KITCHEN } from '../catalog/standards';
 import type {
   Finish,
   Material,
@@ -34,6 +35,21 @@ export const DEFAULT_SETTINGS: Settings = {
   edgeFactoryPerM: 0,
   edgeConsumerPerM: 0,
   defaultBackKind: 'thin',
+  /*
+   * המידות שחוזרות בכל פרויקט. הערכים כאן הם התקן שרוב הנגריות
+   * עובדות בו, והם נקודת פתיחה — כל אחד מהם ניתן לשינוי במסך אחד.
+   */
+  defaults: {
+    socleMm: KITCHEN.socleH,
+    counterTopMm: KITCHEN.counterTop,
+    baseDepthMm: KITCHEN.baseDepth,
+    upperDepthMm: KITCHEN.upperDepth,
+    upperBottomMm: KITCHEN.upperBottom,
+    wallLengthMm: 3000,
+    wallHeightMm: 2600,
+    backKind: 'thin',
+    drawerBox: 'metal',
+  },
   updatedAt: 0,
 };
 
@@ -127,6 +143,7 @@ export const settingsRepo = {
           ...DEFAULT_SETTINGS,
           ...stored,
           accessories: { ...DEFAULT_SETTINGS.accessories, ...stored.accessories },
+          defaults: { ...DEFAULT_SETTINGS.defaults, ...stored.defaults },
           extras: stored.extras ?? [],
         }
       : DEFAULT_SETTINGS;

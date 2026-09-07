@@ -19,6 +19,7 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SlidersIcon,
   UsersIcon,
 } from '../../ui/icons';
 import { nav } from '../../nav/navigation';
@@ -122,6 +123,21 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
                     {archivedCount}
                   </span>
                 )}
+              </button>
+            )}
+            {/*
+              המידות שחוזרות בכל פרויקט — רגליים, עומקים, גובה קיר.
+              הן יושבות ליד ההגדרות ולא בתוכן: מי שפותח פרויקט חדש
+              נוגע בהן, ולא צריך לעבור דרך מחירי אביזרים כדי להגיע.
+            */}
+            {role === 'manager' && (
+              <button
+                onClick={() => nav.push({ name: 'defaults' })}
+                aria-label="ברירות מחדל לפרויקט"
+                title="ברירות מחדל לפרויקט"
+                className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
+              >
+                <SlidersIcon />
               </button>
             )}
             {role === 'manager' && (

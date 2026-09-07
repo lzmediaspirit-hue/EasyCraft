@@ -26,7 +26,7 @@ import { history, useHistory } from './history';
 import { WallThumb } from './WallThumb';
 import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
-import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
+import { finishesRepo, materialsRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumption';
 import { roomDef } from '../../catalog/rooms';
@@ -128,6 +128,7 @@ export function DesignScreen({
     () => customersRepo.get(project?.customerId ?? ''),
     [project?.customerId],
   );
+  const settings = useLiveQuery(() => settingsRepo.get(), []);
   const allFinishes = useLiveQuery(() => finishesRepo.all(), []);
   const allMaterials = useLiveQuery(() => materialsRepo.list(), []);
   const finishHex = useLiveQuery(async () => {
@@ -597,6 +598,7 @@ export function DesignScreen({
           roomBelow={freeRoom(selected, units, wall.heightMm, 'down')}
           fillWidth={fillSpan(selected, units, wall, 'w')}
           fillHeight={fillSpan(selected, units, wall, 'h')}
+          defaultSocleMm={settings?.defaults.socleMm ?? 0}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }

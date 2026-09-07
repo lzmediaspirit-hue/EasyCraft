@@ -15,7 +15,6 @@ import { MeasureInput } from '../../ui/MeasureInput';
 import { BookmarkIcon, CloseIcon, CopyIcon, PencilIcon, TrashIcon } from '../../ui/icons';
 import { DRAWER_BOXES } from '../../db/types';
 import type {
-  BackKind,
   ExposedSides,
   LedSpot,
   OpeningMech,
@@ -48,12 +47,6 @@ const OPENINGS: { key: OpeningMech; label: string }[] = [
   { key: 'sliding', label: 'הזזה' },
 ];
 
-const BACKS: { key: BackKind; label: string }[] = [
-  { key: 'thin', label: 'גב דק' },
-  { key: 'carcass', label: 'גב בעובי גוף' },
-  { key: 'none', label: 'ללא גב' },
-];
-
 /** מידות תקן לכל ציר, לבחירה מהירה. */
 const WIDTHS = [150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1100, 1200];
 const HEIGHTS = [350, 450, 600, 700, 720, 900, 1000, 1200, 1600, 2000, 2050, 2200, 2320, 2400];
@@ -76,6 +69,7 @@ export function UnitEditor({
   roomBelow = 0,
   fillWidth,
   fillHeight,
+  defaultSocleMm = 0,
   onChange,
   onApplyChoiceAll,
   onDuplicate,
@@ -100,6 +94,8 @@ export function UnitEditor({
    */
   fillWidth?: { startMm: number; sizeMm: number };
   fillHeight?: { startMm: number; sizeMm: number };
+  /** גובה הרגליים שהעסק עובד בו — לארגז שחוזר לרצפה */
+  defaultSocleMm?: number;
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
@@ -446,18 +442,6 @@ export function UnitEditor({
               </>
             )}
 
-            <Row label="גב">
-              {BACKS.map((bk) => (
-                <Pill
-                  key={bk.key}
-                  active={(unit.backKind ?? 'thin') === bk.key}
-                  onClick={() => onChange({ backKind: bk.key })}
-                >
-                  {bk.label}
-                </Pill>
-              ))}
-            </Row>
-
             {/*
               מבנה תיבת המגירה משנה אילו חלקים נחתכים, ולכן הוא
               שייך לפנים הארון ולא לחזית.
@@ -776,11 +760,12 @@ export function UnitEditor({
           onClick={() =>
             /* תחתית הארגז היא yMm, והרגליים כלולות בגובה — ולכן ארגז
                שנצמד לרצפה יושב על 0 ולא על גובה הרגליים.
-               ארגז שמשוחרר מהרצפה תלוי, ורגליים לארגז תלוי אין: הן
-               נשארות בגובה שנשמר ומקצרות את הגוף בלי שרואים למה. */
+               ארגז שמשוחרר מהרצפה תלוי, ורגליים לארגז תלוי אין; ארגז
+               שחוזר לרצפה מקבל אותן בחזרה בגובה שהעסק עובד בו. המתג
+               הוא הפיך, ולכן הוא מחזיר בדיוק את מה שלקח. */
             onChange({
               floorLocked: !locked,
-              ...(locked ? { socleMm: 0 } : { yMm: 0 }),
+              ...(locked ? { socleMm: 0 } : { yMm: 0, socleMm: defaultSocleMm }),
             })
           }
           aria-pressed={locked}

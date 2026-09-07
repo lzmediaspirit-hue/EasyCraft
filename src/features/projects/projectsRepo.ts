@@ -213,7 +213,7 @@ export const unitsRepo = {
     widthMm?: number,
   ): Promise<PlacedUnit> {
     const now = Date.now();
-    const { defaultBackKind: backKind } = await settingsRepo.get();
+    const { defaults } = await settingsRepo.get();
     const unit: PlacedUnit = {
       id: crypto.randomUUID(),
       projectId,
@@ -232,9 +232,10 @@ export const unitsRepo = {
       panelThicknessMm: item.panelThicknessMm,
       // גימור שנשמר עם הפריט חוזר איתו, כדי שלא יידרש אותו כיוונון שוב
       drawerStyle: item.drawerStyle,
+      drawerBox: defaults.drawerBox,
       exposed: item.exposed,
       // הגב שהפריט הגיע איתו, ואם אין — דרך העבודה של הנגרייה
-      backKind: item.backKind ?? backKind,
+      backKind: item.backKind ?? defaults.backKind,
       handles: item.handles,
       glassDoors: item.glassDoors,
       led: item.led,
@@ -258,7 +259,12 @@ export const unitsRepo = {
       widthMm: widthMm ?? item.defaultWidthMm,
       heightMm: item.defaultHeightMm,
       depthMm: item.defaultDepthMm,
-      socleMm: item.socleMm,
+      /*
+       * הרגליים נלקחות מברירות המחדל של הנגרייה ולא מהספרייה: הן
+       * אותו גובה בכל ארגז תחתון בעסק, ומי שעובד ב-12 ס"מ לא אמור
+       * לתקן אותן בכל ארגז מחדש. הספרייה קובעת רק אם יש רגליים בכלל.
+       */
+      socleMm: item.socleMm ? defaults.socleMm : item.socleMm,
       counterMm: item.counterMm,
       // ארגז שעומד על הרצפה נעול אליה כברירת מחדל; ארון תלוי חופשי לגובה
       floorLocked: item.level !== 'wall',

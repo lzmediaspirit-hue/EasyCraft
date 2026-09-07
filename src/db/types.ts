@@ -311,6 +311,17 @@ export interface PlacedUnit extends Entity {
 export type BackKind = 'thin' | 'carcass' | 'none';
 
 /**
+ * סוגי הגב, לבחירה.
+ * גב דק יושב בחריץ, גב בעובי גוף נבנה כמו דופן, וללא גב הוא ארון
+ * שנשען על הקיר עצמו.
+ */
+export const BACK_KINDS: { key: BackKind; label: string }[] = [
+  { key: 'thin', label: 'גב דק' },
+  { key: 'carcass', label: 'גב בעובי גוף' },
+  { key: 'none', label: 'ללא גב' },
+];
+
+/**
  * מבנה תיבת המגירה.
  * `wood` — מגירת עץ שנבנית בנגרייה: תחתית, שתי דפנות, גב וחזית.
  * `metal` — מסילת ברזל שהדפנות שלה מגיעות מוכנות, ולכן נבנים רק
@@ -698,6 +709,8 @@ export interface Settings {
    * עבודה שחוזרת על עצמה. מי שרוצה אחרת בארגז מסוים משנה שם.
    */
   defaultBackKind: BackKind;
+  /** המידות שחוזרות בכל פרויקט */
+  defaults: ProjectDefaults;
   /** מחירי אביזרים, ליחידה */
   accessories: AccessoryPrices;
   /** תוספות שהעסק הגדיר בעצמו */
@@ -711,6 +724,35 @@ export interface Settings {
   edgeFactoryPerM: number;
   edgeConsumerPerM: number;
   updatedAt: number;
+}
+
+/**
+ * המידות שחוזרות בכל פרויקט.
+ *
+ * נגרייה עובדת באותן מידות שוב ושוב: רגליים 10 ס"מ, משטח בגובה 90,
+ * תחתונים בעומק 58. עד עכשיו הן ישבו בקוד כתקן, ומי שעובד אחרת היה
+ * מתקן אותן בכל ארגז ובכל פרויקט מחדש. כאן הן נקבעות פעם אחת.
+ *
+ * זו ברירת מחדל ולא כפייה: ארגז בודד עדיין אפשר לשנות, וזה החריג
+ * ולא הרגיל.
+ */
+export interface ProjectDefaults {
+  /** גובה הרגליים של ארגז שעומד על הרצפה */
+  socleMm: number;
+  /** גובה משטח העבודה מהרצפה — ממנו נגזר גוף הארון התחתון */
+  counterTopMm: number;
+  /** עומק תחתונים ועומק עליונים */
+  baseDepthMm: number;
+  upperDepthMm: number;
+  /** תחתית הארון העליון מהרצפה */
+  upperBottomMm: number;
+  /** מידות הקיר שפרויקט חדש נפתח בהן */
+  wallLengthMm: number;
+  wallHeightMm: number;
+  /** סוג הגב שכל ארגז חדש מקבל */
+  backKind: BackKind;
+  /** תיבת המגירה — ברזל או עץ */
+  drawerBox: DrawerBox;
 }
 
 /**
