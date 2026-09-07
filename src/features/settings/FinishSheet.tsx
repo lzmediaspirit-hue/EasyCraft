@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
+import { finishesRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { CopyIcon, PlusIcon, TrashIcon } from '../../ui/icons';
 import { BUILTIN_TEXTURES } from '../../db/types';
 import type { Finish, MaterialPrice } from '../../db/types';
+import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 /**
  * גוון.
@@ -16,8 +16,7 @@ import type { Finish, MaterialPrice } from '../../db/types';
  * מחיר פשוט לא מוצע לגוון הזה כשבונים ארגז.
  */
 export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClose: () => void }) {
-  const materials = useLiveQuery(() => materialsRepo.list(), []);
-  const finishes = useLiveQuery(() => finishesRepo.all(), []);
+  const { materials, finishes } = useMaterialsAndFinishes();
   const [name, setName] = useState(finish?.name ?? '');
   const [texture, setTexture] = useState<string | undefined>(finish?.texture);
   /** מרקמים שהמשתמש הוסיף, מעבר לרשימה שמגיעה עם האפליקציה */

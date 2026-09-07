@@ -3,16 +3,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { consumptionRepo } from '../../materials/consumption';
-import {
-  finishesRepo,
-  materialsRepo,
-  receiveOrder,
-  stockRepo,
-} from '../../materials/materialsRepo';
+import { receiveOrder, stockRepo } from '../../materials/materialsRepo';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { selectOnFocus } from '../../ui/Field';
 import { CheckIcon } from '../../ui/icons';
 import type { ProjectCosting } from '../../costing/boards';
+import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 type SortKey = 'finish' | 'texture' | 'material' | 'missing';
 
@@ -29,8 +25,7 @@ type SortKey = 'finish' | 'texture' | 'material' | 'missing';
  * גוני היער באותה שיחה.
  */
 export function StockScreen() {
-  const materials = useLiveQuery(() => materialsRepo.list(), []);
-  const finishes = useLiveQuery(() => finishesRepo.all(), []);
+  const { materials, finishes } = useMaterialsAndFinishes();
   const stock = useLiveQuery(() => stockRepo.all(), []);
   const projects = useLiveQuery(() => projectsRepo.all(), []);
   const archived = useLiveQuery(() => customersRepo.list(true), []);

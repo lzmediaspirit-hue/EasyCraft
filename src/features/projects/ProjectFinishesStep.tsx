@@ -1,7 +1,6 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
 import { PART_ROLES, finishesForRole, materialForRole } from '../../db/types';
 import type { PartChoice, PartRole } from '../../db/types';
+import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 /**
  * הגוון והחומר של הפרויקט, לכל חלק בארגז.
@@ -19,8 +18,7 @@ export function ProjectFinishesStep({
   value: Partial<Record<PartRole, PartChoice>>;
   onChange: (next: Partial<Record<PartRole, PartChoice>>) => void;
 }) {
-  const finishes = useLiveQuery(() => finishesRepo.all(), []);
-  const materials = useLiveQuery(() => materialsRepo.list(), []);
+  const { materials, finishes } = useMaterialsAndFinishes();
 
   if (!finishes || !materials) return null;
 

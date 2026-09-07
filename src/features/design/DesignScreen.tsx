@@ -27,7 +27,7 @@ import type { SheetName } from './sheets';
 import { history, useHistory } from './history';
 import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
-import { finishesRepo, materialsRepo, settingsRepo } from '../../materials/materialsRepo';
+import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumption';
 import { Sheet } from '../../ui/Sheet';
@@ -40,6 +40,7 @@ import {
 import { cm, meters, unitLabel } from '../../ui/units';
 import { readPref, writePref } from '../../ui/prefs';
 import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
+import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 const PANEL_KEY = 'easycraft.panelRatio';
 
@@ -101,8 +102,7 @@ export function DesignScreen({
     [project?.customerId],
   );
   const settings = useLiveQuery(() => settingsRepo.get(), []);
-  const allFinishes = useLiveQuery(() => finishesRepo.all(), []);
-  const allMaterials = useLiveQuery(() => materialsRepo.list(), []);
+  const { materials: allMaterials, finishes: allFinishes } = useMaterialsAndFinishes();
   const finishHex = useLiveQuery(async () => {
     const all = await finishesRepo.all();
     return Object.fromEntries(all.map((f) => [f.id, f.hex]));

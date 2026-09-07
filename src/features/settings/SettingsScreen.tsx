@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { finishesRepo, materialsRepo, settingsRepo } from '../../materials/materialsRepo';
+import { settingsRepo } from '../../materials/materialsRepo';
 import { MaterialSheet } from './MaterialSheet';
 import { FinishSheet } from './FinishSheet';
 import { ExtrasSection } from './ExtrasSection';
@@ -11,6 +11,7 @@ import { cm, displayUnit, unitLabel } from '../../ui/units';
 import { useDisplayUnit } from '../../ui/useDisplayUnit';
 import { ChevronIcon, PlusIcon, TeamIcon } from '../../ui/icons';
 import type { BackKind, Finish, Material } from '../../db/types';
+import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 /** סוגי הגב, כברירת מחדל לכל ארגז חדש. */
 const BACK_KINDS: { key: BackKind; label: string }[] = [
@@ -28,8 +29,7 @@ export function SettingsScreen() {
   const [editingMaterial, setEditingMaterial] = useState<Material | 'new' | null>(null);
   const [editingFinish, setEditingFinish] = useState<Finish | 'new' | null>(null);
   const settings = useLiveQuery(() => settingsRepo.get(), []);
-  const materials = useLiveQuery(() => materialsRepo.list(), []);
-  const finishes = useLiveQuery(() => finishesRepo.all(), []);
+  const { materials, finishes } = useMaterialsAndFinishes();
 
   const unit = useDisplayUnit();
 
