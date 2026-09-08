@@ -37,6 +37,16 @@ export interface IsoView {
   rise: number;
 }
 
+/*
+ * שכבות הציור בתוך ארון.
+ *
+ * הגוף והפנים חולקים שכבה אחת ומסודרים ביניהם לפי מרחק — דופן
+ * ימנית באמת עומדת לפני המדף שמאחוריה. החזית לעומת זאת מכסה תמיד:
+ * מדף שנמתח על כל רוחב הארון "קרוב" יותר מדלת שמכסה רק חצי ממנו,
+ * ובלי שכבה נפרדת הוא היה נצבע עליה.
+ */
+const L = { body: 0, inside: 0, front: 1, top: 2 };
+
 const DEFAULT_VIEW: IsoView = { yawDeg: 0, rise: 0.5 };
 const MIN_RISE = 0.12;
 const MAX_RISE = 0.95;
@@ -58,9 +68,18 @@ function projector(view: IsoView) {
     const rz = x * sin + z * cos;
     return [(rx - rz) * COS30, (rx + rz) * view.rise - y];
   };
-  /** המרחק מהצופה — לפיו מסודר סדר הציור, ולפיו קיר הוא רקע או חסימה */
+  /** המרחק מהצופה במישור הרצפה — לפיו קיר הוא רקע או חסימה */
   const toward = (x: number, z: number): number => x * (cos + sin) + z * (cos - sin);
-  return { project, toward };
+  /*
+   * המרחק מהצופה בשלושת הממדים.
+   *
+   * קו המבט בהיטל הזה הוא הכיוון (1, 2·rise, 1) במערכת המסובבת:
+   * מה שקדימה, ימינה ולמעלה — קרוב יותר. בלי המרכיב האנכי ארון
+   * עליון וארון תחתון שנפגשים על המסך היו מסודרים לפי מזל.
+   */
+  const depth = (x: number, y: number, z: number): number =>
+    toward(x, z) + 2 * view.rise * y;
+  return { project, toward, depth };
 }
 
 /**
@@ -70,7 +89,21 @@ function projector(view: IsoView) {
  */
 type Tf = (x: number, z: number) => [number, number];
 
-type Face = { points: string; fill: string; key: string; depth: number; unitId?: string };
+type Face = {
+  points: string;
+  fill: string;
+  key: string;
+  depth: number;
+  /*
+   * שכבת הציור בתוך הארון: גוף, פנים, חזית, משטח. מרחק לבדו לא
+   * מספיק — מדף שנמתח על כל רוחב הארון "רחוק" פחות מדלת שמכסה רק
+   * חצי ממנו, ובלי השכבות הוא היה נצבע עליה.
+   */
+  layer: number;
+  /** הארון שהפאה שייכת לו, לפי המרחק שלו — הארונות מסודרים ביניהם */
+  group: number;
+  unitId?: string;
+};
 
 /**
  * תיבה מלבנית — לוח אחד.
@@ -96,13 +129,19 @@ function box(
   const front = [p(0, 0, d), p(w, 0, d), p(w, h, d), p(0, h, d)].join(' ');
   const top = [p(0, h, 0), p(w, h, 0), p(w, h, d), p(0, h, d)].join(' ');
   const side = [p(w, 0, 0), p(w, h, 0), p(w, h, d), p(w, 0, d)].join(' ');
-  // מיון לפי המרחק מהצופה: מה שקרוב יותר מצויר אחרון
-  const [cx, cz] = tf(x + w / 2, z + d / 2);
-  const depth = view.toward(cx, cz) + y * 0.001;
+  /*
+   * מיון לפי המרחק מהצופה: מה שקרוב יותר מצויר אחרון. כל פאה
+   * נמדדת במרכז שלה ולא במרכז התיבה — פאה קדמית וגב של אותו לוח
+   * אינם באותו מרחק.
+   */
+  const at = (dx: number, dy: number, dz: number) => {
+    const [wx, wz] = tf(x + dx, z + dz);
+    return view.depth(wx, y + dy, wz);
+  };
   return [
-    { points: side, fill: shade(tone, 0.78), key: `${key}-s`, depth },
-    { points: top, fill: shade(tone, 1.12), key: `${key}-t`, depth },
-    { points: front, fill: tone, key: `${key}-f`, depth },
+    { points: side, fill: shade(tone, 0.78), key: `${key}-s`, depth: at(w, h / 2, d / 2), layer: 0, group: 0 },
+    { points: top, fill: shade(tone, 1.12), key: `${key}-t`, depth: at(w / 2, h, d / 2), layer: 0, group: 0 },
+    { points: front, fill: tone, key: `${key}-f`, depth: at(w / 2, h / 2, d), layer: 0, group: 0 },
   ];
 }
 
@@ -144,10 +183,20 @@ export function WallIso({
    */
   const [view, setView] = useState<IsoView>(DEFAULT_VIEW);
   const orbit = useRef<{ x: number; y: number; from: IsoView; moved: boolean } | null>(null);
-  const v = projector(view);
-  const project = v.project;
 
   const plan = buildPlan(walls, units);
+  /*
+   * הסיבוב נעצר לפני שהצופה יוצא אל מאחורי הקיר שעובדים עליו.
+   * מעבר לגבול הזה הקיר נעלם ורואים את גב הארונות — תמונה שאין לה
+   * שום שימוש, ובוודאי לא מול לקוח.
+   */
+  const heading = plan.find((p) => p.wall.id === activeWallId)?.headingDeg ?? 0;
+  const shown: IsoView = {
+    ...view,
+    yawDeg: Math.min(Math.max(view.yawDeg, -120 - heading), 30 - heading),
+  };
+  const v = projector(shown);
+  const project = v.project;
   const faces: Face[] = [];
   const backdrops: {
     key: string;
@@ -242,7 +291,15 @@ export function WallIso({
       const h = Math.max(u.heightMm - socle, 0);
       const w = u.widthMm;
       const d = u.depthMm;
-      const add = (f: Face[]) => faces.push(...f.map((face) => ({ ...face, unitId: u.id })));
+      /*
+       * הארון כולו מסודר מול שאר הארונות לפי מרכזו, ובתוכו הסדר
+       * הוא סדר הבנייה: גוף, פנים, חזית ומשטח. כך חזית תמיד מכסה
+       * את מה שמאחוריה, גם כשהמדף שמאחוריה רחב ממנה.
+       */
+      const [gx, gz] = tf(u.xMm + u.widthMm / 2, u.depthMm / 2);
+      const group = v.depth(gx, u.yMm + u.heightMm / 2, gz);
+      const add = (f: Face[], layer = L.inside) =>
+        faces.push(...f.map((face) => ({ ...face, unitId: u.id, layer, group })));
 
       /*
        * לוח בודד הוא לוח, לא ארון: אין לו צדדים, תחתית וגב.
@@ -253,9 +310,9 @@ export function WallIso({
       if (def.noCarcass) {
         const th = u.panelThicknessMm ?? MATERIAL.frontMm;
         if (def.noCarcass === 'horizontal') {
-          add(box(v, tf, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`));
+          add(box(v, tf, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`), L.front);
         } else {
-          add(box(v, tf, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`));
+          add(box(v, tf, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`), L.front);
         }
         continue;
       }
@@ -263,18 +320,19 @@ export function WallIso({
       // רגליים
       if (socle > 0) {
         // הסוקל נסוג מהחזית אבל יושב על הרצפה במלוא הרוחב
-        add(box(v, tf, x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`));
+        add(box(v, tf, x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`), L.body);
       }
 
       // גוף: שני צדדים, תחתית, תקרה וגב
       const gs = u.glassSides ?? {};
-      if (!gs.start) add(box(v, tf, x, y, 0, t, h, d, carcassTone, `${u.id}-l`));
-      if (!gs.end) add(box(v, tf, x + w - t, y, 0, t, h, d, carcassTone, `${u.id}-r`));
-      add(box(v, tf, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`));
-      add(box(v, tf, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`));
+      if (!gs.start) add(box(v, tf, x, y, 0, t, h, d, carcassTone, `${u.id}-l`), L.body);
+      if (!gs.end) add(box(v, tf, x + w - t, y, 0, t, h, d, carcassTone, `${u.id}-r`), L.body);
+      add(box(v, tf, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`), L.body);
+      add(box(v, tf, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`), L.body);
       if ((u.backKind ?? 'thin') !== 'none') {
         add(
           box(v, tf, x + t, y + t, 0, w - 2 * t, h - 2 * t, 6, shade(carcassTone, 0.86), `${u.id}-bk`),
+          L.body,
         );
       }
 
@@ -322,21 +380,29 @@ export function WallIso({
           }
           if (cell.content.kind === 'drawers') {
             const rows = cell.content.drawers ?? 1;
-            for (let r = 0; r < rows; r++) {
+            const hidden = cell.content.drawerStyle === 'inner';
+            /*
+             * מגירה חיצונית היא חזית לכל דבר: היא יושבת באותו מישור
+             * של הדלתות ובאותו עובי. מגירה פנימית נסוגה פנימה
+             * ונראית רק כשמסתכלים לתוך הארון — בדיוק כמו בציור
+             * החזית.
+             */
+            for (let r = 0; r < rows && (!hidden || inside); r++) {
               const dh = zh / rows;
               add(
                 box(
                   v,
                   tf,
-                  cx + 10,
-                  zBottom + r * dh + 10,
-                  d - 40,
-                  cw - 20,
-                  dh - 20,
-                  20,
-                  shade(tone, 0.94),
+                  cx + 6,
+                  zBottom + r * dh + 6,
+                  hidden ? d - 60 : d,
+                  cw - 12,
+                  dh - 12,
+                  hidden ? 20 : MATERIAL.frontMm,
+                  shade(tone, hidden ? 0.94 : 1),
                   `${zk}-dr-${i}-${r}`,
                 ),
+                hidden ? L.inside : L.front,
               );
             }
           }
@@ -363,38 +429,98 @@ export function WallIso({
         );
         if (!inside && (u.doors ?? 0) > 0 && !allOuterDrawers) {
           const doors = Math.max(u.doors ?? 1, 1);
+          /*
+           * בפינה מתה הדלת יושבת רק על החלק הנגיש; מה שנחסם על ידי
+           * הארון שעל הקיר הסמוך מקבל לוח סתימה באותו גוון. דלת על
+           * כל הרוחב הייתה מבטיחה ללקוח פתח שאי אפשר לפתוח.
+           */
+          const blind =
+            u.corner === 'blindStart' || u.corner === 'blindEnd'
+              ? Math.min(Math.max(u.blindMm ?? 0, w * 0.1), w * 0.7)
+              : 0;
+          const openX = u.corner === 'blindStart' ? blind : 0;
+          const openW = w - blind;
+          if (blind) {
+            add(
+              box(
+                v,
+                tf,
+                u.corner === 'blindStart' ? x : x + openW,
+                zBottom + 2,
+                d,
+                blind,
+                zh - 4,
+                MATERIAL.frontMm,
+                tone,
+                `${zk}-blind`,
+              ),
+              L.front,
+            );
+          }
           for (let k = 0; k < doors; k++) {
             add(
               box(
                 v,
                 tf,
-                x + (w / doors) * k + 2,
+                x + openX + (openW / doors) * k + 2,
                 zBottom + 2,
                 d,
-                w / doors - 4,
+                openW / doors - 4,
                 zh - 4,
                 MATERIAL.frontMm,
                 u.glassDoors ? shade(tone, 1.06) : tone,
                 `${zk}-door-${k}`,
               ),
+              L.front,
             );
           }
         }
       });
+
+      /*
+       * מכשיר חשמלי בלי דלת — מקרר, תנור, מדיח — מקבל חזית משלו.
+       * בלי זה הוא נראה בתלת־ממד כארגז פתוח, ולקוח שרואה חור במטבח
+       * לא חושב "מקרר".
+       */
+      if (def.appliance && !(u.doors ?? 0)) {
+        add(
+          box(v, tf, x + 2, y + 2, d, w - 4, h - 4, MATERIAL.frontMm, '#d6d3d1', `${u.id}-app`),
+          L.front,
+        );
+      }
+
+      /*
+       * משטח העבודה — מה שהעין תופסת ראשון במטבח. הוא יושב על
+       * הארגז, גולש מעט לצדדים ומעט קדימה, בדיוק כמו שיש אמיתי.
+       */
+      if (u.counterMm) {
+        add(
+          box(v, tf, x - 20, u.yMm + u.heightMm, 0, w + 40, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`),
+          L.top,
+        );
+      }
 
       // דפנות זרות
       const e = u.exposed ?? {};
       const pd = u.exposedDepthMm ?? d + MATERIAL.exposedExtraMm;
       const eTone = u.exposedFinishId ? (finishHex[u.exposedFinishId] ?? tone) : tone;
       if (e.start)
-        add(box(v, tf, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`));
-      if (e.end) add(box(v, tf, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`));
-      if (e.top) add(box(v, tf, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`));
+        add(
+          box(v, tf, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`),
+          L.top,
+        );
+      if (e.end)
+        add(box(v, tf, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`), L.top);
+      if (e.top) add(box(v, tf, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`), L.top);
     }
   }
 
-  // אלגוריתם הצייר: הרחוק מצויר קודם
-  faces.sort((a, b) => a.depth - b.depth);
+  /*
+   * אלגוריתם הצייר: הרחוק מצויר קודם. הארונות מסודרים ביניהם לפי
+   * המרחק שלהם, ובתוך כל ארון לפי השכבה — כך שחזית לעולם אינה
+   * נצבעת על ידי הפנים של הארון שלה.
+   */
+  faces.sort((a, b) => a.group - b.group || a.layer - b.layer || a.depth - b.depth);
 
   const xs = bounds.map((q) => q[0]);
   const ys = bounds.map((q) => q[1]);
@@ -430,8 +556,11 @@ export function WallIso({
         o.moved = true;
         const box = e.currentTarget.getBoundingClientRect();
         setView({
-          // סיבוב מלא כשגוררים על פני רוחב המסך פעמיים
-          yawDeg: o.from.yawDeg - (dx / Math.max(box.width, 1)) * 180,
+          // סיבוב מלא כשגוררים על פני רוחב המסך פעמיים, עד גבול הקיר
+          yawDeg: Math.min(
+            Math.max(o.from.yawDeg - (dx / Math.max(box.width, 1)) * 180, -120 - heading),
+            30 - heading,
+          ),
           rise: Math.min(
             Math.max(o.from.rise + (dy / Math.max(box.height, 1)) * 1.2, MIN_RISE),
             MAX_RISE,

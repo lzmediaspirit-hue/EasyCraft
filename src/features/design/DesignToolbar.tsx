@@ -19,6 +19,7 @@ import {
   RulerIcon,
   TagIcon,
   UndoIcon,
+  ToolsIcon,
   WallsIcon,
 } from '../../ui/icons';
 import { QuickCalcButton } from '../../ui/QuickCalc';
@@ -77,7 +78,7 @@ export function DesignToolbar({
   onCenter: () => void;
   onClearSelection: () => void;
 }) {
-  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen: _stats, wallsOpen } = design.view;
+  const { iso, inside, measure, rulerPair, rulerAxis, wallsOpen, toolsOpen } = design.view;
 
   return (
     <ScreenHeader
@@ -101,6 +102,18 @@ export function DesignToolbar({
               <EyeIcon />
             </button>
           )}
+          {/* סרגלי הכלים — שלוש שורות שאפשר לקפל כשלא עובדים */}
+          <button
+            onClick={() => design.toggle('toolsOpen')}
+            aria-pressed={toolsOpen}
+            aria-label="כלי העבודה"
+            title={toolsOpen ? 'הסתרת הכלים' : 'הצגת הכלים'}
+            className={`rounded-full p-2 transition-colors hover:bg-stone-200/70 ${
+              toolsOpen ? 'text-stone-600' : 'text-stone-400'
+            }`}
+          >
+            <ToolsIcon />
+          </button>
           {/* שורת הקירות תופסת שורה שלמה, וברוב הזמן לא נוגעים בה */}
           <button
             onClick={() => design.toggle('wallsOpen')}
@@ -121,7 +134,12 @@ export function DesignToolbar({
         שעובדים עליו, והשנייה היא איך מסתכלים עליו. שורה אחת
         ארוכה נגללה הצידה, וכפתור שצריך לגלול אליו הוא כפתור
         שלא לוחצים עליו.
+
+        שלושתן מתקפלות יחד: מי שמסדר ארגזים צריך אותן, ומי שרק
+        מסתכל על הקיר — ובוודאי כשהוא מראה אותו ללקוח — לא.
       */}
+      {toolsOpen && (
+      <>
       <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
         <Tool
           active={inside}
@@ -280,6 +298,8 @@ export function DesignToolbar({
           title="גוון לכל החזיתות, הגופים או הדפנות"
         />
       </div>
+      )}
+      </>
       )}
       {wallsOpen && (
       <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">

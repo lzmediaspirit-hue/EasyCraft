@@ -21,9 +21,39 @@ export interface ViewOptions {
   heightLine: boolean;
   /** אזהרות אוטומטיות מתחת למחוונים */
   warnings: boolean;
+  /**
+   * סדר המחוונים על המסך.
+   *
+   * לכל נגר יש מספר אחד שהוא מסתכל עליו קודם — אצל אחד זה מטר רץ,
+   * אצל אחר מה שנשאר על הקיר — ולכן הסדר אינו נתון אלא בחירה.
+   * מפתח שאינו ברשימה מוצג בסוף, כך שמחוון חדש שנוסף באפליקציה
+   * מופיע במקום סביר בלי לדרוס את הסדר שנקבע.
+   */
+  statOrder: StatKey[];
 }
 
-export const VIEW_OPTION_LABELS: { key: keyof ViewOptions; label: string; hint?: string }[] = [
+/** המחוונים שמוצגים כאריחים מתחת להדמיה, וניתנים לסידור. */
+export type StatKey =
+  | 'wallArea'
+  | 'wallHeight'
+  | 'floorMeters'
+  | 'unitCount'
+  | 'freeSpace'
+  | 'frontArea';
+
+export const STAT_KEYS: StatKey[] = [
+  'wallArea',
+  'wallHeight',
+  'floorMeters',
+  'unitCount',
+  'freeSpace',
+  'frontArea',
+];
+
+/** המתגים שמוצגים ב"מה מוצג" — סדר המחוונים אינו מתג ולכן אינו כאן. */
+export type ToggleKey = Exclude<keyof ViewOptions, 'statOrder'>;
+
+export const VIEW_OPTION_LABELS: { key: ToggleKey; label: string; hint?: string }[] = [
   { key: 'wallArea', label: 'שטח הקיר' },
   { key: 'wallHeight', label: 'גובה הקיר' },
   { key: 'floorMeters', label: 'מטר רץ תחתון' },
@@ -43,6 +73,7 @@ const DEFAULTS: ViewOptions = {
   frontArea: true,
   heightLine: true,
   warnings: true,
+  statOrder: STAT_KEYS,
 };
 
 const KEY = 'easycraft.view';
@@ -61,19 +92,49 @@ function read(): ViewOptions {
 let value = read();
 let snapshot = JSON.stringify(value);
 
+function commit(next: ViewOptions) {
+  value = next;
+  snapshot = JSON.stringify(value);
+  writePref(KEY, snapshot);
+  listeners.forEach((l) => l());
+}
+
 export const viewOptions = {
   get: (): ViewOptions => value,
-  toggle(key: keyof ViewOptions) {
-    value = { ...value, [key]: !value[key] };
-    snapshot = JSON.stringify(value);
-    writePref(KEY, snapshot);
-    listeners.forEach((l) => l());
+  toggle(key: Exclude<keyof ViewOptions, 'statOrder'>) {
+    commit({ ...value, [key]: !value[key] });
+  },
+  /** קובע את סדר המחוונים. מפתח חסר נוסף בסוף, כדי שלא ייעלם. */
+  setStatOrder(order: StatKey[]) {
+    const seen = new Set(order);
+    commit({ ...value, statOrder: [...order, ...STAT_KEYS.filter((k) => !seen.has(k))] });
+  },
+  /** מזיז מחוון אחד צעד למעלה או למטה ברשימה. */
+  moveStat(key: StatKey, dir: -1 | 1) {
+    const order = orderedStats(value);
+    const i = order.indexOf(key);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    const next = [...order];
+    [next[i], next[j]] = [next[j], next[i]];
+    viewOptions.setStatOrder(next);
   },
   subscribe(l: () => void): () => void {
     listeners.add(l);
     return () => listeners.delete(l);
   },
 };
+
+/**
+ * המחוונים לפי הסדר שנקבע.
+ * מפתח שאינו ברשימה השמורה מצטרף בסוף — כך מחוון שנוסף באפליקציה
+ * מופיע בלי לדרוס סדר שכבר נבחר, וכפילות אינה מוצגת פעמיים.
+ */
+export function orderedStats(v: ViewOptions): StatKey[] {
+  const saved = (v.statOrder ?? []).filter((k) => STAT_KEYS.includes(k));
+  const seen = new Set(saved);
+  return [...saved, ...STAT_KEYS.filter((k) => !seen.has(k))];
+}
 
 export function useViewOptions(): ViewOptions {
   /*

@@ -394,3 +394,21 @@ export const CornerIcon = ({ className = 'size-5' }: P) => (
     <path d="M9 19v-4h4" />
   </svg>
 );
+
+/** פלטה — החומר עצמו, לרשימת החומרים. */
+export const SheetIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="4" y="3" width="16" height="18" rx="1.5" />
+    <path d="M8 3v18" />
+  </svg>
+);
+
+/** סרגלי הכלים — מפתח ברגים, כי אלה הכלים שעובדים איתם. */
+export const ToolsIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M14.5 5.5a3.5 3.5 0 0 0 4.6 4.6l-8.2 8.2a2.2 2.2 0 0 1-3.1-3.1l8.2-8.2Z" />
+    <path d="M18 3.2 15.4 5.8" />
+  </svg>
+);

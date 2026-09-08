@@ -7,9 +7,9 @@ import { ExtrasSection } from './ExtrasSection';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { nav } from '../../nav/navigation';
 import { Field, NumField, inputClass, selectOnFocus } from '../../ui/Field';
-import { cm, displayUnit, unitLabel } from '../../ui/units';
+import { displayUnit } from '../../ui/units';
 import { useDisplayUnit } from '../../ui/useDisplayUnit';
-import { ChevronIcon, PlusIcon, TeamIcon } from '../../ui/icons';
+import { ChevronIcon, PlusIcon, SheetIcon, TeamIcon } from '../../ui/icons';
 import type { BackKind, Finish, Material } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
@@ -34,6 +34,20 @@ export function SettingsScreen() {
   const unit = useDisplayUnit();
 
   if (!settings || !materials || !finishes) return null;
+
+  /*
+   * הגוונים מקובצים לפי מרקם, בסדר אלפביתי, וגוון בלי מרקם יורד
+   * לסוף: הוא לא קטגוריה אלא חוסר, ומקומו אחרי מה שכן מסודר.
+   */
+  const NO_TEXTURE = 'בלי מרקם';
+  const groups = new Map<string, typeof finishes>();
+  for (const f of finishes) {
+    const key = f.texture || NO_TEXTURE;
+    groups.set(key, [...(groups.get(key) ?? []), f]);
+  }
+  const byTexture = [...groups.entries()].sort(([a], [b]) =>
+    a === NO_TEXTURE ? 1 : b === NO_TEXTURE ? -1 : a.localeCompare(b, 'he'),
+  );
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
@@ -66,38 +80,49 @@ export function SettingsScreen() {
         */}
         <section>
           <SectionTitle>גוונים</SectionTitle>
-          {finishes.length > 0 && (
-            <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
-              {finishes.map((f) => {
-                const on = materials.filter((m) => f.prices?.[m.id] !== undefined);
-                return (
-                  <li key={f.id}>
-                    <button
-                      onClick={() => setEditingFinish(f)}
-                      className="flex w-full items-center gap-3 px-4 py-3.5 text-start transition-colors hover:bg-stone-50"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="size-8 shrink-0 rounded-lg border border-stone-200"
-                        style={{ background: f.hex }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-semibold text-stone-900">{f.name}</span>
-                        <span className="block truncate text-xs text-stone-500">
-                          {on.length ? on.map((m) => m.name).join(' · ') : 'עוד בלי מחיר לאף חומר'}
-                          {!!f.texture && (
-                            <span className="text-stone-400"> · {f.texture}</span>
-                          )}
-                          {f.hasGrain && <span className="text-stone-400"> · סיבים</span>}
+          {/*
+            הגוונים מקובצים לפי מרקם. ככה הם עומדים במחסן וככה מדברים
+            עליהם — "היער", "המט" — ורשימה ארוכה של שמות בלי חלוקה
+            אילצה לקרוא את כולה כדי למצוא אחד. מרקם בלי שם יורד לסוף,
+            כי הוא לא קטגוריה אלא חוסר.
+          */}
+          {byTexture.map(([texture, group]) => (
+            <div key={texture} className="mb-3 last:mb-0">
+              <h3 className="mb-1.5 flex items-baseline gap-2 px-1">
+                <span className="text-[13px] font-semibold text-stone-600">{texture}</span>
+                <span className="num text-[11px] text-stone-400">{group.length}</span>
+              </h3>
+              <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                {group.map((f) => {
+                  const on = materials.filter((m) => f.prices?.[m.id] !== undefined);
+                  return (
+                    <li key={f.id}>
+                      <button
+                        onClick={() => setEditingFinish(f)}
+                        className="flex w-full items-center gap-3 px-4 py-3.5 text-start transition-colors hover:bg-stone-50"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="size-8 shrink-0 rounded-lg border border-stone-200"
+                          style={{ background: f.hex }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold text-stone-900">
+                            {f.name}
+                          </span>
+                          <span className="block truncate text-xs text-stone-500">
+                            {on.length ? on.map((m) => m.name).join(' · ') : 'עוד בלי מחיר לאף חומר'}
+                            {f.hasGrain && <span className="text-stone-400"> · סיבים</span>}
+                          </span>
                         </span>
-                      </span>
-                      <ChevronIcon className="size-4 shrink-0 text-stone-300" />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                        <ChevronIcon className="size-4 shrink-0 text-stone-300" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
 
           <button
             onClick={() => setEditingFinish('new')}
@@ -113,16 +138,18 @@ export function SettingsScreen() {
           <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
             {materials.map((m) => (
               <li key={m.id}>
+                {/*
+                  החומרים הם רשימה קצרה שבקושי משתנה, ומידות הפלטה
+                  והעובי שייכים לעריכה ולא לרשימה. שם ואייקון מספיקים
+                  כדי לבחור מי מהם לפתוח.
+                */}
                 <button
                   onClick={() => setEditingMaterial(m)}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 text-start transition-colors hover:bg-stone-50"
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-start transition-colors hover:bg-stone-50"
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold text-stone-900">{m.name}</span>
-                    <span className="num block truncate text-xs text-stone-500">
-                      פלטה {cm(m.sheetWidthMm)}×{cm(m.sheetHeightMm)} {unitLabel()}
-                      {m.thicknessMm !== undefined && <span> · {m.thicknessMm} מ״מ</span>}
-                    </span>
+                  <SheetIcon className="size-5 shrink-0 text-stone-400" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
+                    {m.name}
                   </span>
                   <ChevronIcon className="size-4 shrink-0 text-stone-300" />
                 </button>

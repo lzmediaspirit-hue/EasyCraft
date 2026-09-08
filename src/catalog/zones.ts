@@ -229,7 +229,15 @@ function derive(u: FlatSource): Zone[] {
   const rows = u.drawers ?? 0;
   if (rows > 0 && u.glyph === 'doorDrawer') {
     const band = Math.min(h * 0.22, h / (rows + 1)) * rows;
+    /* הראשון ברשימה הוא התחתון: הדלת למטה, והמגירה מעליה */
     return [
+      {
+        id: id('shelves'),
+        kind: 'shelves',
+        heightMm: h - band,
+        shelves: u.shelves ?? autoShelves(h - band),
+        shelfGapsMm: u.shelfGapsMm,
+      },
       {
         id: id('drawers'),
         kind: 'drawers',
@@ -237,13 +245,6 @@ function derive(u: FlatSource): Zone[] {
         drawers: rows,
         drawerCols: u.drawerCols,
         drawerStyle: u.drawerStyle,
-      },
-      {
-        id: id('shelves'),
-        kind: 'shelves',
-        heightMm: h - band,
-        shelves: u.shelves ?? autoShelves(h - band),
-        shelfGapsMm: u.shelfGapsMm,
       },
     ];
   }

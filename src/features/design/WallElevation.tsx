@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
 import { isDark, shade } from '../../ui/color';
@@ -48,6 +48,12 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onMove: (id: string, xMm: number, yMm: number) => void;
+  /**
+   * מחיקה ושכפול של הארגז הנבחר, על הציור עצמו.
+   * ריק = אין עריכה, ואז הכפתורים אינם מצוירים.
+   */
+  onRemove?: (id: string) => void;
+  onDuplicate?: (id: string) => void;
   /** הסתרת חזיתות — תצוגת פנים הארונות */
   inside: boolean;
   /** גוון לכל ארגז, לפי מזהה הגוון */
@@ -84,6 +90,8 @@ export function WallElevation({
   selectedId,
   onSelect,
   onMove,
+  onRemove,
+  onDuplicate,
   inside,
   finishHex,
   measure,
@@ -101,6 +109,7 @@ export function WallElevation({
   const units = [...allUnits].sort((a, b) => layer(a) - layer(b));
 
   const svgRef = useRef<SVGSVGElement>(null);
+
   const drag = useRef<{
     id: string;
     startX: number;
@@ -116,11 +125,13 @@ export function WallElevation({
 
   // כשקו הגובה מוצג צריך מקום לצידו, אחרת המידה נחתכת
   const padX = showHeight ? 420 : 120;
-  const padTop = 140;
+  /* מקום מעל הקיר לשורת הכפתורים של הארגז הנבחר ולתוויות */
+  const padTop = Math.max(140, wall.heightMm * 0.09);
   const padBottom = 340;
   const vbW = wall.lengthMm + padX * 2;
   const vbH = wall.heightMm + padTop + padBottom;
   const stroke = Math.max(wall.lengthMm / 420, 4);
+  const pxPerMm = usePxPerMm(svgRef, vbW, vbH);
   /*
    * המרחק הפנוי בין שני הארגזים שנבחרו לסרגל.
    * נמדד מהפאה הפנימית של האחד לפאה הפנימית של השני — זה המרווח
@@ -166,6 +177,17 @@ export function WallElevation({
     };
   })();
   const fontSize = Math.max(wall.lengthMm / 40, 70);
+  /*
+   * כפתור על הציור נמדד באצבע ולא במילימטרים: אותם 190 מ"מ הם
+   * כפתור נוח על קיר של 3 מטר וכתם של עשרה פיקסלים כשהציור מוקטן
+   * לחצי מסך. לכן המידה נגזרת מקנה המידה בפועל, ומוגבלת מלמעלה כדי
+   * שהכפתור לא יבלע ארגז קטן.
+   */
+  const btn = Math.min(
+    pxPerMm ? 38 / pxPerMm : Math.max(wall.lengthMm / 16, 190),
+    wall.heightMm * 0.3,
+    wall.lengthMm * 0.3,
+  );
 
   /** גובה המסך של נקודה שנמדדת מהרצפה. */
   const flip = (yFromFloor: number) => wall.heightMm - yFromFloor;
@@ -492,6 +514,23 @@ export function WallElevation({
                 stroke="#a06236"
                 strokeWidth={stroke * 1.4}
                 strokeDasharray={`${stroke * 5} ${stroke * 4}`}
+              />
+            )}
+            {/*
+              מחיקה ושכפול צמודות לארגז שנבחר, על הציור.
+              הן היו בכותרת לוח העריכה — רחוק מהיד שמחזיקה את הארגז,
+              ומאחורי גלילה כשהלוח נמוך. כאן הן במקום שבו העין כבר
+              נמצאת.
+            */}
+            {selected && !work && (onRemove || onDuplicate) && (
+              <UnitActions
+                width={u.widthMm}
+                xMm={u.xMm}
+                wallLengthMm={wall.lengthMm}
+                size={btn}
+                headroom={flip(u.yMm + u.heightMm) + padTop}
+                onRemove={onRemove && (() => onRemove(u.id))}
+                onDuplicate={onDuplicate && (() => onDuplicate(u.id))}
               />
             )}
           </g>
@@ -1004,4 +1043,122 @@ function snapY(
   const snapped = nearest(y, targets, tol);
   const maxY = Math.min(Math.max(ceiling, rest), Math.max(wallHeight - 50, 0));
   return Math.round(Math.min(Math.max(snapped, 0), Math.max(maxY, 0)));
+}
+
+/**
+ * מחיקה ושכפול של הארגז שנבחר, מצוירות על הציור.
+ *
+ * הן חיות בתוך ה-SVG ולא כשכבת HTML מעליו, כדי שהן יזוזו עם הארגז
+ * בלי חישוב מיקום נפרד — ובלי שיפגרו אחריו פריים אחד בכל גרירה.
+ */
+function UnitActions({
+  width,
+  xMm,
+  wallLengthMm,
+  size,
+  headroom,
+  onRemove,
+  onDuplicate,
+}: {
+  width: number;
+  xMm: number;
+  wallLengthMm: number;
+  size: number;
+  /** כמה מקום יש מעל הארגז עד לקצה הציור */
+  headroom: number;
+  onRemove?: () => void;
+  onDuplicate?: () => void;
+}) {
+  const gap = size * 0.2;
+  /* מעל הארגז, ואם אין שם מספיק מקום — יורד עליו במקצת */
+  const y = -Math.min(size + gap, Math.max(headroom - gap, 0));
+  const items = [
+    onDuplicate && { key: 'dup', label: 'שכפול הארגז', tone: '#57534e', onClick: onDuplicate },
+    onRemove && { key: 'del', label: 'הסרת הארגז', tone: '#dc2626', onClick: onRemove },
+  ].filter(Boolean) as { key: string; label: string; tone: string; onClick: () => void }[];
+
+  /*
+    השורה נצמדת לקצה הארגז, ובארגז צר ממנה — מתמרכזת עליו.
+    בשני המקרים היא נדחפת בחזרה לתוך הקיר, כדי שלא תיחתך בקצה.
+  */
+  const row = items.length * size + (items.length - 1) * gap;
+  const want = row > width ? xMm + (width - row) / 2 : xMm + width - row;
+  const left = Math.min(Math.max(want, 0), Math.max(wallLengthMm - row, 0)) - xMm;
+
+  return (
+    <g>
+      {items.map((it, i) => {
+        const x = left + row - size - i * (size + gap);
+        return (
+          <g
+            key={it.key}
+            transform={`translate(${x} ${y})`}
+            role="button"
+            aria-label={it.label}
+            className="cursor-pointer"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              it.onClick();
+            }}
+          >
+            <title>{it.label}</title>
+            <rect
+              width={size}
+              height={size}
+              rx={size * 0.28}
+              fill="#ffffff"
+              stroke={it.tone}
+              strokeWidth={size * 0.055}
+            />
+            <g
+              transform={`translate(${size * 0.22} ${size * 0.22}) scale(${size * 0.024})`}
+              fill="none"
+              stroke={it.tone}
+              strokeWidth={1.9}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {it.key === 'del' ? (
+                <>
+                  <path d="M4 7h16" />
+                  <path d="M9 7V5h6v2" />
+                  <path d="M6 7l1 13h10l1-13" />
+                </>
+              ) : (
+                <>
+                  <rect x="9" y="9" width="11" height="11" rx="2" />
+                  <path d="M5 15V5h10" />
+                </>
+              )}
+            </g>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+/**
+ * כמה פיקסלים על המסך שווה מילימטר אחד בציור.
+ *
+ * ה-SVG משתלב במסגרת שגודלה משתנה — לוח העריכה שנפתח מקטין אותו
+ * לחצי — ולכן קנה המידה נמדד מהטרנספורם בפועל ולא מרוחב הקיר.
+ * 0 עד שהמדידה הראשונה מגיעה.
+ */
+function usePxPerMm(ref: React.RefObject<SVGSVGElement | null>, vbW: number, vbH: number) {
+  const [pxPerMm, setPxPerMm] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => {
+      const ctm = el.getScreenCTM();
+      if (ctm?.a) setPxPerMm((prev) => (Math.abs(prev - ctm.a) > 1e-4 ? ctm.a : prev));
+    };
+    read();
+    if (typeof ResizeObserver === 'undefined') return;
+    const obs = new ResizeObserver(read);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [ref, vbW, vbH]);
+  return pxPerMm;
 }

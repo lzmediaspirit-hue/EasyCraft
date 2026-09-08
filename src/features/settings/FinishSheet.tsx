@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
-import { CopyIcon, PlusIcon, TrashIcon } from '../../ui/icons';
+import { CopyIcon, PencilIcon, PlusIcon, TrashIcon } from '../../ui/icons';
 import { BUILTIN_TEXTURES } from '../../db/types';
 import type { Finish, MaterialPrice } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
@@ -19,8 +19,8 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
   const { materials, finishes } = useMaterialsAndFinishes();
   const [name, setName] = useState(finish?.name ?? '');
   const [texture, setTexture] = useState<string | undefined>(finish?.texture);
-  /** מרקמים שהמשתמש הוסיף, מעבר לרשימה שמגיעה עם האפליקציה */
-  const [extraTextures, setExtraTextures] = useState<string[]>([]);
+  /** שדה המרקם החדש, נפתח מהעיפרון */
+  const [addingTexture, setAddingTexture] = useState(false);
   /** מרקם שהמשתמש הוסיף בעצמו, מעבר לרשימה שמגיעה עם האפליקציה */
   const [newTexture, setNewTexture] = useState('');
   const [copying, setCopying] = useState(false);
@@ -42,6 +42,19 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
   const [edgeConsumer, setEdgeConsumer] = useState(
     finish?.edgeConsumerPerM !== undefined ? String(finish.edgeConsumerPerM) : '',
   );
+
+  /*
+   * המרקמים שמוצעים: אלה שמגיעים עם האפליקציה, וכל מרקם שכבר קיים
+   * על גוון אחר. כך מרקם שנוסף פעם אחת חוזר מעצמו בגוון הבא, במקום
+   * להיכתב שוב ולהתפצל לשתי כתיבות של אותו דבר.
+   */
+  const known = [
+    ...new Set([
+      ...BUILTIN_TEXTURES,
+      ...(finishes ?? []).flatMap((f) => (f.texture ? [f.texture] : [])),
+      ...(texture ? [texture] : []),
+    ]),
+  ];
 
   const canSave = name.trim().length > 0;
 
@@ -145,43 +158,62 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
           שבב מבטלת את הבחירה.
         */}
         <Field group label="מרקם" hint="מרקם אחד ללוח">
-          <div className="flex flex-wrap gap-1.5">
-            {[...new Set([...BUILTIN_TEXTURES, ...extraTextures, ...(texture ? [texture] : [])])].map(
-              (t) => (
-                <Chip
-                  key={t}
-                  active={texture === t}
-                  onClick={() => setTexture((prev) => (prev === t ? undefined : t))}
-                >
-                  {t}
-                </Chip>
-              ),
-            )}
-          </div>
-          <div className="mt-2 flex gap-1.5">
-            <input
-              value={newTexture}
-              onChange={(e) => setNewTexture(e.target.value)}
-              onFocus={selectOnFocus}
-              aria-label="מרקם חדש"
-              placeholder="מרקם נוסף"
-              className={`${inputClass} flex-1`}
-            />
+          <div className="flex flex-wrap items-center gap-1.5">
+            {known.map((t) => (
+              <Chip
+                key={t}
+                active={texture === t}
+                onClick={() => setTexture((prev) => (prev === t ? undefined : t))}
+              >
+                {t}
+              </Chip>
+            ))}
+            {/*
+              מרקם חדש נוסף לעיתים רחוקות — פעם בכמה חודשים, כשספק
+              מביא משהו אחר. שדה קבוע לצדו תפס מקום בכל פתיחה, ולכן
+              הוא מאחורי עיפרון.
+            */}
             <button
-              onClick={() => {
-                const t = newTexture.trim();
-                if (!t) return;
-                setExtraTextures((prev) => (prev.includes(t) ? prev : [...prev, t]));
-                setTexture(t);
-                setNewTexture('');
-              }}
-              disabled={!newTexture.trim()}
+              onClick={() => setAddingTexture((v) => !v)}
+              aria-pressed={addingTexture}
               aria-label="הוספת מרקם"
-              className="shrink-0 rounded-xl bg-stone-100 px-3 text-stone-600 transition-colors hover:bg-stone-200 disabled:opacity-40"
+              title="מרקם חדש"
+              className={`grid size-8 shrink-0 place-items-center rounded-full transition-colors ${
+                addingTexture
+                  ? 'bg-oak-600 text-white'
+                  : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+              }`}
             >
-              <PlusIcon className="size-5" />
+              <PencilIcon className="size-4" />
             </button>
           </div>
+          {addingTexture && (
+            <div className="mt-2 flex gap-1.5">
+              <input
+                value={newTexture}
+                onChange={(e) => setNewTexture(e.target.value)}
+                onFocus={selectOnFocus}
+                autoFocus
+                aria-label="מרקם חדש"
+                placeholder="שם המרקם"
+                className={`${inputClass} flex-1`}
+              />
+              <button
+                onClick={() => {
+                  const t = newTexture.trim();
+                  if (!t) return;
+                  setTexture(t);
+                  setNewTexture('');
+                  setAddingTexture(false);
+                }}
+                disabled={!newTexture.trim()}
+                aria-label="שמירת המרקם"
+                className="shrink-0 rounded-xl bg-stone-100 px-3 text-stone-600 transition-colors hover:bg-stone-200 disabled:opacity-40"
+              >
+                <PlusIcon className="size-5" />
+              </button>
+            </div>
+          )}
         </Field>
 
         {/*

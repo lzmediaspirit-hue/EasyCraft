@@ -1,7 +1,16 @@
 import { Sheet } from '../../ui/Sheet';
 import { Field, inputClass, selectOnFocus } from '../../ui/Field';
 import { MeasureInput } from '../../ui/MeasureInput';
-import { VIEW_OPTION_LABELS, viewOptions, useViewOptions } from './viewOptions';
+import { ChevronIcon } from '../../ui/icons';
+import {
+  STAT_KEYS,
+  VIEW_OPTION_LABELS,
+  orderedStats,
+  viewOptions,
+  useViewOptions,
+  type StatKey,
+  type ToggleKey,
+} from './viewOptions';
 import { unitLabel } from '../../ui/units';
 import { wallName } from '../projects/wallLayouts';
 import { WallFeaturesDesigner } from '../projects/WallFeaturesDesigner';
@@ -26,6 +35,21 @@ export function WallToolsSheet({
   onClose: () => void;
 }) {
   const view = useViewOptions();
+  /*
+   * המחוונים לפי הסדר שנקבע, ואחריהם מה שאינו מחוון — קו הגובה
+   * והאזהרות. השניים האחרונים אינם אריחים ואין להם מקום בסדר.
+   */
+  const stats = orderedStats(view);
+  const labelOf = (key: ToggleKey) =>
+    VIEW_OPTION_LABELS.find((o) => o.key === key)!;
+  const rows = [
+    ...stats.map((key) => ({ ...labelOf(key), stat: key as StatKey })),
+    ...VIEW_OPTION_LABELS.filter((o) => !STAT_KEYS.includes(o.key as StatKey)).map((o) => ({
+      ...o,
+      stat: undefined as StatKey | undefined,
+    })),
+  ];
+  const statCount = stats.length;
 
   return (
     <Sheet title={`${wallName(index)} — מידות ותצוגה`} onClose={onClose} tall>
@@ -81,13 +105,18 @@ export function WallToolsSheet({
 
         <section>
           <h3 className="mb-2 text-sm font-semibold text-stone-700">מה מוצג</h3>
+          {/*
+            המחוונים מופיעים לפי הסדר שנקבע להם, והחיצים מזיזים אותם.
+            לכל נגר יש מספר אחד שהוא מסתכל עליו קודם, וסדר קבוע הכריח
+            אותו לחפש אותו בכל פעם באותו מקום שלישי.
+          */}
           <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
-            {VIEW_OPTION_LABELS.map((o) => (
-              <li key={o.key}>
+            {rows.map((o, i) => (
+              <li key={o.key} className="flex items-center">
                 <button
                   onClick={() => viewOptions.toggle(o.key)}
-                  aria-pressed={view[o.key]}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-start transition-colors hover:bg-stone-50"
+                  aria-pressed={!!view[o.key]}
+                  className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-start transition-colors hover:bg-stone-50"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-stone-800">{o.label}</span>
@@ -107,6 +136,26 @@ export function WallToolsSheet({
                     />
                   </span>
                 </button>
+                {o.stat && (
+                  <span className="flex shrink-0 flex-col pe-2">
+                    <button
+                      onClick={() => viewOptions.moveStat(o.stat!, -1)}
+                      disabled={i === 0}
+                      aria-label={`${o.label} — למעלה`}
+                      className="grid size-6 place-items-center rounded text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:opacity-25"
+                    >
+                      <ChevronIcon className="size-3.5 rotate-90" />
+                    </button>
+                    <button
+                      onClick={() => viewOptions.moveStat(o.stat!, 1)}
+                      disabled={i === statCount - 1}
+                      aria-label={`${o.label} — למטה`}
+                      className="grid size-6 place-items-center rounded text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:opacity-25"
+                    >
+                      <ChevronIcon className="size-3.5 -rotate-90" />
+                    </button>
+                  </span>
+                )}
               </li>
             ))}
           </ul>

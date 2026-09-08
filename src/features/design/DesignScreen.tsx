@@ -20,13 +20,14 @@ import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
 import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
-import { useViewOptions } from './viewOptions';
+import { orderedStats, viewOptions, useViewOptions, type StatKey } from './viewOptions';
 import { useDesignView } from './designView';
+import { StatGrid } from './StatGrid';
 import { DesignToolbar } from './DesignToolbar';
 import type { SheetName } from './sheets';
 import { history, useHistory } from './history';
 import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
-import { analyzeWall, fillSpan, nextFreeX } from './analysis';
+import { analyzeWall, fillSpan, nextFreeX, type WallAnalysis } from './analysis';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumption';
@@ -39,7 +40,7 @@ import {
 } from '../../ui/icons';
 import { cm, meters, unitLabel } from '../../ui/units';
 import { readPref, writePref } from '../../ui/prefs';
-import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
+import type { CatalogItem, PlacedUnit, Project, UserRole, Wall } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 const PANEL_KEY = 'easycraft.panelRatio';
@@ -217,6 +218,12 @@ export function DesignScreen({
     if (copy) setSelectedId(copy.id);
   }
 
+  async function removeUnit(id: string) {
+    await history.capture(projectId, `del:${id}`);
+    await unitsRepo.remove(id);
+    setSelectedId(null);
+  }
+
   async function centerWall() {
     if (!wall) return;
     await history.capture(projectId, `center:${Date.now()}`);
@@ -298,6 +305,8 @@ export function DesignScreen({
             corners={corners}
             finishHex={finishHex ?? {}}
             onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
+            onRemove={editable ? removeUnit : undefined}
+            onDuplicate={editable ? (id) => id === selectedId && duplicateSelected() : undefined}
           />
           )}
         </div>
@@ -362,12 +371,7 @@ export function DesignScreen({
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
-          onDuplicate={duplicateSelected}
           onEdit={() => setSheet('edit')}
-          onRemove={async () => {
-            await unitsRepo.remove(selected.id);
-            setSelectedId(null);
-          }}
           onClose={() => setSelectedId(null)}
         />
         </div>
@@ -445,44 +449,18 @@ export function DesignScreen({
               </div>
             )}
 
+            {/*
+              המחוונים מוצגים לפי הסדר שנקבע להם, ואפשר לגרור אותם
+              למקום אחר. לכל נגר יש מספר אחד שהוא מסתכל עליו קודם,
+              והוא צריך להיות ראשון — לא שלישי מפני שכך נכתב בקוד.
+            */}
             {statsOpen && analysis && role === 'manager' && (
-              <>
-                {/* מה מוצג כאן נבחר במגירת הקיר; אין מחוון שאי אפשר לכבות */}
-                <div className="grid grid-cols-3 gap-2">
-                  {view.wallArea && (
-                    <Stat
-                      label="שטח הקיר"
-                      value={((wall.lengthMm / 1000) * (wall.heightMm / 1000)).toFixed(2)}
-                      unit="מ״ר"
-                    />
-                  )}
-                  {view.wallHeight && (
-                    <Stat label="גובה הקיר" value={cm(wall.heightMm)} unit={unitLabel()} />
-                  )}
-                  {view.floorMeters && (
-                    <Stat label="מטר רץ תחתון" value={meters(analysis.floorUsedMm)} unit="מ׳" />
-                  )}
-                  {view.unitCount && <Stat label="ארגזים" value={String(units.length)} />}
-                  {view.freeSpace && (
-                    <Stat
-                      label={analysis.freeMm >= 0 ? 'נשאר על הקיר' : 'חריגה'}
-                      value={cm(Math.abs(analysis.freeMm))}
-                      unit={unitLabel()}
-                      tone={analysis.freeMm < 0 ? 'bad' : 'ok'}
-                    />
-                  )}
-                  {view.frontArea && (
-                    <Stat
-                      label="שטח חזיתות"
-                      value={(
-                        units.reduce((n, u) => n + (u.widthMm / 1000) * (u.heightMm / 1000), 0)
-                      ).toFixed(2)}
-                      unit="מ״ר"
-                    />
-                  )}
-                </div>
-
-              </>
+              <StatGrid
+                order={orderedStats(view)}
+                shown={(key) => !!view[key]}
+                render={(key) => statTile(key, wall, units, analysis)}
+                onReorder={(next) => viewOptions.setStatOrder(next)}
+              />
             )}
 
             {/*
@@ -821,6 +799,53 @@ function EditGate({
   );
 }
 
+
+/**
+ * המחוון עצמו, לפי המפתח שלו.
+ * הפרדה בין "מה מוצג" ל"באיזה סדר" — הסדר שייך לרשת, והתוכן כאן.
+ */
+function statTile(
+  key: StatKey,
+  wall: Wall,
+  units: PlacedUnit[],
+  analysis: WallAnalysis,
+): React.ReactNode {
+  switch (key) {
+    case 'wallArea':
+      return (
+        <Stat
+          label="שטח הקיר"
+          value={((wall.lengthMm / 1000) * (wall.heightMm / 1000)).toFixed(2)}
+          unit="מ״ר"
+        />
+      );
+    case 'wallHeight':
+      return <Stat label="גובה הקיר" value={cm(wall.heightMm)} unit={unitLabel()} />;
+    case 'floorMeters':
+      return <Stat label="מטר רץ תחתון" value={meters(analysis.floorUsedMm)} unit="מ׳" />;
+    case 'unitCount':
+      return <Stat label="ארגזים" value={String(units.length)} />;
+    case 'freeSpace':
+      return (
+        <Stat
+          label={analysis.freeMm >= 0 ? 'נשאר על הקיר' : 'חריגה'}
+          value={cm(Math.abs(analysis.freeMm))}
+          unit={unitLabel()}
+          tone={analysis.freeMm < 0 ? 'bad' : 'ok'}
+        />
+      );
+    case 'frontArea':
+      return (
+        <Stat
+          label="שטח חזיתות"
+          value={units
+            .reduce((n, u) => n + (u.widthMm / 1000) * (u.heightMm / 1000), 0)
+            .toFixed(2)}
+          unit="מ״ר"
+        />
+      );
+  }
+}
 
 function Stat({
   label,

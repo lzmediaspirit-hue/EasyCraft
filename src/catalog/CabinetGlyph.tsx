@@ -494,19 +494,64 @@ function zonedContainer(c: Ctx) {
     }
   }
 
-  // החזית מכסה את כל מה שאינו מגירה חיצונית
+  /*
+   * החזית מכסה את כל מה שאינו מגירה חיצונית — אבל רק רצף שלם.
+   * מגירה באמצע הארון חוצה את הדלתות לשתי חזיתות נפרדות, ודלת אחת
+   * שנמתחת מעל למגירה ומתחתיה הייתה מצוירת עליה: שתי חזיתות באותו
+   * מקום, בדיוק מה שלא קורה בארון אמיתי.
+   */
   if (!inside && c.doors > 0) {
-    const covered = bands.filter(
-      (b) => !(b.zone.kind === 'drawers' && b.zone.drawerStyle !== 'inner'),
-    );
-    if (covered.length) {
-      const top = Math.min(...covered.map((b) => b.top));
-      const bottom = Math.max(...covered.map((b) => b.bottom));
-      out.push(<g key="front">{doorPanels(c, top, bottom, c.doors)}</g>);
-      out.push(<g key="mech">{openingMark(c, top, bottom)}</g>);
-    }
+    const runs = doorRuns(bands);
+    const share = splitDoors(c.doors, runs);
+    runs.forEach((r, i) => {
+      if (!share[i]) return;
+      out.push(<g key={`front-${i}`}>{doorPanels(c, r.top, r.bottom, share[i], `f${i}`)}</g>);
+      out.push(<g key={`mech-${i}`}>{openingMark(c, r.top, r.bottom)}</g>);
+    });
   }
 
+  return out;
+}
+
+/**
+ * הרצפים שהדלתות יושבות עליהם.
+ * אזור של מגירה חיצונית שובר את הרצף — מעליה ומתחתיה אלה שתי
+ * חזיתות שונות, כל אחת עם הדלתות שלה.
+ */
+function doorRuns(bands: { zone: Zone; top: number; bottom: number }[]) {
+  const runs: { top: number; bottom: number }[] = [];
+  for (const b of bands) {
+    if (b.zone.kind === 'drawers' && b.zone.drawerStyle !== 'inner') continue;
+    const last = runs[runs.length - 1];
+    // הרשימה יורדת מהתחתון לעליון, ולכן הרצף נמשך כלפי מעלה
+    if (last && Math.abs(last.top - b.bottom) < 1) last.top = b.top;
+    else runs.push({ top: b.top, bottom: b.bottom });
+  }
+  return runs;
+}
+
+/**
+ * מחלק את הדלתות בין הרצפים לפי הגובה שלהם.
+ * לכל רצף מגיעה דלת אחת לפחות — אין חזית בלי דלת — והשארית הולכת
+ * לרצפים הגבוהים, ששם היא באמת נחוצה.
+ */
+function splitDoors(total: number, runs: { top: number; bottom: number }[]): number[] {
+  if (runs.length < 2) return runs.map(() => total);
+  const heights = runs.map((r) => r.bottom - r.top);
+  const sum = heights.reduce((a, x) => a + x, 0) || 1;
+  const left = Math.max(total - runs.length, 0);
+  const raw = heights.map((h) => (left * h) / sum);
+  const out = raw.map((x) => 1 + Math.floor(x));
+  let rest = total - out.reduce((a, x) => a + x, 0);
+  // השארית לפי גודל השבר שנחתך, מהגדול לקטן
+  const order = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of order) {
+    if (rest <= 0) break;
+    out[i] += 1;
+    rest -= 1;
+  }
   return out;
 }
 

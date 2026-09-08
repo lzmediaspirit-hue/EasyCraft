@@ -12,7 +12,7 @@ import { FinishSheet } from '../settings/FinishSheet';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
-import { BookmarkIcon, CloseIcon, CopyIcon, PencilIcon, TrashIcon } from '../../ui/icons';
+import { BookmarkIcon, CloseIcon, PencilIcon } from '../../ui/icons';
 import { DRAWER_BOXES } from '../../db/types';
 import type {
   ExposedSides,
@@ -72,9 +72,7 @@ export function UnitEditor({
   defaultSocleMm = 0,
   onChange,
   onApplyChoiceAll,
-  onDuplicate,
   onEdit,
-  onRemove,
   onClose,
 }: {
   unit: PlacedUnit;
@@ -99,10 +97,7 @@ export function UnitEditor({
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
-  /** עותק של הארגז הזה על אותו קיר */
-  onDuplicate: () => void;
   onEdit: () => void;
-  onRemove: () => void;
   onClose: () => void;
 }) {
   const [axis, setAxis] = useState<Axis>('w');
@@ -242,26 +237,11 @@ export function UnitEditor({
           <BookmarkIcon className="size-5" />
         </button>
         <button
-          onClick={onDuplicate}
-          aria-label="שכפול הארגז"
-          title="עותק של הארגז הזה"
-          className="rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
-        >
-          <CopyIcon className="size-5" />
-        </button>
-        <button
           onClick={onEdit}
           aria-label="עריכת הארגז"
           className="rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
         >
           <PencilIcon className="size-5" />
-        </button>
-        <button
-          onClick={onRemove}
-          aria-label="הסרת הארגז"
-          className="rounded-full p-2 text-stone-400 transition-colors hover:bg-red-50 hover:text-red-600"
-        >
-          <TrashIcon className="size-5" />
         </button>
         <button
           onClick={onClose}

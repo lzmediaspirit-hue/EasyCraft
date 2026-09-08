@@ -68,7 +68,12 @@ export function PresentSheet({
           </p>
         </div>
 
-        <div className="relative flex h-[46vh] min-h-0 overflow-hidden rounded-2xl border border-stone-200">
+        {/*
+          רקע המסגרת זהה לרקע הציור: הציור שומר על יחס הצדדים, ולכן
+          נשארות רצועות בצדדים — ורצועה לבנה מסגירה שזו תמונה בתוך
+          מסך, במקום חדר.
+        */}
+        <div className="relative flex h-[46vh] min-h-0 overflow-hidden rounded-2xl border border-stone-200 bg-gradient-to-b from-[#f7f5f2] to-[#e8e4de]">
           <WallIso
             walls={walls}
             units={units}

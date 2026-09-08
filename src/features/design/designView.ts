@@ -26,6 +26,14 @@ export interface DesignView {
   statsOpen: boolean;
   /** שורת לשוניות הקירות */
   wallsOpen: boolean;
+  /**
+   * סרגלי הכלים שמעל ההדמיה.
+   *
+   * שלוש שורות כפתורים תופסות שליש מסך בטלפון. מי שמסדר ארגזים
+   * צריך אותן; מי שרק מסתכל על הקיר — לא, וכשהוא מראה אותו ללקוח
+   * הן רק רעש.
+   */
+  toolsOpen: boolean;
 }
 
 const INITIAL: DesignView = {
@@ -37,6 +45,7 @@ const INITIAL: DesignView = {
   /* הנתונים מתחילים סגורים: מי שפותח הדמיה בא לראות את הקיר */
   statsOpen: false,
   wallsOpen: true,
+  toolsOpen: true,
 };
 
 export function useDesignView() {
@@ -49,7 +58,7 @@ export function useDesignView() {
   );
 
   const toggle = useCallback(
-    (key: 'iso' | 'inside' | 'statsOpen' | 'wallsOpen') =>
+    (key: 'iso' | 'inside' | 'statsOpen' | 'wallsOpen' | 'toolsOpen') =>
       setView((v) => ({ ...v, [key]: !v[key] })),
     [],
   );
