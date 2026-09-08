@@ -1,7 +1,14 @@
 import { glyphDef } from '../catalog/glyphList';
 import { nestParts, type NestResult, type PartGrain } from './nesting';
 import { DRAWER, MATERIAL, drawerDepth } from '../catalog/standards';
-import { countDrawers, countShelves, unitCells, unitZones, zoneCells } from '../catalog/zones';
+import {
+  countDrawers,
+  countShelves,
+  unitCells,
+  unitFronts,
+  unitZones,
+  zoneCells,
+} from '../catalog/zones';
 import { materialForRole } from '../db/types';
 import type {
   Material,
@@ -12,7 +19,6 @@ import type {
   ProjectPrice,
   Finish,
   Settings,
-  Zone,
 } from '../db/types';
 
 /**
@@ -136,16 +142,24 @@ export interface ProjectCosting {
 
 /* ------------------------------------------------------------------ */
 
-/** מגירה פנימית מוסתרת מאחורי דלת, ולכן יש חזית גם בלי שהוגדרו דלתות. */
-function effectiveDoors(u: PlacedUnit): number {
+/**
+ * החזיתות של הארגז כפי שהן נחתכות: כל רצף והדלתות שבו.
+ *
+ * מגירה פנימית מוסתרת מאחורי דלת, ולכן יש חזית גם בלי שהוגדרו
+ * דלתות. בנישה למכשיר החזית היא המכשיר עצמו — ערך ישן שנשאר משינוי
+ * איור לא ייהפך לדלת שמישהו ישלם עליה.
+ */
+function doorFronts(u: PlacedUnit): { fromMm: number; toMm: number; doors: number }[] {
+  if (glyphDef(u.glyph).appliance) return [];
+  const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
   const hasInner = unitZones(u).some((z) => z.kind === 'drawers' && z.drawerStyle === 'inner');
-  if (hasInner) return Math.max(u.doors ?? 0, 1);
-  /*
-   * בנישה למכשיר החזית היא המכשיר עצמו. אם נשאר שם ערך ישן משינוי
-   * איור, הוא לא ייהפך לדלת שמישהו ישלם עליה.
-   */
-  if (glyphDef(u.glyph).appliance) return 0;
-  return u.doors ?? 0;
+  const doors = Math.max(u.doors ?? 0, hasInner ? 1 : 0);
+  return unitFronts({ ...u, heightMm: h, doors }, h);
+}
+
+/** כמה לוחות חזית יש בארגז — הסכום של כל החזיתות. */
+function effectiveDoors(u: PlacedUnit): number {
+  return doorFronts(u).reduce((n, f) => n + f.doors, 0);
 }
 
 /** מנגנוני קלאפה בארגז — אחד לכל דלת שנפתחת כלפי מעלה. */
@@ -367,9 +381,6 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     }
   }
 
-  // דלתות מכסות את כל מה שאינו מגירה חיצונית
-  const doors = effectiveDoors(u);
-  const coveredMm = coveredHeight(zones);
   /*
    * בפינה מתה החזית יושבת רק על החלק הנגיש: מה שנחסם על ידי הארון
    * שעל הקיר הסמוך אין דרך לפתוח, ולכן גם אין שם דלת.
@@ -379,30 +390,31 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
       ? Math.min(u.blindMm ?? 300, carcassW)
       : 0;
   const frontW = Math.max(carcassW - blind, 0);
-  // דלת זכוכית אינה לוח, ולכן היא נספרת בנפרד ולא בעמודות הפלטות
   /*
-   * גובה הדלת יכול להיות גדול מהארגז: דלת אחת שמכסה שני ארגזים
-   * שייכת לאחד מהם, והמידה שלה אינה מידתו. כברירת מחדל היא מכסה
-   * בדיוק את מה שאינו מגירה חיצונית.
+   * חזית לכל רצף, ולא דלת אחת לארגז: ארון עם דלת עליונה ודלת
+   * תחתונה הוא שני לוחות בשתי מידות, וזה מה שצריך להגיע למסור.
+   * דלת זכוכית אינה לוח ולכן היא נספרת בנפרד.
    */
-  const doorH = coveredMm + (u.doorGrowTopMm ?? 0) + (u.doorGrowBottomMm ?? 0);
-  if (doors > 0 && doorH > 0 && frontW > 0 && !u.glassDoors) {
-    parts.push({
-      role: 'front',
-      grain: 'height',
-      label: 'דלת',
-      widthMm: Math.max(frontW / doors - gap, 0),
-      heightMm: Math.max(doorH - gap, 0),
-      qty: doors,
-    });
+  const fronts = doorFronts(u);
+  if (!u.glassDoors && frontW > 0) {
+    for (const f of fronts) {
+      const doorH = f.toMm - f.fromMm;
+      if (doorH <= 0) continue;
+      parts.push({
+        role: 'front',
+        grain: 'height',
+        label: 'דלת',
+        widthMm: Math.max(frontW / f.doors - gap, 0),
+        heightMm: Math.max(doorH - gap, 0),
+        qty: f.doors,
+      });
+    }
   }
 
   // דפנות זרות במידה החיצונית המלאה, ועמוקות מהארגז.
   // ברירת המחדל מכסה חזית סטנדרטית; נגר שעובד אחרת מזין מידה משלו.
   const panelDepth = u.exposedDepthMm ?? d + MATERIAL.exposedExtraMm;
-  // דופן שמתיישרת לדלת גבוהה מהארגז — אחרת נראה קו במפגש
-  const grown = (u.doorGrowTopMm ?? 0) + (u.doorGrowBottomMm ?? 0);
-  const sideH = u.exposedMatchesDoor && grown > 0 ? h + grown : h;
+  const sideH = h;
   const panel = (heightMm: number): Part => ({
     role: 'exposed',
     grain: 'height',
@@ -419,20 +431,6 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
   return parts;
 }
 
-/**
- * הגובה שהחזית מכסה.
- * אזור שכולו מגירות חיצוניות כבר יש לו חזית משלו; אזור מעורב —
- * למשל קושרת עם מגירות מצד אחד ומדפים מהשני — עדיין צריך דלת.
- */
-function coveredHeight(zones: Zone[]): number {
-  return zones.reduce((n, z) => {
-    const cells = zoneCells(z);
-    const allOuterDrawers = cells.every(
-      (c) => c.content.kind === 'drawers' && c.content.drawerStyle !== 'inner',
-    );
-    return n + (allOuterDrawers ? 0 : z.heightMm);
-  }, 0);
-}
 
 /** ההגדרות שנחוצות לפירוק לחלקים. */
 export interface PartSettings {
@@ -459,15 +457,17 @@ function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
   const zones = unitZones({ ...u, heightMm: h });
   const out: GlassPart[] = [];
 
-  const doors = effectiveDoors(u);
-  const coveredMm = coveredHeight(zones);
-  if (u.glassDoors && doors > 0 && coveredMm > 0) {
-    out.push({
-      label: 'דלת זכוכית',
-      widthMm: Math.round(Math.max(carcassW / doors - s.frontGapMm, 0)),
-      heightMm: Math.round(Math.max(coveredMm - s.frontGapMm, 0)),
-      qty: doors,
-    });
+  if (u.glassDoors) {
+    for (const f of doorFronts(u)) {
+      const doorH = f.toMm - f.fromMm;
+      if (doorH <= 0) continue;
+      out.push({
+        label: 'דלת זכוכית',
+        widthMm: Math.round(Math.max(carcassW / f.doors - s.frontGapMm, 0)),
+        heightMm: Math.round(Math.max(doorH - s.frontGapMm, 0)),
+        qty: f.doors,
+      });
+    }
   }
 
   // מדף זכוכית נחתך למידת התא שהוא יושב בו

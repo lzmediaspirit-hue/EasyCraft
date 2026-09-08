@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { unitZones, zoneBands, zoneColumns } from '../../catalog/zones';
+import { unitFronts, unitZones, zoneBands, zoneColumns } from '../../catalog/zones';
 import { shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
 import { shade } from '../../ui/color';
@@ -130,18 +130,22 @@ function box(
   const top = [p(0, h, 0), p(w, h, 0), p(w, h, d), p(0, h, d)].join(' ');
   const side = [p(w, 0, 0), p(w, h, 0), p(w, h, d), p(w, 0, d)].join(' ');
   /*
-   * מיון לפי המרחק מהצופה: מה שקרוב יותר מצויר אחרון. כל פאה
-   * נמדדת במרכז שלה ולא במרכז התיבה — פאה קדמית וגב של אותו לוח
-   * אינם באותו מרחק.
+   * מיון לפי המרחק מהצופה: מה שקרוב יותר מצויר אחרון, והמרחק של
+   * לוח נמדד בפינה הקרובה ביותר שלו ולא במרכזו.
+   *
+   * מרכז מטעה כשמשווים לוח גדול ללוח קטן: דופן הארון נמדדת באמצע
+   * הגובה, ומדף שיושב גבוה נמדד גבוה ממנה — ואז המדף נצבע על הדופן
+   * שעומדת לפניו. הפינה הקרובה שייכת לשני הלוחות באותה מידה.
+   *
+   * שלוש הפאות של אותה תיבה חולקות את הפינה, ולכן הן שומרות על
+   * הסדר שבו נכתבו: צד, עליונה, ואז חזית.
    */
-  const at = (dx: number, dy: number, dz: number) => {
-    const [wx, wz] = tf(x + dx, z + dz);
-    return view.depth(wx, y + dy, wz);
-  };
+  const [nx, nz] = tf(x + w, z + d);
+  const depth = view.depth(nx, y + h, nz);
   return [
-    { points: side, fill: shade(tone, 0.78), key: `${key}-s`, depth: at(w, h / 2, d / 2), layer: 0, group: 0 },
-    { points: top, fill: shade(tone, 1.12), key: `${key}-t`, depth: at(w / 2, h, d / 2), layer: 0, group: 0 },
-    { points: front, fill: tone, key: `${key}-f`, depth: at(w / 2, h / 2, d), layer: 0, group: 0 },
+    { points: side, fill: shade(tone, 0.78), key: `${key}-s`, depth, layer: 0, group: 0 },
+    { points: top, fill: shade(tone, 1.12), key: `${key}-t`, depth, layer: 0, group: 0 },
+    { points: front, fill: tone, key: `${key}-f`, depth, layer: 0, group: 0 },
   ];
 }
 
@@ -422,60 +426,65 @@ export function WallIso({
         if (bi > 0) {
           add(box(v, tf, x + t, zBottom - t, 0, w - 2 * t, t, d, carcassTone, `${zk}-sep`));
         }
+      });
 
-        // חזית: לוח שמכסה את הפתח, כשלא מסתכלים פנימה
-        const allOuterDrawers = cells.every(
-          (c) => c.content.kind === 'drawers' && c.content.drawerStyle !== 'inner',
-        );
-        if (!inside && (u.doors ?? 0) > 0 && !allOuterDrawers) {
-          const doors = Math.max(u.doors ?? 1, 1);
-          /*
-           * בפינה מתה הדלת יושבת רק על החלק הנגיש; מה שנחסם על ידי
-           * הארון שעל הקיר הסמוך מקבל לוח סתימה באותו גוון. דלת על
-           * כל הרוחב הייתה מבטיחה ללקוח פתח שאי אפשר לפתוח.
-           */
-          const blind =
-            u.corner === 'blindStart' || u.corner === 'blindEnd'
-              ? Math.min(Math.max(u.blindMm ?? 0, w * 0.1), w * 0.7)
-              : 0;
-          const openX = u.corner === 'blindStart' ? blind : 0;
-          const openW = w - blind;
+      /*
+       * החזיתות: לוח שמכסה את הפתח, כשלא מסתכלים פנימה.
+       *
+       * החזית נגזרת מהאזורים ולא מצוירת לכל אזור בנפרד — דלת אחת
+       * יכולה לכסות כמה תאים, וזה בדיוק מה שרואים בארון אמיתי.
+       */
+      if (!inside) {
+        /*
+         * בפינה מתה הדלת יושבת רק על החלק הנגיש; מה שנחסם על ידי
+         * הארון שעל הקיר הסמוך מקבל לוח סתימה באותו גוון. דלת על
+         * כל הרוחב הייתה מבטיחה ללקוח פתח שאי אפשר לפתוח.
+         */
+        const blind =
+          u.corner === 'blindStart' || u.corner === 'blindEnd'
+            ? Math.min(Math.max(u.blindMm ?? 0, w * 0.1), w * 0.7)
+            : 0;
+        const openX = u.corner === 'blindStart' ? blind : 0;
+        const openW = w - blind;
+        for (const [fi, f] of unitFronts({ ...u, heightMm: h }, h).entries()) {
+          const fh = f.toMm - f.fromMm;
+          if (fh <= 0) continue;
           if (blind) {
             add(
               box(
                 v,
                 tf,
                 u.corner === 'blindStart' ? x : x + openW,
-                zBottom + 2,
+                y + f.fromMm + 2,
                 d,
                 blind,
-                zh - 4,
+                fh - 4,
                 MATERIAL.frontMm,
                 tone,
-                `${zk}-blind`,
+                `${u.id}-blind-${fi}`,
               ),
               L.front,
             );
           }
-          for (let k = 0; k < doors; k++) {
+          for (let k = 0; k < f.doors; k++) {
             add(
               box(
                 v,
                 tf,
-                x + openX + (openW / doors) * k + 2,
-                zBottom + 2,
+                x + openX + (openW / f.doors) * k + 2,
+                y + f.fromMm + 2,
                 d,
-                openW / doors - 4,
-                zh - 4,
+                openW / f.doors - 4,
+                fh - 4,
                 MATERIAL.frontMm,
                 u.glassDoors ? shade(tone, 1.06) : tone,
-                `${zk}-door-${k}`,
+                `${u.id}-door-${fi}-${k}`,
               ),
               L.front,
             );
           }
         }
-      });
+      }
 
       /*
        * מכשיר חשמלי בלי דלת — מקרר, תנור, מדיח — מקבל חזית משלו.

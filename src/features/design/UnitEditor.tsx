@@ -66,8 +66,6 @@ export function UnitEditor({
   unit,
   inside,
   project,
-  roomAbove = 0,
-  roomBelow = 0,
   fillWidth,
   fillHeight,
   defaultSocleMm = 0,
@@ -81,12 +79,6 @@ export function UnitEditor({
   inside: boolean;
   /** הפרויקט, לברירות המחדל של הגוון והחומר */
   project?: Project;
-  /**
-   * כמה מקום פנוי יש לדלת לגדול אליו, למעלה ולמטה.
-   * נמדד בהדמיה, כי רק שם יודעים מי השכנים.
-   */
-  roomAbove?: number;
-  roomBelow?: number;
   /**
    * הרווח שהארגז יושב בתוכו — איפה הוא מתחיל וכמה הוא גדול.
    * גם הוא נמדד בהדמיה, מאותה סיבה.
@@ -107,14 +99,6 @@ export function UnitEditor({
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
   const [addingFinish, setAddingFinish] = useState(false);
-  /**
-   * גובה הדלת מוסתר מאחורי עיפרון.
-   * ארגז שכבר נמשכה בו דלת נפתח פתוח, אחרת מי ששינה קודם לא היה
-   * מוצא את מה ששינה.
-   */
-  const [growOpen, setGrowOpen] = useState(
-    (unit.doorGrowTopMm ?? 0) !== 0 || (unit.doorGrowBottomMm ?? 0) !== 0,
-  );
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
   /*
@@ -152,8 +136,6 @@ export function UnitEditor({
   const hasExposed = !!(exposed.start || exposed.end || exposed.top || exposed.bottom);
   const hasDrawers = unitCells(unit).some(({ content: c }) => c.kind === 'drawers');
   const cells = doorCells(unit);
-  const growTop = unit.doorGrowTopMm ?? 0;
-  const growBottom = unit.doorGrowBottomMm ?? 0;
 
   /*
    * ברוחב מוצגות גם המידות של הפריט וגם מידות התקן עד 120 ס"מ:
@@ -510,69 +492,7 @@ export function UnitEditor({
                         {o.label}
                       </Pill>
                     ))}
-                    {/* העיפרון פותח את גובה הדלת, שהוא היוצא מן הכלל */}
-                    <button
-                      onClick={() => setGrowOpen((v) => !v)}
-                      aria-pressed={growOpen}
-                      aria-label="גובה הדלת"
-                      title="גובה הדלת"
-                      className={`grid size-7 shrink-0 place-items-center rounded-lg transition-colors ${
-                        growOpen
-                          ? 'bg-oak-600 text-white'
-                          : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
-                      }`}
-                    >
-                      <PencilIcon className="size-4" />
-                    </button>
                   </Row>
-
-                  {/*
-                    הדלת גדלה מהארגז כלפי מעלה או כלפי מטה, ולא
-                    "גובה דלת" אחד: השאלה בשטח היא תמיד לאיזה כיוון
-                    היא נמשכת, ומה יש שם. כל כיוון מוגבל למה שפנוי,
-                    כדי שהיא לא תיכנס לארגז השכן.
-
-                    ברוב הארגזים הדלת בגובה הגוף ואין מה לגעת בזה,
-                    ולכן השורה מוסתרת מאחורי העיפרון שליד מנגנון
-                    הפתיחה. ארגז שכבר נמשכה בו דלת פותח אותה מעצמו.
-                  */}
-                  {growOpen && (
-                    <>
-                      <Row
-                        label="הדלת מעבר לארגז"
-                        hint={`גובה הדלת ${cm(bodyH + growTop + growBottom)} ${unitLabel()}`}
-                      >
-                        <Grow
-                          label="למעלה"
-                          value={growTop}
-                          max={roomAbove}
-                          onChange={(mm) => onChange({ doorGrowTopMm: mm || undefined })}
-                        />
-                        <Grow
-                          label="למטה"
-                          value={growBottom}
-                          max={roomBelow}
-                          onChange={(mm) => onChange({ doorGrowBottomMm: mm || undefined })}
-                        />
-                      </Row>
-
-                      {(growTop !== 0 || growBottom !== 0) && hasExposed && (
-                        <button
-                          onClick={() =>
-                            onChange({ exposedMatchesDoor: !unit.exposedMatchesDoor })
-                          }
-                          aria-pressed={!!unit.exposedMatchesDoor}
-                          className={`mt-1.5 w-full rounded-lg px-3 py-1.5 text-start text-[11px] font-medium transition-colors ${
-                            unit.exposedMatchesDoor
-                              ? 'bg-oak-600 text-white'
-                              : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                          }`}
-                        >
-                          הדופן הזרה בגובה הדלת
-                        </button>
-                      )}
-                    </>
-                  )}
 
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <button
@@ -842,52 +762,6 @@ function AxisTab({
   );
 }
 
-/**
- * כמה הדלת נמשכת לכיוון אחד. צעדים של 5 ס"מ, כי זו המידה שבה
- * מדברים בשטח, ומספר מדויק נכנס בשדה עצמו.
- */
-function Grow({
-  label,
-  value,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  /** המקום הפנוי לכיוון הזה */
-  max: number;
-  onChange: (mm: number) => void;
-}) {
-  const step = 50;
-  return (
-    <span className="flex items-center gap-1 rounded-lg bg-stone-100 px-1.5 py-1">
-      <span className="px-1 text-[11px] text-stone-500">{label}</span>
-      <button
-        onClick={() => onChange(Math.max(value - step, -200))}
-        aria-label={`הפחתה ${label}`}
-        className="grid size-6 place-items-center rounded-md bg-white text-stone-600 transition-colors hover:text-oak-700"
-      >
-        −
-      </button>
-      <MeasureInput
-        value={value}
-        onChange={onChange}
-        minMm={-200}
-        maxMm={max}
-        ariaLabel={`הדלת ${label}`}
-        className="num w-10 bg-transparent text-center text-sm font-medium text-stone-900 focus:outline-none"
-      />
-      <button
-        onClick={() => onChange(Math.min(value + step, max))}
-        disabled={value >= max}
-        aria-label={`הוספה ${label}`}
-        className="grid size-6 place-items-center rounded-md bg-white text-stone-600 transition-colors hover:text-oak-700 disabled:opacity-40"
-      >
-        +
-      </button>
-    </span>
-  );
-}
 
 function Row({
   label,

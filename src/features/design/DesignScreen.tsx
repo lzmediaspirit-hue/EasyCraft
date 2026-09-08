@@ -36,8 +36,10 @@ import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
   ChevronIcon,
+  CopyIcon,
   PlusIcon,
   SlidersIcon,
+  TrashIcon,
 } from '../../ui/icons';
 import { readPref, writePref } from '../../ui/prefs';
 import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
@@ -265,7 +267,7 @@ export function DesignScreen({
         צריך מקום, וקיר שכבר בנוי אפשר להסתיר לרגע.
       */}
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
-        <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
           {iso ? (
             /* התלת־ממד מראה את החדר כולו, ולא רק את הקיר שעובדים עליו */
             <WallIso
@@ -305,16 +307,24 @@ export function DesignScreen({
             corners={corners}
             finishHex={finishHex ?? {}}
             onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
-            onRemove={editable ? removeUnit : undefined}
-            onDuplicate={editable ? (id) => id === selectedId && duplicateSelected() : undefined}
           />
           )}
+
         </div>
       </div>
 
       {selected && editable ? (
         <>
-        {/* ידית גרירה שקובעת כמה מהמסך תופס לוח העריכה */}
+        {/*
+          ידית הגרירה שקובעת כמה מהמסך תופס לוח העריכה, ולצידה
+          מחיקה ושכפול של הארגז הנבחר.
+
+          הן היו קודם צמודות לארגז על הציור וזזו איתו — כפתור שנודד
+          מחפשים בכל פעם מחדש, ומעל ארגז עליון הוא כיסה את השכן.
+          כאן הן תמיד באותו מקום, על הגבול שבין הציור ללוח, קרוב
+          לאגודל ובלי להסתיר מילימטר מהקיר.
+        */}
+        <div className="relative flex shrink-0 items-center">
         <div
           role="separator"
           aria-label="גובה לוח העריכה"
@@ -342,9 +352,28 @@ export function DesignScreen({
             setPanelRatio(next);
             writePref(PANEL_KEY, String(next));
           }}
-          className="flex shrink-0 cursor-ns-resize touch-none justify-center py-2"
+          className="flex flex-1 cursor-ns-resize touch-none justify-center py-2"
         >
           <span className="h-1.5 w-12 rounded-full bg-stone-300" />
+        </div>
+        <span className="absolute end-4 flex items-center gap-1.5">
+          <button
+            onClick={duplicateSelected}
+            aria-label="שכפול הארגז"
+            title="עותק של הארגז הזה"
+            className="grid size-9 place-items-center rounded-full bg-white text-stone-600 shadow-sm ring-1 ring-stone-200 transition-colors hover:text-oak-700"
+          >
+            <CopyIcon className="size-4" />
+          </button>
+          <button
+            onClick={() => removeUnit(selected.id)}
+            aria-label="הסרת הארגז"
+            title="מחיקת הארגז"
+            className="grid size-9 place-items-center rounded-full bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition-colors hover:bg-red-50"
+          >
+            <TrashIcon className="size-4" />
+          </button>
+        </span>
         </div>
 
         {/* הלוח עצמו נמתח לגובה שנבחר, ובתוכו הוא גולל */}
@@ -363,8 +392,6 @@ export function DesignScreen({
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
           project={project}
-          roomAbove={freeRoom(selected, units, wall.heightMm, 'up')}
-          roomBelow={freeRoom(selected, units, wall.heightMm, 'down')}
           fillWidth={fillSpan(selected, units, wall, 'w')}
           fillHeight={fillSpan(selected, units, wall, 'h')}
           defaultSocleMm={settings?.defaults.socleMm ?? 0}
@@ -699,41 +726,6 @@ export function DesignScreen({
 
 /* ------------------------------------------------------------------ */
 
-
-/** תת-כותרת בלי כפילות: שם החדר מוצג רק אם הוא שונה משם הפרויקט. */
-/**
- * כמה מקום פנוי יש מעל הדלת או מתחתיה, באותו טווח רוחב.
- *
- * זה מה שמגביל דלת שנמשכת מעבר לארגז: היא יכולה לכסות את מה שאין
- * בו ארגז אחר, ולעצור לפני התקרה או הרצפה.
- *
- * הדלת אינה מתחילה בתחתית הארגז אלא מעל הרגליים, ולכן הרגליים עצמן
- * הן מקום פנוי כלפי מטה — זו בדיוק הדלת שמכסה את הסוקל. מדידה
- * מתחתית הארגז החזירה אפס לכל ארגז שעומד על הרצפה, ו"למטה" פשוט
- * לא זז.
- */
-function freeRoom(
-  unit: PlacedUnit,
-  units: PlacedUnit[],
-  wallHeightMm: number,
-  dir: 'up' | 'down',
-): number {
-  const overlaps = units.filter(
-    (u) => u.id !== unit.id && u.xMm < unit.xMm + unit.widthMm && u.xMm + u.widthMm > unit.xMm,
-  );
-  if (dir === 'down') {
-    const doorBottom = unit.yMm + (unit.socleMm ?? 0);
-    const top = overlaps
-      .filter((u) => u.yMm + u.heightMm <= unit.yMm + 1)
-      .reduce((n, u) => Math.max(n, u.yMm + u.heightMm), 0);
-    return Math.max(doorBottom - top, 0);
-  }
-  const myTop = unit.yMm + unit.heightMm;
-  const bottom = overlaps
-    .filter((u) => u.yMm >= myTop - 1)
-    .reduce((n, u) => Math.min(n, u.yMm), wallHeightMm);
-  return Math.max(bottom - myTop, 0);
-}
 
 /**
  * מה מוצג במקום כפתור ההוספה למי שאינו עורך.

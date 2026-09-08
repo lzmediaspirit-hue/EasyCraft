@@ -370,3 +370,49 @@ export function contentSummary(c: ZoneContent): string {
   if (c.kind === 'rod') return 'מוט תלייה';
   return 'חלל פתוח';
 }
+
+/**
+ * החזיתות של הארון: מה כל דלת מכסה, וכמה דלתות יש בה.
+ *
+ * זו התשובה היחידה לשאלה "איפה יושבות הדלתות", והיא משרתת גם את
+ * ציור החזית, גם את התלת־ממד וגם את פירוק החלקים — אחרת כל אחד
+ * מהם היה מחשב אותה קצת אחרת, ומה שרואים לא היה מה שנחתך.
+ *
+ * המידות נמדדות מתחתית הגוף כלפי מעלה, כמו האזורים עצמם.
+ * מגירה חיצונית אינה מכוסה בדלת ולכן היא שוברת רצף, וגם אזור
+ * שסומן במפורש כפותח חזית חדשה.
+ */
+export function unitFronts(
+  u: FlatSource,
+  bodyMm: number,
+): { fromMm: number; toMm: number; doors: number }[] {
+  const doors = u.doors ?? 0;
+  if (doors <= 0) return [];
+  const zones = normalizeHeights(unitZones(u), bodyMm);
+  const out: { fromMm: number; toMm: number; doors: number }[] = [];
+  let from = 0;
+  for (const z of zones) {
+    const to = from + z.heightMm;
+    const outerDrawers = zoneCells(z).every(
+      (c) => c.content.kind === 'drawers' && c.content.drawerStyle !== 'inner',
+    );
+    /* תא פתוח בכוונה: חזית משלו עם אפס דלתות — נישה בתוך הארון */
+    const open = z.frontSplit && z.doors === 0;
+    const last = out[out.length - 1];
+    /*
+     * רצף נמשך רק אם האזור אינו מגירה חיצונית, אינו מבקש חזית
+     * משלו, והחזית שלפניו נגמרה בדיוק איפה שהוא מתחיל.
+     */
+    if (!outerDrawers && !open) {
+      if (last && !z.frontSplit && Math.abs(last.toMm - from) < 1) last.toMm = to;
+      else out.push({ fromMm: from, toMm: to, doors: Math.max(z.doors ?? 1, 1) });
+    }
+    from = to;
+  }
+  /*
+   * חזית אחת = הארון כולו, ואז מספר הדלתות הוא של הארגז — זה
+   * המספר שנבחר בשורת "דלתות", והוא מה שהנגר מצפה לו.
+   */
+  if (out.length === 1) out[0].doors = doors;
+  return out;
+}

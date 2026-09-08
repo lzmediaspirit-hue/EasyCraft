@@ -6,11 +6,14 @@ import { consumptionRepo } from '../../materials/consumption';
 import { receiveOrder, stockRepo } from '../../materials/materialsRepo';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { selectOnFocus } from '../../ui/Field';
-import { CheckIcon } from '../../ui/icons';
+import { CheckIcon, PlusIcon } from '../../ui/icons';
+import { Sheet } from '../../ui/Sheet';
+import { Pill } from '../../ui/Pill';
 import type { ProjectCosting } from '../../costing/boards';
+import type { Finish, Material } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
-type SortKey = 'finish' | 'texture' | 'material' | 'missing';
+type SortKey = 'finish' | 'texture' | 'material' | 'need' | 'have' | 'ordered' | 'missing';
 
 /**
  * מלאי הפלטות בעסק.
@@ -23,6 +26,11 @@ type SortKey = 'finish' | 'texture' | 'material' | 'missing';
  * עמודה ומשווה מספרים, ולא קוראת כרטיס אחרי כרטיס. מיון וסינון לפי
  * חומר ולפי מרקם, כי ככה מזמינים — כל הסנדוויץ׳ מספק אחד, וכל
  * גוני היער באותה שיחה.
+ *
+ * ברשימה יש רק שורות שיש בהן משהו: לוח שפרויקט דורש, לוח שמונח
+ * בנגרייה, לוח שהוזמן או לוח שכבר נחתך. כל צירוף אפשרי של גוון
+ * וחומר היה מאות שורות ריקות שאין בהן החלטה. לוח שיש בנגרייה ואף
+ * פרויקט לא דורש נוסף בכפתור "הוספת לוח למלאי".
  */
 export function StockScreen() {
   const { materials, finishes } = useMaterialsAndFinishes();
@@ -44,6 +52,7 @@ export function StockScreen() {
   const [texture, setTexture] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>('finish');
   const [onlyNeeded, setOnlyNeeded] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   /**
    * כמה פלטות דורש כל צירוף של גוון וחומר.
@@ -107,11 +116,21 @@ export function StockScreen() {
           };
         }),
     )
+    /*
+      שורה ריקה — בלי דרישה, בלי מלאי, בלי הזמנה ובלי חיתוך — אינה
+      החלטה שמישהו צריך לקבל, ולכן היא לא ברשימה.
+    */
+    .filter((r) => r.sold + r.quoted + r.have + r.ordered + r.cut > 0)
     .filter((r) => !materialId || r.material.id === materialId)
     .filter((r) => !texture || r.finish.texture === texture)
     .filter((r) => !onlyNeeded || r.missing > 0)
     .sort((a, b) => {
-      if (sort === 'missing') return b.missing - a.missing || a.finish.name.localeCompare(b.finish.name, 'he');
+      /* מיון לפי מספר: הגדול קודם, ושוויון נשבר לפי שם הגוון */
+      const byName = a.finish.name.localeCompare(b.finish.name, 'he');
+      if (sort === 'missing') return b.missing - a.missing || byName;
+      if (sort === 'have') return b.have - a.have || byName;
+      if (sort === 'ordered') return b.ordered - a.ordered || byName;
+      if (sort === 'need') return b.sold + b.quoted - (a.sold + a.quoted) || byName;
       /*
         מיון לפי מרקם: ככה עומדים הלוחות במחסן וככה מזמינים אותם —
         כל היער יחד, כל המט יחד. לוח בלי מרקם יורד לסוף, כדי שלא
@@ -151,10 +170,30 @@ export function StockScreen() {
       <ScreenHeader title="מלאי לוחות" subtitle="מה יש, מה בדרך ומה חסר" />
 
       <main className="flex-1 space-y-3 px-4 pt-4 pb-10">
+        {/*
+          שלושת המספרים הם גם המיון: לחיצה על "חסר" מעלה למעלה את מה
+          שצריך להזמין, ולחיצה על "במלאי" את מה שיש הכי הרבה ממנו.
+        */}
         <div className="grid grid-cols-3 gap-2">
-          <Total label="במלאי" value={totals.have} />
-          <Total label="הוזמן" value={totals.ordered} />
-          <Total label="חסר" value={totals.missing} tone={totals.missing > 0} />
+          <Total
+            label="במלאי"
+            value={totals.have}
+            active={sort === 'have'}
+            onClick={() => setSort(sort === 'have' ? 'finish' : 'have')}
+          />
+          <Total
+            label="הוזמן"
+            value={totals.ordered}
+            active={sort === 'ordered'}
+            onClick={() => setSort(sort === 'ordered' ? 'finish' : 'ordered')}
+          />
+          <Total
+            label="חסר"
+            value={totals.missing}
+            tone={totals.missing > 0}
+            active={sort === 'missing'}
+            onClick={() => setSort(sort === 'missing' ? 'finish' : 'missing')}
+          />
         </div>
 
         {/* סינון לפי חומר — ככה מזמינים: כל הסנדוויץ׳ מספק אחד */}
@@ -181,7 +220,6 @@ export function StockScreen() {
               ['finish', 'גוון'],
               ['texture', 'מרקם'],
               ['material', 'חומר'],
-              ['missing', 'חסר'],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -208,15 +246,20 @@ export function StockScreen() {
 
         {rows.length === 0 ? (
           <p className="pt-10 text-center text-sm text-stone-500">
-            {onlyNeeded ? 'לא חסר כלום.' : 'אין גוונים שמתאימים לסינון.'}
+            {onlyNeeded
+              ? 'לא חסר כלום.'
+              : materialId || texture
+                ? 'אין לוחות שמתאימים לסינון.'
+                : 'אין עדיין לוחות במלאי ואף פרויקט לא דורש חומר.'}
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+            {/* כותרת שהיא גם מיון — לוחצים על העמודה שמעניינת */}
             <div className="grid grid-cols-[1fr_2.6rem_3.4rem_4.2rem] items-center gap-1 border-b border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[10px] font-medium text-stone-500">
               <span>גוון · חומר</span>
-              <span className="text-center">צריך</span>
-              <span className="text-center">מלאי</span>
-              <span className="text-center">הוזמן</span>
+              <SortHead label="צריך" active={sort === 'need'} onClick={() => setSort(sort === 'need' ? 'finish' : 'need')} />
+              <SortHead label="מלאי" active={sort === 'have'} onClick={() => setSort(sort === 'have' ? 'finish' : 'have')} />
+              <SortHead label="הוזמן" active={sort === 'ordered'} onClick={() => setSort(sort === 'ordered' ? 'finish' : 'ordered')} />
             </div>
             <ul className="divide-y divide-stone-200/80">
               {rows.map((r) => (
@@ -309,12 +352,160 @@ export function StockScreen() {
           </div>
         )}
 
+        {/*
+          לוח שקנו למחסן בלי שאף פרויקט דורש אותו אינו ברשימה, ולכן
+          הוא נוסף כאן — אחרת אין דרך להזין אותו בכלל.
+        */}
+        <button
+          onClick={() => setAdding(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-stone-300 py-3 text-sm font-medium text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
+        >
+          <PlusIcon className="size-4" />
+          הוספת לוח למלאי
+        </button>
+
         <p className="text-xs leading-snug text-stone-500">
-          "צריך" נספר מפרויקטים שכבר נמכרו; המספר הקטן מתחתיו הוא מה
-          שדורשות הצעות שעוד לא נסגרו. להזמין חומר לפיהן זה להמר.
+          מוצגים רק לוחות שפרויקט דורש, שיש מהם במלאי, שהוזמנו או
+          שכבר נחתכו. "צריך" נספר מפרויקטים שכבר נמכרו; המספר הקטן
+          מתחתיו הוא מה שדורשות הצעות שעוד לא נסגרו.
         </p>
       </main>
+
+      {adding && (
+        <AddStockSheet
+          finishes={finishes}
+          materials={materials}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * הוספת לוח למלאי ביד.
+ *
+ * הרשימה מציגה רק מה שיש בו מספר, ולכן לוח שנקנה מראש — בלי שאף
+ * פרויקט דורש אותו — צריך דרך להיכנס. בוחרים גוון, בוחרים את החומר
+ * שהוא קיים עליו, ומזינים כמות.
+ */
+function AddStockSheet({
+  finishes,
+  materials,
+  onClose,
+}: {
+  finishes: Finish[];
+  materials: Material[];
+  onClose: () => void;
+}) {
+  const [finishId, setFinishId] = useState<string | null>(null);
+  const [materialId, setMaterialId] = useState<string | null>(null);
+  const [sheets, setSheets] = useState(1);
+
+  const finish = finishes.find((f) => f.id === finishId);
+  /* חומר שאין לגוון מחיר עליו אינו לוח שקיים אצל הספק */
+  const forFinish = materials.filter((m) => finish?.prices?.[m.id] !== undefined);
+  const chosen = forFinish.find((m) => m.id === materialId) ?? forFinish[0];
+
+  return (
+    <Sheet
+      title="הוספת לוח למלאי"
+      onClose={onClose}
+      tall
+      footer={
+        <button
+          disabled={!finish || !chosen || sheets < 1}
+          onClick={async () => {
+            if (!finish || !chosen) return;
+            await stockRepo.set(finish.id, chosen.id, { sheets });
+            onClose();
+          }}
+          className="w-full rounded-2xl bg-oak-600 py-3.5 text-base font-semibold text-white transition-colors hover:bg-oak-700 disabled:bg-stone-200 disabled:text-stone-400"
+        >
+          הוספה למלאי
+        </button>
+      }
+    >
+      <div className="space-y-4">
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-stone-700">גוון</h3>
+          <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+            {finishes.map((f) => (
+              <li key={f.id}>
+                <button
+                  onClick={() => {
+                    setFinishId(f.id);
+                    setMaterialId(null);
+                  }}
+                  aria-pressed={f.id === finishId}
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-start transition-colors ${
+                    f.id === finishId ? 'bg-oak-50' : 'hover:bg-stone-50'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-7 shrink-0 rounded-lg border border-stone-200"
+                    style={{ background: f.hex }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-stone-900">
+                      {f.name}
+                    </span>
+                    {f.texture && (
+                      <span className="block truncate text-[11px] text-stone-400">{f.texture}</span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {finish && (
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-stone-700">חומר</h3>
+            {forFinish.length === 0 ? (
+              <p className="text-xs leading-snug text-stone-500">
+                לגוון הזה עוד אין מחיר לאף חומר. קובעים אותו במסך ההגדרות, ואז אפשר
+                להחזיק ממנו מלאי.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {forFinish.map((m) => (
+                  <Pill
+                    key={m.id}
+                    active={m.id === chosen?.id}
+                    onClick={() => setMaterialId(m.id)}
+                  >
+                    {m.name}
+                  </Pill>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-stone-700">כמה פלטות</h3>
+          <div className="flex items-center gap-2">
+            {[1, 2, 3, 5, 10].map((n) => (
+              <Pill key={n} active={sheets === n} onClick={() => setSheets(n)}>
+                {n}
+              </Pill>
+            ))}
+            <input
+              value={sheets || ''}
+              onChange={(e) => setSheets(Math.max(Number(e.target.value) || 0, 0))}
+              onFocus={selectOnFocus}
+              type="number"
+              inputMode="numeric"
+              aria-label="כמות מדויקת"
+              className="num w-16 rounded-lg bg-stone-100 py-1.5 text-center text-sm font-medium text-stone-900 focus:bg-white focus:ring-1 focus:ring-oak-400 focus:outline-none"
+            />
+          </div>
+        </section>
+      </div>
+    </Sheet>
   );
 }
 
@@ -380,17 +571,67 @@ function Cell({
   );
 }
 
-function Total({ label, value, tone }: { label: string; value: number; tone?: boolean }) {
+function Total({
+  label,
+  value,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  tone?: boolean;
+  /** המיון הנוכחי הוא לפי המספר הזה */
+  active?: boolean;
+  onClick?: () => void;
+}) {
   return (
-    <div
-      className={`rounded-2xl border p-3 text-center ${
-        tone ? 'border-red-200 bg-red-50' : 'border-stone-200 bg-white'
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={`מיון לפי ${label}`}
+      className={`rounded-2xl border p-3 text-center transition-colors ${
+        active
+          ? 'border-stone-900 bg-stone-900'
+          : tone
+            ? 'border-red-200 bg-red-50'
+            : 'border-stone-200 bg-white'
       }`}
     >
-      <span className="block text-[11px] text-stone-500">{label}</span>
-      <span className={`num block text-2xl font-bold ${tone ? 'text-red-700' : 'text-stone-900'}`}>
+      <span className={`block text-[11px] ${active ? 'text-white/70' : 'text-stone-500'}`}>
+        {label}
+      </span>
+      <span
+        className={`num block text-2xl font-bold ${
+          active ? 'text-white' : tone ? 'text-red-700' : 'text-stone-900'
+        }`}
+      >
         {value}
       </span>
-    </div>
+    </button>
+  );
+}
+
+/** כותרת עמודה שאפשר למיין לפיה. */
+function SortHead({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={`מיון לפי ${label}`}
+      className={`rounded-md py-0.5 text-center transition-colors ${
+        active ? 'bg-stone-900 text-white' : 'hover:bg-stone-200/70'
+      }`}
+    >
+      {label}
+    </button>
   );
 }

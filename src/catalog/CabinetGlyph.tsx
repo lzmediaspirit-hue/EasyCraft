@@ -1,4 +1,4 @@
-import { zoneBands, zoneCells, isContainer } from './zones';
+import { isContainer, unitFronts, zoneBands, zoneCells } from './zones';
 import type { CornerKind, OpeningMech, Zone, ZoneContent } from '../db/types';
 
 /**
@@ -45,10 +45,6 @@ export type GlyphProps = {
   corner?: CornerKind;
   /** רוחב החלק החסום בפינה מתה */
   blindMm?: number;
-  /** כמה החזית נמשכת מעל הגוף */
-  growTopMm?: number;
-  /** כמה החזית נמשכת מתחת לגוף, על הרגליים */
-  growBottomMm?: number;
 };
 
 export function CabinetGlyph({
@@ -68,8 +64,6 @@ export function CabinetGlyph({
   opening = 'hinge',
   corner,
   blindMm = 0,
-  growTopMm = 0,
-  growBottomMm = 0,
 }: GlyphProps) {
   // ארגזי נגרות הם מלבנים; עיגול קל בלבד, שלא ייראה כמו רהיט מצויר
   const r = Math.min(8, Math.min(w, h) * 0.015);
@@ -100,8 +94,6 @@ export function CabinetGlyph({
         opening,
         corner,
         blindMm,
-        growTop: growTopMm,
-        growBottom: growBottomMm,
       })}
     </g>
   );
@@ -131,9 +123,6 @@ type Ctx = {
   opening: OpeningMech;
   corner?: CornerKind;
   blindMm: number;
-  /** החזית נמשכת מעבר לגוף — כלפי מעלה וכלפי מטה */
-  growTop: number;
-  growBottom: number;
 };
 
 function details(c: Ctx) {
@@ -400,6 +389,8 @@ function cellContent(
   top: number,
   bottom: number,
   key: string,
+  /** יש דלת מול התא הזה, ולכן לא רואים מה בתוכו */
+  hidden = false,
 ): React.ReactNode {
   const { t, inside } = c;
   const cc = { ...c, w: cw };
@@ -407,13 +398,13 @@ function cellContent(
   if (content.kind === 'drawers') {
     const rows = content.drawers ?? 1;
     const cols = Math.max(content.drawerCols ?? 1, 1);
-    const hidden = content.drawerStyle === 'inner';
+    const inner = content.drawerStyle === 'inner';
     // מגירה פנימית נראית רק כשמסתכלים פנימה
-    if (hidden && !inside) return null;
-    return <g key={`d-${key}`}>{drawerGrid(cc, top, bottom, rows, cols, hidden && inside)}</g>;
+    if (inner && !inside) return null;
+    return <g key={`d-${key}`}>{drawerGrid(cc, top, bottom, rows, cols, inner && inside)}</g>;
   }
 
-  if (!inside && c.doors > 0) return null;
+  if (hidden) return null;
 
   if (content.kind === 'shelves') {
     return (
@@ -454,8 +445,18 @@ function zonedContainer(c: Ctx) {
   const { w, h, t, inside } = c;
   const bands = zoneBands(c.zones!, h);
   const out: React.ReactNode[] = [];
+  /*
+   * החזיתות של הארון, ומה שהן מכסות. תא שאין עליו חזית — נישה
+   * פתוחה, מגירה חיצונית — נראה גם כשמסתכלים מלפנים, כי אין שם
+   * דלת שתסתיר אותו.
+   */
+  const fronts = c.doors > 0 ? unitFronts({ ...c, heightMm: h, zones: c.zones }, h) : [];
+  const behindDoor = (top: number, bottom: number) =>
+    !inside &&
+    fronts.some((f) => h - f.toMm <= top + 1 && h - f.fromMm >= bottom - 1);
 
   for (const { zone, top, bottom } of bands) {
+    const hidden = behindDoor(top, bottom);
     /*
      * כל אזור מצויר תא-תא. בלי קושרת יש תא אחד ברוחב מלא; עם קושרת
      * כל עמודה מקבלת את הרוחב שלה, והקושרת עצמה מצוירת בין העמודות
@@ -467,12 +468,12 @@ function zonedContainer(c: Ctx) {
       const cw = w * cell.share;
       out.push(
         <g key={`cell-${zone.id}-${cell.key}`} transform={`translate(${x} 0)`}>
-          {cellContent(c, cell.content, cw, top, bottom, `${zone.id}-${cell.key}`)}
+          {cellContent(c, cell.content, cw, top, bottom, `${zone.id}-${cell.key}`, hidden)}
         </g>,
       );
       x += cw;
       // הקושרת בין תא לתא, כשרואים את הפנים
-      if (i < cells.length - 1 && (inside || !c.doors)) {
+      if (i < cells.length - 1 && !hidden) {
         out.push(
           <line
             key={`div-${zone.id}-${cell.key}`}
@@ -487,7 +488,7 @@ function zonedContainer(c: Ctx) {
     });
 
     // קו הפרדה בין אזורים
-    if (top > 0 && (inside || !c.doors)) {
+    if (top > 0 && !hidden) {
       out.push(
         <line key={`sep-${zone.id}`} x1={0} y1={top} x2={w} y2={top} strokeWidth={t} />,
       );
@@ -495,63 +496,24 @@ function zonedContainer(c: Ctx) {
   }
 
   /*
-   * החזית מכסה את כל מה שאינו מגירה חיצונית — אבל רק רצף שלם.
-   * מגירה באמצע הארון חוצה את הדלתות לשתי חזיתות נפרדות, ודלת אחת
-   * שנמתחת מעל למגירה ומתחתיה הייתה מצוירת עליה: שתי חזיתות באותו
-   * מקום, בדיוק מה שלא קורה בארון אמיתי.
+   * החזיתות לפי מה שנקבע בעורך פנים הארון: דלת אחת לכל הארון, דלת
+   * לכל תא, או דלת שמכסה כמה תאים. אותו חישוב עצמו משרת גם את
+   * התלת־ממד וגם את פירוק החלקים, ולכן מה שרואים הוא מה שנחתך.
    */
   if (!inside && c.doors > 0) {
-    const runs = doorRuns(bands);
-    const share = splitDoors(c.doors, runs);
-    runs.forEach((r, i) => {
-      if (!share[i]) return;
-      out.push(<g key={`front-${i}`}>{doorPanels(c, r.top, r.bottom, share[i], `f${i}`)}</g>);
-      out.push(<g key={`mech-${i}`}>{openingMark(c, r.top, r.bottom)}</g>);
+    unitFronts({ ...c, heightMm: h, zones: c.zones, doors: c.doors }, h).forEach((f, i) => {
+      // האזורים נמדדים מלמטה, והציור מלמעלה
+      const top = h - f.toMm;
+      const bottom = h - f.fromMm;
+      out.push(<g key={`front-${i}`}>{doorPanels(c, top, bottom, f.doors, `f${i}`)}</g>);
+      out.push(<g key={`mech-${i}`}>{openingMark(c, top, bottom)}</g>);
+      /* הקו שבין חזית לחזית — בלעדיו שתי דלתות נראות כדלת אחת */
+      if (top > 0.5) {
+        out.push(<line key={`fedge-${i}`} x1={0} y1={top} x2={w} y2={top} strokeWidth={t} />);
+      }
     });
   }
 
-  return out;
-}
-
-/**
- * הרצפים שהדלתות יושבות עליהם.
- * אזור של מגירה חיצונית שובר את הרצף — מעליה ומתחתיה אלה שתי
- * חזיתות שונות, כל אחת עם הדלתות שלה.
- */
-function doorRuns(bands: { zone: Zone; top: number; bottom: number }[]) {
-  const runs: { top: number; bottom: number }[] = [];
-  for (const b of bands) {
-    if (b.zone.kind === 'drawers' && b.zone.drawerStyle !== 'inner') continue;
-    const last = runs[runs.length - 1];
-    // הרשימה יורדת מהתחתון לעליון, ולכן הרצף נמשך כלפי מעלה
-    if (last && Math.abs(last.top - b.bottom) < 1) last.top = b.top;
-    else runs.push({ top: b.top, bottom: b.bottom });
-  }
-  return runs;
-}
-
-/**
- * מחלק את הדלתות בין הרצפים לפי הגובה שלהם.
- * לכל רצף מגיעה דלת אחת לפחות — אין חזית בלי דלת — והשארית הולכת
- * לרצפים הגבוהים, ששם היא באמת נחוצה.
- */
-function splitDoors(total: number, runs: { top: number; bottom: number }[]): number[] {
-  if (runs.length < 2) return runs.map(() => total);
-  const heights = runs.map((r) => r.bottom - r.top);
-  const sum = heights.reduce((a, x) => a + x, 0) || 1;
-  const left = Math.max(total - runs.length, 0);
-  const raw = heights.map((h) => (left * h) / sum);
-  const out = raw.map((x) => 1 + Math.floor(x));
-  let rest = total - out.reduce((a, x) => a + x, 0);
-  // השארית לפי גודל השבר שנחתך, מהגדול לקטן
-  const order = raw
-    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
-    .sort((a, b) => b.frac - a.frac);
-  for (const { i } of order) {
-    if (rest <= 0) break;
-    out[i] += 1;
-    rest -= 1;
-  }
   return out;
 }
 
@@ -649,24 +611,11 @@ function hangersAt(w: number, rodY: number, drop: number, t: number, key: string
 }
 
 /** דלתות: קווי הפרדה אנכיים וידיות בצד הפתיחה. */
-function doorPanels(c: Ctx, rawTop: number, rawBottom: number, n: number, key = '') {
+function doorPanels(c: Ctx, top: number, bottom: number, n: number, key = '') {
   const { w, t } = c;
   if (n < 1) return [];
   const out = [];
-  /*
-   * דלת שנמשכת מעבר לגוף מצוירת בגודל שלה ולא בגודל הארגז.
-   * הצמיחה חלה רק על הקצה שנוגע בקצה הארגז: אזור דלתות שיושב
-   * מתחת למגירות לא גדל כלפי מעלה, כי אין לו לאן.
-   */
-  const gTop = rawTop <= 0 ? c.growTop : 0;
-  const gBottom = rawBottom >= c.h ? c.growBottom : 0;
-  const top = rawTop - gTop;
-  const bottom = rawBottom + gBottom;
   const zoneH = bottom - top;
-  // בלי מסגרת משלה, דלת שחורגת מהארגז לא נראית בכלל
-  if (gTop || gBottom) {
-    out.push(<rect key={`${key}face`} x={0} y={top} width={w} height={zoneH} strokeWidth={t} />);
-  }
   const panelW = w / n;
   const hy1 = top + zoneH * 0.44;
   const hy2 = top + zoneH * 0.56;

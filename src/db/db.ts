@@ -457,3 +457,25 @@ db.version(16)
         delete m.kind;
       }),
   );
+
+/**
+ * דלת בגובה הגוף, תמיד.
+ *
+ * "הדלת מעבר לארגז" נועדה לדלת אחת שמכסה שני ארגזים; בפועל היא
+ * הייתה הגדרה שקשה למצוא וקל לשבור בה חזית, והמקום הנכון לכסות
+ * כמה חללים בדלת אחת הוא חזית שמשתרעת על כמה תאים בתוך אותו ארון.
+ * השדות הישנים נמחקים כדי שלא יישארו ארגזים עם דלת בגובה שאי אפשר
+ * לשנות.
+ */
+db.version(17)
+  .stores(TABLES_V14)
+  .upgrade((tx) =>
+    tx
+      .table('units')
+      .toCollection()
+      .modify((u: Record<string, unknown>) => {
+        delete u.doorGrowTopMm;
+        delete u.doorGrowBottomMm;
+        delete u.exposedMatchesDoor;
+      }),
+  );
