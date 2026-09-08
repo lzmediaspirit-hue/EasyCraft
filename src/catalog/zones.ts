@@ -388,11 +388,17 @@ export function unitFronts(
 ): { fromMm: number; toMm: number; doors: number }[] {
   const doors = u.doors ?? 0;
   if (doors <= 0) return [];
-  const zones = normalizeHeights(unitZones(u), bodyMm);
+  /*
+   * אותם גבולות בדיוק שהציור משתמש בהם — כולל המתיחה של אזורים
+   * קבועים שחורגים מהגוף. חישוב נפרד היה נותן חזית שלא יושבת על
+   * התא שהיא אמורה לכסות.
+   */
+  const bands = zoneBands(unitZones(u), bodyMm);
   const out: { fromMm: number; toMm: number; doors: number }[] = [];
-  let from = 0;
-  for (const z of zones) {
-    const to = from + z.heightMm;
+  for (const { zone: z, top, bottom } of bands) {
+    // zoneBands מודד מלמעלה; החזיתות נמדדות מלמטה, כמו האזורים
+    const from = bodyMm - bottom;
+    const to = bodyMm - top;
     const outerDrawers = zoneCells(z).every(
       (c) => c.content.kind === 'drawers' && c.content.drawerStyle !== 'inner',
     );
@@ -407,7 +413,6 @@ export function unitFronts(
       if (last && !z.frontSplit && Math.abs(last.toMm - from) < 1) last.toMm = to;
       else out.push({ fromMm: from, toMm: to, doors: Math.max(z.doors ?? 1, 1) });
     }
-    from = to;
   }
   /*
    * חזית אחת = הארון כולו, ואז מספר הדלתות הוא של הארגז — זה

@@ -450,7 +450,7 @@ function zonedContainer(c: Ctx) {
    * פתוחה, מגירה חיצונית — נראה גם כשמסתכלים מלפנים, כי אין שם
    * דלת שתסתיר אותו.
    */
-  const fronts = c.doors > 0 ? unitFronts({ ...c, heightMm: h, zones: c.zones }, h) : [];
+  const fronts = c.doors > 0 ? unitFronts({ ...c, heightMm: h }, h) : [];
   const behindDoor = (top: number, bottom: number) =>
     !inside &&
     fronts.some((f) => h - f.toMm <= top + 1 && h - f.fromMm >= bottom - 1);
@@ -501,7 +501,7 @@ function zonedContainer(c: Ctx) {
    * התלת־ממד וגם את פירוק החלקים, ולכן מה שרואים הוא מה שנחתך.
    */
   if (!inside && c.doors > 0) {
-    unitFronts({ ...c, heightMm: h, zones: c.zones, doors: c.doors }, h).forEach((f, i) => {
+    fronts.forEach((f, i) => {
       // האזורים נמדדים מלמטה, והציור מלמעלה
       const top = h - f.toMm;
       const bottom = h - f.fromMm;
