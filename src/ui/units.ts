@@ -47,13 +47,10 @@ export const fromMm = (mm: number): number => (unit === 'mm' ? mm : mm / 10);
  * השם נשאר `cm` מסיבות היסטוריות בקוד, אבל הפונקציה מכבדת את
  * היחידה שנבחרה — ולכן היא נקראת גם כשהתצוגה במ"מ.
  */
-export function len(mm: number): string {
+export function cm(mm: number): string {
   const v = fromMm(mm);
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
-
-/** כינוי היסטורי ל-`len`. */
-export const cm = len;
 
 /** המרות ישירות, לשימושים שאינם תלויים בתצוגה. */
 export const cmToMm = (value: number): number => Math.round(value * 10);

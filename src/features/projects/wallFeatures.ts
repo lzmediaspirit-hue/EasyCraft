@@ -1,7 +1,7 @@
 import type { HeightRef, WallFeature, WallFeatureKind, WallSide } from '../../db/types';
 
 /** שדה מידה אחד בטופס הסימון. */
-export interface FeatureField {
+interface FeatureField {
   key: 'x' | 'width' | 'height' | 'y';
   label: string;
 }

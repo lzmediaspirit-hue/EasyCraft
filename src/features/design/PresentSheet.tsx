@@ -54,7 +54,13 @@ export function PresentSheet({
         material: materials.find((m) => m.id === c.materialId),
       });
     }
-    return { role, lines: [...used.values()].filter((l) => l.finish) };
+    /* השורות שיש להן גוון בלבד — כך אין צורך לוודא אותו שוב בציור */
+    return {
+      role,
+      lines: [...used.values()].flatMap((l) =>
+        l.finish ? [{ finish: l.finish, material: l.material }] : [],
+      ),
+    };
   }).filter((r) => r.lines.length > 0);
 
   return (
@@ -109,16 +115,16 @@ export function PresentSheet({
                   </span>
                   <span className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1">
                     {r.lines.map((l) => (
-                      <span key={l.finish!.id} className="flex items-center gap-1.5">
+                      <span key={l.finish.id} className="flex items-center gap-1.5">
                         <span
                           aria-hidden="true"
                           className="size-5 shrink-0 rounded border border-black/10"
-                          style={{ background: l.finish!.hex }}
+                          style={{ background: l.finish.hex }}
                         />
                         <span className="truncate text-sm text-stone-800">
-                          {l.finish!.name}
-                          {l.finish!.texture && (
-                            <span className="text-stone-400"> · {l.finish!.texture}</span>
+                          {l.finish.name}
+                          {l.finish.texture && (
+                            <span className="text-stone-400"> · {l.finish.texture}</span>
                           )}
                         </span>
                       </span>

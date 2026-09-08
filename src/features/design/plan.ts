@@ -8,7 +8,7 @@ import type { PlacedUnit, Wall } from '../../db/types';
  * חדר בצורה אחרת, וזה מה שמאפשר לתאר חדר שאינו קובייה.
  */
 
-export interface PlanPoint {
+interface PlanPoint {
   x: number;
   y: number;
 }
@@ -51,7 +51,7 @@ export function buildPlan(walls: Wall[], units: PlacedUnit[]): PlanWall[] {
 }
 
 /** העומק הגדול ביותר של ארון שעומד על הרצפה בקיר נתון. */
-export function wallDepth(wall: Wall, units: PlacedUnit[]): number {
+function wallDepth(wall: Wall, units: PlacedUnit[]): number {
   return units
     .filter((u) => u.wallId === wall.id && u.level !== 'wall')
     .reduce((max, u) => Math.max(max, u.depthMm), 0);

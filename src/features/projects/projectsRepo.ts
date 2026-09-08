@@ -2,6 +2,7 @@ import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { projectCosting, type ProjectCosting } from '../../costing/boards';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
+import { releaseConsumption } from '../../materials/consumption';
 import type {
   CatalogItem,
   PartChoice,
@@ -93,22 +94,18 @@ export const projectsRepo = {
   },
 
   async remove(id: string): Promise<void> {
-    // גם תהליך העבודה והקבצים נמחקים, כדי שלא יישארו שלבים יתומים
-    await db.transaction(
-      'rw',
-      db.projects,
-      db.walls,
-      db.units,
-      db.stages,
-      db.attachments,
-      async () => {
-        await db.units.where('projectId').equals(id).delete();
-        await db.walls.where('projectId').equals(id).delete();
-        await db.stages.where('projectId').equals(id).delete();
-        await db.attachments.where('projectId').equals(id).delete();
-        await db.projects.delete(id);
-      },
-    );
+    /* קודם המלאי: פלטות שנחתכו בפרויקט חוזרות אליו לפני שהוא נעלם */
+    await releaseConsumption(id);
+    // גם תהליך העבודה, הקבצים והמחירים נמחקים, כדי שלא יישארו יתומים
+    const tables = [db.projects, db.walls, db.units, db.stages, db.attachments, db.projectPrices];
+    await db.transaction('rw', tables, async () => {
+      await db.units.where('projectId').equals(id).delete();
+      await db.walls.where('projectId').equals(id).delete();
+      await db.stages.where('projectId').equals(id).delete();
+      await db.attachments.where('projectId').equals(id).delete();
+      await db.projectPrices.where('projectId').equals(id).delete();
+      await db.projects.delete(id);
+    });
   },
 
   /** סיכום כל פרויקט — ארגזים, פלטות ומחיר — לתצוגה ברשימה. */

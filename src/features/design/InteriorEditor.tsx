@@ -1,3 +1,4 @@
+import { Pill } from '../../ui/Pill';
 import { useState } from 'react';
 import {
   MAX_BODY_MM,
@@ -329,7 +330,7 @@ function ContentEditor({
     <div className="mt-3">
       <div className="flex flex-wrap gap-1.5">
         {KINDS.map((k) => (
-          <Pill
+          <Pill size="sm"
             key={k}
             active={content.kind === k}
             onClick={() => onChange(contentDefaults(k, heightMm))}
@@ -343,7 +344,7 @@ function ContentEditor({
         <>
           <Row label="מדפים">
             {COUNTS.map((n) => (
-              <Pill
+              <Pill size="sm"
                 key={n}
                 active={n === (content.shelves ?? 0)}
                 onClick={() => onChange({ shelves: n, shelfGapsMm: undefined })}
@@ -354,13 +355,13 @@ function ContentEditor({
           </Row>
           {(content.shelves ?? 0) > 0 && (
             <Row label="חומר">
-              <Pill
+              <Pill size="sm"
                 active={!content.glassShelves}
                 onClick={() => onChange({ glassShelves: undefined })}
               >
                 לוח
               </Pill>
-              <Pill active={!!content.glassShelves} onClick={() => onChange({ glassShelves: true })}>
+              <Pill size="sm" active={!!content.glassShelves} onClick={() => onChange({ glassShelves: true })}>
                 זכוכית
               </Pill>
             </Row>
@@ -378,7 +379,7 @@ function ContentEditor({
         <>
           <Row label="שורות">
             {COUNTS.slice(1).map((n) => (
-              <Pill
+              <Pill size="sm"
                 key={n}
                 active={n === (content.drawers ?? 0)}
                 onClick={() => onChange({ drawers: n })}
@@ -389,7 +390,7 @@ function ContentEditor({
           </Row>
           <Row label="לרוחב">
             {[1, 2, 3, 4].map((n) => (
-              <Pill
+              <Pill size="sm"
                 key={n}
                 active={n === (content.drawerCols ?? 1)}
                 onClick={() => onChange({ drawerCols: n })}
@@ -399,13 +400,13 @@ function ContentEditor({
             ))}
           </Row>
           <Row label="סוג">
-            <Pill
+            <Pill size="sm"
               active={content.drawerStyle !== 'inner'}
               onClick={() => onChange({ drawerStyle: 'outer' })}
             >
               חזית בולטת
             </Pill>
-            <Pill
+            <Pill size="sm"
               active={content.drawerStyle === 'inner'}
               onClick={() => onChange({ drawerStyle: 'inner' })}
             >
@@ -427,23 +428,3 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function Pill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`num min-w-7 shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
-        active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}

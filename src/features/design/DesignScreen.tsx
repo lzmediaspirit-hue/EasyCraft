@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
-import { WallElevation, collides } from './WallElevation';
+import { WallElevation } from './WallElevation';
+import { collides } from './snapping';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
@@ -20,14 +21,14 @@ import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
 import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
-import { orderedStats, viewOptions, useViewOptions, type StatKey } from './viewOptions';
+import { orderedStats, viewOptions, useViewOptions } from './viewOptions';
 import { useDesignView } from './designView';
-import { StatGrid } from './StatGrid';
+import { StatGrid, statTile } from './StatGrid';
 import { DesignToolbar } from './DesignToolbar';
 import type { SheetName } from './sheets';
 import { history, useHistory } from './history';
 import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
-import { analyzeWall, fillSpan, nextFreeX, type WallAnalysis } from './analysis';
+import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumption';
@@ -38,9 +39,8 @@ import {
   PlusIcon,
   SlidersIcon,
 } from '../../ui/icons';
-import { cm, meters, unitLabel } from '../../ui/units';
 import { readPref, writePref } from '../../ui/prefs';
-import type { CatalogItem, PlacedUnit, Project, UserRole, Wall } from '../../db/types';
+import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 const PANEL_KEY = 'easycraft.panelRatio';
@@ -800,75 +800,4 @@ function EditGate({
 }
 
 
-/**
- * המחוון עצמו, לפי המפתח שלו.
- * הפרדה בין "מה מוצג" ל"באיזה סדר" — הסדר שייך לרשת, והתוכן כאן.
- */
-function statTile(
-  key: StatKey,
-  wall: Wall,
-  units: PlacedUnit[],
-  analysis: WallAnalysis,
-): React.ReactNode {
-  switch (key) {
-    case 'wallArea':
-      return (
-        <Stat
-          label="שטח הקיר"
-          value={((wall.lengthMm / 1000) * (wall.heightMm / 1000)).toFixed(2)}
-          unit="מ״ר"
-        />
-      );
-    case 'wallHeight':
-      return <Stat label="גובה הקיר" value={cm(wall.heightMm)} unit={unitLabel()} />;
-    case 'floorMeters':
-      return <Stat label="מטר רץ תחתון" value={meters(analysis.floorUsedMm)} unit="מ׳" />;
-    case 'unitCount':
-      return <Stat label="ארגזים" value={String(units.length)} />;
-    case 'freeSpace':
-      return (
-        <Stat
-          label={analysis.freeMm >= 0 ? 'נשאר על הקיר' : 'חריגה'}
-          value={cm(Math.abs(analysis.freeMm))}
-          unit={unitLabel()}
-          tone={analysis.freeMm < 0 ? 'bad' : 'ok'}
-        />
-      );
-    case 'frontArea':
-      return (
-        <Stat
-          label="שטח חזיתות"
-          value={units
-            .reduce((n, u) => n + (u.widthMm / 1000) * (u.heightMm / 1000), 0)
-            .toFixed(2)}
-          unit="מ״ר"
-        />
-      );
-  }
-}
 
-function Stat({
-  label,
-  value,
-  unit,
-  tone = 'ok',
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  tone?: 'ok' | 'bad';
-}) {
-  return (
-    <div className="rounded-xl border border-stone-200 bg-white px-3 py-2">
-      <span className="block text-[11px] text-stone-500">{label}</span>
-      <span
-        className={`flex items-baseline gap-1 text-lg font-semibold ${
-          tone === 'bad' ? 'text-red-600' : 'text-stone-900'
-        }`}
-      >
-        <span className="num">{value}</span>
-        {unit && <span className="text-xs font-normal text-stone-400">{unit}</span>}
-      </span>
-    </div>
-  );
-}

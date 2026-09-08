@@ -76,7 +76,7 @@ export interface NestOptions {
   grainAlong?: 'height' | 'width';
 }
 
-export interface NestPart {
+interface NestPart {
   /** מזהה החלק בפריסה, לצורך תצוגה */
   id: string;
   /** האינדקס של החלק ברשימת הקלט שהוא נחתך ממנה */
@@ -92,7 +92,7 @@ export interface NestPart {
 }
 
 /** שארית שימושית שנשארת מהפלטה אחרי הניסור. */
-export interface Offcut {
+interface Offcut {
   x: number;
   y: number;
   widthMm: number;
@@ -104,14 +104,14 @@ export interface Offcut {
  * שרץ מ-y = from עד y = to; `axis: 'y'` הוא חתך אופקי בקו y = at
  * שרץ מ-x = from עד x = to. כל חתך חוצה את היחידה שהוא נעשה בה.
  */
-export interface Cut {
+interface Cut {
   axis: 'x' | 'y';
   at: number;
   from: number;
   to: number;
 }
 
-export interface NestSheet {
+interface NestSheet {
   index: number;
   parts: NestPart[];
   /** אחוז משטח הפלטה שהופך לחלקים — נטו, בלי הכרסום */
@@ -123,7 +123,7 @@ export interface NestSheet {
 }
 
 /** חלק שאינו נכנס לפלטה באף כיוון מותר. */
-export interface OversizePart {
+interface OversizePart {
   label: string;
   widthMm: number;
   heightMm: number;
@@ -145,7 +145,7 @@ export interface NestResult {
  * שארית שצלעה הקצרה קטנה מזה אינה נחשבת — פס צר כזה לא הופך לחלק
  * בפרויקט הבא, הוא הולך לפח.
  */
-export const MIN_OFFCUT_MM = 100;
+const MIN_OFFCUT_MM = 100;
 
 /** סובלנות להשוואת מידות, כי מידות חלקים עשויות להיות שבריות */
 const EPS = 1e-6;

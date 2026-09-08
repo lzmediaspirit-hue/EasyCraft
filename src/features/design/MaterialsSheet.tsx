@@ -1,3 +1,4 @@
+import { Stat } from '../../ui/Stat';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
 import { projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
@@ -317,14 +318,3 @@ function PriceCell({
   );
 }
 
-function Stat({ label, value, unit }: { label: string; value: number | string; unit?: string }) {
-  return (
-    <div className="rounded-xl border border-stone-200 bg-white px-3 py-2">
-      <span className="block text-[11px] text-stone-500">{label}</span>
-      <span className="flex items-baseline gap-1">
-        <span className="num text-lg font-semibold text-stone-900">{value}</span>
-        {unit && <span className="text-xs text-stone-400">{unit}</span>}
-      </span>
-    </div>
-  );
-}

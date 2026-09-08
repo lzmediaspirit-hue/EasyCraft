@@ -48,7 +48,7 @@ function partCut(u: PlacedUnit, role: PartRole): boolean {
  * השורה, אבל גם אינו מספיק לבדו: שורה שכולה כזו לא תופחת לעולם,
  * כי אף אחד לא סימן בה כלום.
  */
-export function cutLines(
+function cutLines(
   units: PlacedUnit[],
   settings: PartSettings,
   project?: Project,
@@ -90,7 +90,23 @@ export const consumptionRepo = {
  * את המלאי רק בהפרש: שורה שכבר הופחתה לא תופחת שוב, ושורה שהסימון
  * שלה בוטל מקבלת את הפלטות בחזרה.
  */
-export async function syncConsumption(projectId: string): Promise<void> {
+export function syncConsumption(projectId: string): Promise<void> {
+  /*
+   * שתי הקשות מהירות על שלבי עבודה הריצו שתי סנכרונים במקביל, שניהם
+   * קראו את אותו מצב מלאי — והפלטות ירדו פעמיים. לכל פרויקט תור אחד.
+   */
+  const prev = pending.get(projectId) ?? Promise.resolve();
+  const next = prev.catch(() => {}).then(() => runSync(projectId));
+  pending.set(projectId, next);
+  next.finally(() => {
+    if (pending.get(projectId) === next) pending.delete(projectId);
+  });
+  return next;
+}
+
+const pending = new Map<string, Promise<void>>();
+
+async function runSync(projectId: string): Promise<void> {
   const [costing, units, settings, project] = await Promise.all([
     projectsRepo.costing(projectId),
     db.units.where('projectId').equals(projectId).toArray(),
@@ -129,6 +145,20 @@ export async function syncConsumption(projectId: string): Promise<void> {
   /* שורה שנעלמה מהתמחור — הגוון הוחלף, הארגז נמחק — מחזירה את שלה */
   for (const c of existing) {
     if (costing.lines.some((l) => l.key === c.lineKey)) continue;
+    await moveStock(c.finishId, c.materialId, c.sheets);
+    await db.consumption.delete(c.id);
+  }
+}
+
+/**
+ * מחזיר למלאי את מה שהפרויקט לקח, ומוחק את רישומי הצריכה שלו.
+ *
+ * נקראת כשפרויקט נמחק. בלעדיה הפלטות שנחתכו בפרויקט שנמחק היו
+ * נשארות חסרות במלאי לנצח, בלי שום רישום שמסביר לאן הלכו.
+ */
+export async function releaseConsumption(projectId: string): Promise<void> {
+  const rows = await db.consumption.where('projectId').equals(projectId).toArray();
+  for (const c of rows) {
     await moveStock(c.finishId, c.materialId, c.sheets);
     await db.consumption.delete(c.id);
   }

@@ -19,12 +19,12 @@ export const PRICING_LABEL: Record<PricingMode, string> = {
 };
 
 /** שטח החזית של ארגז במ"ר — הגודל שהלקוח באמת רואה. */
-export function unitFrontM2(u: PlacedUnit): number {
+function unitFrontM2(u: PlacedUnit): number {
   return (u.widthMm / 1000) * (u.heightMm / 1000);
 }
 
 /** מטר רץ של קיר שהארונות התחתונים תופסים. */
-export function runningMeters(units: PlacedUnit[]): number {
+function runningMeters(units: PlacedUnit[]): number {
   return units.filter((u) => u.level !== 'wall').reduce((n, u) => n + u.widthMm, 0) / 1000;
 }
 

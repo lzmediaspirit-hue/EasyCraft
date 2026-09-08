@@ -109,7 +109,7 @@ function QuickCalcSheet({ onClose }: { onClose: () => void }) {
  * הפירוק ידני ולא דרך eval — קלט של המשתמש לא הופך לקוד רץ. תומך
  * בארבע פעולות ובסוגריים, וזה מה שצריך לחישוב מהיר מול לקוח.
  */
-export function evaluate(input: string): number | null {
+function evaluate(input: string): number | null {
   const src = input.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
   const tokens = src.match(/\d+\.?\d*|[+\-*/()]/g);
   if (!tokens) return null;

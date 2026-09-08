@@ -72,7 +72,7 @@ export const stageIndex = (s: TrackStage): number =>
   s === 'none' ? -1 : STAGE_CHAIN.findIndex((x) => x.key === s);
 
 /** האם לארגז יש חזיתות שצריך להתקין. */
-export function hasFronts(u: PlacedUnit): boolean {
+function hasFronts(u: PlacedUnit): boolean {
   return (
     (u.doors ?? 0) > 0 ||
     unitCells(u).some(({ content: c }) => c.kind === 'drawers' && c.drawerStyle !== 'inner')
@@ -80,7 +80,7 @@ export function hasFronts(u: PlacedUnit): boolean {
 }
 
 /** האם לארגז יש דפנות זרות שצריך להתקין. */
-export function hasPanels(u: PlacedUnit): boolean {
+function hasPanels(u: PlacedUnit): boolean {
   const e = u.exposed ?? {};
   return !!(e.start || e.end || e.top || e.bottom);
 }

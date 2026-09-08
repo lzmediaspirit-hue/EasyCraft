@@ -1,3 +1,4 @@
+import { Stat } from '../../ui/Stat';
 import { useState } from 'react';
 import { projectsRepo } from './projectsRepo';
 import { PRICING_LABEL, paymentStatus, projectQuote } from '../../costing/pricing';
@@ -262,9 +263,11 @@ export function SaleSheet({
 
           {payments.length > 0 && (
             <div className="mt-3 grid grid-cols-3 gap-2">
-              <Stat label="סך התשלומים" value={shekels(status.total)} />
-              <Stat label="שולם" value={shekels(status.paid)} tone="ok" />
+              <Stat variant="flat" size="sm" label="סך התשלומים" value={shekels(status.total)} />
+              <Stat variant="flat" size="sm" label="שולם" value={shekels(status.paid)} tone="ok" />
               <Stat
+                variant="flat"
+                size="sm"
                 label="נותר"
                 value={shekels(status.due)}
                 tone={status.due > 0 ? 'due' : 'ok'}
@@ -295,15 +298,3 @@ export function SaleSheet({
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'due' }) {
-  return (
-    <div
-      className={`rounded-xl px-2.5 py-2 ${
-        tone === 'ok' ? 'bg-oak-50' : tone === 'due' ? 'bg-amber-50' : 'bg-stone-50'
-      }`}
-    >
-      <span className="block text-[10px] text-stone-500">{label}</span>
-      <span className="num block text-sm font-semibold text-stone-900">{value}</span>
-    </div>
-  );
-}

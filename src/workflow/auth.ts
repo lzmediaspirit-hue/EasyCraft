@@ -22,12 +22,12 @@ function toHex(buf: ArrayBuffer): string {
 }
 
 /** מלח אקראי חדש, כמחרוזת hex. */
-export function newSalt(): string {
+function newSalt(): string {
   return toHex(crypto.getRandomValues(new Uint8Array(16)).buffer);
 }
 
 /** גיבוב סיסמה עם מלח. אותה סיסמה ואותו מלח תמיד נותנים אותו גיבוב. */
-export async function hashPassword(password: string, salt: string): Promise<string> {
+async function hashPassword(password: string, salt: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, [
     'deriveBits',

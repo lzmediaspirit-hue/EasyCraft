@@ -1,4 +1,5 @@
 import { db } from '../../db/db';
+import { releaseConsumption } from '../../materials/consumption';
 import type { Customer, NewCustomer } from '../../db/types';
 
 /**
@@ -43,6 +44,8 @@ export const customersRepo = {
       db.attachments,
       db.projectPrices,
     ];
+    /* פלטות שנחתכו בפרויקטים של הלקוח חוזרות למלאי לפני המחיקה */
+    for (const pid of ids) await releaseConsumption(pid);
     await db.transaction('rw', tables, async () => {
       for (const pid of ids) {
         await db.units.where('projectId').equals(pid).delete();

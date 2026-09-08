@@ -1,3 +1,4 @@
+import { Stat } from '../../ui/Stat';
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
@@ -42,9 +43,9 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
     <Sheet title="ניסור הלוחות" onClose={onClose} tall>
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-2">
-          <Stat label="פלטות" value={String(totalSheets)} />
-          <Stat label="מ״ר חלקים" value={partsM2.toFixed(1)} />
-          <Stat label="ניצולת" value={`${usedPct}%`} />
+          <Stat variant="flat" label="פלטות" value={String(totalSheets)} />
+          <Stat variant="flat" label="מ״ר חלקים" value={partsM2.toFixed(1)} />
+          <Stat variant="flat" label="ניצולת" value={`${usedPct}%`} />
         </div>
 
         <button
@@ -271,11 +272,3 @@ function SheetPlan({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-stone-50 px-3 py-2">
-      <span className="block text-[10px] text-stone-500">{label}</span>
-      <span className="num block text-lg font-bold text-stone-900">{value}</span>
-    </div>
-  );
-}

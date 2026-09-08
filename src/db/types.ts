@@ -1,5 +1,5 @@
 /** ישות בסיס — לכל רשומה מזהה ותאריכי מעקב. */
-export interface Entity {
+interface Entity {
   id: string;
   createdAt: number;
   updatedAt: number;
@@ -408,7 +408,7 @@ export interface ZoneColumn extends ZoneContent {
 export type ZoneKind = 'shelves' | 'drawers' | 'rod' | 'empty';
 
 /** מגירה חיצונית נראית בחזית; פנימית מסתתרת מאחורי דלת. */
-export type DrawerStyle = 'outer' | 'inner';
+type DrawerStyle = 'outer' | 'inner';
 
 /** צדדים גלויים של הארגז שנבנים כדופן זרה. */
 export interface ExposedSides {
@@ -528,7 +528,7 @@ export interface Material extends Entity {
 }
 
 /** החומרים שמשמשים לחלק מסוים, לפי הסדר שנקבע להם. */
-export function materialsForRole(role: PartRole, materials: Material[]): Material[] {
+function materialsForRole(role: PartRole, materials: Material[]): Material[] {
   return materials.filter((m) => m.roles?.includes(role));
 }
 
@@ -778,7 +778,7 @@ export interface ExtraItem {
 export type ExtraBasis = 'door' | 'drawer' | 'cabinet' | 'lift' | 'handle' | 'ledMeter' | 'manual';
 
 /** מחירי אביזרים במפעל ולצרכן. */
-export interface AccessoryPrices {
+interface AccessoryPrices {
   /** למגירה */
   drawerFactory: number;
   drawerConsumer: number;
@@ -845,7 +845,7 @@ export type StageKey =
  * done — הושלם
  * skipped — נוסה במכוון, למשל התקנה שהלקוח מבצע בעצמו
  */
-export type StageStatus = 'waiting' | 'active' | 'done' | 'skipped';
+type StageStatus = 'waiting' | 'active' | 'done' | 'skipped';
 
 export interface ProjectStage extends Entity {
   projectId: string;

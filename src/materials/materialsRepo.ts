@@ -3,14 +3,13 @@ import { KITCHEN } from '../catalog/standards';
 import type {
   Finish,
   Material,
-  PartChoice,
   ProjectPrice,
   Settings,
   StockItem,
 } from '../db/types';
 
 /** הגדרות ברירת מחדל, עד שהמשתמש משנה אותן במסך ההגדרות. */
-export const DEFAULT_SETTINGS: Settings = {
+const DEFAULT_SETTINGS: Settings = {
   id: 'app',
   sheetWidthMm: 2440,
   sheetHeightMm: 1220,
@@ -319,11 +318,6 @@ export async function receiveOrder(finishId: string, materialId: string): Promis
     ordered: 0,
     updatedAt: Date.now(),
   });
-}
-
-/** מפתח שורת התמחור: אותו גוון על שני חומרים הוא שתי שורות הזמנה. */
-export function lineKey(choice: PartChoice): string {
-  return `${choice.finishId ?? ''}:${choice.materialId ?? ''}`;
 }
 
 export const projectPricesRepo = {

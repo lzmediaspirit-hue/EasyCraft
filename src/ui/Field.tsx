@@ -139,7 +139,7 @@ export function NumField({
  * מונחים כמו "שקע הגב בחריץ" ברורים לנגר ותיק ולא לכל אחד, וההסבר
  * שייך לצד השדה — לא במדריך נפרד שאף אחד לא פותח.
  */
-export function HelpDot({ label, text }: { label: string; text: string }) {
+function HelpDot({ label, text }: { label: string; text: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>

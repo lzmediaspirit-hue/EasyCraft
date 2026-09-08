@@ -49,7 +49,7 @@ export interface Part {
   qty: number;
 }
 
-export interface BoardLine {
+interface BoardLine {
   /** מפתח השורה, `finishId:materialId` — לפיו נדרס המחיר בפרויקט */
   key: string;
   material: Material;
@@ -67,7 +67,7 @@ export interface BoardLine {
 }
 
 /** שורת אביזר בתמחור. */
-export interface AccessoryLine {
+interface AccessoryLine {
   label: string;
   qty: number;
   unit: string;
@@ -78,7 +78,7 @@ export interface AccessoryLine {
 }
 
 /** דלת זכוכית בגודל מסוים, וכמה כאלה יש בפרויקט. */
-export interface GlassDoorLine {
+interface GlassDoorLine {
   /** דלת זכוכית או מדף זכוכית — פריטים שונים בהזמנה מהזגג */
   label: string;
   widthMm: number;
@@ -90,7 +90,7 @@ export interface GlassDoorLine {
 }
 
 /** החלקים שנחתכים מחומר וגוון מסוימים, והפריסה שלהם על הפלטות. */
-export interface PartGroup {
+interface PartGroup {
   key: string;
   material: Material;
   finish?: Finish;
@@ -442,7 +442,7 @@ export interface PartSettings {
 }
 
 /** חלק זכוכית בארגז — דלת או מדף — עם המידה והכמות שלו. */
-export interface GlassPart {
+interface GlassPart {
   label: string;
   widthMm: number;
   heightMm: number;
@@ -450,7 +450,7 @@ export interface GlassPart {
 }
 
 /** כל חלקי הזכוכית בארגז: דלתות ומדפים. */
-export function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
+function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
   const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
   const e = u.exposed ?? {};
   const ft = MATERIAL.frontMm;
@@ -510,7 +510,7 @@ export function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
  * המדפים והקושרות. הגב וקצוות שנשארים בפנים אינם מקונטים, ולכן
  * הם לא נספרים כאן.
  */
-export function unitEdgeMeters(u: PlacedUnit, s: PartSettings): number {
+function unitEdgeMeters(u: PlacedUnit, s: PartSettings): number {
   let mm = 0;
   for (const p of unitParts(u, s)) {
     if (p.role === 'back') continue;
@@ -526,7 +526,7 @@ export function unitEdgeMeters(u: PlacedUnit, s: PartSettings): number {
  * נספר לפי התאים ולא לפי האזורים: אזור שחולק בקושרת מחזיק את
  * המגירות בעמודות, והשדות שברמת האזור עלולים להישאר מהמצב הקודם.
  */
-export function unitHandles(u: PlacedUnit): number {
+function unitHandles(u: PlacedUnit): number {
   if (!u.handles) return 0;
   const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
   const outerDrawers = unitCells({ ...u, heightMm: h }).reduce(
@@ -541,7 +541,7 @@ export function unitHandles(u: PlacedUnit): number {
 }
 
 /** מטרים רצים של פס לד בארגז. */
-export function unitLedMeters(u: PlacedUnit): number {
+function unitLedMeters(u: PlacedUnit): number {
   if (!u.led?.length) return 0;
   const shelves = countShelves(u);
   let mm = 0;

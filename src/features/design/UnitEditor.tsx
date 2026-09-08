@@ -1,3 +1,4 @@
+import { Pill } from '../../ui/Pill';
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
@@ -908,28 +909,6 @@ function Row({
   );
 }
 
-function Pill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      /* בורר ולא מתג, אבל קורא מסך צריך לדעת מה נבחר */
-      aria-pressed={active}
-      className={`num min-w-9 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 function NumBox({
   label,

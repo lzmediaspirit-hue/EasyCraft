@@ -10,7 +10,7 @@ import { cm } from '../../ui/units';
  * התראה בלי ארגז היא טקסט שצריך לחפש לפיו על הקיר. `unitIds` הוא
  * מה שהופך אותה לכפתור: לוחצים, והארגז שיש בו הבעיה נבחר.
  */
-export interface WallWarning {
+interface WallWarning {
   text: string;
   unitIds: string[];
 }

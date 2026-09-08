@@ -1,5 +1,9 @@
 import { useRef, useState } from 'react';
+import { Stat } from '../../ui/Stat';
+import { cm, meters, unitLabel } from '../../ui/units';
 import type { StatKey } from './viewOptions';
+import type { WallAnalysis } from './analysis';
+import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
  * מחווני הקיר, בסדר שאפשר לשנות בגרירה.
@@ -100,4 +104,51 @@ export function StatGrid({
       ))}
     </div>
   );
+}
+
+/**
+ * המחוון עצמו, לפי המפתח שלו.
+ * הפרדה בין "מה מוצג" ל"באיזה סדר" — הסדר שייך לרשת, והתוכן כאן.
+ */
+export function statTile(
+  key: StatKey,
+  wall: Wall,
+  units: PlacedUnit[],
+  analysis: WallAnalysis,
+): React.ReactNode {
+  switch (key) {
+    case 'wallArea':
+      return (
+        <Stat
+          label="שטח הקיר"
+          value={((wall.lengthMm / 1000) * (wall.heightMm / 1000)).toFixed(2)}
+          unit="מ״ר"
+        />
+      );
+    case 'wallHeight':
+      return <Stat label="גובה הקיר" value={cm(wall.heightMm)} unit={unitLabel()} />;
+    case 'floorMeters':
+      return <Stat label="מטר רץ תחתון" value={meters(analysis.floorUsedMm)} unit="מ׳" />;
+    case 'unitCount':
+      return <Stat label="ארגזים" value={String(units.length)} />;
+    case 'freeSpace':
+      return (
+        <Stat
+          label={analysis.freeMm >= 0 ? 'נשאר על הקיר' : 'חריגה'}
+          value={cm(Math.abs(analysis.freeMm))}
+          unit={unitLabel()}
+          tone={analysis.freeMm < 0 ? 'bad' : 'plain'}
+        />
+      );
+    case 'frontArea':
+      return (
+        <Stat
+          label="שטח חזיתות"
+          value={units
+            .reduce((n, u) => n + (u.widthMm / 1000) * (u.heightMm / 1000), 0)
+            .toFixed(2)}
+          unit="מ״ר"
+        />
+      );
+  }
 }

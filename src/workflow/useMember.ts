@@ -5,7 +5,7 @@ import { teamRepo } from './workflowRepo';
 import type { TeamMember } from '../db/types';
 
 /** מזהה מי שמחובר עכשיו. */
-export function useCurrentMemberId(): string | null {
+function useCurrentMemberId(): string | null {
   return useSyncExternalStore(session.subscribe, session.memberId, () => null);
 }
 
