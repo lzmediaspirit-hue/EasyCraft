@@ -89,6 +89,29 @@ function projector(view: IsoView) {
  */
 type Tf = (x: number, z: number) => [number, number];
 
+/**
+ * המסגרת של ארגז אחד: המרה מהמידות שלו עצמו — רוחב לרוחב הדלת,
+ * עומק מהגב אל החזית — לקואורדינטות הקיר.
+ *
+ * כך כל הארגז מצויר תמיד באותו קוד, בין אם הוא ישר ובין אם הוא
+ * מסובב: רק המסגרת מסתובבת. 90 מעלות מפנה את החזית אל תחילת
+ * הקיר, 270 אל סופו, ו-180 אל הקיר עצמו.
+ *
+ * ארבע המסגרות הן סיבובים ולא שיקופים — כל אחת שומרת על כיוון
+ * הסיבוב. מסגרת משוקפת נראית כמעט נכון בתלת־ממד, ורק דלת שנפתחת
+ * לצד ההפוך מגלה שהארון התהפך.
+ */
+function unitFrame(u: PlacedUnit, tf: Tf): Tf {
+  const r = ((u.rotationDeg ?? 0) % 360 + 360) % 360;
+  const x0 = u.xMm;
+  const W = u.widthMm;
+  const D = u.depthMm;
+  if (r === 90) return (x, z) => tf(x0 + D - z, x);
+  if (r === 180) return (x, z) => tf(x0 + W - x, D - z);
+  if (r === 270) return (x, z) => tf(x0 + z, W - x);
+  return (x, z) => tf(x0 + x, z);
+}
+
 type Face = {
   points: string;
   fill: string;
@@ -131,7 +154,9 @@ function box(
   const side = [p(w, 0, 0), p(w, h, 0), p(w, h, d), p(w, 0, d)].join(' ');
   /*
    * מיון לפי המרחק מהצופה: מה שקרוב יותר מצויר אחרון, והמרחק של
-   * לוח נמדד בפינה הקרובה ביותר שלו ולא במרכזו.
+   * לוח נמדד בפינה הקרובה ביותר שלו ולא במרכזו. איזו מארבע הפינות
+   * קרובה תלוי בזווית המבט ובסיבוב של הארגז, ולכן היא נבחרת ולא
+   * מונחת מראש.
    *
    * מרכז מטעה כשמשווים לוח גדול ללוח קטן: דופן הארון נמדדת באמצע
    * הגובה, ומדף שיושב גבוה נמדד גבוה ממנה — ואז המדף נצבע על הדופן
@@ -140,8 +165,19 @@ function box(
    * שלוש הפאות של אותה תיבה חולקות את הפינה, ולכן הן שומרות על
    * הסדר שבו נכתבו: צד, עליונה, ואז חזית.
    */
-  const [nx, nz] = tf(x + w, z + d);
-  const depth = view.depth(nx, y + h, nz);
+  const depth = Math.max(
+    ...(
+      [
+        [0, 0],
+        [w, 0],
+        [0, d],
+        [w, d],
+      ] as const
+    ).map(([dx, dz]) => {
+      const [nx, nz] = tf(x + dx, z + dz);
+      return view.depth(nx, y + h, nz);
+    }),
+  );
   return [
     { points: side, fill: shade(tone, 0.78), key: `${key}-s`, depth, layer: 0, group: 0 },
     { points: top, fill: shade(tone, 1.12), key: `${key}-t`, depth, layer: 0, group: 0 },
@@ -284,13 +320,19 @@ export function WallIso({
       bounds.push(label, tail);
     }
 
-    for (const u of units.filter((x) => x.wallId === w0.id)) {
+    /* ארגז מוסתר אינו מצויר כאן, אבל נשאר בחומרים, במחיר ובניסור */
+    for (const u of units.filter((x) => x.wallId === w0.id && !x.hidden)) {
       const frontId = inside ? u.carcassFinishId : (u.frontFinishId ?? u.finishId);
       const tone = (frontId && finishHex[frontId]) || '#d9c3a5';
       const carcassTone = u.carcassFinishId ? (finishHex[u.carcassFinishId] ?? '#e8dcc8') : '#e8dcc8';
 
+      /*
+       * הארגז מצויר במידות של עצמו, בתוך מסגרת שיודעת איפה הוא
+       * עומד ולאן הוא פונה. הסיבוב יושב במסגרת בלבד.
+       */
+      const tfu = unitFrame(u, tf);
       const socle = u.socleMm ?? 0;
-      const x = u.xMm;
+      const x = 0;
       const y = u.yMm + socle;
       const h = Math.max(u.heightMm - socle, 0);
       const w = u.widthMm;
@@ -300,7 +342,7 @@ export function WallIso({
        * הוא סדר הבנייה: גוף, פנים, חזית ומשטח. כך חזית תמיד מכסה
        * את מה שמאחוריה, גם כשהמדף שמאחוריה רחב ממנה.
        */
-      const [gx, gz] = tf(u.xMm + u.widthMm / 2, u.depthMm / 2);
+      const [gx, gz] = tfu(u.widthMm / 2, u.depthMm / 2);
       const group = v.depth(gx, u.yMm + u.heightMm / 2, gz);
       const add = (f: Face[], layer = L.inside) =>
         faces.push(...f.map((face) => ({ ...face, unitId: u.id, layer, group })));
@@ -314,9 +356,9 @@ export function WallIso({
       if (def.noCarcass) {
         const th = u.panelThicknessMm ?? MATERIAL.frontMm;
         if (def.noCarcass === 'horizontal') {
-          add(box(v, tf, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`), L.front);
+          add(box(v, tfu, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`), L.front);
         } else {
-          add(box(v, tf, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`), L.front);
+          add(box(v, tfu, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`), L.front);
         }
         continue;
       }
@@ -324,18 +366,18 @@ export function WallIso({
       // רגליים
       if (socle > 0) {
         // הסוקל נסוג מהחזית אבל יושב על הרצפה במלוא הרוחב
-        add(box(v, tf, x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`), L.body);
+        add(box(v, tfu, x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`), L.body);
       }
 
       // גוף: שני צדדים, תחתית, תקרה וגב
       const gs = u.glassSides ?? {};
-      if (!gs.start) add(box(v, tf, x, y, 0, t, h, d, carcassTone, `${u.id}-l`), L.body);
-      if (!gs.end) add(box(v, tf, x + w - t, y, 0, t, h, d, carcassTone, `${u.id}-r`), L.body);
-      add(box(v, tf, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`), L.body);
-      add(box(v, tf, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`), L.body);
+      if (!gs.start) add(box(v, tfu, x, y, 0, t, h, d, carcassTone, `${u.id}-l`), L.body);
+      if (!gs.end) add(box(v, tfu, x + w - t, y, 0, t, h, d, carcassTone, `${u.id}-r`), L.body);
+      add(box(v, tfu, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`), L.body);
+      add(box(v, tfu, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`), L.body);
       if ((u.backKind ?? 'thin') !== 'none') {
         add(
-          box(v, tf, x + t, y + t, 0, w - 2 * t, h - 2 * t, 6, shade(carcassTone, 0.86), `${u.id}-bk`),
+          box(v, tfu, x + t, y + t, 0, w - 2 * t, h - 2 * t, 6, shade(carcassTone, 0.86), `${u.id}-bk`),
           L.body,
         );
       }
@@ -380,7 +422,7 @@ export function WallIso({
             }
           }
           if (cell.content.kind === 'rod') {
-            add(box(v, tf, cx, zBottom + zh * 0.86, d / 2 - 15, cw, 30, 30, '#a8a29e', `${zk}-rod-${i}`));
+            add(box(v, tfu, cx, zBottom + zh * 0.86, d / 2 - 15, cw, 30, 30, '#a8a29e', `${zk}-rod-${i}`));
           }
           if (cell.content.kind === 'drawers') {
             const rows = cell.content.drawers ?? 1;
@@ -413,7 +455,7 @@ export function WallIso({
           cx += cw;
           // קושרת בין תא לתא
           if (i < cells.length - 1) {
-            add(box(v, tf, cx, zBottom, 0, t, zh, d - 20, carcassTone, `${zk}-div-${i}`));
+            add(box(v, tfu, cx, zBottom, 0, t, zh, d - 20, carcassTone, `${zk}-div-${i}`));
             cx += t;
           }
         });
@@ -424,7 +466,7 @@ export function WallIso({
          * כקו: שני תאים זה אומר שיש ביניהם משהו.
          */
         if (bi > 0) {
-          add(box(v, tf, x + t, zBottom - t, 0, w - 2 * t, t, d, carcassTone, `${zk}-sep`));
+          add(box(v, tfu, x + t, zBottom - t, 0, w - 2 * t, t, d, carcassTone, `${zk}-sep`));
         }
       });
 
@@ -493,7 +535,7 @@ export function WallIso({
        */
       if (def.appliance && !(u.doors ?? 0)) {
         add(
-          box(v, tf, x + 2, y + 2, d, w - 4, h - 4, MATERIAL.frontMm, '#d6d3d1', `${u.id}-app`),
+          box(v, tfu, x + 2, y + 2, d, w - 4, h - 4, MATERIAL.frontMm, '#d6d3d1', `${u.id}-app`),
           L.front,
         );
       }
@@ -504,7 +546,7 @@ export function WallIso({
        */
       if (u.counterMm) {
         add(
-          box(v, tf, x - 20, u.yMm + u.heightMm, 0, w + 40, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`),
+          box(v, tfu, x - 20, u.yMm + u.heightMm, 0, w + 40, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`),
           L.top,
         );
       }
@@ -515,12 +557,12 @@ export function WallIso({
       const eTone = u.exposedFinishId ? (finishHex[u.exposedFinishId] ?? tone) : tone;
       if (e.start)
         add(
-          box(v, tf, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`),
+          box(v, tfu, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`),
           L.top,
         );
       if (e.end)
-        add(box(v, tf, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`), L.top);
-      if (e.top) add(box(v, tf, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`), L.top);
+        add(box(v, tfu, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`), L.top);
+      if (e.top) add(box(v, tfu, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`), L.top);
     }
   }
 

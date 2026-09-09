@@ -1,3 +1,4 @@
+import { alongWallMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -54,7 +55,7 @@ export function buildPlan(walls: Wall[], units: PlacedUnit[]): PlanWall[] {
 function wallDepth(wall: Wall, units: PlacedUnit[]): number {
   return units
     .filter((u) => u.wallId === wall.id && u.level !== 'wall')
-    .reduce((max, u) => Math.max(max, u.depthMm), 0);
+    .reduce((max, u) => Math.max(max, intoRoomMm(u)), 0);
 }
 
 /**
@@ -115,14 +116,14 @@ function zonesAt(wall: Wall, units: PlacedUnit[], side: 'start' | 'end'): Corner
   const touching = units.filter(
     (u) =>
       u.wallId === wall.id &&
-      (side === 'start' ? u.xMm <= 1 : u.xMm + u.widthMm >= wall.lengthMm - 1),
+      (side === 'start' ? u.xMm <= 1 : u.xMm + alongWallMm(u) >= wall.lengthMm - 1),
   );
   const out: CornerZone[] = [];
   for (const wallLevel of [false, true]) {
     const same = touching.filter((u) => (u.level === 'wall') === wallLevel);
     if (!same.length) continue;
     out.push({
-      depthMm: same.reduce((max, u) => Math.max(max, u.depthMm), 0),
+      depthMm: same.reduce((max, u) => Math.max(max, intoRoomMm(u)), 0),
       yMm: same.reduce((min, u) => Math.min(min, u.yMm), Infinity),
       heightMm:
         same.reduce((max, u) => Math.max(max, u.yMm + u.heightMm), 0) -
@@ -165,8 +166,10 @@ export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
         x: p.start.x + dir.x * u.xMm,
         y: p.start.y + dir.y * u.xMm,
       };
-      const b = { x: a.x + dir.x * u.widthMm, y: a.y + dir.y * u.widthMm };
-      const d = u.depthMm;
+      /* ארגז מסובב תופס על הקיר את עומקו ונכנס לחדר ברוחבו */
+      const along = alongWallMm(u);
+      const b = { x: a.x + dir.x * along, y: a.y + dir.y * along };
+      const d = intoRoomMm(u);
       const corners = [
         a,
         b,
@@ -177,8 +180,8 @@ export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
         unit: u,
         corners,
         center: {
-          x: a.x + dir.x * (u.widthMm / 2) + normal.x * (d / 2),
-          y: a.y + dir.y * (u.widthMm / 2) + normal.y * (d / 2),
+          x: a.x + dir.x * (along / 2) + normal.x * (d / 2),
+          y: a.y + dir.y * (along / 2) + normal.y * (d / 2),
         },
         clash: false,
       });

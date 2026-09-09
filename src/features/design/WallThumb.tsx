@@ -14,7 +14,7 @@ export function WallThumb({
   units: PlacedUnit[];
   active: boolean;
 }) {
-  const mine = units.filter((u) => u.wallId === wall.id);
+  const mine = units.filter((u) => u.wallId === wall.id && !u.hidden);
   const line = active ? '#ffffff' : '#57534e';
   const fill = active ? 'rgba(255,255,255,0.55)' : 'rgba(120,113,108,0.45)';
 

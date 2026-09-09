@@ -42,6 +42,7 @@ import {
   TrashIcon,
 } from '../../ui/icons';
 import { readPref, writePref } from '../../ui/prefs';
+import { turned } from '../../db/types';
 import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
@@ -197,6 +198,7 @@ export function DesignScreen({
       glyph: item.glyph,
       widthMm: item.defaultWidthMm,
       heightMm: item.defaultHeightMm,
+      depthMm: item.defaultDepthMm,
     };
     for (let x = from; x <= maxX; x += 50) {
       if (!collides(probe, x, item.defaultYMm, units)) return x;
@@ -392,7 +394,9 @@ export function DesignScreen({
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
           project={project}
-          fillWidth={fillSpan(selected, units, wall, 'w')}
+          /* ארגז מסובב תופס על הקיר את עומקו, ולכן ההשלמה לרוחב
+             לא תמלא את הרווח שנמדד — עדיף בלי הצעה מאשר הצעה שקרית */
+          fillWidth={turned(selected) ? undefined : fillSpan(selected, units, wall, 'w')}
           fillHeight={fillSpan(selected, units, wall, 'h')}
           defaultSocleMm={settings?.defaults.socleMm ?? 0}
           onApplyChoiceAll={(role, choice) =>

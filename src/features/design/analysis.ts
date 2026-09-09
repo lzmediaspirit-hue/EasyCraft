@@ -1,3 +1,4 @@
+import { alongWallMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 import { featureDef } from '../projects/wallFeatures';
 import { MAX_BODY_MM } from '../../catalog/zones';
@@ -37,12 +38,12 @@ export function analyzeWall(
   const floor = units.filter((u) => u.level !== 'wall');
   const upper = units.filter((u) => u.level === 'wall');
 
-  const floorUsedMm = floor.reduce((sum, u) => sum + u.widthMm, 0);
-  const wallUsedMm = upper.reduce((sum, u) => sum + u.widthMm, 0);
+  const floorUsedMm = floor.reduce((sum, u) => sum + alongWallMm(u), 0);
+  const wallUsedMm = upper.reduce((sum, u) => sum + alongWallMm(u), 0);
   const warnings: WallWarning[] = [];
   /** מי חורג בפועל מקצה הקיר — אליו מצביעה ההתראה */
   const past = (group: PlacedUnit[]) =>
-    group.filter((u) => u.xMm + u.widthMm > wall.lengthMm + 1).map((u) => u.id);
+    group.filter((u) => u.xMm + alongWallMm(u) > wall.lengthMm + 1).map((u) => u.id);
 
   if (floorUsedMm > wall.lengthMm) {
     warnings.push({
@@ -62,7 +63,7 @@ export function analyzeWall(
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const cur = sorted[i];
-      if (cur.xMm < prev.xMm + prev.widthMm - 1) {
+      if (cur.xMm < prev.xMm + alongWallMm(prev) - 1) {
         warnings.push({ text: `${prev.name} ו${cur.name} חופפים`, unitIds: [prev.id, cur.id] });
         break;
       }
@@ -110,7 +111,7 @@ export function analyzeWall(
 function contains(u: PlacedUnit, f: Wall['features'][number]): boolean {
   return (
     u.xMm <= f.xMm &&
-    u.xMm + u.widthMm >= f.xMm + f.widthMm &&
+    u.xMm + alongWallMm(u) >= f.xMm + f.widthMm &&
     u.yMm <= f.yMm &&
     u.yMm + u.heightMm >= f.yMm + f.heightMm
   );
@@ -119,7 +120,7 @@ function contains(u: PlacedUnit, f: Wall['features'][number]): boolean {
 function overlaps(u: PlacedUnit, f: Wall['features'][number]): boolean {
   return (
     u.xMm < f.xMm + f.widthMm &&
-    u.xMm + u.widthMm > f.xMm &&
+    u.xMm + alongWallMm(u) > f.xMm &&
     u.yMm < f.yMm + f.heightMm &&
     u.yMm + u.heightMm > f.yMm
   );
@@ -128,7 +129,7 @@ function overlaps(u: PlacedUnit, f: Wall['features'][number]): boolean {
 /** המיקום הפנוי הבא במפלס מסוים — כדי שארגז חדש יינחת צמוד לשורה. */
 export function nextFreeX(units: PlacedUnit[], level: PlacedUnit['level']): number {
   const sameLine = units.filter((u) => (level === 'wall' ? u.level === 'wall' : u.level !== 'wall'));
-  return sameLine.reduce((end, u) => Math.max(end, u.xMm + u.widthMm), 0);
+  return sameLine.reduce((end, u) => Math.max(end, u.xMm + alongWallMm(u)), 0);
 }
 
 /**
@@ -153,7 +154,7 @@ export function fillSpan(
   if (axis === 'h') {
     // רק מי שחולק איתו רוחב יכול לחסום אותו לגובה
     const same = others.filter(
-      (u) => u.xMm < unit.xMm + unit.widthMm && u.xMm + u.widthMm > unit.xMm,
+      (u) => u.xMm < unit.xMm + alongWallMm(unit) && u.xMm + alongWallMm(u) > unit.xMm,
     );
     const mid = unit.yMm + unit.heightMm / 2;
     const start = same
@@ -167,10 +168,10 @@ export function fillSpan(
 
   // ברוחב חוסמים רק שכנים באותו מפלס, כמו בהצמדה
   const same = others.filter((u) => (u.level === 'wall') === (unit.level === 'wall'));
-  const mid = unit.xMm + unit.widthMm / 2;
+  const mid = unit.xMm + alongWallMm(unit) / 2;
   const start = same
-    .filter((u) => u.xMm + u.widthMm <= mid)
-    .reduce((n, u) => Math.max(n, u.xMm + u.widthMm), 0);
+    .filter((u) => u.xMm + alongWallMm(u) <= mid)
+    .reduce((n, u) => Math.max(n, u.xMm + alongWallMm(u)), 0);
   const end = same
     .filter((u) => u.xMm >= mid)
     .reduce((n, u) => Math.min(n, u.xMm), wall.lengthMm);

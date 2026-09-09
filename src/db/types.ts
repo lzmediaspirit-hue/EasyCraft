@@ -205,6 +205,22 @@ export interface PlacedUnit extends Entity {
    */
   heightMm: number;
   depthMm: number;
+  /**
+   * סיבוב הארגז סביב הציר האנכי, בצעדים של 90°.
+   *
+   * ריק או 0 = הארגז מקביל לקיר והחזית פונה אל החדר, כמו רוב
+   * הארגזים. 90 או 270 = הארגז מסובב, החזית פונה לאורך הקיר, והוא
+   * תופס על הקיר את העומק שלו במקום את הרוחב — עמודת מדפים בפינה,
+   * ארגז שחוזר לתוך החדר בקצה מטבח.
+   */
+  rotationDeg?: 0 | 90 | 180 | 270;
+  /**
+   * מוסתר בהדמיה בלבד.
+   *
+   * ארגז מוסתר אינו מצויר, אבל הוא קיים לכל דבר אחר: הוא נספר
+   * בחומרים, במחיר ובניסור. הסתרה היא כלי הסתכלות ולא מחיקה.
+   */
+  hidden?: boolean;
   /** גובה הרגליים, נכלל בתוך heightMm */
   socleMm?: number;
   /** משטח עבודה מעל הארגז */
@@ -537,6 +553,29 @@ function materialsForRole(role: PartRole, materials: Material[]): Material[] {
  * שעונה על התנאי נופלים למה שיש — חלק בלי חומר אינו מתומחר בכלל,
  * וזה גרוע יותר מחומר שאינו האידיאלי.
  */
+/**
+ * כמה מקום הארגז תופס לאורך הקיר.
+ *
+ * ארגז מסובב עומד בצד: על הקיר הוא תופס את העומק שלו, ולתוך החדר
+ * הוא נכנס ברוחב שלו. כל חישוב שנוגע במקום על הקיר — הצמדה,
+ * חפיפה, מטר רץ, אזהרות — עובר דרך שתי הפונקציות האלה, כדי שסיבוב
+ * לא יתפזר לעשרים תנאים.
+ */
+export function alongWallMm(u: Pick<PlacedUnit, 'widthMm' | 'depthMm' | 'rotationDeg'>): number {
+  return turned(u) ? u.depthMm : u.widthMm;
+}
+
+/** כמה הארגז נכנס לתוך החדר. */
+export function intoRoomMm(u: Pick<PlacedUnit, 'widthMm' | 'depthMm' | 'rotationDeg'>): number {
+  return turned(u) ? u.widthMm : u.depthMm;
+}
+
+/** האם הארגז עומד בצד — 90° או 270°. */
+export function turned(u: Pick<PlacedUnit, 'rotationDeg'>): boolean {
+  const r = ((u.rotationDeg ?? 0) % 360 + 360) % 360;
+  return r === 90 || r === 270;
+}
+
 export function materialForRole(
   role: PartRole,
   materials: Material[],

@@ -91,6 +91,12 @@ export function WallElevation({
    */
   const layer = (u: PlacedUnit) => (glyphDef(u.glyph).cladding ? 0 : 1);
   const units = [...allUnits].sort((a, b) => layer(a) - layer(b));
+  /*
+   * ארגז מוסתר אינו מצויר, אבל נשאר ברשימה: הוא עדיין תופס מקום
+   * בקיר, עדיין חוסם גרירה, ועדיין נספר בחומרים ובניסור. ההסתרה
+   * היא של העין בלבד.
+   */
+  const shown = units.filter((u) => !u.hidden);
 
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -338,7 +344,7 @@ export function WallElevation({
       />
 
       {/* רגליים ומשטחי עבודה — נגזרים מהארגז, לא נבחרים בנפרד */}
-      {units.map((u) => (
+      {shown.map((u) => (
         <g key={`trim-${u.id}`}>
           {/*
             הסוקל יושב על הרצפה ברוחב מלא, כמו בשטח. הנסיגה שלו
@@ -379,7 +385,7 @@ export function WallElevation({
       ))}
 
       {/* הארגזים */}
-      {units.map((u) => {
+      {shown.map((u) => {
         const selected = u.id === selectedId;
         /*
          * בחזית רואים את גוון החזיתות; כשהחזיתות מוסתרות רואים את
@@ -517,7 +523,7 @@ export function WallElevation({
         את כל המידות יחד, לא ללחוץ על ארגז אחרי ארגז.
       */}
       {measure
-        ? units.map((u) => (
+        ? shown.map((u) => (
             <g key={`measure-${u.id}`}>
               {measureOverlay(u, measure, flip, stroke, fontSize)}
             </g>

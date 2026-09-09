@@ -1,6 +1,7 @@
 import { glyphDef } from '../../catalog/glyphList';
 import { cornerDepth } from './plan';
 import type { CornerZones } from './plan';
+import { alongWallMm } from '../../db/types';
 import type { PlacedUnit } from '../../db/types';
 
 /*
@@ -50,17 +51,19 @@ function nearest(value: number, targets: number[], limit: number): number {
  * שההצמדה נועדה לעשות.
  */
 export function collides(
-  unit: Pick<PlacedUnit, 'id' | 'glyph' | 'widthMm' | 'heightMm'>,
+  unit: Pick<PlacedUnit, 'id' | 'glyph' | 'widthMm' | 'depthMm' | 'heightMm' | 'rotationDeg'>,
   x: number,
   y: number,
   units: PlacedUnit[],
 ): boolean {
   if (glyphDef(unit.glyph).cladding) return false;
-  const right = x + unit.widthMm;
+  const right = x + alongWallMm(unit);
   const top = y + unit.heightMm;
   return units.some((o) => {
     if (o.id === unit.id || glyphDef(o.glyph).cladding) return false;
-    return x < o.xMm + o.widthMm && right > o.xMm && y < o.yMm + o.heightMm && top > o.yMm;
+    return (
+      x < o.xMm + alongWallMm(o) && right > o.xMm && y < o.yMm + o.heightMm && top > o.yMm
+    );
   });
 }
 
@@ -92,12 +95,12 @@ export function snapX(
   const startMm = unit.corner ? 0 : cornerDepth(corners?.start, wallLevel);
   const endMm = unit.corner ? 0 : cornerDepth(corners?.end, wallLevel);
   const min = startMm;
-  const max = Math.max(wallLength - endMm - unit.widthMm, min);
+  const max = Math.max(wallLength - endMm - alongWallMm(unit), min);
 
   const targets = [min, max];
   for (const other of units) {
     if (other.id === unit.id || other.level !== unit.level) continue;
-    targets.push(other.xMm + other.widthMm, other.xMm - unit.widthMm);
+    targets.push(other.xMm + alongWallMm(other), other.xMm - alongWallMm(unit));
   }
   const snapped = nearest(x, targets, tol);
   return Math.round(Math.min(Math.max(snapped, min), max));
@@ -132,7 +135,7 @@ export function snapY(
   for (const other of units) {
     if (other.id === unit.id) continue;
     targets.push(other.yMm, other.yMm + other.heightMm, other.yMm - unit.heightMm);
-    const sameRun = other.xMm < atX + unit.widthMm && other.xMm + other.widthMm > atX;
+    const sameRun = other.xMm < atX + alongWallMm(unit) && other.xMm + alongWallMm(other) > atX;
     if (sameRun) rest = Math.max(rest, other.yMm + other.heightMm);
   }
   const snapped = nearest(y, targets, tol);

@@ -97,9 +97,11 @@ export function PlanView({
             כל ארון כמלבן ברוחב ובעומק שלו. ארון שמתנגש בארון על קיר
             אחר מסומן באדום — זו התנגשות שבמבט חזית לא רואים בכלל.
           */}
-          {boxes.map((b) => (
+          {/* ארגז מוסתר עדיין נמדד ונבדק להתנגשות, רק אינו מצויר */}
+          {boxes.filter((b) => !b.unit.hidden).map((b) => (
             <g key={b.unit.id} pointerEvents="none">
               <polygon
+                data-plan-unit={b.unit.id}
                 points={b.corners.map((c) => `${c.x},${c.y}`).join(' ')}
                 fill={b.clash ? '#fecaca' : b.unit.level === 'wall' ? '#e7e5e4' : '#d9b483'}
                 fillOpacity={b.unit.level === 'wall' ? 0.55 : 0.9}
