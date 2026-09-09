@@ -627,28 +627,36 @@ export function UnitEditor({
           )}
 
           {/*
-            ויטרינה: צד שעשוי זכוכית במקום לוח. הצד יוצא מפירוק
-            הפלטות ונכנס לרשימת הזכוכית, ולארון נשארים הגב, הצד
-            השני, והתחתית והתקרה.
+            צד שעשוי זכוכית במקום לוח. הצד יוצא מפירוק הפלטות ונכנס
+            לרשימת הזכוכית, ולארון נשארים הגב, הצד השני, והתחתית
+            והתקרה.
+
+            רק לוויטרינה: בארון אטום אין מה לראות דרך הצד. ארגז ישן
+            שכבר סומן כך ממשיך להראות את השורה, כדי שאפשר יהיה
+            לבטל — הגדרה שנעלמת ואי אפשר לכבות היא מלכודת.
           */}
-          <Row label="צד זכוכית" hint="ויטרינה שרואים דרכה מהצד">
-            {(['start', 'end'] as const).map((side) => (
-              <Pill
-                key={side}
-                active={!!glassSides[side]}
-                onClick={() =>
-                  onChange({ glassSides: { ...glassSides, [side]: !glassSides[side] } })
-                }
-              >
-                {side === 'start' ? 'שמאל' : 'ימין'}
-              </Pill>
-            ))}
-          </Row>
-          {(glassSides.start || glassSides.end) && (
-            <p className="mt-1 text-[10px] leading-snug text-stone-400">
-              הצד נספר במ״ר זכוכית ולא בפלטות.
-              {glassSides.start && glassSides.end && ' שני הצדדים זכוכית — הארון נשען על הגב ועל התחתית והתקרה.'}
-            </p>
+          {(glyphDef(unit.glyph).vitrine || glassSides.start || glassSides.end) && (
+            <>
+              <Row label="צד זכוכית" hint="ויטרינה שרואים דרכה מהצד">
+                {(['start', 'end'] as const).map((side) => (
+                  <Pill
+                    key={side}
+                    active={!!glassSides[side]}
+                    onClick={() =>
+                      onChange({ glassSides: { ...glassSides, [side]: !glassSides[side] } })
+                    }
+                  >
+                    {side === 'start' ? 'שמאל' : 'ימין'}
+                  </Pill>
+                ))}
+              </Row>
+              {(glassSides.start || glassSides.end) && (
+                <p className="mt-1 text-[10px] leading-snug text-stone-400">
+                  הצד נספר במ״ר זכוכית ולא בפלטות.
+                  {glassSides.start && glassSides.end && ' שני הצדדים זכוכית — הארון נשען על הגב ועל התחתית והתקרה.'}
+                </p>
+              )}
+            </>
           )}
         </>
       )}

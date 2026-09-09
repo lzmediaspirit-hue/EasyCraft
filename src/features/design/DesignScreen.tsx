@@ -44,12 +44,10 @@ import {
   SlidersIcon,
   TrashIcon,
 } from '../../ui/icons';
-import { readPref, writePref } from '../../ui/prefs';
 import { turned } from '../../db/types';
 import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
-const PANEL_KEY = 'easycraft.panelRatio';
 
 /** גובה הלוח נשאר בתחום שמשאיר את הקיר גלוי ואת הלוח שימושי. */
 /*
@@ -61,7 +59,13 @@ const PANEL_KEY = 'easycraft.panelRatio';
 const NO_UNITS: PlacedUnit[] = [];
 const NO_HEX: Record<string, string> = {};
 
-const clampRatio = (r: number) => Math.min(Math.max(r, 0.2), 0.85);
+/*
+ * גובה לוח העריכה, כחלק מגובה המסך.
+ *
+ * מידה קבועה ולא נגררת: מי שעורך ארגז רוצה לראות אותו ואת הלוח
+ * יחד, וזה היחס שנותן את שניהם.
+ */
+const PANEL_RATIO = 0.45;
 
 /**
  * מסך ההדמיה. רואים קיר אחד בכל רגע, ופעולה ראשית אחת:
@@ -105,11 +109,6 @@ export function DesignScreen({
    * לוח הגדרות ארוך היה מכסה את הקיר, וקצר מדי מחייב גלילה בלי סוף.
    * לכן הגובה נגרר, ונשמר כדי שהעבודה הבאה תתחיל באותה חלוקה.
    */
-  const [panelRatio, setPanelRatio] = useState(() => {
-    const saved = Number(readPref(PANEL_KEY));
-    return Number.isFinite(saved) && saved > 0 ? clampRatio(saved) : 0.45;
-  });
-  const dragPanel = useRef<{ startY: number; startRatio: number } | null>(null);
 
   const project = useLiveQuery(() => projectsRepo.get(projectId), [projectId]);
   const walls = useLiveQuery(() => wallsRepo.listForProject(projectId), [projectId]);
@@ -432,35 +431,12 @@ export function DesignScreen({
           לאגודל ובלי להסתיר מילימטר מהקיר.
         */}
         <div className="relative flex shrink-0 items-center">
-        <div
-          role="separator"
-          aria-label="גובה לוח העריכה"
-          aria-orientation="horizontal"
-          tabIndex={0}
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-            dragPanel.current = { startY: e.clientY, startRatio: panelRatio };
-          }}
-          onPointerMove={(e) => {
-            const d = dragPanel.current;
-            if (!d) return;
-            // גרירה כלפי מעלה מגדילה את הלוח
-            setPanelRatio(clampRatio(d.startRatio + (d.startY - e.clientY) / window.innerHeight));
-          }}
-          onPointerUp={(e) => {
-            e.currentTarget.releasePointerCapture(e.pointerId);
-            dragPanel.current = null;
-            writePref(PANEL_KEY, String(panelRatio));
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-            e.preventDefault();
-            const next = clampRatio(panelRatio + (e.key === 'ArrowUp' ? 0.05 : -0.05));
-            setPanelRatio(next);
-            writePref(PANEL_KEY, String(next));
-          }}
-          className="flex flex-1 cursor-ns-resize touch-none justify-center py-2"
-        >
+        {/*
+          הגבול בין הציור ללוח. הוא סימון ולא ידית: גרירה כאן הייתה
+          נתפסת בטעות בזמן עבודה על הארגז, והמידה שהיא שינתה לא
+          הייתה שווה את זה.
+        */}
+        <div className="flex flex-1 justify-center py-2">
           <span className="h-1.5 w-12 rounded-full bg-stone-300" />
         </div>
         <span className="absolute end-4 flex items-center gap-1.5">
@@ -504,7 +480,7 @@ export function DesignScreen({
         {/* הלוח עצמו נמתח לגובה שנבחר, ובתוכו הוא גולל */}
         <div
           className="flex shrink-0 flex-col [&>div:first-child]:min-h-0 [&>div:first-child]:flex-1"
-          style={{ height: `${panelRatio * 100}dvh` }}
+          style={{ height: `${PANEL_RATIO * 100}dvh` }}
         >
         {/*
           מפתח לפי מזהה הארגז: בלעדיו הלוח נשאר מורכב במעבר בין

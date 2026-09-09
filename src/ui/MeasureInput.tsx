@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fromMm, toMm } from './units';
 
 /**
@@ -7,7 +7,13 @@ import { fromMm, toMm } from './units';
  * תוך כדי הקלדה השדה מחזיק את מה שהוקלד ולא את הערך המתוקן — אחרת
  * הדרך למספר גדול נחסמת: הקלדת "1" בדרך ל-"60" הייתה נתקנת מיד
  * למינימום והמספר היה קופץ מתחת לאצבע. התיקון קורה ביציאה מהשדה.
+ *
+ * הערך נשמר החוצה אחרי רגע של שקט ולא בכל תו. מאחורי השדה הזה
+ * יושבים בסיס נתונים, בניית החדר וציור של מאות לוחות, וכולם רצו
+ * שלוש פעמים בדרך מ-"6" ל-"600" — זה מה שהרגיש כבד תחת האצבע.
+ * מה שנראה על המסך אינו מחכה: הוא נלקח מהטיוטה המקומית.
  */
+const SETTLE_MS = 180;
 export function MeasureInput({
   value,
   onChange,
@@ -35,6 +41,13 @@ export function MeasureInput({
   autoFocus?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stop = () => {
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = null;
+  };
+  // שדה שיצא מהמסך באמצע הקלדה לא ישאיר טיימר שיורה אל תוך הריק
+  useEffect(() => stop, []);
   // `inMm` הוא שדה שתמיד במ"מ (כרסום, עובי); השאר לפי יחידת התצוגה
   const show = (mm: number) => String(inMm ? mm : fromMm(mm));
   const parse = (v: number) => (inMm ? Math.round(v) : toMm(v));
@@ -61,10 +74,14 @@ export function MeasureInput({
         const raw = e.target.value;
         setDraft(raw);
         const n = Number(raw);
+        stop();
         // שדה ריק או חצי מוקלד נשאר על המסך, אבל לא נשמר
-        if (raw.trim() !== '' && Number.isFinite(n)) onChange(parse(n));
+        if (raw.trim() !== '' && Number.isFinite(n)) {
+          settle.current = setTimeout(() => onChange(parse(n)), SETTLE_MS);
+        }
       }}
       onBlur={() => {
+        stop();
         const n = Number(draft);
         onChange(clamp(draft?.trim() && Number.isFinite(n) ? parse(n) : value));
         setDraft(null);

@@ -7,6 +7,7 @@ import { outOfSight } from './designView';
 import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
 import { blocked } from './collision';
 import { unitBox } from './placement';
+import { LockIcon, UnlockIcon } from '../../ui/icons';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -82,10 +83,10 @@ export function WallIso({
   const [view, setView] = useState<IsoView>(DEFAULT_VIEW);
   /*
    * אותה אצבע לא יכולה גם לסובב את המבט וגם להזיז ארון: כל תנועה
-   * הייתה עושה את שניהם. המתג מפריד ביניהם — צפייה או הזזה — וזה
+   * הייתה עושה את שניהם. הנעילה מפרידה ביניהם — וזה
    * גם מה שמונע מהחדר להסתובב בכל פעם שמישהו נגע בארון.
    */
-  const [moving, setMoving] = useState(false);
+  const [locked, setLocked] = useState(false);
   const drag = useRef<{
     /** הארגז כפי שהיה בתחילת הגרירה — ממנו נמדד הכול, ולכן היא הפיכה */
     from: PlacedUnit;
@@ -313,12 +314,16 @@ export function WallIso({
         const hit = (e.target as Element).getAttribute?.('data-unit') ?? null;
         const held = hit ? units.find((u) => u.id === hit) : undefined;
         /*
-         * במצב הזזה אצבע שירדה על ארון גוררת אותו; אצבע שירדה על
-         * הרצפה עדיין מסובבת את המבט, כי אחרת המתג היה נועל את
-         * הזווית ומכריח לחזור אליו בכל פעם.
+         * כשהחדר נעול האצבע שייכת לארונות בלבד: אצבע על ארון גוררת
+         * אותו, ואצבע על הרצפה לא עושה דבר. חדר שהמשיך להסתובב
+         * בזמן שמזיזים ארון הפך כל גרירה להימור על מה יזוז.
          */
-        if (moving && held && onMoveTo && !present) {
-          drag.current = { from: held, startX: e.clientX, startY: e.clientY, moved: false };
+        if (locked && !present) {
+          if (held && onMoveTo) {
+            drag.current = { from: held, startX: e.clientX, startY: e.clientY, moved: false };
+          } else {
+            orbit.current = { x: e.clientX, y: e.clientY, from: view, moved: false, hit };
+          }
           return;
         }
         orbit.current = {
@@ -337,6 +342,8 @@ export function WallIso({
         const dy = e.clientY - o.y;
         if (!o.moved && Math.hypot(dx, dy) < ORBIT_SLOP) return;
         o.moved = true;
+        /* חדר נעול אינו מסתובב; הגרירה רק מבטלת את הבחירה בהרפיה */
+        if (locked) return;
         const box = e.currentTarget.getBoundingClientRect();
         setView({
           // סיבוב מלא כשגוררים על פני רוחב המסך פעמיים, עד גבול הקיר
@@ -534,26 +541,44 @@ export function WallIso({
                   stroke="#a06236"
                   strokeWidth={r * 0.09}
                 />
-                {/* חץ מעוקל: קשת ברבע מעגל וראש בקצה שאליו מסתובבים */}
-                <path
-                  d={`M ${cx - dir * r * 0.45} ${cy + r * 0.18} A ${r * 0.5} ${r * 0.5} 0 1 ${
-                    dir > 0 ? 1 : 0
-                  } ${cx + dir * r * 0.45} ${cy + r * 0.18}`}
-                  fill="none"
-                  stroke="#a06236"
-                  strokeWidth={r * 0.13}
-                  strokeLinecap="round"
-                />
-                <path
-                  d={`M ${cx + dir * r * 0.16} ${cy + r * 0.5} L ${cx + dir * r * 0.45} ${
-                    cy + r * 0.18
-                  } L ${cx + dir * r * 0.6} ${cy + r * 0.52}`}
-                  fill="none"
-                  stroke="#a06236"
-                  strokeWidth={r * 0.13}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                {/*
+                  חץ מעוקל: קשת של שלושה רבעי מעגל, וראש מלא בקצה
+                  שאליו הסיבוב הולך. הקשת והראש נגזרים מאותה זווית,
+                  ולכן הראש תמיד יושב על הקצה ובכיוון התנועה.
+                */}
+                {(() => {
+                  const a = r * 0.44;
+                  /* נקודה על הקשת. `dir` הופך את הציור, ואיתו גם את כיוון הסיבוב */
+                  const at = (deg: number) => {
+                    const t = (deg * Math.PI) / 180;
+                    return [cx + dir * a * Math.cos(t), cy + a * Math.sin(t)] as const;
+                  };
+                  const [x0, y0] = at(60);
+                  const [x1, y1] = at(-30);
+                  const t1 = (-30 * Math.PI) / 180;
+                  /* המשיק בקצה, בכיוון שבו הקשת נסגרת */
+                  const tx = -Math.sin(t1) * dir;
+                  const ty = Math.cos(t1);
+                  const hl = r * 0.3;
+                  const hw = r * 0.19;
+                  const head = [
+                    [x1 + tx * hl, y1 + ty * hl],
+                    [x1 - ty * hw, y1 + tx * hw],
+                    [x1 + ty * hw, y1 - tx * hw],
+                  ];
+                  return (
+                    <>
+                      <path
+                        d={`M ${x0} ${y0} A ${a} ${a} 0 1 ${dir > 0 ? 1 : 0} ${x1} ${y1}`}
+                        fill="none"
+                        stroke="#a06236"
+                        strokeWidth={r * 0.14}
+                        strokeLinecap="round"
+                      />
+                      <polygon points={head.map((q) => q.join(',')).join(' ')} fill="#a06236" />
+                    </>
+                  );
+                })()}
               </g>
             );
           })}
@@ -562,20 +587,23 @@ export function WallIso({
     </svg>
 
     {/*
-      צפייה או הזזה.
-      שתי התנועות דורשות את אותה אצבע על אותה תמונה, ולכן הן אינן
-      יכולות לחיות יחד: המתג אומר במפורש מה האצבע עושה עכשיו.
+      נעילת החדר.
+      סיבוב המבט והזזת ארגז דורשים את אותה אצבע על אותה תמונה, ולכן
+      הם אינם יכולים לחיות יחד. נעול — האצבע מזיזה ארונות והחדר עומד
+      במקום; פתוח — האצבע מסובבת את החדר ואפשר להסתכל מכל זווית.
     */}
     {onMoveTo && !present && (
       <button
-        onClick={() => setMoving((m) => !m)}
-        aria-pressed={moving}
-        aria-label="צפייה או הזזה"
-        className={`absolute start-1 top-1 rounded-full px-3 py-1 text-[11px] font-medium shadow-sm transition-colors ${
-          moving ? 'bg-oak-600 text-white' : 'bg-white/90 text-stone-600 hover:text-oak-700'
+        onClick={() => setLocked((m) => !m)}
+        aria-pressed={locked}
+        aria-label={locked ? 'שחרור סיבוב החדר' : 'נעילת סיבוב החדר'}
+        title={locked ? 'החדר נעול — האצבע מזיזה ארונות' : 'החדר חופשי — האצבע מסובבת את המבט'}
+        className={`absolute start-1 top-1 flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium shadow-sm transition-colors ${
+          locked ? 'bg-oak-600 text-white' : 'bg-white/90 text-stone-600 hover:text-oak-700'
         }`}
       >
-        {moving ? 'הזזה' : 'צפייה'}
+        {locked ? <LockIcon className="size-3.5" /> : <UnlockIcon className="size-3.5" />}
+        {locked ? 'נעול' : 'חופשי'}
       </button>
     )}
 

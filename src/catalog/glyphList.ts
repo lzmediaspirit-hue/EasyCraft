@@ -31,6 +31,11 @@ export interface GlyphDef {
    */
   standalone?: boolean;
   /**
+   * ויטרינה: ארון שרואים לתוכו, ולכן אפשר לעשות לו גם צד זכוכית.
+   * בארון אטום צד זכוכית הוא סתירה — אין מה לראות דרכו.
+   */
+  vitrine?: boolean;
+  /**
    * חיפוי קיר: לוח שנצמד לקיר ויושב מאחורי הארגזים.
    * הוא מכסה קיר, ולא ניצב לפניו, ולכן גם בציור הוא מצויר ראשון.
    */
@@ -43,7 +48,7 @@ export const GLYPHS: GlyphDef[] = [
   { key: 'doorDrawer', label: 'דלת ומגירה', doors: true, drawers: true, shelves: true },
   { key: 'open', label: 'פתוח', shelves: true },
   { key: 'shelves', label: 'מדפים', shelves: true },
-  { key: 'glass', label: 'ויטרינה', doors: true, shelves: true },
+  { key: 'glass', label: 'ויטרינה', doors: true, shelves: true, vitrine: true },
   { key: 'lift', label: 'קלאפה', shelves: true },
   { key: 'shutter', label: 'תריס', shelves: true },
   { key: 'corner', label: 'פינתי', doors: true, shelves: true },
