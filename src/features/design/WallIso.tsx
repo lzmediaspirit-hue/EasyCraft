@@ -7,7 +7,7 @@ import { MATERIAL } from '../../catalog/standards';
 import { buildPlan, cornerZones } from './plan';
 import type { PlanWall } from './plan';
 import { wallName } from '../projects/wallLayouts';
-import { featureDef } from '../projects/wallFeatures';
+import { featureBiteMm, featureDef } from '../projects/wallFeatures';
 import { SNAP, SNAP_PX, collides, snapX, snapY } from './snapping';
 import type { PlacedUnit, Wall } from '../../db/types';
 
@@ -146,6 +146,8 @@ type Face = {
   /** הארון שהפאה שייכת לו, לפי המרחק שלו — הארונות מסודרים ביניהם */
   group: number;
   unitId?: string;
+  /** סימון קיר שעומד בחדר — עמוד או מדרגה, ולא ארון */
+  featureKind?: string;
 };
 
 /**
@@ -388,18 +390,45 @@ export function WallIso({
        * שמסתובב בחדר רוצה לראות שהארון עומד מתחת לחלון, ולא לחזור
        * למבט אחר כדי לבדוק.
        */
+      /*
+       * שטוח על הקיר, או נכנס לתוכו. עמוד ומדרגה, שבולטים אל
+       * החדר, אינם כאן אלא בין הארונות — הם עומדים באותו מרחב
+       * ולכן הם צריכים להסתיר ולהיות מוסתרים יחד איתם.
+       */
       onWall: facing
-        ? w0.features.map((f) => ({
-            key: f.id,
-            kind: f.kind,
-            tone: featureDef(f.kind).tone,
-            points: poly([
-              at(f.xMm, f.yMm, 0),
-              at(f.xMm + f.widthMm, f.yMm, 0),
-              at(f.xMm + f.widthMm, f.yMm + f.heightMm, 0),
-              at(f.xMm, f.yMm + f.heightMm, 0),
-            ]),
-          }))
+        ? w0.features
+            .filter((f) => featureBiteMm(f) <= 0)
+            .flatMap((f) => {
+              const x1 = f.xMm;
+              const x2 = f.xMm + f.widthMm;
+              const y1 = f.yMm;
+              const y2 = f.yMm + f.heightMm;
+              const tone = featureDef(f.kind).tone;
+              // נישה נכנסת אל תוך הקיר, ולכן העומק שלה שלילי
+              const back = featureBiteMm(f);
+              const flat = {
+                key: f.id,
+                kind: f.kind,
+                tone,
+                points: poly([at(x1, y1, back), at(x2, y1, back), at(x2, y2, back), at(x1, y2, back)]),
+              };
+              if (!back) return [flat];
+              return [
+                flat,
+                {
+                  key: `${f.id}-top`,
+                  kind: f.kind,
+                  tone: shade(tone, 1.08),
+                  points: poly([at(x1, y2, 0), at(x2, y2, 0), at(x2, y2, back), at(x1, y2, back)]),
+                },
+                {
+                  key: `${f.id}-side`,
+                  kind: f.kind,
+                  tone: shade(tone, 0.84),
+                  points: poly([at(x1, y1, 0), at(x1, y2, 0), at(x1, y2, back), at(x1, y1, back)]),
+                },
+              ];
+            })
         : [],
       active: w0.id === activeWallId,
     });
@@ -437,6 +466,24 @@ export function WallIso({
         active: w0.id === activeWallId,
       });
       bounds.push(label, tail);
+    }
+
+    /*
+     * עמוד ומדרגה: תיבה שעומדת בחדר, ולכן היא נכנסת לרשימת הפאות
+     * יחד עם הארונות ולא לרקע. עמוד שצויר ברקע היה נעלם מאחורי כל
+     * ארון שעומד לידו — וזה בדיוק העמוד שהנגר צריך לראות.
+     */
+    for (const f of w0.features) {
+      const bite = featureBiteMm(f);
+      if (bite <= 0) continue;
+      const tone = featureDef(f.kind).tone;
+      const [cx, cz] = tf(f.xMm + f.widthMm / 2, bite / 2);
+      const group = v.depth(cx, f.yMm + f.heightMm / 2, cz);
+      faces.push(
+        ...box(v, tf, f.xMm, f.yMm, 0, f.widthMm, f.heightMm, bite, tone, `${w0.id}-${f.id}`).map(
+          (face) => ({ ...face, layer: L_FACE.body, group, featureKind: f.kind }),
+        ),
+      );
     }
 
     /* ארגז מוסתר אינו מצויר כאן, אבל נשאר בחומרים, במחיר ובניסור */
@@ -1008,6 +1055,7 @@ export function WallIso({
             }
             strokeLinejoin="round"
             data-unit={f.unitId}
+            data-wall-solid={f.featureKind}
             className={f.unitId && !present ? 'cursor-pointer' : undefined}
           />
         ))}

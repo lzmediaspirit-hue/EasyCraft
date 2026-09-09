@@ -2,7 +2,7 @@ import type { HeightRef, WallFeature, WallFeatureKind, WallSide } from '../../db
 
 /** שדה מידה אחד בטופס הסימון. */
 interface FeatureField {
-  key: 'x' | 'width' | 'height' | 'y';
+  key: 'x' | 'width' | 'height' | 'y' | 'depth';
   label: string;
 }
 
@@ -13,6 +13,16 @@ export interface FeatureDef {
   w: number;
   h: number;
   y: number;
+  /**
+   * כמה הסימון יוצא מהקיר או נכנס אליו, כברירת מחדל.
+   * ריק = הסימון שטוח על הקיר ואין לו עומק בכלל.
+   */
+  depth?: number;
+  /**
+   * הסימון נכנס לתוך הקיר במקום לצאת ממנו.
+   * נישה מוסיפה עומק לארון שיעמוד בה; עמוד גונב ממנו.
+   */
+  intoWall?: boolean;
   /** צבע הסימון בהדמיה */
   tone: string;
   /**
@@ -106,14 +116,16 @@ export const FEATURE_DEFS: FeatureDef[] = [
     w: 300,
     h: 2600,
     y: 0,
+    depth: 250,
     tone: '#d6d3d1',
     onFloor: true,
     fields: [
       { key: 'x', label: 'מהקיר לקצה' },
       { key: 'width', label: 'רוחב העמוד' },
       { key: 'height', label: 'גובה העמוד' },
+      { key: 'depth', label: 'כמה בולט' },
     ],
-    hint: 'עמוד יושב על הרצפה ולרוב עולה עד התקרה.',
+    hint: 'עמוד יושב על הרצפה, עולה לרוב עד התקרה, ובולט אל תוך החדר.',
   },
   {
     kind: 'niche',
@@ -121,14 +133,34 @@ export const FEATURE_DEFS: FeatureDef[] = [
     w: 600,
     h: 600,
     y: 1000,
+    depth: 150,
+    intoWall: true,
     tone: '#e7e5e4',
     fields: [
       { key: 'x', label: 'מהקיר לקצה' },
       { key: 'width', label: 'רוחב הנישה' },
       { key: 'height', label: 'גובה הנישה' },
       { key: 'y', label: 'תחתית' },
+      { key: 'depth', label: 'עומק' },
     ],
-    hint: 'הנישה נמדדת כמו חלון — לקצה, ולתחתית הפתח.',
+    hint: 'הנישה נמדדת כמו חלון — לקצה, ולתחתית הפתח — ונכנסת לתוך הקיר.',
+  },
+  {
+    kind: 'step',
+    label: 'מדרגת קיר',
+    w: 800,
+    h: 2600,
+    y: 0,
+    depth: 60,
+    tone: '#e7d8c4',
+    onFloor: true,
+    fields: [
+      { key: 'x', label: 'מהקיר לקצה' },
+      { key: 'width', label: 'רוחב המדרגה' },
+      { key: 'height', label: 'גובה המדרגה' },
+      { key: 'depth', label: 'כמה בולטת' },
+    ],
+    hint: 'גם קיר ישר יוצא מהבנייה עם מדרגה של כמה סנטימטרים. סמן אותה כאן, והארון יידע לוותר עליהם.',
   },
 ];
 
@@ -146,6 +178,7 @@ export function newFeature(kind: WallFeatureKind): WallFeature {
     yMm: def.y,
     widthMm: def.w,
     heightMm: def.h,
+    depthMm: def.depth,
     fromSide: 'start',
     heightRef: 'floor',
   };
@@ -194,6 +227,24 @@ export function featureYToMm(f: WallFeature, value: number, wallHeightMm: number
     ? wallHeightMm - value - (def.xToCenter ? half : f.heightMm)
     : value - half;
   return Math.max(Math.round(y), 0);
+}
+
+/**
+ * העומק בפועל של סימון: מה שנשמר, ואם לא נשמר — ברירת המחדל שלו.
+ * סימון שטוח על הקיר מחזיר 0.
+ */
+export function featureDepth(f: WallFeature): number {
+  return Math.max(f.depthMm ?? featureDef(f.kind).depth ?? 0, 0);
+}
+
+/**
+ * כמה עומק הסימון גונב מארון שיעמוד לפניו, או מוסיף לו.
+ * חיובי = הארון צריך לוותר על העומק הזה; שלילי = יש לו עוד מקום.
+ */
+export function featureBiteMm(f: WallFeature): number {
+  const def = featureDef(f.kind);
+  if (!def.depth && f.depthMm === undefined) return 0;
+  return def.intoWall ? -featureDepth(f) : featureDepth(f);
 }
 
 export const SIDE_LABEL: Record<WallSide, string> = {

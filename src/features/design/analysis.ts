@@ -1,6 +1,6 @@
 import { alongWallMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
-import { featureDef } from '../projects/wallFeatures';
+import { featureBiteMm, featureDef } from '../projects/wallFeatures';
 import { MAX_BODY_MM } from '../../catalog/zones';
 import { glyphDef } from '../../catalog/glyphList';
 import { cm } from '../../ui/units';
@@ -80,9 +80,26 @@ export function analyzeWall(
       continue;
     }
 
-    // חלון, דלת או נישה שארגז נכנס לתוכם — גם חפיפה חלקית היא בעיה
     const blocking = units.find((u) => overlaps(u, f));
-    if (blocking) warnings.push({ text: `${blocking.name} חוסם את ה${label}`, unitIds: [blocking.id] });
+    if (!blocking) continue;
+
+    /*
+     * עמוד ומדרגה הם ההפך מחלון: לא הארגז חוסם אותם, אלא הם
+     * גונבים ממנו עומק. הנגר שקורא "הארגז חוסם את העמוד" מחפש מה
+     * הוא עשה לא בסדר; מה שהוא צריך לדעת הוא כמה סנטימטרים ייעלמו
+     * לו מהגוף אם הארגז יישאר שם.
+     */
+    const bite = featureBiteMm(f);
+    if (bite > 0) {
+      warnings.push({
+        text: `ה${label} בולט ${cm(bite)} ס"מ אל תוך ${blocking.name}`,
+        unitIds: [blocking.id],
+      });
+      continue;
+    }
+
+    // חלון, דלת או נישה שארגז נכנס לתוכם — גם חפיפה חלקית היא בעיה
+    warnings.push({ text: `${blocking.name} חוסם את ה${label}`, unitIds: [blocking.id] });
   }
 
   // ארון גבוה מדי — קשה להרים, להוביל ולהתקין

@@ -4,6 +4,7 @@ import {
   HEIGHT_REF_LABEL,
   SIDE_LABEL,
   featureDef,
+  featureDepth,
   featureX,
   featureXToMm,
   featureY,
@@ -246,19 +247,24 @@ function FeatureSettings({
   const side: WallSide = f.fromSide ?? 'start';
   const heightRef: HeightRef = f.heightRef ?? 'floor';
 
-  const value = (key: 'x' | 'width' | 'height' | 'y') =>
+  type Key = 'x' | 'width' | 'height' | 'y' | 'depth';
+
+  const value = (key: Key) =>
     key === 'x'
       ? featureX(f, wallLengthMm)
       : key === 'y'
         ? featureY(f, wallHeightMm)
         : key === 'width'
           ? f.widthMm
-          : f.heightMm;
+          : key === 'depth'
+            ? featureDepth(f)
+            : f.heightMm;
 
-  const write = (key: 'x' | 'width' | 'height' | 'y', mm: number) => {
+  const write = (key: Key, mm: number) => {
     if (key === 'x') return onPatch({ xMm: featureXToMm(f, mm, wallLengthMm) });
     if (key === 'y') return onPatch({ yMm: featureYToMm(f, mm, wallHeightMm) });
     if (key === 'width') return onPatch({ widthMm: mm });
+    if (key === 'depth') return onPatch({ depthMm: mm });
     // שינוי הגובה מזיז גם את התחתית, כשהמידה נמדדת מהתקרה
     const yMm =
       heightRef === 'ceiling' && !def.xToCenter ? Math.max(f.yMm + f.heightMm - mm, 0) : f.yMm;
@@ -310,7 +316,7 @@ function FeatureSettings({
             <MeasureInput
               value={value(field.key)}
               onChange={(mm) => write(field.key, mm)}
-              minMm={field.key === 'width' || field.key === 'height' ? 20 : 0}
+              minMm={field.key === 'x' || field.key === 'y' ? 0 : 20}
               ariaLabel={`${def.label} — ${field.label}`}
               className="num w-12 shrink-0 bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
             />

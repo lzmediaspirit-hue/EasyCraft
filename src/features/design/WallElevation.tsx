@@ -3,7 +3,7 @@ import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
 import { isDark, shade } from '../../ui/color';
 import { doorCells, unitZones } from '../../catalog/zones';
-import { featureDef } from '../projects/wallFeatures';
+import { featureBiteMm, featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
@@ -557,7 +557,10 @@ export function WallElevation({
             fill="#57534e"
             direction="ltr"
           >
-            {def.label}
+            {/* עומק הוא מידה שמשנה תכנון, ולכן הוא נכתב ליד השם */}
+            {featureBiteMm(f)
+              ? `${def.label} ${cm(Math.abs(featureBiteMm(f)))} ס״מ`
+              : def.label}
           </text>
         );
       })}
