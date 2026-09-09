@@ -7,11 +7,11 @@ import { buildPlan } from './plan';
 import { outOfSight } from './designView';
 import { wallName } from '../projects/wallLayouts';
 import { featureBiteMm, featureDef } from '../projects/wallFeatures';
-import { L_AWAY, L_FACE, WALL_MM, box, projector, roomFloor } from './isoMath';
+import { WALL_MM, frameOf, orderSolids, projector, roomFloor, slab, solidFaces } from './isoMath';
 import { unitBox, unitFrame } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
-import type { Face, IsoView, Tf } from './isoMath';
+import type { Face, IsoView, Solid, Tf } from './isoMath';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /** גוון הזכוכית — מה שרואים דרכו נשאר קר וכחלחל, כמו זכוכית אמיתית. */
@@ -100,7 +100,7 @@ export function buildScene({
   };
   const v = projector(shown);
   const project = v.project;
-  const faces: Face[] = [];
+  const solids: Solid[] = [];
   const backdrops: Backdrop[] = [];
   const marks: WallMark[] = [];
   const bounds: [number, number][] = [];
@@ -115,7 +115,7 @@ export function buildScene({
     const s = wallScenery(p, plan, walls, v, activeWallId);
     backdrops.push(s.backdrop);
     if (s.mark) marks.push(s.mark);
-    faces.push(...s.faces);
+    solids.push(...s.solids);
     bounds.push(...s.bounds);
   }
 
@@ -131,66 +131,49 @@ export function buildScene({
     const place = unitBox(u, plan);
     if (!place) continue;
     if (u.id === selectedId && !present) spin = spinPoint(u, place, v);
-    faces.push(...unitFaces(u, place, v, inside, finishHex));
+    solids.push(...unitSolids(u, place, inside, finishHex));
   }
 
   /*
-   * אלגוריתם הצייר: הרחוק מצויר קודם. הארונות מסודרים ביניהם לפי
-   * המרחק שלהם, ובתוך כל ארון לפי השכבה — כך שחזית לעולם אינה
-   * נצבעת על ידי הפנים של הארון שלה.
+   * הרחוק מצויר קודם. הסדר נקבע בין הלוחות, ורק אז כל לוח נפרש
+   * לפאות שנראות ממנו — כך שאותו סדר משרת את כל הפאות שלו.
    */
-  faces.sort((a, b) => a.group - b.group || a.layer - b.layer || a.depth - b.depth);
+  const faces = orderSolids(solids, v).flatMap((q) => solidFaces(q, v));
 
   return { view: shown, faces, backdrops, marks, floor, bounds, spin };
 }
 
 /**
- * הפאות של ארגז אחד.
+ * הלוחות של ארגז אחד.
  *
- * הארגז מצויר במידות של עצמו, מהרצפה שלו כלפי מעלה, בתוך מסגרת
+ * הארגז נבנה במידות של עצמו, מהרצפה שלו כלפי מעלה, בתוך מסגרת
  * שיודעת איפה הוא עומד בחדר ולאן הוא פונה. הפרדה בין "מה הארגז"
  * לבין "איפה הוא" היא מה שמאפשר לאי ולארון על קיר להיות אותו קוד.
+ *
+ * מכאן יוצאים לוחות ולא פאות: הסדר ביניהם נקבע אחר כך, בבת אחת
+ * לכל החדר, ולכן אין כאן שום החלטה על מי מכסה את מי.
  */
-function unitFaces(
+function unitSolids(
   u: PlacedUnit,
   place: UnitBox,
-  v: ReturnType<typeof projector>,
   inside: boolean,
   finishHex: Record<string, string>,
-): Face[] {
+): Solid[] {
   const t = MATERIAL.carcassMm;
-  const out: Face[] = [];
+  const out: Solid[] = [];
   const frontId = inside ? u.carcassFinishId : (u.frontFinishId ?? u.finishId);
   const tone = (frontId && finishHex[frontId]) || '#d9c3a5';
   const carcassTone = u.carcassFinishId ? (finishHex[u.carcassFinishId] ?? '#e8dcc8') : '#e8dcc8';
 
-  /*
-   * הארגז מצויר במידות של עצמו, בתוך מסגרת שיודעת איפה הוא עומד
-   * ולאן הוא פונה. הסיבוב והמיקום יושבים במסגרת בלבד.
-   */
-  const tfu = unitFrame(place);
-  /*
-   * לאן פונה החזית: אם מישור הדלת קרוב לצופה יותר ממישור הגב,
-   * רואים אותה — ואם לא, היא מאחורי הארון.
-   */
-  const [fwx, fwz] = tfu(u.widthMm / 2, u.depthMm);
-  const [bwx, bwz] = tfu(u.widthMm / 2, 0);
-  const L = v.toward(fwx, fwz) >= v.toward(bwx, bwz) ? L_FACE : L_AWAY;
+  /* הסיבוב והמיקום יושבים במסגרת בלבד */
+  const frame = frameOf(unitFrame(place));
   const socle = u.socleMm ?? 0;
   const x = 0;
   const y = u.yMm + socle;
   const h = Math.max(u.heightMm - socle, 0);
   const w = u.widthMm;
   const d = u.depthMm;
-  /*
-   * הארון כולו מסודר מול שאר הארונות לפי מרכזו, ובתוכו הסדר
-   * הוא סדר הבנייה: גוף, פנים, חזית ומשטח. כך חזית תמיד מכסה
-   * את מה שמאחוריה, גם כשהמדף שמאחוריה רחב ממנה.
-   */
-  const [gx, gz] = tfu(u.widthMm / 2, u.depthMm / 2);
-  const group = v.depth(gx, u.yMm + u.heightMm / 2, gz);
-  const add = (f: Face[], layer = L.inside, glass = false) =>
-    out.push(...f.map((face) => ({ ...face, unitId: u.id, layer, group, glass })));
+  const add = (q: Solid, glass = false) => out.push({ ...q, unitId: u.id, glass });
 
   /*
    * לוח בודד הוא לוח, לא ארון: אין לו צדדים, תחתית וגב.
@@ -201,9 +184,9 @@ function unitFaces(
   if (def.noCarcass) {
     const th = u.panelThicknessMm ?? MATERIAL.frontMm;
     if (def.noCarcass === 'horizontal') {
-      add(box(v, tfu, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`), L.front);
+      add(slab(frame, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`));
     } else {
-      add(box(v, tfu, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`), L.front);
+      add(slab(frame, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`));
     }
     return out;
   }
@@ -211,7 +194,7 @@ function unitFaces(
   // רגליים
   if (socle > 0) {
     // הסוקל נסוג מהחזית אבל יושב על הרצפה במלוא הרוחב
-    add(box(v, tfu, x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`), L.body);
+    add(slab(frame, x, u.yMm, 0, w, socle, d - 50, shade(carcassTone, 0.72), `${u.id}-soc`));
   }
 
   // גוף: שני צדדים, תחתית, תקרה וגב
@@ -221,23 +204,30 @@ function unitFaces(
    * נראית. מה שמשתנה הוא שרואים דרכה — ולכן היא מצוירת שקופה
    * ולא נמחקת מהתמונה.
    */
-  add(box(v, tfu, x, y, 0, t, h, d, gs.start ? GLASS_TONE : carcassTone, `${u.id}-l`), L.body, !!gs.start);
+  add(slab(frame, x, y, 0, t, h, d, gs.start ? GLASS_TONE : carcassTone, `${u.id}-l`), !!gs.start);
   add(
-    box(v, tfu, x + w - t, y, 0, t, h, d, gs.end ? GLASS_TONE : carcassTone, `${u.id}-r`),
-    L.body,
+    slab(frame, x + w - t, y, 0, t, h, d, gs.end ? GLASS_TONE : carcassTone, `${u.id}-r`),
     !!gs.end,
   );
-  add(box(v, tfu, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`), L.body);
-  add(box(v, tfu, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`), L.body);
+  add(slab(frame, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`));
+  add(slab(frame, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`));
   const back = u.backKind ?? 'thin';
-  if (back !== 'none') {
-    // גב בעובי גוף נבנה כמו דופן, וגב דק יושב בחריץ — וזה נראה
-    const bt = back === 'carcass' ? t : MATERIAL.backMm;
+  // גב בעובי גוף נבנה כמו דופן, וגב דק יושב בחריץ — וזה נראה
+  const bt = back === 'none' ? 0 : back === 'carcass' ? t : MATERIAL.backMm;
+  if (bt) {
     add(
-      box(v, tfu, x + t, y + t, 0, w - 2 * t, h - 2 * t, bt, shade(carcassTone, 0.86), `${u.id}-bk`),
-      L.body,
+      slab(frame, x + t, y + t, 0, w - 2 * t, h - 2 * t, bt, shade(carcassTone, 0.86), `${u.id}-bk`),
     );
   }
+  /*
+   * הפנים מתחיל לפני הגב ולא בתוכו.
+   *
+   * מדף שהתחיל ב-0 חתך את לוח הגב בארבעה מילימטרים, ולוחות
+   * שנחתכים אין ביניהם "מי לפני מי" — ואז הגב, גבוה ורחב, נצבע
+   * מעל המדפים ומחק אותם מהתמונה. זה גם פשוט נכון: מדף יושב על
+   * הגב, לא בתוכו.
+   */
+  const inZ = bt;
 
   /*
    * לד. הפס יושב על הקצה הקדמי, מחוץ למה שהדלת מכסה — בדיוק
@@ -252,8 +242,7 @@ function unitFaces(
     lh: number,
     key: string,
     lz = d - LED_MM,
-    layer = L.hardware,
-  ) => add(box(v, tfu, lx, ly, lz, lw, lh, LED_MM, LED_TONE, `${u.id}-led-${key}`), layer);
+  ) => add(slab(frame, lx, ly, lz, lw, lh, LED_MM, LED_TONE, `${u.id}-led-${key}`));
   if (ledAt.has('top')) ledBar(x, y + h, w, LED_MM, 'top');
   if (ledAt.has('bottom')) ledBar(x, Math.max(y - LED_MM, u.yMm), w, LED_MM, 'bottom');
   if (ledAt.has('start')) ledBar(x - LED_MM, y, LED_MM, h, 'start');
@@ -287,18 +276,17 @@ function unitFaces(
         for (const sy of shelfYs({ shelves, gaps: cell.content.shelfGapsMm }, 0, zh)) {
           const shelfY = zBottom + (zh - sy);
           add(
-            box(v, tfu, cx, shelfY, 0, cw, t, zd - 20, glassShelf ? GLASS_TONE : carcassTone, `${zk}-sh-${i}-${sy}`),
-            L.inside,
+            slab(frame, cx, shelfY, inZ, cw, t, zd - 20 - inZ, glassShelf ? GLASS_TONE : carcassTone, `${zk}-sh-${i}-${sy}`),
             glassShelf,
           );
           if (ledAt.has('shelf')) {
             /* פס שמתחת למדף יושב בתוך הארון, ולכן הוא נסתר מאחורי הדלת ומאחורי הדופן */
-            ledBar(cx, shelfY - LED_MM, cw, LED_MM, `sh-${zone.id}-${i}-${sy}`, d - 40 - LED_MM, L.inside);
+            ledBar(cx, shelfY - LED_MM, cw, LED_MM, `sh-${zone.id}-${i}-${sy}`, d - 40 - LED_MM);
           }
         }
       }
       if (cell.content.kind === 'rod') {
-        add(box(v, tfu, cx, zBottom + zh * 0.86, zd / 2 - 15, cw, 30, 30, '#a8a29e', `${zk}-rod-${i}`));
+        add(slab(frame, cx, zBottom + zh * 0.86, zd / 2 - 15, cw, 30, 30, '#a8a29e', `${zk}-rod-${i}`));
       }
       if (cell.content.kind === 'drawers') {
         const rows = cell.content.drawers ?? 1;
@@ -316,9 +304,8 @@ function unitFaces(
             const dh = zh / rows;
             const dw = cw / drawerCols;
             add(
-              box(
-                v,
-                tfu,
+              slab(
+                frame,
                 cx + col * dw + 6,
                 zBottom + r * dh + 6,
                 hidden ? zd - 60 : zd,
@@ -328,7 +315,6 @@ function unitFaces(
                 shade(tone, hidden ? 0.94 : 1),
                 `${zk}-dr-${i}-${r}-${col}`,
               ),
-              hidden ? L.inside : L.front,
             );
           }
         }
@@ -336,7 +322,7 @@ function unitFaces(
       cx += cw;
       // קושרת בין תא לתא
       if (i < cells.length - 1) {
-        add(box(v, tfu, cx, zBottom, 0, t, zh, zd - 20, carcassTone, `${zk}-div-${i}`));
+        add(slab(frame, cx, zBottom, inZ, t, zh, zd - 20 - inZ, carcassTone, `${zk}-div-${i}`));
         cx += t;
       }
     });
@@ -347,7 +333,7 @@ function unitFaces(
      * כקו: שני תאים זה אומר שיש ביניהם משהו.
      */
     if (bi > 0) {
-      add(box(v, tfu, x + t, zBottom - t, 0, w - 2 * t, t, d, carcassTone, `${zk}-sep`));
+      add(slab(frame, x + t, zBottom - t, inZ, w - 2 * t, t, d - inZ, carcassTone, `${zk}-sep`));
     }
   });
 
@@ -372,9 +358,8 @@ function unitFaces(
       if (fh <= 0) continue;
       if (blind) {
         add(
-          box(
-            v,
-            tfu,
+          slab(
+            frame,
             atStart ? x : x + openW,
             y + f.fromMm + 2,
             d,
@@ -384,16 +369,14 @@ function unitFaces(
             tone,
             `${u.id}-blind-${fi}`,
           ),
-          L.front,
         );
       }
       const dw = openW / f.doors;
       for (let k = 0; k < f.doors; k++) {
         const dx = x + openX + dw * k;
         add(
-          box(
-            v,
-            tfu,
+          slab(
+            frame,
             dx + 2,
             y + f.fromMm + 2,
             d,
@@ -403,7 +386,6 @@ function unitFaces(
             u.glassDoors ? GLASS_TONE : tone,
             `${u.id}-door-${fi}-${k}`,
           ),
-          L.front,
           u.glassDoors,
         );
         /*
@@ -414,9 +396,8 @@ function unitFaces(
           const inset = Math.min(dw * 0.12, 60);
           const hx = f.doors === 1 || k % 2 === 0 ? dx + dw - inset : dx + inset;
           add(
-            box(
-              v,
-              tfu,
+            slab(
+              frame,
               hx - HANDLE_MM / 2,
               y + f.fromMm + fh * 0.36,
               d + MATERIAL.frontMm,
@@ -426,7 +407,6 @@ function unitFaces(
               '#57534e',
               `${u.id}-hdl-${fi}-${k}`,
             ),
-            L.hardware,
           );
         }
       }
@@ -440,8 +420,7 @@ function unitFaces(
    */
   if (def.appliance && !(u.doors ?? 0)) {
     add(
-      box(v, tfu, x + 2, y + 2, d, w - 4, h - 4, MATERIAL.frontMm, '#d6d3d1', `${u.id}-app`),
-      L.front,
+      slab(frame, x + 2, y + 2, d, w - 4, h - 4, MATERIAL.frontMm, '#d6d3d1', `${u.id}-app`),
     );
   }
 
@@ -451,8 +430,7 @@ function unitFaces(
    */
   if (u.counterMm) {
     add(
-      box(v, tfu, x - 20, u.yMm + u.heightMm, 0, w + 40, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`),
-      L.top,
+      slab(frame, x - 20, u.yMm + u.heightMm, 0, w + 40, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`),
     );
   }
 
@@ -462,14 +440,13 @@ function unitFaces(
   const eTone = u.exposedFinishId ? (finishHex[u.exposedFinishId] ?? tone) : tone;
   if (e.start)
     add(
-      box(v, tfu, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`),
-      L.top,
+      slab(frame, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`),
     );
   if (e.end)
-    add(box(v, tfu, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`), L.top);
-  if (e.top) add(box(v, tfu, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`), L.top);
+    add(slab(frame, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`));
+  if (e.top) add(slab(frame, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`));
   if (e.bottom)
-    add(box(v, tfu, x, y - MATERIAL.frontMm, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-b`), L.top);
+    add(slab(frame, x, y - MATERIAL.frontMm, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-b`));
   return out;
 }
 
@@ -517,9 +494,9 @@ function wallScenery(
   walls: Wall[],
   v: ReturnType<typeof projector>,
   activeWallId: string,
-): { backdrop: Backdrop; mark: WallMark | null; faces: Face[]; bounds: [number, number][] } {
+): { backdrop: Backdrop; mark: WallMark | null; solids: Solid[]; bounds: [number, number][] } {
   const project = v.project;
-  const out: Face[] = [];
+  const out: Solid[] = [];
   const bounds: [number, number][] = [];
   let mark: WallMark | null = null;
   const rad = (p.headingDeg * Math.PI) / 180;
@@ -644,21 +621,18 @@ function wallScenery(
   }
 
   /*
-   * עמוד ומדרגה: תיבה שעומדת בחדר, ולכן היא נכנסת לרשימת הפאות
-   * יחד עם הארונות ולא לרקע. עמוד שצויר ברקע היה נעלם מאחורי כל
-   * ארון שעומד לידו — וזה בדיוק העמוד שהנגר צריך לראות.
+   * עמוד ומדרגה: תיבה שעומדת בחדר, ולכן היא נכנסת ללוחות יחד עם
+   * הארונות ולא לרקע. עמוד שצויר ברקע היה נעלם מאחורי כל ארון
+   * שעומד לידו — וזה בדיוק העמוד שהנגר צריך לראות.
    */
+  const wallFrame = frameOf(tf);
   for (const f of w0.features) {
     const bite = featureBiteMm(f);
     if (bite <= 0) continue;
-    const tone = featureDef(f.kind).tone;
-    const [cx, cz] = tf(f.xMm + f.widthMm / 2, bite / 2);
-    const group = v.depth(cx, f.yMm + f.heightMm / 2, cz);
-    out.push(
-      ...box(v, tf, f.xMm, f.yMm, 0, f.widthMm, f.heightMm, bite, tone, `${w0.id}-${f.id}`).map(
-        (face) => ({ ...face, layer: L_FACE.body, group, featureKind: f.kind }),
-      ),
-    );
+    out.push({
+      ...slab(wallFrame, f.xMm, f.yMm, 0, f.widthMm, f.heightMm, bite, featureDef(f.kind).tone, `${w0.id}-${f.id}`),
+      featureKind: f.kind,
+    });
   }
-  return { backdrop, mark, faces: out, bounds };
+  return { backdrop, mark, solids: out, bounds };
 }

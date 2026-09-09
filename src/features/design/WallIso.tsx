@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { COS30, DEFAULT_VIEW, MAX_RISE, MIN_RISE, ORBIT_SLOP } from './isoMath';
 import type { IsoView } from './isoMath';
 import { buildScene } from './isoScene';
@@ -102,35 +102,76 @@ export function WallIso({
     hit: string | null;
   } | null>(null);
 
-  const scene = buildScene({
-    walls,
-    units,
-    activeWallId,
-    selectedId,
-    inside,
-    noUppers,
-    finishHex,
-    present,
-    view,
-  });
+  /*
+   * בניית הסצנה היא העבודה הכבדה של המסך, ולכן היא נעשית רק כשמשהו
+   * שנכנס אליה השתנה. בלי זה כל ציור מחדש של המסך — פתיחת מקלדת,
+   * מגע בכפתור, רענון של שאילתה — בנה את החדר כולו מחדש.
+   */
+  const scene = useMemo(
+    () => buildScene({ walls, units, activeWallId, selectedId, inside, noUppers, finishHex, present, view }),
+    [walls, units, activeWallId, selectedId, inside, noUppers, finishHex, present, view],
+  );
   const { faces, backdrops, marks, floor, bounds, spin } = scene;
   /* הזווית שבאמת מצוירת — היא מוגבלת כדי לא לצאת אל מאחורי הקיר */
   const shown = scene.view;
-  const plan = buildPlan(walls, units);
+  const plan = useMemo(() => buildPlan(walls, units), [walls, units]);
   /*
    * הכיוון של הקיר שעובדים עליו, לפיו נעצר הסיבוב לפני שהצופה יוצא
    * אל מאחוריו. הגרירה צריכה את אותו גבול שהתמונה כבר חושבת לפיו.
    */
   const heading = plan.find((p) => p.wall.id === activeWallId)?.headingDeg ?? 0;
 
-  const xs = bounds.map((q) => q[0]);
-  const ys = bounds.map((q) => q[1]);
+  /* המסגרת שמכילה הכול. פרישה של אלפי נקודות לתוך Math.min יקרה, ומעל גבול מסוים גם נופלת */
   const pad = 300;
-  const minX = Math.min(...xs) - pad;
-  const minY = Math.min(...ys) - pad;
-  const vbW = Math.max(...xs) - Math.min(...xs) + pad * 2;
-  const vbH = Math.max(...ys) - Math.min(...ys) + pad * 2;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const [qx, qy] of bounds) {
+    if (qx < x0) x0 = qx;
+    if (qx > x1) x1 = qx;
+    if (qy < y0) y0 = qy;
+    if (qy > y1) y1 = qy;
+  }
+  const minX = x0 - pad;
+  const minY = y0 - pad;
+  const vbW = x1 - x0 + pad * 2;
+  const vbH = y1 - y0 + pad * 2;
   const stroke = Math.max(vbW / 700, 3);
+
+  /*
+   * הלוחות עצמם. ארון מלא הוא מאות מצולעים, ולכן הם נבנים רק
+   * כשהתמונה משתנה: שינוי גודל של החלון — פתיחת מקלדת, סיבוב
+   * המכשיר — אינו נוגע בהם בכלל.
+   */
+  const painted = useMemo(
+    () =>
+      faces.map((f) => (
+        <polygon
+          key={f.key}
+          points={f.points}
+          fill={f.fill}
+          /* זכוכית: רואים דרכה את מה שכבר צויר מאחוריה */
+          fillOpacity={f.glass ? 0.42 : undefined}
+          /*
+            בהצגה הקו בין לוח ללוח נעלם: הוא מה שהופך רהיט לשרטוט.
+            נשאר קו דק מאוד בגוון המשטח עצמו, כדי שפאה בהירה על
+            רקע בהיר עדיין תיראה.
+          */
+          stroke={
+            present ? 'rgba(87,83,78,0.18)' : f.unitId === selectedId ? '#a06236' : '#57534e'
+          }
+          strokeWidth={
+            present ? stroke * 0.35 : f.unitId === selectedId ? stroke * 1.6 : stroke * 0.7
+          }
+          strokeLinejoin="round"
+          data-unit={f.unitId}
+          data-wall-solid={f.featureKind}
+          className={f.unitId && !present ? 'cursor-pointer' : undefined}
+        />
+      )),
+    [faces, present, selectedId, stroke],
+  );
 
   /*
    * כמה יחידות ציור נכנסות לפיקסל אחד.
@@ -403,36 +444,7 @@ export function WallIso({
         </g>
       ))}
 
-      <g filter={present ? 'url(#iso-shadow)' : undefined}>
-        {faces.map((f) => (
-          <polygon
-            key={f.key}
-            points={f.points}
-            fill={f.fill}
-            /* זכוכית: רואים דרכה את מה שכבר צויר מאחוריה */
-            fillOpacity={f.glass ? 0.42 : undefined}
-            /*
-              בהצגה הקו בין לוח ללוח נעלם: הוא מה שהופך רהיט לשרטוט.
-              נשאר קו דק מאוד בגוון המשטח עצמו, כדי שפאה בהירה על
-              רקע בהיר עדיין תיראה.
-            */
-            stroke={
-              present
-                ? 'rgba(87,83,78,0.18)'
-                : f.unitId === selectedId
-                  ? '#a06236'
-                  : '#57534e'
-            }
-            strokeWidth={
-              present ? stroke * 0.35 : f.unitId === selectedId ? stroke * 1.6 : stroke * 0.7
-            }
-            strokeLinejoin="round"
-            data-unit={f.unitId}
-            data-wall-solid={f.featureKind}
-            className={f.unitId && !present ? 'cursor-pointer' : undefined}
-          />
-        ))}
-      </g>
+      <g filter={present ? 'url(#iso-shadow)' : undefined}>{painted}</g>
 
       {/* שכבת האור: מבהירה למעלה ומכהה למטה, על כל התמונה בבת אחת */}
       {present && (

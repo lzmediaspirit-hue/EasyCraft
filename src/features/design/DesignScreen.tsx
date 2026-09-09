@@ -52,6 +52,15 @@ import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 const PANEL_KEY = 'easycraft.panelRatio';
 
 /** גובה הלוח נשאר בתחום שמשאיר את הקיר גלוי ואת הלוח שימושי. */
+/*
+ * ברירות מחדל יציבות.
+ *
+ * `?? []` בתוך ה-JSX יוצר מערך חדש בכל ציור, וכל מי שמקבל אותו
+ * מחשב הכול מחדש גם כששום דבר לא השתנה. קבוע אחד פותר את זה.
+ */
+const NO_UNITS: PlacedUnit[] = [];
+const NO_HEX: Record<string, string> = {};
+
 const clampRatio = (r: number) => Math.min(Math.max(r, 0.2), 0.85);
 
 /**
@@ -129,11 +138,11 @@ export function DesignScreen({
 
   const wall = walls?.[Math.min(wallIndex, (walls?.length ?? 1) - 1)];
   const units = useMemo(
-    () => (wall ? (allUnits ?? []).filter((u) => u.wallId === wall.id) : []),
+    () => (wall ? (allUnits ?? NO_UNITS).filter((u) => u.wallId === wall.id) : []),
     [allUnits, wall],
   );
   const selected = units.find((u) => u.id === selectedId) ?? null;
-  const workUnit = (allUnits ?? []).find((u) => u.id === workUnitId) ?? null;
+  const workUnit = (allUnits ?? NO_UNITS).find((u) => u.id === workUnitId) ?? null;
   const me = useCurrentMember();
   const role = useEffectiveRole(me?.role);
   const mayEdit = can.design(role, project);
@@ -157,17 +166,18 @@ export function DesignScreen({
   useEffect(() => {
     const wallId = walls?.[wallIndex]?.id;
     setSelectedId((id) => {
-      const picked = (allUnits ?? []).find((u) => u.id === id);
+      const picked = (allUnits ?? NO_UNITS).find((u) => u.id === id);
       return picked && picked.wallId === wallId ? id : null;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallIndex]);
 
-  const corners = wall && walls && walls.length > 1
-    ? cornerZones(walls, wall, allUnits ?? [])
-    : undefined;
+  const corners = useMemo(
+    () => (wall && walls && walls.length > 1 ? cornerZones(walls, wall, allUnits ?? NO_UNITS) : undefined),
+    [wall, walls, allUnits],
+  );
   /* גיאומטריית החדר, פעם אחת — ממנה נגזרים המבטים וההתנגשות */
-  const plan = useMemo(() => buildPlan(walls ?? [], allUnits ?? []), [walls, allUnits]);
+  const plan = useMemo(() => buildPlan(walls ?? [], allUnits ?? NO_UNITS), [walls, allUnits]);
   /*
    * ההתנגשות נמדדת על התיבות במרחב החדר ולא על סימון אזור הפינה:
    * הפינה פתוחה לכל ארגז, והשאלה היחידה היא אם שני ארונות באמת
@@ -176,28 +186,34 @@ export function DesignScreen({
   const clashing = useMemo(() => {
     if (!wall) return [];
     const seen = new Map<string, { id: string; name: string }>();
-    for (const b of planUnits(plan, allUnits ?? [])) {
+    for (const b of planUnits(plan, allUnits ?? NO_UNITS)) {
       if (!b.clash || b.unit.wallId !== wall.id) continue;
       seen.set(b.unit.id, { id: b.unit.id, name: b.unit.name });
     }
     return [...seen.values()];
   }, [plan, wall, allUnits]);
-  const analysis = wall ? analyzeWall(wall, units, clashing) : null;
+  const analysis = useMemo(
+    () => (wall ? analyzeWall(wall, units, clashing) : null),
+    [wall, units, clashing],
+  );
   /*
    * המקור למחוונים: הקיר שעובדים עליו, או כל הקירות יחד. שניהם
    * נבנים מאותה בדיקה, ולכן אין סיכוי שהמספרים יסתרו זה את זה.
    */
-  const statSource =
-    wall && analysis
-      ? roomStats
-        ? roomStatsOf(walls ?? [], allUnits ?? [], (w) =>
-            analyzeWall(
-              w,
-              (allUnits ?? []).filter((u) => u.wallId === w.id),
-            ),
-          )
-        : wallStats(wall, units, analysis)
-      : null;
+  const statSource = useMemo(
+    () =>
+      wall && analysis
+        ? roomStats
+          ? roomStatsOf(walls ?? [], allUnits ?? NO_UNITS, (w) =>
+              analyzeWall(
+                w,
+                (allUnits ?? NO_UNITS).filter((u) => u.wallId === w.id),
+              ),
+            )
+          : wallStats(wall, units, analysis)
+        : null,
+    [wall, analysis, roomStats, walls, allUnits, units],
+  );
 
   async function addItem(item: CatalogItem) {
     if (!wall) return;
@@ -237,7 +253,7 @@ export function DesignScreen({
     } as PlacedUnit;
     for (let x = from; x <= maxX; x += 50) {
       const b = unitBox({ ...probe, xMm: x }, plan);
-      if (b && !blocked(probe, b, allUnits ?? [], plan)) return x;
+      if (b && !blocked(probe, b, allUnits ?? NO_UNITS, plan)) return x;
     }
     return from;
   }
@@ -267,7 +283,7 @@ export function DesignScreen({
    * כלום.
    */
   async function setFree(id: string, free: boolean) {
-    const u = (allUnits ?? []).find((x) => x.id === id);
+    const u = (allUnits ?? NO_UNITS).find((x) => x.id === id);
     const b = u && unitBox(u, plan);
     if (!u || !b) return;
     await history.capture(projectId, `free:${id}`);
@@ -291,7 +307,7 @@ export function DesignScreen({
 
   /** מחזיר לתצוגה את כל מה שהוסתר — צעד אחד, ולא ארגז אחרי ארגז. */
   async function showHidden() {
-    const back = (allUnits ?? []).filter((u) => u.hidden);
+    const back = (allUnits ?? NO_UNITS).filter((u) => u.hidden);
     if (!back.length) return;
     await history.capture(projectId, 'show-hidden');
     for (const u of back) await unitsRepo.update(u.id, { hidden: false });
@@ -324,7 +340,7 @@ export function DesignScreen({
         wallIndex={wallIndex}
         onWallIndex={setWallIndex}
         units={units}
-        allUnits={allUnits ?? []}
+        allUnits={allUnits ?? NO_UNITS}
         role={role}
         editable={editable}
         workMode={workMode}
@@ -350,12 +366,12 @@ export function DesignScreen({
             /* התלת־ממד מראה את החדר כולו, ולא רק את הקיר שעובדים עליו */
             <WallIso
               walls={walls}
-              units={allUnits ?? []}
+              units={allUnits ?? NO_UNITS}
               activeWallId={wall.id}
               selectedId={selectedId}
               /* בחירה בתלת־ממד עשויה ליפול על קיר אחר — עוברים אליו */
               onSelect={(id) => {
-                const picked = (allUnits ?? []).find((u) => u.id === id);
+                const picked = (allUnits ?? NO_UNITS).find((u) => u.id === id);
                 if (picked && picked.wallId !== wall.id) {
                   const i = walls.findIndex((w) => w.id === picked.wallId);
                   if (i >= 0) setWallIndex(i);
@@ -373,13 +389,13 @@ export function DesignScreen({
               onMoveTo={editable ? (id, patch) => patchUnit(id, patch) : undefined}
               inside={inside}
               noUppers={noUppers}
-              finishHex={finishHex ?? {}}
+              finishHex={finishHex ?? NO_HEX}
             />
           ) : (
           <WallElevation
             wall={wall}
             units={units}
-            allUnits={allUnits ?? []}
+            allUnits={allUnits ?? NO_UNITS}
             plan={plan}
             selectedId={selectedId}
             showHeight={view.heightLine}
@@ -396,7 +412,7 @@ export function DesignScreen({
             noUppers={noUppers}
             measure={measure}
             corners={corners}
-            finishHex={finishHex ?? {}}
+            finishHex={finishHex ?? NO_HEX}
             onMove={(id, patch) => patchUnit(id, patch)}
           />
           )}
@@ -780,10 +796,10 @@ export function DesignScreen({
           project={project}
           customer={customer}
           walls={walls}
-          units={allUnits ?? []}
+          units={allUnits ?? NO_UNITS}
           finishes={allFinishes ?? []}
           materials={allMaterials ?? []}
-          finishHex={finishHex ?? {}}
+          finishHex={finishHex ?? NO_HEX}
           onClose={closeSheet}
         />
       )}
@@ -793,7 +809,7 @@ export function DesignScreen({
           <PlanView
             noUppers={noUppers}
             walls={walls}
-            units={allUnits ?? []}
+            units={allUnits ?? NO_UNITS}
             activeWallId={wall.id}
             onSelectWall={(id) => {
               const i = walls.findIndex((w) => w.id === id);
@@ -830,7 +846,7 @@ export function DesignScreen({
       {sheet === 'sale' && (
         <SaleSheet
           project={project}
-          units={allUnits ?? []}
+          units={allUnits ?? NO_UNITS}
           costing={costing}
           isManager={me?.role === 'manager'}
           onClose={closeSheet}
