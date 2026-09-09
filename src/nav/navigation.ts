@@ -1,3 +1,4 @@
+import { subscribers } from '../ui/store';
 import { useSyncExternalStore } from 'react';
 
 export type Route =
@@ -19,12 +20,12 @@ export type Route =
  * כולל כפתור החזרה של המכשיר — כדי שהאפליקציה תתנהג כמו אפליקציה.
  */
 let stack: Route[] = [{ name: 'customers' }];
-const listeners = new Set<() => void>();
+const bus = subscribers();
 /** האם היסטוריית הדפדפן זמינה. בסביבות מוטמעות היא עלולה להיחסם. */
 let historyWorks = true;
 
 function emit() {
-  listeners.forEach((l) => l());
+  bus.notify();
 }
 
 export const nav = {
@@ -73,8 +74,7 @@ window.addEventListener('popstate', () => {
 export function useRoute(): Route {
   return useSyncExternalStore(
     (cb) => {
-      listeners.add(cb);
-      return () => listeners.delete(cb);
+      return bus.subscribe(cb);
     },
     () => stack[stack.length - 1],
   );

@@ -74,6 +74,40 @@ export function PrimaryButton({
   );
 }
 
+/**
+ * שדה מחיר עם תווית מעליו.
+ *
+ * שני מסכי הגדרות ציירו אותו פעמיים, ונבדלו רק ברקע — אחד יושב על
+ * לוח לבן והשני על אפור. הרקע הוא ההבדל היחיד, ולכן הוא פרופ.
+ */
+export function PriceField({
+  label,
+  value,
+  onChange,
+  tone = 'sunken',
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  /** על רקע אפור (sunken) או על לוח לבן (raised) */
+  tone?: 'sunken' | 'raised';
+}) {
+  return (
+    <label className={`block rounded-xl px-3 py-2 ${tone === 'raised' ? 'bg-white' : 'bg-stone-100'}`}>
+      <span className="block text-[11px] text-stone-500">{label}</span>
+      <input
+        value={value || ''}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        onFocus={selectOnFocus}
+        type="number"
+        inputMode="decimal"
+        placeholder="₪"
+        className="num w-full bg-transparent text-base font-medium text-stone-900 placeholder:text-stone-300 focus:outline-none"
+      />
+    </label>
+  );
+}
+
 /** בחירה בודדת מתוך כמה אפשרויות קצרות. */
 export function Chip({
   active,

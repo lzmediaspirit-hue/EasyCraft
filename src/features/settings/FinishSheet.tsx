@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { finishesRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
-import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
-import { CopyIcon, PencilIcon, PlusIcon, TrashIcon } from '../../ui/icons';
+import { SheetFooter } from '../../ui/SheetFooter';
+import { Chip, Field, inputClass, selectOnFocus } from '../../ui/Field';
+import { CopyIcon, PencilIcon, PlusIcon } from '../../ui/icons';
 import { BUILTIN_TEXTURES } from '../../db/types';
 import type { Finish, MaterialPrice } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
@@ -96,25 +97,19 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
       onClose={onClose}
       tall
       footer={
-        <div className="flex items-center gap-2">
-          {finish && (
-            <button
-              onClick={async () => {
-                await finishesRepo.remove(finish.id);
-                onClose();
-              }}
-              aria-label="מחיקת הגוון"
-              className="shrink-0 rounded-2xl border border-stone-200 p-4 text-stone-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-            >
-              <TrashIcon />
-            </button>
-          )}
-          <div className="flex-1">
-            <PrimaryButton disabled={!canSave} onClick={save}>
-              שמירה
-            </PrimaryButton>
-          </div>
-        </div>
+        <SheetFooter
+          canSave={canSave}
+          onSave={save}
+          removeLabel="מחיקת הגוון"
+          onRemove={
+            finish
+              ? async () => {
+                  await finishesRepo.remove(finish.id);
+                  onClose();
+                }
+              : undefined
+          }
+        />
       }
     >
       <div className="space-y-5">

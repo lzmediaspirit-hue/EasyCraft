@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
+import { Pill } from '../../ui/Pill';
 import { cm } from '../../ui/units';
 import type { PlacedUnit } from '../../db/types';
 
@@ -107,12 +108,12 @@ export function SaveToLibrarySheet({
         {canUpdate && (
           <Field group label="איך לשמור">
             <div className="flex flex-wrap gap-1.5">
-              <Choice active={mode === 'update'} onClick={() => setMode('update')}>
+              <Pill wide active={mode === 'update'} onClick={() => setMode('update')}>
                 עדכון {source.name}
-              </Choice>
-              <Choice active={mode === 'new'} onClick={() => setMode('new')}>
+              </Pill>
+              <Pill wide active={mode === 'new'} onClick={() => setMode('new')}>
                 ארגז חדש
-              </Choice>
+              </Pill>
             </div>
           </Field>
         )}
@@ -131,27 +132,6 @@ export function SaveToLibrarySheet({
         </dl>
       </div>
     </Sheet>
-  );
-}
-
-function Choice({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`max-w-full truncate rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

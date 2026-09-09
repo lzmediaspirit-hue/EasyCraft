@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { settingsRepo } from '../../materials/materialsRepo';
-import { Chip, Field, inputClass, selectOnFocus } from '../../ui/Field';
+import { Chip, Field, PriceField, inputClass, selectOnFocus } from '../../ui/Field';
 import { PlusIcon, TrashIcon } from '../../ui/icons';
 import type { ExtraBasis, ExtraItem, Settings } from '../../db/types';
 
@@ -99,18 +99,18 @@ export function ExtrasSection({ settings }: { settings: Settings }) {
 
           <div className="grid grid-cols-2 gap-2">
             {draft.per === 'manual' && (
-              <NumInput
+              <PriceField tone="raised"
                 label="כמות"
                 value={draft.qty ?? 0}
                 onChange={(v) => setDraft({ ...draft, qty: v })}
               />
             )}
-            <NumInput
+            <PriceField tone="raised"
               label="מחיר במפעל"
               value={draft.factoryPrice}
               onChange={(v) => setDraft({ ...draft, factoryPrice: v })}
             />
-            <NumInput
+            <PriceField tone="raised"
               label="מחיר לצרכן"
               value={draft.consumerPrice}
               onChange={(v) => setDraft({ ...draft, consumerPrice: v })}
@@ -151,30 +151,5 @@ export function ExtrasSection({ settings }: { settings: Settings }) {
         </button>
       )}
     </>
-  );
-}
-
-function NumInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="block rounded-xl bg-white px-3 py-2">
-      <span className="block text-[11px] text-stone-500">{label}</span>
-      <input
-        value={value || ''}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
-        onFocus={selectOnFocus}
-        type="number"
-        inputMode="decimal"
-        placeholder="₪"
-        className="num w-full bg-transparent text-base font-medium text-stone-900 placeholder:text-stone-300 focus:outline-none"
-      />
-    </label>
   );
 }

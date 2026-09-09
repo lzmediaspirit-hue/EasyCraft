@@ -1,3 +1,4 @@
+import { subscribers } from './store';
 import { readPref, writePref } from './prefs';
 /**
  * יחידות מידה.
@@ -11,7 +12,7 @@ import { readPref, writePref } from './prefs';
 export type DisplayUnit = 'cm' | 'mm';
 
 const KEY = 'easycraft.unit';
-const listeners = new Set<() => void>();
+const bus = subscribers();
 
 let unit: DisplayUnit = read();
 
@@ -24,12 +25,9 @@ export const displayUnit = {
   set(next: DisplayUnit) {
     unit = next;
     writePref(KEY, next);
-    listeners.forEach((l) => l());
+    bus.notify();
   },
-  subscribe(l: () => void): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: bus.subscribe,
 };
 
 /** תווית היחידה לתצוגה, לצד מספר. */

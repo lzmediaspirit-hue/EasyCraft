@@ -6,7 +6,7 @@ import { FinishSheet } from './FinishSheet';
 import { ExtrasSection } from './ExtrasSection';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { nav } from '../../nav/navigation';
-import { Field, NumField, inputClass, selectOnFocus } from '../../ui/Field';
+import { Field, NumField, PriceField, inputClass, selectOnFocus } from '../../ui/Field';
 import { displayUnit } from '../../ui/units';
 import { useDisplayUnit } from '../../ui/useDisplayUnit';
 import { ChevronIcon, PlusIcon, SheetIcon, TeamIcon } from '../../ui/icons';
@@ -357,12 +357,12 @@ export function SettingsScreen() {
               <span className="text-[11px] text-stone-400">למ״ר</span>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <PriceBox
+              <PriceField
                 label="מפעל"
                 value={settings.glassFactoryPerM2}
                 onChange={(v) => settingsRepo.save({ glassFactoryPerM2: v })}
               />
-              <PriceBox
+              <PriceField
                 label="צרכן"
                 value={settings.glassConsumerPerM2}
                 onChange={(v) => settingsRepo.save({ glassConsumerPerM2: v })}
@@ -425,34 +425,9 @@ function AccessoryRow({
         <span className="text-[11px] text-stone-400">{unit}</span>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <PriceBox label="מפעל" value={factory} onChange={(v) => onChange(v, consumer)} />
-        <PriceBox label="צרכן" value={consumer} onChange={(v) => onChange(factory, v)} />
+        <PriceField label="מפעל" value={factory} onChange={(v) => onChange(v, consumer)} />
+        <PriceField label="צרכן" value={consumer} onChange={(v) => onChange(factory, v)} />
       </div>
     </div>
-  );
-}
-
-function PriceBox({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="block rounded-xl bg-stone-100 px-3 py-2">
-      <span className="block text-[11px] text-stone-500">{label}</span>
-      <input
-        value={value || ''}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
-        onFocus={selectOnFocus}
-        type="number"
-        inputMode="decimal"
-        placeholder="₪"
-        className="num w-full bg-transparent text-base font-medium text-stone-900 placeholder:text-stone-300 focus:outline-none"
-      />
-    </label>
   );
 }

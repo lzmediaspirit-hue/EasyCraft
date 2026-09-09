@@ -4,8 +4,8 @@ import { normalizeUsername, setPassword, usernameTaken } from '../../workflow/au
 import { ROLE_LABEL } from '../../workflow/stages';
 import { normalizePhone, isValidPhone } from '../customers/phone';
 import { Sheet } from '../../ui/Sheet';
-import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
-import { TrashIcon } from '../../ui/icons';
+import { SheetFooter } from '../../ui/SheetFooter';
+import { Chip, Field, inputClass, selectOnFocus } from '../../ui/Field';
 import type { TeamMember, UserRole } from '../../db/types';
 
 const ROLES: UserRole[] = ['manager', 'planner', 'carpenter', 'installer'];
@@ -70,25 +70,19 @@ export function MemberSheet({
       title={member ? 'עריכת משתמש' : 'משתמש חדש'}
       onClose={onClose}
       footer={
-        <div className="flex items-center gap-2">
-          {member && !isSelf && (
-            <button
-              onClick={async () => {
-                await teamRepo.remove(member.id);
-                onClose();
-              }}
-              aria-label="מחיקת איש הצוות"
-              className="shrink-0 rounded-2xl border border-stone-200 p-4 text-stone-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-            >
-              <TrashIcon />
-            </button>
-          )}
-          <div className="flex-1">
-            <PrimaryButton disabled={!canSave} onClick={save}>
-              שמירה
-            </PrimaryButton>
-          </div>
-        </div>
+        <SheetFooter
+          canSave={canSave}
+          onSave={save}
+          removeLabel="מחיקת איש הצוות"
+          onRemove={
+            member && !isSelf
+              ? async () => {
+                  await teamRepo.remove(member.id);
+                  onClose();
+                }
+              : undefined
+          }
+        />
       }
     >
       <div className="space-y-5">

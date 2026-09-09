@@ -1,3 +1,4 @@
+import { subscribers } from '../ui/store';
 import { useSyncExternalStore } from 'react';
 import type { UserRole } from '../db/types';
 
@@ -23,18 +24,15 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 };
 
 let override: UserRole | null = null;
-const listeners = new Set<() => void>();
+const bus = subscribers();
 
 export const viewRole = {
   get: (): UserRole | null => override,
   set(role: UserRole | null) {
     override = role;
-    listeners.forEach((l) => l());
+    bus.notify();
   },
-  subscribe(l: () => void): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: bus.subscribe,
 };
 
 /** התפקידים שמותר לצפות בהם — התפקיד שלי ומה שמתחתיו. */

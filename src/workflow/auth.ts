@@ -1,3 +1,4 @@
+import { subscribers } from '../ui/store';
 import { clearPref, readPref, writePref } from '../ui/prefs';
 import { db } from '../db/db';
 import type { TeamMember, UserRole } from '../db/types';
@@ -85,7 +86,7 @@ export async function setPassword(memberId: string, password: string): Promise<v
 /* ------------------------------------------------------------------ */
 
 const SESSION_KEY = 'easycraft.session';
-const listeners = new Set<() => void>();
+const bus = subscribers();
 
 /**
  * החיבור נשמר ב-localStorage כדי שהנגר לא יתחבר מחדש בכל פתיחה
@@ -97,16 +98,13 @@ export const session = {
   },
   signIn(memberId: string) {
     writePref(SESSION_KEY, memberId);
-    listeners.forEach((l) => l());
+    bus.notify();
   },
   signOut() {
     clearPref(SESSION_KEY);
-    listeners.forEach((l) => l());
+    bus.notify();
   },
-  subscribe(l: () => void): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: bus.subscribe,
 };
 
 /* ------------------------------------------------------------------ */

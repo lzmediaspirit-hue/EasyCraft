@@ -1,3 +1,4 @@
+import { subscribers } from '../../ui/store';
 import { useSyncExternalStore } from 'react';
 import { db } from '../../db/db';
 import type { PlacedUnit } from '../../db/types';
@@ -26,7 +27,7 @@ interface Stack {
 }
 
 const stacks = new Map<string, Stack>();
-const listeners = new Set<() => void>();
+const bus = subscribers();
 
 function stackOf(projectId: string): Stack {
   let s = stacks.get(projectId);
@@ -37,7 +38,7 @@ function stackOf(projectId: string): Stack {
   return s;
 }
 
-const emit = () => listeners.forEach((l) => l());
+const emit = bus.notify;
 
 const snapshot = (projectId: string) => db.units.where('projectId').equals(projectId).toArray();
 
@@ -95,10 +96,7 @@ export const history = {
     return { canUndo: !!s?.past.length, canRedo: !!s?.future.length };
   },
 
-  subscribe(l: () => void): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: bus.subscribe,
 };
 
 /** האם יש מה לבטל ומה להחזיר, כמצב שמתעדכן מעצמו. */

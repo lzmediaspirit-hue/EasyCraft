@@ -1,3 +1,4 @@
+import { subscribers } from '../../ui/store';
 import { readPref, writePref } from '../../ui/prefs';
 import { useSyncExternalStore } from 'react';
 
@@ -77,7 +78,7 @@ const DEFAULTS: ViewOptions = {
 };
 
 const KEY = 'easycraft.view';
-const listeners = new Set<() => void>();
+const bus = subscribers();
 
 function read(): ViewOptions {
   try {
@@ -96,7 +97,7 @@ function commit(next: ViewOptions) {
   value = next;
   snapshot = JSON.stringify(value);
   writePref(KEY, snapshot);
-  listeners.forEach((l) => l());
+  bus.notify();
 }
 
 export const viewOptions = {
@@ -119,10 +120,7 @@ export const viewOptions = {
     [next[i], next[j]] = [next[j], next[i]];
     viewOptions.setStatOrder(next);
   },
-  subscribe(l: () => void): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: bus.subscribe,
 };
 
 /**

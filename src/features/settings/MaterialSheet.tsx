@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { materialsRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
-import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
-import { TrashIcon } from '../../ui/icons';
+import { SheetFooter } from '../../ui/SheetFooter';
+import { Chip, Field, inputClass, selectOnFocus } from '../../ui/Field';
 import { PART_ROLES, SHEET_HEIGHTS_MM, SHEET_WIDTH_MM } from '../../db/types';
 import { cm, unitLabel } from '../../ui/units';
 import type { Material, PartRole } from '../../db/types';
@@ -54,25 +54,19 @@ export function MaterialSheet({
       title={material ? 'עריכת חומר' : 'חומר חדש'}
       onClose={onClose}
       footer={
-        <div className="flex items-center gap-2">
-          {material && (
-            <button
-              onClick={async () => {
-                await materialsRepo.remove(material.id);
-                onClose();
-              }}
-              aria-label="מחיקת החומר"
-              className="shrink-0 rounded-2xl border border-stone-200 p-4 text-stone-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-            >
-              <TrashIcon />
-            </button>
-          )}
-          <div className="flex-1">
-            <PrimaryButton disabled={!canSave} onClick={save}>
-              שמירה
-            </PrimaryButton>
-          </div>
-        </div>
+        <SheetFooter
+          canSave={canSave}
+          onSave={save}
+          removeLabel="מחיקת החומר"
+          onRemove={
+            material
+              ? async () => {
+                  await materialsRepo.remove(material.id);
+                  onClose();
+                }
+              : undefined
+          }
+        />
       }
     >
       <div className="space-y-5">
