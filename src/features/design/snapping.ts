@@ -1,16 +1,17 @@
-import { glyphDef } from '../../catalog/glyphList';
 import { cornerDepth } from './plan';
 import type { CornerZones } from './plan';
-import { alongWallMm, intoRoomMm } from '../../db/types';
+import { alongWallMm } from '../../db/types';
 import type { PlacedUnit } from '../../db/types';
 
 /*
  * ההצמדה של ארגז לקיר, לשכנים ולפינות.
  *
  * זה החשבון שמאחורי הגרירה, ואין בו שום דבר של ציור: מי שמזיז ארגז
- * — בעכבר, באצבע או מכפתור — צריך את אותן תשובות. הוא ישב בתוך
- * רכיב הציור, ומסך ההדמיה נאלץ לייבא ממנו את `collides` רק כדי
- * לבדוק אם יש מקום לארגז חדש.
+ * — בעכבר, באצבע או מכפתור — צריך את אותן תשובות.
+ *
+ * מה שאין כאן הוא בדיקת ההתנגשות. הצמדה שואלת "לאן זה קופץ", ואילו
+ * התנגשות שואלת "האם זה יכול לעמוד שם" — שאלה פיזיקלית שנמדדת
+ * בתיבות שלמות במרחב החדר, ולכן היא יושבת ב-`collision`.
  */
 
 /**
@@ -38,46 +39,6 @@ function nearest(value: number, targets: number[], limit: number): number {
     }
   }
   return best;
-}
-
-/**
- * האם הארגז היה חופף לארגז אחר אילו הונח כאן.
- *
- * שני ארגזים באותו מקום הם שרטוט שלא ייבנה, ולכן זו לא אזהרה אלא
- * חסימה. חיפוי קיר הוא היוצא מן הכלל: הוא לוח דק שמכסה את הקיר,
- * והארגזים אמורים לעמוד לפניו ולהסתיר אותו.
- *
- * נגיעה אינה חפיפה — ארגז שנצמד לשכן חולק איתו קו, וזה בדיוק מה
- * שההצמדה נועדה לעשות.
- */
-export function collides(
-  unit: Pick<
-    PlacedUnit,
-    'id' | 'glyph' | 'widthMm' | 'depthMm' | 'heightMm' | 'rotationDeg' | 'offsetMm'
-  >,
-  x: number,
-  y: number,
-  units: PlacedUnit[],
-): boolean {
-  if (glyphDef(unit.glyph).cladding) return false;
-  const right = x + alongWallMm(unit);
-  const top = y + unit.heightMm;
-  /* הרצועה שהארגז תופס בעומק החדר — ממנה נובע מי בכלל יכול לפגוש אותו */
-  const near = Math.max(unit.offsetMm ?? 0, 0);
-  const far = near + intoRoomMm(unit);
-  return units.some((o) => {
-    if (o.id === unit.id || glyphDef(o.glyph).cladding) return false;
-    /*
-     * אי שעומד באמצע החדר עובר מעל ארון שצמוד לקיר בלי לגעת בו:
-     * הם חולקים מקום בחזית, אבל לא באותו עומק. בלי הבדיקה הזאת
-     * אי אפשר היה להעמיד אי מול מטבח קיים בכלל.
-     */
-    const oNear = Math.max(o.offsetMm ?? 0, 0);
-    if (oNear >= far - 1 || oNear + intoRoomMm(o) <= near + 1) return false;
-    return (
-      x < o.xMm + alongWallMm(o) && right > o.xMm && y < o.yMm + o.heightMm && top > o.yMm
-    );
-  });
 }
 
 /**

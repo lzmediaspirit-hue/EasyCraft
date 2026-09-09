@@ -4,7 +4,9 @@ import type { IsoView } from './isoMath';
 import { buildScene } from './isoScene';
 import { buildPlan, cornerZones } from './plan';
 import { outOfSight } from './designView';
-import { SNAP, SNAP_PX, collides, snapX, snapY } from './snapping';
+import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
+import { blocked } from './collision';
+import { unitBox } from './placement';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -50,14 +52,14 @@ export function WallIso({
    * פינה היא מקום ולא גבול: מי שגורר ארון לאורך המטבח לא עוצר
    * בפינה ומתחיל מחדש.
    */
-  onMoveTo?: (id: string, xMm: number, yMm: number, wallId: string) => void;
+  onMoveTo?: (id: string, patch: Partial<PlacedUnit>) => void;
   /**
    * סיבוב הארגז הנבחר ברבע סיבוב.
    *
    * שני חצים מתחתיו, אחד לכל כיוון — זו התנועה שעושים ביד על
    * ארון אמיתי כשמעמידים אותו בפינה, ולא בחירה מתוך רשימה.
    */
-  onRotate?: (id: string, deg: 0 | 90 | 180 | 270) => void;
+  onRotate?: (id: string, patch: Partial<PlacedUnit>) => void;
   /** חזיתות מוסתרות — רואים את הגוף והמדפים */
   inside: boolean;
   /** העליונים יורדים מהתמונה */
@@ -85,14 +87,10 @@ export function WallIso({
    */
   const [moving, setMoving] = useState(false);
   const drag = useRef<{
-    id: string;
-    /** הקיר שממנו יצאה הגרירה — לפיו נמדד הכיוון על המסך */
-    wallId: string;
+    /** הארגז כפי שהיה בתחילת הגרירה — ממנו נמדד הכול, ולכן היא הפיכה */
+    from: PlacedUnit;
     startX: number;
     startY: number;
-    originX: number;
-    originY: number;
-    locked: boolean;
     moved: boolean;
   } | null>(null);
   const orbit = useRef<{
@@ -171,23 +169,41 @@ export function WallIso({
   /*
    * הזזת ארון על המסך, בחזרה למידות של החדר.
    *
-   * תנועה אופקית של האצבע היא תנועה לאורך הקיר, ותנועה אנכית היא
-   * תערובת של גובה ושל אותה תנועה לאורך הקיר — כי בהיטל איזומטרי
-   * גם הליכה לאורך הקיר מטפסת על המסך. שתי המשוואות האלה נפתרות
-   * כאן, ולכן הארון הולך אחרי האצבע ולא באלכסון משלו.
+   * ארגז על קיר זז לאורך הקיר ולגובה; אי זז על הרצפה, בשני הצירים
+   * שלה. אלה שתי מערכות שונות, ולכן שני פתרונות — אבל שניהם אותו
+   * חשבון: היפוך המטריצה שההיטל מפעיל על התנועה.
    */
   function moveDrag(e: React.PointerEvent) {
     const d = drag.current;
     if (!d || !onMoveTo) return;
-    const unit = units.find((u) => u.id === d.id);
-    const from = plan.find((q) => q.wall.id === d.wallId);
-    if (!unit || !from) return;
-
     const mdx = (e.clientX - d.startX) / pxPerUnit;
     const mdy = (e.clientY - d.startY) / pxPerUnit;
     if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < ORBIT_SLOP) return;
     d.moved = true;
 
+    const yaw = (shown.yawDeg * Math.PI) / 180;
+    const c = Math.cos(yaw);
+    const s2 = Math.sin(yaw);
+    const tol = Math.max(SNAP, SNAP_PX / pxPerUnit);
+    const step = (v: number) => Math.round(v / 10) * 10;
+
+    /* אי: התנועה על הרצפה נפתרת בשני הצירים, ותמיד יש לה פתרון */
+    if (d.from.free) {
+      const det = 2 * COS30 * shown.rise;
+      const dx = ((c - s2) * shown.rise * mdx + (s2 + c) * COS30 * mdy) / det;
+      const dz = (-(c + s2) * shown.rise * mdx + (c - s2) * COS30 * mdy) / det;
+      const next = {
+        ...d.from.free,
+        xMm: step(d.from.free.xMm + dx),
+        zMm: step(d.from.free.zMm + dz),
+      };
+      const box = unitBox({ ...d.from, free: next }, plan);
+      if (box && !blocked(d.from, box, units, plan)) onMoveTo(d.from.id, { free: next });
+      return;
+    }
+
+    const from = plan.find((q) => q.wall.id === d.from.wallId);
+    if (!from) return;
     // הכיוון של "מטר אחד לאורך הקיר" על המסך, בזווית המבט הנוכחית
     const theta = ((from.headingDeg + shown.yawDeg) * Math.PI) / 180;
     const ax = (Math.cos(theta) - Math.sin(theta)) * COS30;
@@ -201,8 +217,8 @@ export function WallIso({
      * הפיכה — מי שגרר רחוק מדי חוזר וממשיך מהמקום שהיה.
      */
     let target = from.wall;
-    let x = d.originX + alongMm;
-    const i = walls.findIndex((w) => w.id === d.wallId);
+    let x = d.from.xMm + alongMm;
+    const i = walls.findIndex((w) => w.id === d.from.wallId);
     if (x < -80 && i > 0) {
       target = walls[i - 1];
       x += target.lengthMm;
@@ -212,26 +228,32 @@ export function WallIso({
     }
 
     const mates = units.filter((u) => u.wallId === target.id);
-    const tol = Math.max(SNAP, SNAP_PX / pxPerUnit);
-    const nx = snapX(x, unit, mates, target.lengthMm, cornerZones(walls, target, units), tol);
-    const ny = d.locked
-      ? d.originY
-      : snapY(d.originY + upMm, unit, mates, target.heightMm, tol, nx);
+    const nx = snapX(x, d.from, mates, target.lengthMm, cornerZones(walls, target, units), tol);
+    const ny = d.from.floorLocked
+      ? d.from.yMm
+      : snapY(d.from.yMm + upMm, d.from, mates, target.heightMm, tol, nx);
 
     /*
-     * אותה חסימה שבמבט החזית: שני ארונות לא עומדים באותו מקום,
-     * אבל ארון שכבר חופף חייב להיות מסוגל לצאת משם.
+     * חוקי הפיזיקה של החדר: נגיעה והכלה מותרות, חדירה חלקית לא.
+     * ארגז שכבר חודר במקום שהוא עומד בו הוא היוצא מן הכלל — דווקא
+     * ממנו צריך להיות אפשר לצאת.
      */
-    const stuck = collides(unit, unit.xMm, unit.yMm, mates);
-    const free = (px: number, py: number) => stuck || !collides(unit, px, py, mates);
-    const [fx, fy] = free(nx, ny)
+    const at = (px: number, py: number) =>
+      unitBox({ ...d.from, wallId: target.id, xMm: px, yMm: py }, plan);
+    const here = unitBox(d.from, plan);
+    const stuck = !!here && blocked(d.from, here, units, plan);
+    const ok = (px: number, py: number) => {
+      const b = at(px, py);
+      return !!b && (stuck || !blocked(d.from, b, units, plan));
+    };
+    const [fx, fy] = ok(nx, ny)
       ? [nx, ny]
-      : free(nx, unit.yMm)
-        ? [nx, unit.yMm]
-        : free(unit.xMm, ny)
-          ? [unit.xMm, ny]
-          : [unit.xMm, unit.yMm];
-    onMoveTo(d.id, fx, fy, target.id);
+      : ok(nx, d.from.yMm)
+        ? [nx, d.from.yMm]
+        : ok(d.from.xMm, ny)
+          ? [d.from.xMm, ny]
+          : [d.from.xMm, d.from.yMm];
+    onMoveTo(d.from.id, { xMm: fx, yMm: fy, wallId: target.id });
   }
 
   return (
@@ -255,16 +277,7 @@ export function WallIso({
          * הזווית ומכריח לחזור אליו בכל פעם.
          */
         if (moving && held && onMoveTo && !present) {
-          drag.current = {
-            id: held.id,
-            wallId: held.wallId,
-            startX: e.clientX,
-            startY: e.clientY,
-            originX: held.xMm,
-            originY: held.yMm,
-            locked: !!held.floorLocked,
-            moved: false,
-          };
+          drag.current = { from: held, startX: e.clientX, startY: e.clientY, moved: false };
           return;
         }
         orbit.current = {
@@ -306,7 +319,7 @@ export function WallIso({
          * גם גרירה מסתיימת בבחירה: ארון שהועבר לקיר אחר צריך שהמסך
          * יעבור אליו, אחרת הלוח שלו נסגר באמצע העבודה.
          */
-        if (d) return onSelect(d.id);
+        if (d) return onSelect(d.from.id);
         if (!o || o.moved) return;
         onSelect(o.hit);
       }}
@@ -478,7 +491,15 @@ export function WallIso({
               minX + vbW - r * 1.2,
             );
             const cy = Math.min(spinAt.y + r * 1.6, minY + vbH - r * 1.2);
-            const next = ((((selectedUnit.rotationDeg ?? 0) + dir * 90) % 360) + 360) % 360;
+            /*
+             * ארגז על קיר מסתובב ברבעים ביחס לקיר; אי מסתובב ביחס
+             * לחדר, כי אין לו קיר להסתובב ביחס אליו. אותה לחיצה,
+             * שני שדות.
+             */
+            const turn = (v: number) => (((v + dir * 90) % 360) + 360) % 360;
+            const next: Partial<PlacedUnit> = selectedUnit.free
+              ? { free: { ...selectedUnit.free, headingDeg: turn(selectedUnit.free.headingDeg) } }
+              : { rotationDeg: turn(selectedUnit.rotationDeg ?? 0) as 0 | 90 | 180 | 270 };
             return (
               <g
                 key={label}
@@ -488,7 +509,7 @@ export function WallIso({
                 onPointerDown={(e) => e.stopPropagation()}
                 onPointerUp={(e) => {
                   e.stopPropagation();
-                  onRotate(selectedUnit.id, next as 0 | 90 | 180 | 270);
+                  onRotate(selectedUnit.id, next);
                 }}
               >
                 <circle

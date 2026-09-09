@@ -1,4 +1,6 @@
 import { alongWallMm, intoRoomMm } from '../../db/types';
+import { boxCorners, unitBox } from './placement';
+import { clash } from './collision';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -66,9 +68,9 @@ export function buildPlan(walls: Wall[], units: PlacedUnit[]): PlanWall[] {
 /** העומק הגדול ביותר של ארון שעומד על הרצפה בקיר נתון. */
 function wallDepth(wall: Wall, units: PlacedUnit[]): number {
   return units
-    .filter((u) => u.wallId === wall.id && u.level !== 'wall')
-    /* ארגז חופשי נמדד מהקיר ועד קצהו הרחוק — כולל האוויר שביניהם */
-    .reduce((max, u) => Math.max(max, (u.offsetMm ?? 0) + intoRoomMm(u)), 0);
+    /* אי אינו עומד על הקיר, ולכן אינו קובע את עומקו */
+    .filter((u) => u.wallId === wall.id && u.level !== 'wall' && !u.free)
+    .reduce((max, u) => Math.max(max, intoRoomMm(u)), 0);
 }
 
 /**
@@ -129,6 +131,7 @@ function zonesAt(wall: Wall, units: PlacedUnit[], side: 'start' | 'end'): Corner
   const touching = units.filter(
     (u) =>
       u.wallId === wall.id &&
+      !u.free &&
       (side === 'start' ? u.xMm <= 1 : u.xMm + alongWallMm(u) >= wall.lengthMm - 1),
   );
   const out: CornerZone[] = [];
@@ -136,7 +139,7 @@ function zonesAt(wall: Wall, units: PlacedUnit[], side: 'start' | 'end'): Corner
     const same = touching.filter((u) => (u.level === 'wall') === wallLevel);
     if (!same.length) continue;
     out.push({
-      depthMm: same.reduce((max, u) => Math.max(max, (u.offsetMm ?? 0) + intoRoomMm(u)), 0),
+      depthMm: same.reduce((max, u) => Math.max(max, intoRoomMm(u)), 0),
       yMm: same.reduce((min, u) => Math.min(min, u.yMm), Infinity),
       heightMm:
         same.reduce((max, u) => Math.max(max, u.yMm + u.heightMm), 0) -
@@ -154,105 +157,40 @@ export interface PlanUnit {
   corners: PlanPoint[];
   /** מרכז המלבן, לתווית */
   center: PlanPoint;
-  /** מתנגש עם ארון על קיר אחר */
+  /** חודר בפועל לתוך ארון אחר */
   clash: boolean;
 }
 
 /**
  * הארונות במבט על.
  *
- * כל ארון הוא מלבן ברוחב שלו ובעומק שלו, מונח לאורך הקיר ובולט
- * ממנו פנימה. זה מה שמאפשר לראות מיד שארון בקצה קיר אחד נכנס
- * לתוך ארון בקצה הקיר השכן — התנגשות שבמבט חזית לא נראית בכלל.
+ * הגיאומטריה מגיעה מ-`unitBox`, אותו מקום שהתלת־ממד ובדיקת
+ * ההתנגשות שואלים. כשכל מבט חישב את זה בעצמו הם יכלו לא להסכים,
+ * ואי — שאינו על קיר בכלל — לא היה מצויר כאן נכון לעולם.
  */
 export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
   const out: PlanUnit[] = [];
-
-  for (const p of plan) {
-    const rad = (p.headingDeg * Math.PI) / 180;
-    // כיוון הקיר, והניצב לו שאליו הארונות בולטים
-    const dir = { x: Math.cos(rad), y: Math.sin(rad) };
-    const normal = { x: -Math.sin(rad), y: Math.cos(rad) };
-
-    for (const u of units.filter((x) => x.wallId === p.wall.id)) {
-      /* ארגז חופשי עומד בתוך החדר, ולא על הקיר */
-      const off = Math.max(u.offsetMm ?? 0, 0);
-      const a = {
-        x: p.start.x + dir.x * u.xMm + normal.x * off,
-        y: p.start.y + dir.y * u.xMm + normal.y * off,
-      };
-      /* ארגז מסובב תופס על הקיר את עומקו ונכנס לחדר ברוחבו */
-      const along = alongWallMm(u);
-      const b = { x: a.x + dir.x * along, y: a.y + dir.y * along };
-      const d = intoRoomMm(u);
-      const corners = [
-        a,
-        b,
-        { x: b.x + normal.x * d, y: b.y + normal.y * d },
-        { x: a.x + normal.x * d, y: a.y + normal.y * d },
-      ];
-      out.push({
-        unit: u,
-        corners,
-        center: {
-          x: a.x + dir.x * (along / 2) + normal.x * (d / 2),
-          y: a.y + dir.y * (along / 2) + normal.y * (d / 2),
-        },
-        clash: false,
-      });
-    }
+  for (const u of units) {
+    const b = unitBox(u, plan);
+    if (!b) continue;
+    out.push({ unit: u, corners: boxCorners(b), center: { x: b.cx, y: b.cz }, clash: false });
   }
 
   /*
-   * התנגשות נבדקת רק בין ארונות על קירות שונים ובאותו מפלס: שני
-   * ארונות על אותו קיר כבר נבדקים במבט חזית, וארון תלוי עובר מעל
-   * ארון רצפה בלי לגעת בו.
+   * התנגשות אמיתית, באותו חוק פיזיקלי של הגרירה: מגע והכלה מותרים,
+   * חדירה חלקית לא. כאן היא מסומנת ולא נחסמת — מה שכבר עומד בחדר
+   * צריך להיראות, גם כשהוא לא חוקי.
    */
   for (let i = 0; i < out.length; i++) {
     for (let j = i + 1; j < out.length; j++) {
-      const A = out[i];
-      const B = out[j];
-      if (A.unit.wallId === B.unit.wallId) continue;
-      if ((A.unit.level === 'wall') !== (B.unit.level === 'wall')) continue;
-      if (overlaps(A.corners, B.corners)) {
-        A.clash = true;
-        B.clash = true;
+      const a = unitBox(out[i].unit, plan);
+      const b = unitBox(out[j].unit, plan);
+      if (a && b && clash(a, b)) {
+        out[i].clash = true;
+        out[j].clash = true;
       }
     }
   }
 
   return out;
-}
-
-/**
- * חפיפה בין שני מלבנים מסובבים, בשיטת הצירים המפרידים.
- * אם קיים ציר שעליו ההיטלים אינם נחתכים — אין חפיפה.
- */
-function overlaps(a: PlanPoint[], b: PlanPoint[]): boolean {
-  for (const poly of [a, b]) {
-    for (let i = 0; i < poly.length; i++) {
-      const p1 = poly[i];
-      const p2 = poly[(i + 1) % poly.length];
-      const axis = { x: -(p2.y - p1.y), y: p2.x - p1.x };
-      const len = Math.hypot(axis.x, axis.y);
-      if (len < 1e-6) continue;
-      const n = { x: axis.x / len, y: axis.y / len };
-      const [minA, maxA] = project(a, n);
-      const [minB, maxB] = project(b, n);
-      // סובלנות של מילימטר: מגע קצה בקצה אינו התנגשות
-      if (maxA <= minB + 1 || maxB <= minA + 1) return false;
-    }
-  }
-  return true;
-}
-
-function project(poly: PlanPoint[], n: PlanPoint): [number, number] {
-  let min = Infinity;
-  let max = -Infinity;
-  for (const p of poly) {
-    const v = p.x * n.x + p.y * n.y;
-    min = Math.min(min, v);
-    max = Math.max(max, v);
-  }
-  return [min, max];
 }

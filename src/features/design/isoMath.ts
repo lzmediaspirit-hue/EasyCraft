@@ -1,6 +1,5 @@
 import { shade } from '../../ui/color';
 import type { PlanWall } from './plan';
-import type { PlacedUnit } from '../../db/types';
 
 /**
  * הגיאומטריה של המבט התלת־ממדי.
@@ -94,32 +93,6 @@ export function projector(view: IsoView) {
  * מוגדרים — והתוצאה היא הרצפה של החדר כולו.
  */
 export type Tf = (x: number, z: number) => [number, number];
-
-/**
- * המסגרת של ארגז אחד: המרה מהמידות שלו עצמו — רוחב לרוחב הדלת,
- * עומק מהגב אל החזית — לקואורדינטות הקיר.
- *
- * כך כל הארגז מצויר תמיד באותו קוד, בין אם הוא ישר ובין אם הוא
- * מסובב: רק המסגרת מסתובבת. 90 מעלות מפנה את החזית אל תחילת
- * הקיר, 270 אל סופו, ו-180 אל הקיר עצמו.
- *
- * ארבע המסגרות הן סיבובים ולא שיקופים — כל אחת שומרת על כיוון
- * הסיבוב. מסגרת משוקפת נראית כמעט נכון בתלת־ממד, ורק דלת שנפתחת
- * לצד ההפוך מגלה שהארון התהפך.
- */
-export function unitFrame(u: PlacedUnit, tf: Tf): Tf {
-  const r = ((u.rotationDeg ?? 0) % 360 + 360) % 360;
-  const x0 = u.xMm;
-  const W = u.widthMm;
-  const D = u.depthMm;
-  /* ארגז חופשי עומד בתוך החדר — כל המסגרת שלו נדחפת מהקיר פנימה */
-  const off = Math.max(u.offsetMm ?? 0, 0);
-  const at: Tf = (x, z) => tf(x, z + off);
-  if (r === 90) return (x, z) => at(x0 + D - z, x);
-  if (r === 180) return (x, z) => at(x0 + W - x, D - z);
-  if (r === 270) return (x, z) => at(x0 + z, W - x);
-  return (x, z) => at(x0 + x, z);
-}
 
 export type Face = {
   points: string;

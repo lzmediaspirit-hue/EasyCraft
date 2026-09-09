@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { WallElevation } from './WallElevation';
-import { collides } from './snapping';
+import { blocked } from './collision';
+import { unitBox, wallShadow } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
@@ -165,21 +166,22 @@ export function DesignScreen({
   const corners = wall && walls && walls.length > 1
     ? cornerZones(walls, wall, allUnits ?? [])
     : undefined;
+  /* גיאומטריית החדר, פעם אחת — ממנה נגזרים המבטים וההתנגשות */
+  const plan = useMemo(() => buildPlan(walls ?? [], allUnits ?? []), [walls, allUnits]);
   /*
-   * ההתנגשות נמדדת על המלבנים במבט העל ולא על סימון אזור הפינה:
+   * ההתנגשות נמדדת על התיבות במרחב החדר ולא על סימון אזור הפינה:
    * הפינה פתוחה לכל ארגז, והשאלה היחידה היא אם שני ארונות באמת
    * תופסים את אותו מקום.
    */
   const clashing = useMemo(() => {
-    if (!wall || !walls || walls.length < 2) return [];
-    const boxes = planUnits(buildPlan(walls, allUnits ?? []), allUnits ?? []);
+    if (!wall) return [];
     const seen = new Map<string, { id: string; name: string }>();
-    for (const b of boxes) {
+    for (const b of planUnits(plan, allUnits ?? [])) {
       if (!b.clash || b.unit.wallId !== wall.id) continue;
       seen.set(b.unit.id, { id: b.unit.id, name: b.unit.name });
     }
     return [...seen.values()];
-  }, [walls, wall, allUnits]);
+  }, [plan, wall, allUnits]);
   const analysis = wall ? analyzeWall(wall, units, clashing) : null;
   /*
    * המקור למחוונים: הקיר שעובדים עליו, או כל הקירות יחד. שניהם
@@ -222,15 +224,20 @@ export function DesignScreen({
    * לחיצה שלא עשתה כלום.
    */
   function freeX(from: number, maxX: number, item: CatalogItem): number {
+    if (!wall) return from;
     const probe = {
       id: 'new',
+      wallId: wall.id,
       glyph: item.glyph,
       widthMm: item.defaultWidthMm,
       heightMm: item.defaultHeightMm,
       depthMm: item.defaultDepthMm,
-    };
+      yMm: item.defaultYMm,
+      xMm: from,
+    } as PlacedUnit;
     for (let x = from; x <= maxX; x += 50) {
-      if (!collides(probe, x, item.defaultYMm, units)) return x;
+      const b = unitBox({ ...probe, xMm: x }, plan);
+      if (b && !blocked(probe, b, allUnits ?? [], plan)) return x;
     }
     return from;
   }
@@ -249,6 +256,37 @@ export function DesignScreen({
     );
     const copy = await unitsRepo.duplicate(selected.id, x);
     if (copy) setSelectedId(copy.id);
+  }
+
+  /**
+   * הופך ארגז לאי, או מחזיר אותו אל הקיר.
+   *
+   * האי נולד בדיוק במקום שהארגז כבר עומד בו — כך הלחיצה מורידה
+   * אותו מהקיר בלי להזיז אותו, ומשם גוררים. בדרך חזרה הוא נוחת
+   * במקום שבו הצל שלו נפל על הקיר, ולא ב-xMm הישן שכבר לא אומר
+   * כלום.
+   */
+  async function setFree(id: string, free: boolean) {
+    const u = (allUnits ?? []).find((x) => x.id === id);
+    const b = u && unitBox(u, plan);
+    if (!u || !b) return;
+    await history.capture(projectId, `free:${id}`);
+    if (free) {
+      await unitsRepo.update(id, {
+        free: {
+          xMm: Math.round(b.cx),
+          zMm: Math.round(b.cz),
+          headingDeg: Math.round((b.facing * 180) / Math.PI),
+        },
+      });
+      return;
+    }
+    const p = plan.find((q) => q.wall.id === u.wallId);
+    const shadow = p ? wallShadow(b, p) : null;
+    await unitsRepo.update(id, {
+      free: undefined,
+      xMm: shadow ? Math.max(Math.round(shadow.xMm), 0) : u.xMm,
+    });
   }
 
   /** מחזיר לתצוגה את כל מה שהוסתר — צעד אחד, ולא ארגז אחרי ארגז. */
@@ -330,13 +368,9 @@ export function DesignScreen({
                * הייתה נראית כמו כפתור שבור. החפיפה מסומנת בהתראות
                * ובמבט העל.
                */
-              onRotate={editable ? (id, deg) => patchUnit(id, { rotationDeg: deg }, `rotate:${id}`) : undefined}
+              onRotate={editable ? (id, patch) => patchUnit(id, patch, `rotate:${id}`) : undefined}
               /* גרירה בתלת־ממד עשויה לעבור לקיר שכן — הארגז עובר איתה */
-              onMoveTo={
-                editable
-                  ? (id, xMm, yMm, wallId) => patchUnit(id, { xMm, yMm, wallId })
-                  : undefined
-              }
+              onMoveTo={editable ? (id, patch) => patchUnit(id, patch) : undefined}
               inside={inside}
               noUppers={noUppers}
               finishHex={finishHex ?? {}}
@@ -345,6 +379,8 @@ export function DesignScreen({
           <WallElevation
             wall={wall}
             units={units}
+            allUnits={allUnits ?? []}
+            plan={plan}
             selectedId={selectedId}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
@@ -361,7 +397,7 @@ export function DesignScreen({
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? {}}
-            onMove={(id, xMm, yMm) => patchUnit(id, { xMm, yMm })}
+            onMove={(id, patch) => patchUnit(id, patch)}
           />
           )}
 
@@ -471,6 +507,7 @@ export function DesignScreen({
           fillHeight={fillSpan(selected, units, wall, 'h')}
           defaultSocleMm={settings?.defaults.socleMm ?? 0}
           freeStanding={freeStanding}
+          onFree={(v) => setFree(selected.id, v)}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
@@ -598,9 +635,11 @@ export function DesignScreen({
             */}
             {analysis && role === 'manager' && view.warnings && analysis.warnings.length > 0 && (
               <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                {/* המפתח כולל את הארגזים: שני ארגזים באותו שם מייצרים
+                    בדיוק את אותו משפט, ובלעדיהם השני נעלם */}
                 {analysis.warnings.map((w) =>
                   w.unitIds.length > 0 ? (
-                    <li key={w.text}>
+                    <li key={`${w.text}|${w.unitIds.join(',')}`}>
                       <button
                         onClick={() => setSelectedId(w.unitIds[0])}
                         className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"

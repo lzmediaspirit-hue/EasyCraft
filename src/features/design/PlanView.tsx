@@ -98,7 +98,7 @@ export function PlanView({
           })}
 
           {/*
-            כל ארון כמלבן ברוחב ובעומק שלו. ארון שמתנגש בארון על קיר
+            כל ארון כמלבן ברוחב ובעומק שלו. ארון שחודר לתוך ארון
             אחר מסומן באדום — זו התנגשות שבמבט חזית לא רואים בכלל.
           */}
           {/* ארגז מוסתר עדיין נמדד ונבדק להתנגשות, רק אינו מצויר */}
@@ -132,7 +132,7 @@ export function PlanView({
         <ul className="space-y-1.5 rounded-2xl border border-red-200 bg-red-50 p-3">
           {[...new Set(clashes.map((c) => c.unit.name))].map((name) => (
             <li key={name} className="text-sm leading-snug text-red-900">
-              {name} מתנגש עם ארון על קיר אחר
+              {name} חודר לתוך ארון אחר
             </li>
           ))}
         </ul>
@@ -225,7 +225,7 @@ export function PlanView({
       <p className="text-xs leading-snug text-stone-500">
         פנייה של 90° היא פינה ישרה. שנה את הזווית כדי לתאר חדר שאינו מלבן.
         כל מלבן הוא ארון ברוחב ובעומק שלו; מקווקו הוא ארון תלוי, ואדום
-        הוא ארון שמתנגש בארון על הקיר השכן.
+        הוא ארון שחודר לתוך ארון אחר.
       </p>
     </div>
   );

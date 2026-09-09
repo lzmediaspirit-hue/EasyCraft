@@ -62,9 +62,6 @@ type Axis = 'w' | 'h' | 'd';
  * דלתות, מנגנון פתיחה, גוון ודפנות זרות. כשהחזיתות מוסתרות מוצג פנים
  * הארון — אזורים, מדפים ומגירות. כך אין על המסך הגדרות שלא רואים.
  */
-/** מרחקים נפוצים של אי מהקיר — מעבר לזה מקלידים. */
-const FREE_OFFSETS = [600, 900, 1200];
-
 export function UnitEditor({
   unit,
   inside,
@@ -73,6 +70,7 @@ export function UnitEditor({
   fillHeight,
   defaultSocleMm = 0,
   freeStanding = false,
+  onFree,
   onChange,
   onApplyChoiceAll,
   onEdit,
@@ -91,8 +89,10 @@ export function UnitEditor({
   fillHeight?: { startMm: number; sizeMm: number };
   /** גובה הרגליים שהעסק עובד בו — לארגז שחוזר לרצפה */
   defaultSocleMm?: number;
-  /** המתג בסרגל פתוח — מציגים גם את המרחק מהקיר */
+  /** המתג בסרגל פתוח — מציגים גם את ההפיכה לאי */
   freeStanding?: boolean;
+  /** הופך את הארגז לאי בחדר, או מחזיר אותו אל הקיר */
+  onFree?: (free: boolean) => void;
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
@@ -124,7 +124,6 @@ export function UnitEditor({
 
   const caps = glyphDef(unit.glyph);
   const locked = unit.floorLocked ?? false;
-  const offMm = Math.max(unit.offsetMm ?? 0, 0);
   const exposed = unit.exposed ?? {};
   const glassSides = unit.glassSides ?? {};
   // הרגליים אינן חלק מהגוף, ולכן האזהרה נמדדת בלעדיהן
@@ -664,36 +663,21 @@ export function UnitEditor({
       </Row>
 
       {/*
-        אי וחצי־אי: כמה הארגז מרוחק מהקיר.
-        השורה נפתחת מהמתג בסרגל, ונשארת פתוחה כל עוד הארגז באמת
-        עומד בתוך החדר — אחרת ארגז שכבר הועמד כאי היה מאבד את
-        המידה שלו ברגע שהמתג נכבה.
+        אי: הארגז יורד מהקיר ועומד בחדר.
+
+        המתג בסרגל פותח את השורה, והיא נשארת פתוחה כל עוד הארגז
+        באמת אי — אחרת ארגז שכבר הועמד באמצע החדר היה מאבד את הדרך
+        לחזור ברגע שהמתג נכבה. אחרי ההפיכה גוררים אותו בתלת־ממד אל
+        המקום שלו; הכפתור רק מוריד אותו מהקיר.
       */}
-      {(freeStanding || offMm > 0) && (
-        <Row label="מרחק מהקיר" hint="אי או חצי־אי">
-          <Pill active={offMm === 0} ariaLabel="צמוד לקיר" onClick={() => onChange({ offsetMm: 0 })}>
-            צמוד
+      {(freeStanding || unit.free) && onFree && (
+        <Row label="אי" hint="ארגז שעומד בחדר ולא על קיר">
+          <Pill active={!unit.free} ariaLabel="על הקיר" onClick={() => onFree(false)}>
+            על הקיר
           </Pill>
-          {FREE_OFFSETS.map((mm) => (
-            <Pill
-              key={mm}
-              active={offMm === mm}
-              ariaLabel={`${cm(mm)} מהקיר`}
-              onClick={() => onChange({ offsetMm: mm })}
-            >
-              <span className="num">{cm(mm)}</span>
-            </Pill>
-          ))}
-          <label className="flex items-center gap-1 rounded-full bg-stone-100 px-2.5 py-1">
-            <MeasureInput
-              value={offMm}
-              onChange={(mm) => onChange({ offsetMm: Math.max(mm, 0) })}
-              minMm={0}
-              ariaLabel="מרחק מהקיר"
-              className="num w-10 bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
-            />
-            <span className="text-[10px] text-stone-400">{unitLabel()}</span>
-          </label>
+          <Pill active={!!unit.free} ariaLabel="אי בחדר" onClick={() => onFree(true)}>
+            אי בחדר
+          </Pill>
         </Row>
       )}
 

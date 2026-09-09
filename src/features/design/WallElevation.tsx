@@ -7,8 +7,10 @@ import { featureBiteMm, featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
-import { SNAP, SNAP_PX, collides, snapX, snapY } from './snapping';
-import type { CornerZones } from './plan';
+import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
+import { blocked } from './collision';
+import { unitBox, wallShadow } from './placement';
+import type { CornerZones, PlanWall } from './plan';
 import { outOfSight } from './designView';
 import { alongWallMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
@@ -35,9 +37,18 @@ export type MeasureAxis = 'w' | 'h' | 'd';
 type Props = {
   wall: Wall;
   units: PlacedUnit[];
+  /**
+   * כל הארגזים בחדר, וגיאומטריית הקירות.
+   *
+   * הגרירה כאן מציירת קיר אחד אבל מתנגשת בחדר שלם: ארון על הקיר
+   * השכן ואי שעומד באמצע תופסים מקום אמיתי, וחסימה שמסתכלת רק על
+   * הקיר הזה הייתה נותנת להיכנס לתוכם.
+   */
+  allUnits: PlacedUnit[];
+  plan: PlanWall[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onMove: (id: string, xMm: number, yMm: number) => void;
+  onMove: (id: string, patch: Partial<PlacedUnit>) => void;
   /**
    * מחיקה ושכפול של הארגז הנבחר, על הציור עצמו.
    * ריק = אין עריכה, ואז הכפתורים אינם מצוירים.
@@ -76,7 +87,9 @@ type Props = {
  */
 export function WallElevation({
   wall,
-  units: allUnits,
+  units: wallUnits,
+  allUnits,
+  plan,
   selectedId,
   onSelect,
   onMove,
@@ -95,13 +108,20 @@ export function WallElevation({
    * בלי הסדר הזה לוח שנוסף אחרון היה מסתיר את מה שהוא אמור לגבות.
    */
   const layer = (u: PlacedUnit) => (glyphDef(u.glyph).cladding ? 0 : 1);
-  const units = [...allUnits].sort((a, b) => layer(a) - layer(b));
+  const units = [...wallUnits].sort((a, b) => layer(a) - layer(b));
   /*
    * ארגז מוסתר אינו מצויר, אבל נשאר ברשימה: הוא עדיין תופס מקום
    * בקיר, עדיין חוסם גרירה, ועדיין נספר בחומרים ובניסור. ההסתרה
    * היא של העין בלבד.
    */
   const shown = units.filter((u) => !outOfSight(u, noUppers));
+  const here = plan.find((p) => p.wall.id === wall.id);
+  /** אי: הצל שלו על הקיר הזה. ארגז רגיל מחזיר ריק ומצויר כרגיל. */
+  const free = (u: PlacedUnit) => {
+    if (!u.free || !here) return null;
+    const b = unitBox(u, plan);
+    return b ? wallShadow(b, here) : null;
+  };
 
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -229,8 +249,12 @@ export function WallElevation({
      * ארגז שכבר חופף במקום שהוא עומד בו הוא היוצא מן הכלל: חסימה
      * שם הייתה נועלת אותו שם לתמיד, ודווקא ממנו צריך לצאת.
      */
-    const stuck = collides(unit, unit.xMm, unit.yMm, units);
-    const at = (nx: number, ny: number) => stuck || !collides(unit, nx, ny, units);
+    const here = unitBox(unit, plan);
+    const stuck = !!here && blocked(unit, here, allUnits, plan);
+    const at = (nx: number, ny: number) => {
+      const b = unitBox({ ...unit, xMm: nx, yMm: ny }, plan);
+      return !!b && (stuck || !blocked(unit, b, allUnits, plan));
+    };
     const [fx, fy] = at(x, y)
       ? [x, y]
       : at(x, unit.yMm)
@@ -238,7 +262,7 @@ export function WallElevation({
         : at(unit.xMm, y)
           ? [unit.xMm, y]
           : [unit.xMm, unit.yMm];
-    onMove(d.id, fx, fy);
+    onMove(d.id, { xMm: fx, yMm: fy });
   }
 
   function endDrag(e: React.PointerEvent) {
@@ -424,14 +448,17 @@ export function WallElevation({
          * הוא מצויר כלוח, עם תווית שאומרת מה רואים.
          */
         const rot = ((u.rotationDeg ?? 0) % 360 + 360) % 360;
-        const sideOn = rot !== 0;
-        const uw = alongWallMm(u);
         /*
-         * ארגז חופשי עומד בתוך החדר ולא על הקיר. במבט חזית אי אפשר
-         * לראות את זה — הוא נראה בדיוק כמו שכנו הצמוד — ולכן הוא
-         * מסומן בקו מקווקו ובמידה, ולא נשאר שקר שקט על השרטוט.
+         * אי אינו עומד על הקיר, ולכן הוא מצויר בצל שלו עליו: במקום
+         * שבו הוא נופל על ציר הקיר, ברוחב שהוא מסתיר, עם תווית
+         * שאומרת כמה הוא רחוק. בלי זה הוא נעלם ממי שעובד בחזית,
+         * ועם ציור רגיל הוא היה נראה בדיוק כמו שכנו הצמוד.
          */
-        const offMm = Math.max(u.offsetMm ?? 0, 0);
+        const shadow = free(u);
+        const sideOn = !u.free && rot !== 0;
+        const uw = shadow ? shadow.widthMm : alongWallMm(u);
+        const ux = shadow ? shadow.xMm : u.xMm;
+        const awayMm = shadow ? Math.max(shadow.awayMm, 0) : 0;
         // הגב יושב עמוק יותר ולכן נראה כהה מעט מהגוף; בלי גב רואים את הקיר
         const backKind = u.backKind ?? 'thin';
         const backFill =
@@ -441,7 +468,7 @@ export function WallElevation({
           <g
             key={u.id}
             data-unit-id={u.id}
-            transform={`translate(${u.xMm} ${flip(u.yMm + u.heightMm)})`}
+            transform={`translate(${ux} ${flip(u.yMm + u.heightMm)})`}
             onPointerDown={(e) => (work ? onSelect(u.id) : beginDrag(e, u))}
             className={measure || work ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
           >
@@ -533,7 +560,7 @@ export function WallElevation({
             )}
             {!sideOn && ledStrips(u, stroke, carcassH)}
             {!sideOn && exposedPanels(u, stroke, carcassH)}
-            {offMm > 0 && (
+            {awayMm > 0 && (
               <g pointerEvents="none">
                 <rect
                   width={uw}
@@ -551,7 +578,7 @@ export function WallElevation({
                   fill="#0f766e"
                   direction="ltr"
                 >
-                  {`${cm(offMm)} ס״מ מהקיר`}
+                  {`אי · ${cm(awayMm)} ס״מ מהקיר`}
                 </text>
               </g>
             )}

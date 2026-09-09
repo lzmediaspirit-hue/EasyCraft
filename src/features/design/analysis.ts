@@ -32,11 +32,17 @@ export interface WallAnalysis {
 export function analyzeWall(
   wall: Wall,
   units: PlacedUnit[],
-  /** ארונות שמתנגשים בפועל בארון של קיר אחר, ממבט העל */
+  /** ארונות שחודרים בפועל לתוך ארון אחר בחדר */
   clashing: { id: string; name: string }[] = [],
 ): WallAnalysis {
-  const floor = units.filter((u) => u.level !== 'wall');
-  const upper = units.filter((u) => u.level === 'wall');
+  /*
+   * אי אינו על הקיר, ולכן הוא אינו נמדד בחשבונות שלו: הוא לא תופס
+   * מטר רץ, לא חורג מקצהו ולא חופף לשכניו עליו. הוא כן נספר
+   * בארגזים ובשטח החזיתות — הוא חלק מהעבודה.
+   */
+  const onWall = units.filter((u) => !u.free);
+  const floor = onWall.filter((u) => u.level !== 'wall');
+  const upper = onWall.filter((u) => u.level === 'wall');
 
   const floorUsedMm = floor.reduce((sum, u) => sum + alongWallMm(u), 0);
   const wallUsedMm = upper.reduce((sum, u) => sum + alongWallMm(u), 0);
@@ -58,29 +64,17 @@ export function analyzeWall(
     });
   }
 
-  for (const group of [floor, upper]) {
-    const sorted = [...group].sort((a, b) => a.xMm - b.xMm);
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = sorted[i - 1];
-      const cur = sorted[i];
-      if (cur.xMm < prev.xMm + alongWallMm(prev) - 1) {
-        warnings.push({ text: `${prev.name} ו${cur.name} חופפים`, unitIds: [prev.id, cur.id] });
-        break;
-      }
-    }
-  }
-
   for (const f of wall.features) {
     const label = featureDef(f.kind).label;
 
     // שקע או נקודת מים שנבלעים לגמרי מאחורי ארגז
     if (f.kind === 'socket' || f.kind === 'water') {
-      const covered = units.find((u) => contains(u, f));
+      const covered = onWall.find((u) => contains(u, f));
       if (covered) warnings.push({ text: `${label} מוסתר מאחורי ארגז`, unitIds: [covered.id] });
       continue;
     }
 
-    const blocking = units.find((u) => overlaps(u, f));
+    const blocking = onWall.find((u) => overlaps(u, f));
     if (!blocking) continue;
 
     /*
@@ -114,12 +108,13 @@ export function analyzeWall(
   }
 
   /*
-   * התנגשות אמיתית בפינה, ולא "נכנס לאזור שסומן".
-   * הפינה פתוחה לכל ארגז; מה שאסור זה ששני ארונות יתפסו את אותו
-   * מקום בחדר — וזה נמדד במבט העל, על המלבנים עצמם.
+   * חדירה אמיתית, ולא "נכנס לאזור שסומן".
+   * הפינה פתוחה לכל ארגז, הנחה זה על זה מותרת, וארגז שנכנס כולו
+   * לתוך אחר הוא מכשיר בעמודה. מה שאסור הוא שדופן תעבור באמצע
+   * תחתית — וזה נמדד על התיבות עצמן, במרחב החדר.
    */
   for (const c of clashing) {
-    warnings.push({ text: `${c.name} מתנגש בארון על הקיר השכן`, unitIds: [c.id] });
+    warnings.push({ text: `${c.name} חודר לתוך ארון אחר`, unitIds: [c.id] });
   }
 
   return { floorUsedMm, wallUsedMm, freeMm: wall.lengthMm - floorUsedMm, warnings };
