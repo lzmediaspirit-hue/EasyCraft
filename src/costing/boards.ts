@@ -218,7 +218,10 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
 
   // צד שעשוי זכוכית אינו לוח — הוא נספר ברשימת הזכוכית
   const g = u.glassSides ?? {};
-  const boardSides = 2 - (g.start ? 1 : 0) - (g.end ? 1 : 0);
+  /* צד מזכוכית אינו לוח, וצד שלא נבנה אינו קיים בכלל */
+  const off = u.omit ?? {};
+  const boardSides =
+    2 - (g.start || off.start ? 1 : 0) - (g.end || off.end ? 1 : 0);
   if (boardSides > 0) {
         // בצד הצלע הגלויה היא האנכית
     parts.push({
@@ -232,14 +235,15 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
       edgeMm: carcassH,
     });
   }
-  parts.push({
+  const decks = 2 - (off.top ? 1 : 0) - (off.bottom ? 1 : 0);
+  if (decks > 0) parts.push({
     role: 'carcass',
     label: 'תחתית ותקרה',
     // בתוך הארון לא רואים את הסיבים, ולכן מותר לסובב לניצול טוב יותר
     grain: 'free',
     widthMm: innerW,
     heightMm: d,
-    qty: 2,
+    qty: decks,
     edgeMm: innerW,
   });
 

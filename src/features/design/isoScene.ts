@@ -204,13 +204,16 @@ function unitSolids(
    * נראית. מה שמשתנה הוא שרואים דרכה — ולכן היא מצוירת שקופה
    * ולא נמחקת מהתמונה.
    */
-  add(slab(frame, x, y, 0, t, h, d, gs.start ? GLASS_TONE : carcassTone, `${u.id}-l`), !!gs.start);
-  add(
-    slab(frame, x + w - t, y, 0, t, h, d, gs.end ? GLASS_TONE : carcassTone, `${u.id}-r`),
-    !!gs.end,
-  );
-  add(slab(frame, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`));
-  add(slab(frame, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`));
+  const off = u.omit ?? {};
+  if (!off.start)
+    add(slab(frame, x, y, 0, t, h, d, gs.start ? GLASS_TONE : carcassTone, `${u.id}-l`), !!gs.start);
+  if (!off.end)
+    add(
+      slab(frame, x + w - t, y, 0, t, h, d, gs.end ? GLASS_TONE : carcassTone, `${u.id}-r`),
+      !!gs.end,
+    );
+  if (!off.bottom) add(slab(frame, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`));
+  if (!off.top) add(slab(frame, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`));
   const back = u.backKind ?? 'thin';
   // גב בעובי גוף נבנה כמו דופן, וגב דק יושב בחריץ — וזה נראה
   const bt = back === 'none' ? 0 : back === 'carcass' ? t : MATERIAL.backMm;

@@ -7,7 +7,7 @@ import { SaleSheet } from './SaleSheet';
 import { roomDef } from '../../catalog/rooms';
 import { nav } from '../../nav/navigation';
 import { ScreenHeader } from '../../ui/ScreenHeader';
-import { BoxesIcon, ChevronIcon, PlusIcon, TagIcon } from '../../ui/icons';
+import { BoxesIcon, ChevronIcon, PlusIcon, TagIcon, TrashIcon } from '../../ui/icons';
 import { stagesRepo, currentStage } from '../../workflow/workflowRepo';
 import { useCurrentMember } from '../../workflow/useMember';
 import { useEffectiveRole } from '../../workflow/viewRole';
@@ -121,6 +121,7 @@ function ProjectCard({
   isManager: boolean;
   onSale: () => void;
 }) {
+  const [confirm, setConfirm] = useState(false);
   const room = roomDef(project.roomKind);
   const quote = projectQuote(project, units, boards);
   const pay = paymentStatus(project);
@@ -230,7 +231,45 @@ function ProjectCard({
             תהליך העבודה נפתח אחרי המכירה
           </span>
         )}
+
+        {/*
+          מחיקת פרויקט אחד, בלי לגעת בלקוח ובשאר הפרויקטים שלו.
+          המחיקה אינה הפיכה, ולכן היא נשאלת לפני ולא נעשית בלחיצה.
+        */}
+        {isManager && (
+          <button
+            onClick={() => setConfirm(true)}
+            aria-label={`מחיקת הפרויקט ${project.name}`}
+            title="מחיקת הפרויקט"
+            className="ms-auto shrink-0 rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-red-50 hover:text-red-600"
+          >
+            <TrashIcon className="size-4" />
+          </button>
+        )}
       </div>
+
+      {confirm && (
+        <div className="border-t border-red-100 bg-red-50 p-3">
+          <p className="text-xs leading-snug text-red-900">
+            מחיקת {project.name} תמחק את ההדמיה, הקירות, הארגזים, הקבצים
+            והמחירים שלו. פלטות שנחתכו בו יחזרו למלאי. אי אפשר לבטל.
+          </p>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              onClick={() => projectsRepo.remove(project.id)}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-700"
+            >
+              כן, למחוק
+            </button>
+            <button
+              onClick={() => setConfirm(false)}
+              className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-stone-700"
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
     </li>
   );
 }

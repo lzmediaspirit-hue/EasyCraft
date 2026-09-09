@@ -870,17 +870,23 @@ function ledStrips(u: PlacedUnit, stroke: number, bodyH: number) {
 }
 
 /**
- * הדפנות שנראות מבחוץ: דופן זרה ודופן זכוכית.
+ * מה שמסומן על קצות הארגז: דופן זרה, דופן זכוכית, וצד שלא נבנה.
  *
- * שתיהן אותה צורה — רצועה בעובי הלוח על הקצה — ונבדלות רק בגוון,
- * ולכן הן מצוירות יחד. דופן זכוכית שלא צוירה בחזית הייתה נראית שם
- * כמו דופן רגילה, בזמן שבתלת־ממד רואים דרכה.
+ * שלושתם אותה צורה — רצועה בעובי הלוח על הקצה — ונבדלים בגוון
+ * ובקו, ולכן הם מצוירים יחד. בלי הסימון הזה שלושת המצבים נראים
+ * בחזית בדיוק כמו ארגז רגיל.
  */
 function sideMarks(u: PlacedUnit, stroke: number, bodyH: number) {
   const t = MATERIAL.frontMm;
   const e = u.exposed ?? {};
   const g = u.glassSides ?? {};
-  const bars: { x: number; y: number; w: number; h: number; glass?: boolean }[] = [];
+  const off = u.omit ?? {};
+  const bars: { x: number; y: number; w: number; h: number; glass?: boolean; gone?: boolean }[] = [];
+  /* צד שלא נבנה: קו מקווקו במקום הלוח, כדי שרואים שהוא חסר בכוונה */
+  if (off.start) bars.push({ x: 0, y: 0, w: t, h: bodyH, gone: true });
+  if (off.end) bars.push({ x: u.widthMm - t, y: 0, w: t, h: bodyH, gone: true });
+  if (off.top) bars.push({ x: 0, y: 0, w: u.widthMm, h: t, gone: true });
+  if (off.bottom) bars.push({ x: 0, y: bodyH - t, w: u.widthMm, h: t, gone: true });
   if (g.start) bars.push({ x: 0, y: 0, w: t, h: bodyH, glass: true });
   if (g.end) bars.push({ x: u.widthMm - t, y: 0, w: t, h: bodyH, glass: true });
   if (e.start) bars.push({ x: 0, y: 0, w: t, h: bodyH });
@@ -898,9 +904,10 @@ function sideMarks(u: PlacedUnit, stroke: number, bodyH: number) {
           y={b.y}
           width={b.w}
           height={b.h}
-          fill={b.glass ? '#bfdbfe' : '#c8935a'}
-          stroke={b.glass ? '#3b82f6' : '#814c2e'}
-          strokeWidth={stroke * 0.6}
+          fill={b.gone ? 'none' : b.glass ? '#bfdbfe' : '#c8935a'}
+          stroke={b.gone ? '#a8a29e' : b.glass ? '#3b82f6' : '#814c2e'}
+          strokeWidth={stroke * (b.gone ? 0.9 : 0.6)}
+          strokeDasharray={b.gone ? `${stroke * 2.5} ${stroke * 2}` : undefined}
         />
       ))}
     </g>

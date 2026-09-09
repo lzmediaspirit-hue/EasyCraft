@@ -22,11 +22,12 @@ import { DepthSheet } from './DepthSheet';
 import { PlanView } from './PlanView';
 import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
-import { orderedStats, viewOptions, useViewOptions } from './viewOptions';
+import { orderedStats, useViewOptions } from './viewOptions';
 import { useDesignView } from './designView';
 import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatGrid';
 import { DesignToolbar } from './DesignToolbar';
 import type { SheetName } from './sheets';
+import { readPref, writePref } from '../../ui/prefs';
 import { history, useHistory } from './history';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
@@ -59,13 +60,9 @@ import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 const NO_UNITS: PlacedUnit[] = [];
 const NO_HEX: Record<string, string> = {};
 
-/*
- * גובה לוח העריכה, כחלק מגובה המסך.
- *
- * מידה קבועה ולא נגררת: מי שעורך ארגז רוצה לראות אותו ואת הלוח
- * יחד, וזה היחס שנותן את שניהם.
- */
-const PANEL_RATIO = 0.45;
+const PANEL_KEY = 'easycraft.panelRatio';
+/* גובה לוח העריכה כחלק מגובה המסך — בין רבע למסך כמעט מלא */
+const clampRatio = (r: number) => Math.min(Math.max(r, 0.2), 0.85);
 
 /**
  * מסך ההדמיה. רואים קיר אחד בכל רגע, ופעולה ראשית אחת:
@@ -84,9 +81,14 @@ export function DesignScreen({
 }) {
   /* איך מסתכלים על הקיר — שבעה מצבים שהם דבר אחד */
   const design = useDesignView();
-  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen, noUppers, roomStats, freeStanding } =
+  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen, noUppers, roomStats } =
     design.view;
 
+  const [panelRatio, setPanelRatio] = useState(() => {
+    const saved = Number(readPref(PANEL_KEY));
+    return Number.isFinite(saved) && saved > 0 ? clampRatio(saved) : 0.45;
+  });
+  const dragPanel = useRef<{ startY: number; startRatio: number } | null>(null);
   const [wallIndex, setWallIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /*
@@ -431,12 +433,36 @@ export function DesignScreen({
           לאגודל ובלי להסתיר מילימטר מהקיר.
         */}
         <div className="relative flex shrink-0 items-center">
-        {/*
-          הגבול בין הציור ללוח. הוא סימון ולא ידית: גרירה כאן הייתה
-          נתפסת בטעות בזמן עבודה על הארגז, והמידה שהיא שינתה לא
-          הייתה שווה את זה.
-        */}
-        <div className="flex flex-1 justify-center py-2">
+        {/* הגבול בין הציור ללוח, והידית שמזיזה אותו */}
+        <div
+          role="separator"
+          aria-label="גובה לוח העריכה"
+          aria-orientation="horizontal"
+          tabIndex={0}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            dragPanel.current = { startY: e.clientY, startRatio: panelRatio };
+          }}
+          onPointerMove={(e) => {
+            const d = dragPanel.current;
+            if (!d) return;
+            // גרירה כלפי מעלה מגדילה את הלוח
+            setPanelRatio(clampRatio(d.startRatio + (d.startY - e.clientY) / window.innerHeight));
+          }}
+          onPointerUp={(e) => {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+            dragPanel.current = null;
+            writePref(PANEL_KEY, String(panelRatio));
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+            e.preventDefault();
+            const next = clampRatio(panelRatio + (e.key === 'ArrowUp' ? 0.05 : -0.05));
+            setPanelRatio(next);
+            writePref(PANEL_KEY, String(next));
+          }}
+          className="flex flex-1 cursor-ns-resize touch-none justify-center py-2"
+        >
           <span className="h-1.5 w-12 rounded-full bg-stone-300" />
         </div>
         <span className="absolute end-4 flex items-center gap-1.5">
@@ -480,7 +506,7 @@ export function DesignScreen({
         {/* הלוח עצמו נמתח לגובה שנבחר, ובתוכו הוא גולל */}
         <div
           className="flex shrink-0 flex-col [&>div:first-child]:min-h-0 [&>div:first-child]:flex-1"
-          style={{ height: `${PANEL_RATIO * 100}dvh` }}
+          style={{ height: `${panelRatio * 100}dvh` }}
         >
         {/*
           מפתח לפי מזהה הארגז: בלעדיו הלוח נשאר מורכב במעבר בין
@@ -498,7 +524,6 @@ export function DesignScreen({
           fillWidth={turned(selected) ? undefined : fillSpan(selected, units, wall, 'w')}
           fillHeight={fillSpan(selected, units, wall, 'h')}
           defaultSocleMm={settings?.defaults.socleMm ?? 0}
-          freeStanding={freeStanding}
           onFree={(v) => setFree(selected.id, v)}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
@@ -611,7 +636,6 @@ export function DesignScreen({
                   order={orderedStats(view)}
                   shown={(key) => !!view[key]}
                   render={(key) => statTile(key, statSource)}
-                  onReorder={(next) => viewOptions.setStatOrder(next)}
                 />
               </>
             )}

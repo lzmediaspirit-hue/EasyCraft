@@ -1,4 +1,5 @@
 import { Pill } from '../../ui/Pill';
+import { ChevronIcon } from '../../ui/icons';
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
@@ -62,6 +63,14 @@ type Axis = 'w' | 'h' | 'd';
  * דלתות, מנגנון פתיחה, גוון ודפנות זרות. כשהחזיתות מוסתרות מוצג פנים
  * הארון — אזורים, מדפים ומגירות. כך אין על המסך הגדרות שלא רואים.
  */
+/** ארבעת הצדדים שאפשר לוותר עליהם, בשמות שנגר משתמש בהם. */
+const OMIT_SIDES = [
+  { key: 'start', label: 'שמאל' },
+  { key: 'end', label: 'ימין' },
+  { key: 'top', label: 'תקרה' },
+  { key: 'bottom', label: 'תחתית' },
+] as const;
+
 export function UnitEditor({
   unit,
   inside,
@@ -69,7 +78,6 @@ export function UnitEditor({
   fillWidth,
   fillHeight,
   defaultSocleMm = 0,
-  freeStanding = false,
   onFree,
   onChange,
   onApplyChoiceAll,
@@ -89,8 +97,6 @@ export function UnitEditor({
   fillHeight?: { startMm: number; sizeMm: number };
   /** גובה הרגליים שהעסק עובד בו — לארגז שחוזר לרצפה */
   defaultSocleMm?: number;
-  /** המתג בסרגל פתוח — מציגים גם את ההפיכה לאי */
-  freeStanding?: boolean;
   /** הופך את הארגז לאי בחדר, או מחזיר אותו אל הקיר */
   onFree?: (free: boolean) => void;
   onChange: (patch: Partial<PlacedUnit>) => void;
@@ -106,6 +112,9 @@ export function UnitEditor({
   const chipRow = useRef<HTMLDivElement>(null);
   const [addingFinish, setAddingFinish] = useState(false);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
+  /* מגירת העריכה המתקדמת נפתחת לבד לארגז שכבר משתמש במה שיש בה */
+  const [advanced, setAdvanced] = useState(() => !!unit.free || !!unit.omit);
+  const omit = unit.omit ?? {};
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
   /*
    * גוון נבחר מתוך הלוח שממנו החלק באמת נבנה: הגוף מלוחות הגוף,
@@ -670,22 +679,56 @@ export function UnitEditor({
       </Row>
 
       {/*
-        אי: הארגז יורד מהקיר ועומד בחדר.
+        עריכה מתקדמת: מה שנגר עושה פעם בעשרה ארגזים.
 
-        המתג בסרגל פותח את השורה, והיא נשארת פתוחה כל עוד הארגז
-        באמת אי — אחרת ארגז שכבר הועמד באמצע החדר היה מאבד את הדרך
-        לחזור ברגע שהמתג נכבה. אחרי ההפיכה גוררים אותו בתלת־ממד אל
-        המקום שלו; הכפתור רק מוריד אותו מהקיר.
+        הדברים האלה אמיתיים ונחוצים — ארגז שנשען על שכנו, ארגז
+        שיורד מהקיר — אבל הם לא הדבר שפותחים בשבילו את הלוח. מגירה
+        סגורה משאירה את העורך קצר, ומי שצריך אותם יודע לחפש.
       */}
-      {(freeStanding || unit.free) && onFree && (
-        <Row label="אי" hint="ארגז שעומד בחדר ולא על קיר">
-          <Pill active={!unit.free} ariaLabel="על הקיר" onClick={() => onFree(false)}>
-            על הקיר
-          </Pill>
-          <Pill active={!!unit.free} ariaLabel="אי בחדר" onClick={() => onFree(true)}>
-            אי בחדר
-          </Pill>
-        </Row>
+      <button
+        onClick={() => setAdvanced((v) => !v)}
+        aria-expanded={advanced}
+        className="mt-3 flex w-full items-center justify-between rounded-xl bg-stone-100 px-3 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-200"
+      >
+        עריכה מתקדמת
+        <ChevronIcon className={`size-4 transition-transform ${advanced ? '-rotate-90' : ''}`} />
+      </button>
+
+      {advanced && (
+        <>
+          {/*
+            צד שלא נבנה. ארגז שנצמד לשכן נשען עליו ואינו צריך דופן
+            משלו, וארגז בנישה יכול לוותר על התקרה. מה שיורד כאן יורד
+            גם מהניסור ומהמחיר, ולא רק מהתמונה.
+          */}
+          <Row label="בלי דופן" hint="הארגז נשען על השכן במקומה">
+            {OMIT_SIDES.map((o) => (
+              <Pill
+                key={o.key}
+                active={!!omit[o.key]}
+                ariaLabel={`בלי ${o.label}`}
+                onClick={() => onChange({ omit: { ...omit, [o.key]: !omit[o.key] } })}
+              >
+                {o.label}
+              </Pill>
+            ))}
+          </Row>
+
+          {/*
+            אי: הארגז יורד מהקיר ועומד בחדר. אחרי ההפיכה גוררים אותו
+            בתלת־ממד אל המקום שלו; הכפתור רק מוריד אותו מהקיר.
+          */}
+          {onFree && (
+            <Row label="אי" hint="ארגז שעומד בחדר ולא על קיר">
+              <Pill active={!unit.free} ariaLabel="על הקיר" onClick={() => onFree(false)}>
+                על הקיר
+              </Pill>
+              <Pill active={!!unit.free} ariaLabel="אי בחדר" onClick={() => onFree(true)}>
+                אי בחדר
+              </Pill>
+            </Row>
+          )}
+        </>
       )}
 
       <div className="mt-3 flex items-stretch gap-2">

@@ -195,7 +195,12 @@ function details(c: Ctx) {
         ...[0.28, 0.5, 0.72].map((f, i) => (
           <circle key={`b${i}`} cx={w * f} cy={band * 0.5} r={band * 0.26} strokeWidth={t} />
         )),
-        ...drawerGrid(c, band, h, Math.max(c.drawers, 2), 1),
+        /*
+         * הכיריים הן החלק העליון, ומה שמתחתיהן הוא הארגז עצמו.
+         * מי שביקש ארגז פתוח בלי דלתות ובלי מגירות מקבל פתח, לא
+         * חזית שהציור החליט עליה בשבילו.
+         */
+        ...openFront(c, band, h),
       ];
     }
 
@@ -335,9 +340,7 @@ function details(c: Ctx) {
         <rect key="scr" x={w * 0.14} y={h * 0.08} width={w * 0.72} height={h * 0.4}
           rx={w * 0.02} strokeWidth={t} />,
         L(0, unitTop, w, unitTop, 'top'),
-        ...(c.doors > 0
-          ? front(unitTop, h, c.doors)
-          : drawerZone(unitTop, h, Math.max(c.drawers, 2), 'tv')),
+        ...(c.doors > 0 ? front(unitTop, h, c.doors) : openFront(c, unitTop, h, 'tv')),
       ];
     }
 
@@ -767,6 +770,19 @@ export function shelfYs(
 
   const step = zone / (shelves + 1);
   return Array.from({ length: shelves }, (_, i) => top + step * (i + 1));
+}
+
+/**
+ * מה שיש מתחת לחזית של ארגז מכשיר: מגירות אם הוגדרו, מדפים אם
+ * הוגדרו, ואם לא הוגדר דבר — פתח ריק.
+ *
+ * ארגז שאין לו חזית הוא ארגז פתוח, ולא ארגז שהציור ממציא לו שתי
+ * מגירות. מספר שנבחר אפס הוא בחירה, לא חוסר.
+ */
+function openFront(c: Ctx, top: number, bottom: number, key = '') {
+  if (c.drawers > 0) return drawerGrid(c, top, bottom, c.drawers, c.cols);
+  if (c.shelves > 0) return shelfLines(c, top, bottom, key);
+  return [];
 }
 
 /**

@@ -44,14 +44,6 @@ export interface DesignView {
   noUppers: boolean;
   /** המחוונים סופרים את החדר כולו ולא את הקיר שעובדים עליו */
   roomStats: boolean;
-  /**
-   * ארגז חופשי בחדר — אי וחצי־אי.
-   *
-   * תשעה מכל עשרה ארגזים נצמדים לקיר, ולכן המרחק מהקיר אינו מידה
-   * שמציגים לכולם: הוא שדה נוסף בעורך שרובם לעולם לא יגעו בו.
-   * המתג פותח אותו למי שבונה אי, ומשאיר את השאר נקי.
-   */
-  freeStanding: boolean;
 }
 
 const INITIAL: DesignView = {
@@ -66,7 +58,6 @@ const INITIAL: DesignView = {
   toolsOpen: true,
   noUppers: false,
   roomStats: false,
-  freeStanding: false,
 };
 
 /**
@@ -103,7 +94,6 @@ export function useDesignView() {
         | 'toolsOpen'
         | 'noUppers'
         | 'roomStats'
-        | 'freeStanding',
     ) =>
       setView((v) => ({ ...v, [key]: !v[key] })),
     [],

@@ -82,7 +82,7 @@ export function DesignToolbar({
   /** מחזיר לתצוגה את כל הארגזים שהוסתרו בפרויקט */
   onShowHidden: () => void;
 }) {
-  const { iso, inside, measure, rulerPair, rulerAxis, wallsOpen, toolsOpen, noUppers, freeStanding } =
+  const { iso, inside, measure, rulerPair, rulerAxis, wallsOpen, toolsOpen, noUppers } =
     design.view;
   const hiddenCount = allUnits.filter((u) => u.hidden).length;
 
@@ -327,18 +327,6 @@ export function DesignToolbar({
           icon={<TagIcon className="size-4" />}
           label="גוון לכולם"
           title="גוון לכל החזיתות, הגופים או הדפנות"
-        />
-        {/*
-          אי וחצי־אי. תשעה מכל עשרה ארגזים נצמדים לקיר, ולכן המרחק
-          ממנו אינו מידה שמציגים לכולם — המתג פותח אותה למי שבונה
-          אי, ומשאיר את שאר העורך נקי.
-        */}
-        <Tool
-          active={freeStanding}
-          onClick={() => design.toggle('freeStanding')}
-          icon={<PlanIcon className="size-4" />}
-          label="ארגז חופשי"
-          title="אי וחצי־אי — ארגז שעומד בתוך החדר"
         />
       </div>
       )}
