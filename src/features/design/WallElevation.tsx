@@ -9,6 +9,7 @@ import { cm } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
 import { SNAP, SNAP_PX, collides, snapX, snapY } from './snapping';
 import type { CornerZones } from './plan';
+import { alongWallMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /** מרחק הצמדה בין ארגזים ולקצות הקיר (מ"מ). */
@@ -142,7 +143,7 @@ export function WallElevation({
         }
         const u = units.find((x) => x.id === id);
         return u
-          ? { near: u.xMm, far: u.xMm + u.widthMm, mid: u.yMm + u.heightMm / 2 }
+          ? { near: u.xMm, far: u.xMm + alongWallMm(u), mid: u.yMm + u.heightMm / 2 }
           : null;
       }
       if (id === EDGE_FLOOR) return { near: 0, far: 0, mid: wall.lengthMm / 2 };
@@ -150,7 +151,7 @@ export function WallElevation({
         return { near: wall.heightMm, far: wall.heightMm, mid: wall.lengthMm / 2 };
       }
       const u = units.find((x) => x.id === id);
-      return u ? { near: u.yMm, far: u.yMm + u.heightMm, mid: u.xMm + u.widthMm / 2 } : null;
+      return u ? { near: u.yMm, far: u.yMm + u.heightMm, mid: u.xMm + alongWallMm(u) / 2 } : null;
     };
     const [a, b] = rulerPair.map(at);
     if (!a || !b) return null;
@@ -356,7 +357,7 @@ export function WallElevation({
               <rect
                 x={u.xMm}
                 y={flip(u.yMm + u.socleMm)}
-                width={u.widthMm}
+                width={alongWallMm(u)}
                 height={u.socleMm}
                 fill="#ddd9d4"
                 stroke="#c4bfb8"
@@ -365,7 +366,7 @@ export function WallElevation({
               <line
                 x1={u.xMm}
                 y1={flip(u.yMm + u.socleMm) + u.socleMm * 0.25}
-                x2={u.xMm + u.widthMm}
+                x2={u.xMm + alongWallMm(u)}
                 y2={flip(u.yMm + u.socleMm) + u.socleMm * 0.25}
                 stroke="#c4bfb8"
                 strokeWidth={stroke * 0.5}
@@ -376,7 +377,7 @@ export function WallElevation({
             <rect
               x={u.xMm - 20}
               y={flip(u.yMm + u.heightMm + u.counterMm)}
-              width={u.widthMm + 40}
+              width={alongWallMm(u) + 40}
               height={u.counterMm}
               fill="#78716c"
             />
@@ -412,6 +413,15 @@ export function WallElevation({
         const fill = hex ?? (selected ? '#f4e9d8' : '#ffffff');
         // הגובה כולל את הרגליים; הגוף עצמו מתחיל מעליהן
         const carcassH = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+        /*
+         * ארגז שאינו פונה אל החדר: מסובב לצד, ואז מה שתופס את הקיר
+         * הוא עומקו; או מסובב לגמרי, ואז רואים את גבו. בשני המקרים
+         * הדלתות והמגירות אינן נראות, וציורן כאן היה משקר — ולכן
+         * הוא מצויר כלוח, עם תווית שאומרת מה רואים.
+         */
+        const rot = ((u.rotationDeg ?? 0) % 360 + 360) % 360;
+        const sideOn = rot !== 0;
+        const uw = alongWallMm(u);
         // הגב יושב עמוק יותר ולכן נראה כהה מעט מהגוף; בלי גב רואים את הקיר
         const backKind = u.backKind ?? 'thin';
         const backFill =
@@ -425,13 +435,13 @@ export function WallElevation({
             onPointerDown={(e) => (work ? onSelect(u.id) : beginDrag(e, u))}
             className={measure || work ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
           >
-            <rect width={u.widthMm} height={carcassH} fill={fill} stroke="transparent" />
+            <rect width={uw} height={carcassH} fill={fill} stroke="transparent" />
             {/* ארגז שהותקן בשטח — וי באמצע, שרואים ממרחק */}
             {work && isInstalled(u) && (
               <path
-                d={`M ${u.widthMm * 0.34} ${carcassH * 0.52} L ${u.widthMm * 0.45} ${
+                d={`M ${uw * 0.34} ${carcassH * 0.52} L ${uw * 0.45} ${
                   carcassH * 0.64
-                } L ${u.widthMm * 0.68} ${carcassH * 0.36}`}
+                } L ${uw * 0.68} ${carcassH * 0.36}`}
                 fill="none"
                 stroke="#059669"
                 strokeWidth={stroke * 2.4}
@@ -445,45 +455,79 @@ export function WallElevation({
               <rect
                 x={stroke * 2}
                 y={stroke * 2}
-                width={Math.max(u.widthMm - stroke * 4, 0)}
+                width={Math.max(uw - stroke * 4, 0)}
                 height={Math.max(carcassH - stroke * 4, 0)}
                 fill={backFill}
                 stroke="transparent"
               />
             )}
-            <g color={lineColor}>
-              <CabinetGlyph
-                glyph={u.glyph}
-                w={u.widthMm}
-                h={carcassH}
-                doors={u.doors}
-                drawers={u.drawers}
-                drawerCols={u.drawerCols}
-                shelves={u.shelves}
-                drawerStyle={u.drawerStyle}
-                glassDoors={u.glassDoors}
-                shelfGapsMm={u.shelfGapsMm}
-                /*
-                  הקושרות שהדלתות נתפסות עליהן הן חלק מהאזורים, ולכן
-                  הציור צריך את האזורים המחושבים ולא את מה שנשמר.
-                  בלי זה ארגז שלא חולק ידנית נצייר בלי הקושרת, ומי
-                  שמסתיר את החזיתות לא רואה על מה הדלתות תלויות.
-                */
-                zones={u.zones?.length || doorCells(u) > 1 ? unitZones(u) : undefined}
-                opening={u.opening}
-                corner={u.corner}
-                blindMm={u.blindMm}
-                stroke={selected ? stroke * 1.7 : stroke}
-                inside={inside}
-              />
-            </g>
-            {ledStrips(u, stroke, carcassH)}
-            {exposedPanels(u, stroke, carcassH)}
+            {sideOn ? (
+              /* לוח: מסגרת, קו מקווקו במקום שאליו פונה החזית, ותווית */
+              <g color={lineColor} pointerEvents="none">
+                <rect
+                  width={uw}
+                  height={carcassH}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={selected ? stroke * 1.7 : stroke}
+                />
+                {rot !== 180 && (
+                  <line
+                    x1={rot === 90 ? stroke * 3 : uw - stroke * 3}
+                    y1={0}
+                    x2={rot === 90 ? stroke * 3 : uw - stroke * 3}
+                    y2={carcassH}
+                    stroke="currentColor"
+                    strokeWidth={stroke}
+                    strokeDasharray={`${stroke * 4} ${stroke * 3}`}
+                  />
+                )}
+                <text
+                  x={uw / 2}
+                  y={carcassH / 2}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={Math.min(uw * 0.3, carcassH * 0.12, 80)}
+                  fill="currentColor"
+                >
+                  {rot === 180 ? 'גב לחדר' : 'מסובב'}
+                </text>
+              </g>
+            ) : (
+              <g color={lineColor}>
+                <CabinetGlyph
+                  glyph={u.glyph}
+                  w={u.widthMm}
+                  h={carcassH}
+                  doors={u.doors}
+                  drawers={u.drawers}
+                  drawerCols={u.drawerCols}
+                  shelves={u.shelves}
+                  drawerStyle={u.drawerStyle}
+                  glassDoors={u.glassDoors}
+                  shelfGapsMm={u.shelfGapsMm}
+                  /*
+                    הקושרות שהדלתות נתפסות עליהן הן חלק מהאזורים, ולכן
+                    הציור צריך את האזורים המחושבים ולא את מה שנשמר.
+                    בלי זה ארגז שלא חולק ידנית נצייר בלי הקושרת, ומי
+                    שמסתיר את החזיתות לא רואה על מה הדלתות תלויות.
+                  */
+                  zones={u.zones?.length || doorCells(u) > 1 ? unitZones(u) : undefined}
+                  opening={u.opening}
+                  corner={u.corner}
+                  blindMm={u.blindMm}
+                  stroke={selected ? stroke * 1.7 : stroke}
+                  inside={inside}
+                />
+              </g>
+            )}
+            {!sideOn && ledStrips(u, stroke, carcassH)}
+            {!sideOn && exposedPanels(u, stroke, carcassH)}
             {selected && (
               <rect
                 x={-stroke * 2}
                 y={-stroke * 2}
-                width={u.widthMm + stroke * 4}
+                width={uw + stroke * 4}
                 height={carcassH + stroke * 4}
                 fill="none"
                 stroke="#a06236"
@@ -833,22 +877,23 @@ function measureOverlay(
     return (
       <g pointerEvents="none">
         <g stroke={color} strokeWidth={stroke * 1.2}>
-          <line x1={u.xMm} y1={y} x2={u.xMm + u.widthMm} y2={y} />
+          <line x1={u.xMm} y1={y} x2={u.xMm + alongWallMm(u)} y2={y} />
           <line x1={u.xMm} y1={y - tick / 2} x2={u.xMm} y2={y + tick / 2} />
           <line
-            x1={u.xMm + u.widthMm}
+            x1={u.xMm + alongWallMm(u)}
             y1={y - tick / 2}
-            x2={u.xMm + u.widthMm}
+            x2={u.xMm + alongWallMm(u)}
             y2={y + tick / 2}
           />
         </g>
-        {label(u.xMm + u.widthMm / 2, y + tick * 1.6, cm(u.widthMm))}
+        {/* מה שנמדד על הקיר הוא מה שתופס אותו — בארגז מסובב זה עומקו */}
+        {label(u.xMm + alongWallMm(u) / 2, y + tick * 1.6, cm(alongWallMm(u)))}
       </g>
     );
   }
 
   if (axis === 'h') {
-    const x = u.xMm + u.widthMm + tick * 1.2;
+    const x = u.xMm + alongWallMm(u) + tick * 1.2;
     const top = flip(u.yMm + u.heightMm);
     const bottom = flip(u.yMm);
     return (
@@ -864,7 +909,7 @@ function measureOverlay(
   }
 
   // העומק אינו נראה בחזית, ולכן מוצג כתווית על הארגז
-  const cx = u.xMm + u.widthMm / 2;
+  const cx = u.xMm + alongWallMm(u) / 2;
   const cy = flip(u.yMm + u.heightMm / 2);
   const boxW = fontSize * 4;
   const boxH = fontSize * 1.7;
@@ -880,7 +925,7 @@ function measureOverlay(
         stroke={color}
         strokeWidth={stroke * 1.2}
       />
-      {label(cx, cy + fontSize * 0.35, `${cm(u.depthMm)} ↕`)}
+      {label(cx, cy + fontSize * 0.35, `${cm(intoRoomMm(u))} ↕`)}
     </g>
   );
 }

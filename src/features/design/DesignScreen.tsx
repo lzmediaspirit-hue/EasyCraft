@@ -286,6 +286,13 @@ export function DesignScreen({
                 }
                 setSelectedId(id);
               }}
+              /*
+               * הסיבוב חופשי גם כשהוא יוצר חפיפה: מי שמעמיד ארון
+               * בפינה מסובב אותו קודם ומזיז אחר כך, וחסימה כאן
+               * הייתה נראית כמו כפתור שבור. החפיפה מסומנת בהתראות
+               * ובמבט העל.
+               */
+              onRotate={editable ? (id, deg) => patchUnit(id, { rotationDeg: deg }, `rotate:${id}`) : undefined}
               inside={inside}
               finishHex={finishHex ?? {}}
             />

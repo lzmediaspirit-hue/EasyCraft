@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { unitFronts, unitZones, zoneBands, zoneColumns } from '../../catalog/zones';
 import { shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
@@ -45,7 +45,13 @@ export interface IsoView {
  * מדף שנמתח על כל רוחב הארון "קרוב" יותר מדלת שמכסה רק חצי ממנו,
  * ובלי שכבה נפרדת הוא היה נצבע עליה.
  */
-const L = { body: 0, inside: 0, front: 1, top: 2 };
+const L_FACE = { body: 0, inside: 0, front: 1, top: 2 };
+/*
+ * ארון שהחזית שלו פנתה מהצופה: מה שרואים ממנו הוא הגב והדפנות,
+ * והדלת נמצאת מאחוריהם. בלי ההיפוך הזה דלת של ארון מסובב הייתה
+ * נצבעת על הגוף של עצמו ונראית כאילו היא מרחפת לפניו.
+ */
+const L_AWAY = { body: 1, inside: 1, front: 0, top: 2 };
 
 const DEFAULT_VIEW: IsoView = { yawDeg: 0, rise: 0.5 };
 const MIN_RISE = 0.12;
@@ -192,6 +198,7 @@ export function WallIso({
   activeWallId,
   selectedId,
   onSelect,
+  onRotate,
   inside,
   finishHex,
   present = false,
@@ -203,6 +210,13 @@ export function WallIso({
   activeWallId: string;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /**
+   * סיבוב הארגז הנבחר ברבע סיבוב.
+   *
+   * שני חצים מתחתיו, אחד לכל כיוון — זו התנועה שעושים ביד על
+   * ארון אמיתי כשמעמידים אותו בפינה, ולא בחירה מתוך רשימה.
+   */
+  onRotate?: (id: string, deg: 0 | 90 | 180 | 270) => void;
   /** חזיתות מוסתרות — רואים את הגוף והמדפים */
   inside: boolean;
   finishHex: Record<string, string>;
@@ -222,7 +236,14 @@ export function WallIso({
    * נקודת המבט — אותה תנועה שעושים ביד על מודל אמיתי.
    */
   const [view, setView] = useState<IsoView>(DEFAULT_VIEW);
-  const orbit = useRef<{ x: number; y: number; from: IsoView; moved: boolean } | null>(null);
+  const orbit = useRef<{
+    x: number;
+    y: number;
+    from: IsoView;
+    moved: boolean;
+    /** הארון שהאצבע ירדה עליו — נקרא בהרפיה */
+    hit: string | null;
+  } | null>(null);
 
   const plan = buildPlan(walls, units);
   /*
@@ -248,6 +269,8 @@ export function WallIso({
   }[] = [];
   const marks: { key: string; label: string; x: number; y: number; arrow: string; active: boolean }[] = [];
   const bounds: [number, number][] = [];
+  /* הנקודה שמתחת לארגז הנבחר, שעליה יושבים חצי הסיבוב */
+  let spin: { x: number; y: number } | null = null;
 
   for (const p of plan) {
     const rad = (p.headingDeg * Math.PI) / 180;
@@ -331,6 +354,34 @@ export function WallIso({
        * עומד ולאן הוא פונה. הסיבוב יושב במסגרת בלבד.
        */
       const tfu = unitFrame(u, tf);
+      if (u.id === selectedId && !present) {
+        /*
+         * החצים יושבים מתחת לארון, ולכן הם נמדדים מהפינה התחתונה
+         * שנראית הכי נמוכה על המסך — לא מהמרכז. איזו פינה זו תלוי
+         * בזווית המבט, ולכן היא נבחרת ולא מונחת מראש.
+         */
+        const [cxw, czw] = tfu(u.widthMm / 2, u.depthMm / 2);
+        const [sx] = v.project(cxw, u.yMm, czw);
+        const low = Math.max(
+          ...([
+            [0, 0],
+            [u.widthMm, 0],
+            [0, u.depthMm],
+            [u.widthMm, u.depthMm],
+          ] as const).map(([lx, lz]) => {
+            const [px, pz] = tfu(lx, lz);
+            return v.project(px, u.yMm, pz)[1];
+          }),
+        );
+        spin = { x: sx, y: low };
+      }
+      /*
+       * לאן פונה החזית: אם מישור הדלת קרוב לצופה יותר ממישור הגב,
+       * רואים אותה — ואם לא, היא מאחורי הארון.
+       */
+      const [fwx, fwz] = tfu(u.widthMm / 2, u.depthMm);
+      const [bwx, bwz] = tfu(u.widthMm / 2, 0);
+      const L = v.toward(fwx, fwz) >= v.toward(bwx, bwz) ? L_FACE : L_AWAY;
       const socle = u.socleMm ?? 0;
       const x = 0;
       const y = u.yMm + socle;
@@ -583,20 +634,59 @@ export function WallIso({
   const stroke = Math.max(vbW / 700, 3);
 
   /*
+   * כמה יחידות ציור נכנסות לפיקסל אחד.
+   *
+   * הציור נמתח לגודל המסגרת, ולכן כפתור שנמדד ביחידות הציור מתכווץ
+   * יחד איתה: כשהלוח של הארגז פתוח נשאר לתלת־ממד פס נמוך, וחץ בגודל
+   * עשרה פיקסלים אי אפשר ללחוץ עליו באצבע. המידה הזאת מחזירה את
+   * החצים לגודל אמיתי, בלי קשר לכמה מקום נשאר לתמונה.
+   */
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [pxPerUnit, setPxPerUnit] = useState(1);
+  useLayoutEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const read = () => {
+      const box = el.getBoundingClientRect();
+      // preserveAspectRatio ברירת המחדל מכניס את הציור כולו — הצלע הצרה קובעת
+      const k = Math.min(box.width / vbW, box.height / vbH);
+      if (k > 0) setPxPerUnit(k);
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [vbW, vbH]);
+
+  /*
    * גרירה מסובבת, נגיעה בוחרת.
    * הבחירה נעשית בהרפיה ולא בלחיצה, כי אחרת כל תחילת סיבוב שהתחילה
    * על ארון הייתה בוחרת אותו — והלוח היה נפתח באמצע התנועה.
    */
-  const moved = () => !!orbit.current?.moved;
+  /* המשתנים נכתבים בתוך הלולאה; כאן הם כבר סופיים */
+  const spinAt: { x: number; y: number } | null = spin;
+  const selectedUnit = units.find((u) => u.id === selectedId && !u.hidden) ?? null;
 
   return (
     <div className="relative flex min-h-0 w-full flex-1 flex-col">
     <svg
+      ref={svgRef}
       viewBox={`${minX} ${minY} ${vbW} ${vbH}`}
       className="max-h-full min-h-0 w-full flex-1 touch-none select-none"
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
-        orbit.current = { x: e.clientX, y: e.clientY, from: view, moved: false };
+        /*
+         * מה שנגעו בו נשמר כאן ולא נקרא בהרפיה: לכידת המצביע
+         * מפנה את כל האירועים הבאים אל ה-SVG עצמו, ולכן בהרפיה
+         * כבר אי אפשר לדעת על איזה ארון האצבע ירדה.
+         */
+        orbit.current = {
+          x: e.clientX,
+          y: e.clientY,
+          from: view,
+          moved: false,
+          hit: (e.target as Element).getAttribute?.('data-unit') ?? null,
+        };
       }}
       onPointerMove={(e) => {
         const o = orbit.current;
@@ -619,12 +709,11 @@ export function WallIso({
         });
       }}
       onPointerUp={(e) => {
-        const wasOrbit = moved();
+        const o = orbit.current;
         orbit.current = null;
         e.currentTarget.releasePointerCapture(e.pointerId);
-        if (wasOrbit) return;
-        const id = (e.target as Element).getAttribute?.('data-unit') ?? null;
-        onSelect(id);
+        if (!o || o.moved) return;
+        onSelect(o.hit);
       }}
       onPointerCancel={() => {
         orbit.current = null;
@@ -745,6 +834,68 @@ export function WallIso({
           </text>
         </g>
         ))}
+
+      {/*
+        שני חצי הסיבוב, מתחת לארגז הנבחר.
+        כאן ולא בלוח הצדדי: מסובבים ארון כשמסתכלים עליו, ורואים את
+        התוצאה באותה תנועה. כל לחיצה היא רבע סיבוב, ושמונה לחיצות
+        מחזירות למקום — אין מצב שאי אפשר לצאת ממנו.
+      */}
+      {spinAt && selectedUnit && onRotate && (
+        <g>
+          {([
+            { dir: -1 as const, label: 'סיבוב שמאלה', at: -1 },
+            { dir: 1 as const, label: 'סיבוב ימינה', at: 1 },
+          ]).map(({ dir, label, at }) => {
+            const r = Math.min(17 / pxPerUnit, vbW / 14);
+            const cx = spinAt.x + at * r * 1.35;
+            const cy = spinAt.y + r * 1.6;
+            const next = ((((selectedUnit.rotationDeg ?? 0) + dir * 90) % 360) + 360) % 360;
+            return (
+              <g
+                key={label}
+                role="button"
+                aria-label={label}
+                className="cursor-pointer"
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => {
+                  e.stopPropagation();
+                  onRotate(selectedUnit.id, next as 0 | 90 | 180 | 270);
+                }}
+              >
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={r}
+                  fill="#ffffff"
+                  stroke="#a06236"
+                  strokeWidth={r * 0.09}
+                />
+                {/* חץ מעוקל: קשת ברבע מעגל וראש בקצה שאליו מסתובבים */}
+                <path
+                  d={`M ${cx - dir * r * 0.45} ${cy + r * 0.18} A ${r * 0.5} ${r * 0.5} 0 1 ${
+                    dir > 0 ? 1 : 0
+                  } ${cx + dir * r * 0.45} ${cy + r * 0.18}`}
+                  fill="none"
+                  stroke="#a06236"
+                  strokeWidth={r * 0.13}
+                  strokeLinecap="round"
+                />
+                <path
+                  d={`M ${cx + dir * r * 0.16} ${cy + r * 0.5} L ${cx + dir * r * 0.45} ${
+                    cy + r * 0.18
+                  } L ${cx + dir * r * 0.6} ${cy + r * 0.52}`}
+                  fill="none"
+                  stroke="#a06236"
+                  strokeWidth={r * 0.13}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </g>
+            );
+          })}
+        </g>
+      )}
     </svg>
 
     {/* חזרה לזווית ההתחלתית, אחרי שהסתובבנו למקום שקשה לחזור ממנו */}
