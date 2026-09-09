@@ -293,6 +293,12 @@ export function DesignScreen({
                * ובמבט העל.
                */
               onRotate={editable ? (id, deg) => patchUnit(id, { rotationDeg: deg }, `rotate:${id}`) : undefined}
+              /* גרירה בתלת־ממד עשויה לעבור לקיר שכן — הארגז עובר איתה */
+              onMoveTo={
+                editable
+                  ? (id, xMm, yMm, wallId) => patchUnit(id, { xMm, yMm, wallId })
+                  : undefined
+              }
               inside={inside}
               finishHex={finishHex ?? {}}
             />
