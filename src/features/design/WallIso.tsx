@@ -5,7 +5,9 @@ import { glyphDef } from '../../catalog/glyphList';
 import { shade } from '../../ui/color';
 import { MATERIAL } from '../../catalog/standards';
 import { buildPlan, cornerZones } from './plan';
+import type { PlanWall } from './plan';
 import { wallName } from '../projects/wallLayouts';
+import { featureDef } from '../projects/wallFeatures';
 import { SNAP, SNAP_PX, collides, snapX, snapY } from './snapping';
 import type { PlacedUnit, Wall } from '../../db/types';
 
@@ -26,6 +28,17 @@ import type { PlacedUnit, Wall } from '../../db/types';
  */
 
 const COS30 = Math.cos(Math.PI / 6);
+
+/**
+ * עובי הקיר בהדמיה, ועומק החדר כשיש קיר אחד בלבד.
+ *
+ * שתי המידות האלה הן תצוגה ותו לא: הן לא נכנסות לשום חישוב, לא
+ * לחומרים ולא לניסור. חדר בלי עובי קיר נראה כמו מישור מרחף, וקיר
+ * בודד בלי עומק נראה כמו קיר בלי חדר — ולכן יש להן ערך קבוע, ולא
+ * שדה שמישהו צריך למלא.
+ */
+const WALL_MM = 100;
+const LONE_ROOM_MM = 1800;
 
 /** זווית המבט: סיבוב סביב הציר האנכי, והגובה שממנו מסתכלים. */
 export interface IsoView {
@@ -193,6 +206,31 @@ function box(
 }
 
 
+/**
+ * רצפת החדר: מצולע אחד, ולא רצועה לכל קיר.
+ *
+ * רצועה לכל קיר משאירה חורים בפינות ושכבות שנצבעות זו על זו, וחדר
+ * נראה כמו כמה קירות שבמקרה עומדים ליד. שרשרת הקירות נסגרת כאן
+ * לצורה אחת: שני קירות מושלמים למלבן שהם מגדירים, שלושה ומעלה
+ * נסגרים בחזרה אל נקודת ההתחלה, וקיר בודד מקבל עומק חדר קבוע — כי
+ * אין ממה לגזור אותו.
+ */
+function roomFloor(plan: PlanWall[]): { x: number; y: number }[] {
+  if (!plan.length) return [];
+  const pts = [plan[0].start, ...plan.map((p) => p.end)];
+  if (plan.length === 1) {
+    const rad = (plan[0].headingDeg * Math.PI) / 180;
+    const n = { x: -Math.sin(rad) * LONE_ROOM_MM, y: Math.cos(rad) * LONE_ROOM_MM };
+    return [pts[0], pts[1], { x: pts[1].x + n.x, y: pts[1].y + n.y }, { x: pts[0].x + n.x, y: pts[0].y + n.y }];
+  }
+  if (plan.length === 2) {
+    // הצלע הרביעית של המלבן ששני הקירות מגדירים
+    const [a, b, c] = pts;
+    return [a, b, c, { x: c.x + a.x - b.x, y: c.y + a.y - b.y }];
+  }
+  return pts;
+}
+
 export function WallIso({
   walls,
   units,
@@ -288,16 +326,23 @@ export function WallIso({
   const faces: Face[] = [];
   const backdrops: {
     key: string;
-    floor: string;
     base: string;
     /** מישור הקיר עצמו — מצויר רק כשהוא לא חוסם את המבט */
     wall: string | null;
+    /** ראש הקיר והמשקופים בקצותיו — מה שנותן לקיר עובי */
+    thickness: string[];
+    /** חלונות, דלתות ושקעים, על מישור הקיר */
+    onWall: { key: string; kind: string; points: string; tone: string }[];
     active: boolean;
   }[] = [];
   const marks: { key: string; label: string; x: number; y: number; arrow: string; active: boolean }[] = [];
   const bounds: [number, number][] = [];
   /* הנקודה שמתחת לארגז הנבחר, שעליה יושבים חצי הסיבוב */
   let spin: { x: number; y: number } | null = null;
+
+  const floorPts = roomFloor(plan).map((q) => project(q.x, 0, q.y));
+  const floor = floorPts.map((q) => q.join(',')).join(' ');
+  bounds.push(...floorPts);
 
   for (const p of plan) {
     const rad = (p.headingDeg * Math.PI) / 180;
@@ -319,29 +364,53 @@ export function WallIso({
      */
     // המכפלה הפנימית של הנורמל הפנימי של הקיר עם הכיוון אל הצופה
     const toward = v.toward(-sin, cos);
+    const facing = toward > 0.01;
+    const len = w0.lengthMm;
+    const hgt = w0.heightMm;
     backdrops.push({
       key: w0.id,
-      floor: poly([at(0, 0, 0), at(w0.lengthMm, 0, 0), at(w0.lengthMm, 0, 800), at(0, 0, 800)]),
-      base: poly([at(0, 0, 0), at(w0.lengthMm, 0, 0)]),
-      wall:
-        toward > 0.01
-          ? poly([
-              at(0, 0, 0),
-              at(w0.lengthMm, 0, 0),
-              at(w0.lengthMm, w0.heightMm, 0),
-              at(0, w0.heightMm, 0),
-            ])
-          : null,
+      base: poly([at(0, 0, 0), at(len, 0, 0)]),
+      wall: facing ? poly([at(0, 0, 0), at(len, 0, 0), at(len, hgt, 0), at(0, hgt, 0)]) : null,
+      /*
+       * ראש הקיר ושני המשקופים. אלה שלושת המקומות שבהם העין רואה
+       * שלקיר יש עובי — למעלה ובשתי הפינות — ולכן זה כל מה שצריך
+       * לצייר כדי שהחדר יפסיק להיראות כמו מישור נייר.
+       */
+      thickness: facing
+        ? [
+            poly([at(0, hgt, 0), at(len, hgt, 0), at(len, hgt, -WALL_MM), at(0, hgt, -WALL_MM)]),
+            poly([at(0, 0, 0), at(0, hgt, 0), at(0, hgt, -WALL_MM), at(0, 0, -WALL_MM)]),
+            poly([at(len, 0, 0), at(len, hgt, 0), at(len, hgt, -WALL_MM), at(len, 0, -WALL_MM)]),
+          ]
+        : [],
+      /*
+       * חלון, פתח ושקע מצוירים על הקיר גם כאן ולא רק בחזית: מי
+       * שמסתובב בחדר רוצה לראות שהארון עומד מתחת לחלון, ולא לחזור
+       * למבט אחר כדי לבדוק.
+       */
+      onWall: facing
+        ? w0.features.map((f) => ({
+            key: f.id,
+            kind: f.kind,
+            tone: featureDef(f.kind).tone,
+            points: poly([
+              at(f.xMm, f.yMm, 0),
+              at(f.xMm + f.widthMm, f.yMm, 0),
+              at(f.xMm + f.widthMm, f.yMm + f.heightMm, 0),
+              at(f.xMm, f.yMm + f.heightMm, 0),
+            ]),
+          }))
+        : [],
       active: w0.id === activeWallId,
     });
 
     for (const q of [
       at(0, 0, 0),
-      at(w0.lengthMm, 0, 0),
-      at(0, w0.heightMm, 0),
-      at(w0.lengthMm, w0.heightMm, 0),
-      at(0, 0, 800),
-      at(w0.lengthMm, 0, 800),
+      at(len, 0, 0),
+      at(0, hgt, 0),
+      at(len, hgt, 0),
+      at(0, hgt, -WALL_MM),
+      at(len, hgt, -WALL_MM),
     ]) {
       bounds.push(q);
     }
@@ -869,9 +938,21 @@ export function WallIso({
         <rect x={minX} y={minY} width={vbW} height={vbH} fill="url(#iso-sky)" />
       )}
 
+      {/* הרצפה — מצולע אחד לכל החדר, מתחת לכל השאר */}
+      <polygon data-room-floor="" points={floor} fill={present ? 'url(#iso-floor)' : '#f0efec'} />
+
       {backdrops.map((b) => (
         <g key={b.key}>
-          <polygon points={b.floor} fill={present ? 'url(#iso-floor)' : '#f0efec'} />
+          {b.thickness.map((t, i) => (
+            <polygon
+              key={`th-${i}`}
+              data-wall-thickness=""
+              points={t}
+              fill={present ? '#e9e5df' : '#eceae6'}
+              stroke={present ? 'none' : '#e0ddd8'}
+              strokeWidth={stroke * 0.7}
+            />
+          ))}
           {b.wall && (
             <polygon
               points={b.wall}
@@ -880,6 +961,17 @@ export function WallIso({
               strokeWidth={stroke}
             />
           )}
+          {b.onWall.map((f) => (
+            <polygon
+              key={f.key}
+              data-wall-feature={f.kind}
+              points={f.points}
+              fill={f.tone}
+              fillOpacity={present ? 0.9 : 0.55}
+              stroke={present ? 'none' : '#a8a29e'}
+              strokeWidth={stroke * 0.7}
+            />
+          ))}
           {/* קו הבסיס מראה איפה הקיר עומד, גם כשהמישור שלו לא מצויר */}
           {!present && (
             <polyline
