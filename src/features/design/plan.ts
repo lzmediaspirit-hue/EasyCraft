@@ -1,5 +1,6 @@
 import { alongWallMm, intoRoomMm } from '../../db/types';
 import { boxCorners, unitBox } from './placement';
+import type { UnitBox } from './placement';
 import { clash } from './collision';
 import type { PlacedUnit, Wall } from '../../db/types';
 
@@ -74,15 +75,6 @@ function wallDepth(wall: Wall, units: PlacedUnit[]): number {
 }
 
 /**
- * אזורי הפינה של קיר: הרוחב בכל קצה שכבר תפוס בפועל על ידי ארון
- * של הקיר השכן.
- *
- * זו הצגה ולא חסימה — הנגר הוא שמחליט על איזה מהשניים הפינה
- * נופלת. נספרים רק ארונות שבאמת נוגעים בפינה המשותפת: ארון בקצה
- * הרחוק של הקיר השכן לא תופס כאן כלום, וסימון שלו היה חוסם שטח
- * פנוי בלי סיבה.
- */
-/**
  * רצועה אחת שתפוסה בפינה: כמה היא נכנסת לקיר הזה, ובאיזה גובה.
  *
  * הגובה חשוב: ארון תחתון בפינה תופס את החלק התחתון, וארון עליון
@@ -105,6 +97,15 @@ export interface CornerZones {
   end: CornerZone[];
 }
 
+/**
+ * אזורי הפינה של קיר: הרוחב בכל קצה שכבר תפוס בפועל על ידי ארון
+ * של הקיר השכן.
+ *
+ * זו הצגה ולא חסימה — הנגר הוא שמחליט על איזה מהשניים הפינה
+ * נופלת. נספרים רק ארונות שבאמת נוגעים בפינה המשותפת: ארון בקצה
+ * הרחוק של הקיר השכן לא תופס כאן כלום, וסימון שלו היה חוסם שטח
+ * פנוי בלי סיבה.
+ */
 export function cornerZones(walls: Wall[], wall: Wall, units: PlacedUnit[]): CornerZones {
   const i = walls.findIndex((w) => w.id === wall.id);
   const prev = i > 0 ? walls[i - 1] : undefined;
@@ -170,9 +171,12 @@ export interface PlanUnit {
  */
 export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
   const out: PlanUnit[] = [];
+  /* התיבה מחושבת פעם אחת לכל ארגז, ומשמשת גם לציור וגם לבדיקה */
+  const boxes: UnitBox[] = [];
   for (const u of units) {
     const b = unitBox(u, plan);
     if (!b) continue;
+    boxes.push(b);
     out.push({ unit: u, corners: boxCorners(b), center: { x: b.cx, y: b.cz }, clash: false });
   }
 
@@ -183,9 +187,7 @@ export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
    */
   for (let i = 0; i < out.length; i++) {
     for (let j = i + 1; j < out.length; j++) {
-      const a = unitBox(out[i].unit, plan);
-      const b = unitBox(out[j].unit, plan);
-      if (a && b && clash(a, b)) {
+      if (clash(boxes[i], boxes[j])) {
         out[i].clash = true;
         out[j].clash = true;
       }

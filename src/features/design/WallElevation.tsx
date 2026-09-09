@@ -15,7 +15,6 @@ import { outOfSight } from './designView';
 import { alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 
-/** מרחק הצמדה בין ארגזים ולקצות הקיר (מ"מ). */
 /**
  * פינות הקיר כקצה סרגל.
  *
@@ -49,10 +48,6 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onMove: (id: string, patch: Partial<PlacedUnit>) => void;
-  /**
-   * מחיקה ושכפול של הארגז הנבחר, על הציור עצמו.
-   * ריק = אין עריכה, ואז הכפתורים אינם מצוירים.
-   */
   /** הסתרת חזיתות — תצוגת פנים הארונות */
   inside: boolean;
   /** גוון לכל ארגז, לפי מזהה הגוון */

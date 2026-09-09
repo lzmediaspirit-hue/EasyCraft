@@ -515,7 +515,7 @@ function zonedContainer(c: Ctx) {
      * בחזית דלת על כל הרוחב — הבטחה ללקוח לפתח שאי אפשר לפתוח.
      */
     const blind = blindWidth(c);
-    const atStart = c.corner === 'blindStart';
+    const atStart = blindSide(c) === 'blindStart';
     const openX = blind && atStart ? blind : 0;
     const openW = w - blind;
     if (blind) {
@@ -554,10 +554,6 @@ function zonedContainer(c: Ctx) {
   return out;
 }
 
-/**
- * רוחב החלק החסום בפינה מתה, או 0 כשאין פינה כזאת.
- * אותו חשבון עצמו משרת את החזית ואת התלת־ממד.
- */
 /**
  * פינה מתה: החלק שנחסם על ידי הארון שעל הקיר הסמוך מסומן
  * בקווקוו, והחזית יושבת רק על החלק הנגיש.
