@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
 import { isDark, shade } from '../../ui/color';
-import { doorCells, unitZones } from '../../catalog/zones';
+import { unitZones } from '../../catalog/zones';
 import { featureBiteMm, featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
@@ -12,7 +12,7 @@ import { blocked } from './collision';
 import { unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
 import { outOfSight } from './designView';
-import { alongWallMm, intoRoomMm } from '../../db/types';
+import { alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /** מרחק הצמדה בין ארגזים ולקצות הקיר (מ"מ). */
@@ -439,8 +439,7 @@ export function WallElevation({
               ? '#814c2e'
               : '#78716c';
         const fill = hex ?? (selected ? '#f4e9d8' : '#ffffff');
-        // הגובה כולל את הרגליים; הגוף עצמו מתחיל מעליהן
-        const carcassH = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+        const carcassH = bodyHeightMm(u);
         /*
          * ארגז שאינו פונה אל החדר: מסובב לצד, ואז מה שתופס את הקיר
          * הוא עומקו; או מסובב לגמרי, ואז רואים את גבו. בשני המקרים
@@ -542,14 +541,18 @@ export function WallElevation({
                   shelves={u.shelves}
                   drawerStyle={u.drawerStyle}
                   glassDoors={u.glassDoors}
+                  handles={u.handles}
                   shelfGapsMm={u.shelfGapsMm}
                   /*
-                    הקושרות שהדלתות נתפסות עליהן הן חלק מהאזורים, ולכן
-                    הציור צריך את האזורים המחושבים ולא את מה שנשמר.
-                    בלי זה ארגז שלא חולק ידנית נצייר בלי הקושרת, ומי
-                    שמסתיר את החזיתות לא רואה על מה הדלתות תלויות.
+                    האזורים תמיד, ולא רק כשהם נשמרו במפורש.
+
+                    מה שיש בתוך הארון מתואר באזורים — גם כשהם נגזרים
+                    משדות פשוטים — וזה מה שהתלת־ממד, רשימת החומרים
+                    והניסור קוראים. כשהחזית ציירה לפי הצורה בלבד,
+                    ארון מגירות שנבנה על צורה של דלת יצא ריק בחזית
+                    ומלא מגירות בתלת־ממד. עכשיו שניהם קוראים אותו דבר.
                   */
-                  zones={u.zones?.length || doorCells(u) > 1 ? unitZones(u) : undefined}
+                  zones={unitZones(u)}
                   opening={u.opening}
                   corner={u.corner}
                   blindMm={u.blindMm}
@@ -559,7 +562,7 @@ export function WallElevation({
               </g>
             )}
             {!sideOn && ledStrips(u, stroke, carcassH)}
-            {!sideOn && exposedPanels(u, stroke, carcassH)}
+            {!sideOn && sideMarks(u, stroke, carcassH)}
             {awayMm > 0 && (
               <g pointerEvents="none">
                 <rect
@@ -872,14 +875,19 @@ function ledStrips(u: PlacedUnit, stroke: number, bodyH: number) {
 }
 
 /**
- * דפנות זרות מסומנות כרצועה מלאה בצד הגלוי.
- * בחזית רואים את עובי הלוח, ולכן הרצועה ברוחב עובי החומר.
+ * הדפנות שנראות מבחוץ: דופן זרה ודופן זכוכית.
+ *
+ * שתיהן אותה צורה — רצועה בעובי הלוח על הקצה — ונבדלות רק בגוון,
+ * ולכן הן מצוירות יחד. דופן זכוכית שלא צוירה בחזית הייתה נראית שם
+ * כמו דופן רגילה, בזמן שבתלת־ממד רואים דרכה.
  */
-function exposedPanels(u: PlacedUnit, stroke: number, bodyH: number) {
-  const e = u.exposed;
-  if (!e) return null;
+function sideMarks(u: PlacedUnit, stroke: number, bodyH: number) {
   const t = MATERIAL.frontMm;
-  const bars: { x: number; y: number; w: number; h: number }[] = [];
+  const e = u.exposed ?? {};
+  const g = u.glassSides ?? {};
+  const bars: { x: number; y: number; w: number; h: number; glass?: boolean }[] = [];
+  if (g.start) bars.push({ x: 0, y: 0, w: t, h: bodyH, glass: true });
+  if (g.end) bars.push({ x: u.widthMm - t, y: 0, w: t, h: bodyH, glass: true });
   if (e.start) bars.push({ x: 0, y: 0, w: t, h: bodyH });
   if (e.end) bars.push({ x: u.widthMm - t, y: 0, w: t, h: bodyH });
   if (e.top) bars.push({ x: 0, y: 0, w: u.widthMm, h: t });
@@ -895,8 +903,8 @@ function exposedPanels(u: PlacedUnit, stroke: number, bodyH: number) {
           y={b.y}
           width={b.w}
           height={b.h}
-          fill="#c8935a"
-          stroke="#814c2e"
+          fill={b.glass ? '#bfdbfe' : '#c8935a'}
+          stroke={b.glass ? '#3b82f6' : '#814c2e'}
           strokeWidth={stroke * 0.6}
         />
       ))}

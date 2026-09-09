@@ -583,13 +583,6 @@ function materialsForRole(role: PartRole, materials: Material[]): Material[] {
 }
 
 /**
- * החומר שמתאים לחלק, מתוך מה שזמין.
- *
- * `allowed` מצמצם לרשימה שהגוון באמת קיים עליה. כשאין חומר משויך
- * שעונה על התנאי נופלים למה שיש — חלק בלי חומר אינו מתומחר בכלל,
- * וזה גרוע יותר מחומר שאינו האידיאלי.
- */
-/**
  * כמה מקום הארגז תופס לאורך הקיר.
  *
  * ארגז מסובב עומד בצד: על הקיר הוא תופס את העומק שלו, ולתוך החדר
@@ -599,6 +592,18 @@ function materialsForRole(role: PartRole, materials: Material[]): Material[] {
  */
 export function alongWallMm(u: Pick<PlacedUnit, 'widthMm' | 'depthMm' | 'rotationDeg'>): number {
   return turned(u) ? u.depthMm : u.widthMm;
+}
+
+/**
+ * גובה הגוף: הגובה הכולל פחות הרגליים.
+ *
+ * הרגליים נכללות ב-heightMm כי זה מה שתופס מקום על הקיר, אבל הגוף
+ * — הדפנות, המדפים, החזיתות והאזורים — מתחיל מעליהן. כל מי שמודד
+ * את הארון עצמו עובר דרך כאן, כדי ששלושת הציורים והחישוב לא
+ * יחשבו את אותו דבר בשלוש דרכים.
+ */
+export function bodyHeightMm(u: Pick<PlacedUnit, 'heightMm' | 'socleMm'>): number {
+  return Math.max(u.heightMm - (u.socleMm ?? 0), 0);
 }
 
 /** כמה הארגז נכנס לתוך החדר. */
@@ -612,6 +617,13 @@ export function turned(u: Pick<PlacedUnit, 'rotationDeg'>): boolean {
   return r === 90 || r === 270;
 }
 
+/**
+ * החומר שמתאים לחלק, מתוך מה שזמין.
+ *
+ * `allowed` מצמצם לרשימה שהגוון באמת קיים עליה. כשאין חומר משויך
+ * שעונה על התנאי נופלים למה שיש — חלק בלי חומר אינו מתומחר בכלל,
+ * וזה גרוע יותר מחומר שאינו האידיאלי.
+ */
 export function materialForRole(
   role: PartRole,
   materials: Material[],

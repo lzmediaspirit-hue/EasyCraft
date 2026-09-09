@@ -21,6 +21,7 @@ import { ZoneIcon } from './ZoneIcon';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { BackIcon, LockIcon, PlusIcon, TrashIcon, UnlockIcon } from '../../ui/icons';
+import { bodyHeightMm } from '../../db/types';
 import type { PlacedUnit, Zone, ZoneContent, ZoneKind } from '../../db/types';
 
 const KINDS: ZoneKind[] = ['shelves', 'drawers', 'rod', 'empty'];
@@ -46,7 +47,7 @@ export function InteriorEditor({
 }) {
   const [focus, setFocus] = useState<Focus>(null);
   const socle = unit.socleMm ?? 0;
-  const bodyH = Math.max(unit.heightMm - socle, 0);
+  const bodyH = bodyHeightMm(unit);
   const zones = unitZones({ ...unit, heightMm: bodyH });
 
   /** כותב אזורים חזרה; גובה נעול שלא נכנס מגדיל את הארון. */

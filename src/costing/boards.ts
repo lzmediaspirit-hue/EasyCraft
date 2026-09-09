@@ -2,6 +2,7 @@ import { glyphDef } from '../catalog/glyphList';
 import { nestParts, type NestResult, type PartGrain } from './nesting';
 import { DRAWER, MATERIAL, drawerDepth } from '../catalog/standards';
 import {
+  blindWidthMm,
   countDrawers,
   countShelves,
   unitCells,
@@ -9,7 +10,7 @@ import {
   unitZones,
   zoneCells,
 } from '../catalog/zones';
-import { materialForRole } from '../db/types';
+import { bodyHeightMm, materialForRole } from '../db/types';
 import type {
   Material,
   PartChoice,
@@ -151,7 +152,7 @@ export interface ProjectCosting {
  */
 function doorFronts(u: PlacedUnit): { fromMm: number; toMm: number; doors: number }[] {
   if (glyphDef(u.glyph).appliance) return [];
-  const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+  const h = bodyHeightMm(u);
   const hasInner = unitZones(u).some((z) => z.kind === 'drawers' && z.drawerStyle === 'inner');
   const doors = Math.max(u.doors ?? 0, hasInner ? 1 : 0);
   return unitFronts({ ...u, heightMm: h, doors }, h);
@@ -179,7 +180,7 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
    * פס הסוקל עצמו אינו נספר כאן במכוון: הוא נחתך משאריות או מפרופיל
    * נפרד, ולא מהפלטות של הארון.
    */
-  const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+  const h = bodyHeightMm(u);
   const d = u.depthMm;
   const t = s.carcassThicknessMm;
   const ft = MATERIAL.frontMm;
@@ -385,10 +386,7 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
    * בפינה מתה החזית יושבת רק על החלק הנגיש: מה שנחסם על ידי הארון
    * שעל הקיר הסמוך אין דרך לפתוח, ולכן גם אין שם דלת.
    */
-  const blind =
-    u.glyph === 'blindStart' || u.glyph === 'blindEnd'
-      ? Math.min(u.blindMm ?? 300, carcassW)
-      : 0;
+  const blind = Math.min(blindWidthMm(u), carcassW);
   const frontW = Math.max(carcassW - blind, 0);
   /*
    * חזית לכל רצף, ולא דלת אחת לארגז: ארון עם דלת עליונה ודלת
@@ -449,7 +447,7 @@ interface GlassPart {
 
 /** כל חלקי הזכוכית בארגז: דלתות ומדפים. */
 function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
-  const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+  const h = bodyHeightMm(u);
   const e = u.exposed ?? {};
   const ft = MATERIAL.frontMm;
   const carcassW = u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0);
@@ -528,7 +526,7 @@ function unitEdgeMeters(u: PlacedUnit, s: PartSettings): number {
  */
 function unitHandles(u: PlacedUnit): number {
   if (!u.handles) return 0;
-  const h = Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+  const h = bodyHeightMm(u);
   const outerDrawers = unitCells({ ...u, heightMm: h }).reduce(
     (n, { content: c }) =>
       n +

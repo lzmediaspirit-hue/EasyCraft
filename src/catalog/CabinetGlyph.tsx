@@ -1,4 +1,4 @@
-import { isContainer, unitFronts, zoneBands, zoneCells } from './zones';
+import { blindSide, blindWidthMm, isContainer, unitFronts, zoneBands, zoneCells } from './zones';
 import type { CornerKind, OpeningMech, Zone, ZoneContent } from '../db/types';
 
 /**
@@ -45,6 +45,8 @@ export type GlyphProps = {
   corner?: CornerKind;
   /** רוחב החלק החסום בפינה מתה */
   blindMm?: number;
+  /** ידיות על החזיתות. כבוי = פתיחה בלחיצה, בלי ידית */
+  handles?: boolean;
 };
 
 export function CabinetGlyph({
@@ -64,6 +66,7 @@ export function CabinetGlyph({
   opening = 'hinge',
   corner,
   blindMm = 0,
+  handles = false,
 }: GlyphProps) {
   // ארגזי נגרות הם מלבנים; עיגול קל בלבד, שלא ייראה כמו רהיט מצויר
   const r = Math.min(8, Math.min(w, h) * 0.015);
@@ -94,6 +97,7 @@ export function CabinetGlyph({
         opening,
         corner,
         blindMm,
+        handles,
       })}
     </g>
   );
@@ -118,6 +122,7 @@ type Ctx = {
   inside: boolean;
   innerDrawers: boolean;
   glass: boolean;
+  handles: boolean;
   gaps?: number[];
   zones?: Zone[];
   opening: OpeningMech;
@@ -501,12 +506,44 @@ function zonedContainer(c: Ctx) {
    * התלת־ממד וגם את פירוק החלקים, ולכן מה שרואים הוא מה שנחתך.
    */
   if (!inside && c.doors > 0) {
+    /*
+     * פינה מתה: החזית יושבת רק על החלק הנגיש, ומה שנחסם על ידי
+     * הארון שעל הקיר הסמוך מסומן בקווקוו.
+     *
+     * הפינה נקראת מהשדה ולא מהצורה, כמו בתלת־ממד. כשהיא נקראה
+     * מהצורה בלבד, ארון פינתי שנבנה על צורה של דלת רגילה קיבל
+     * בחזית דלת על כל הרוחב — הבטחה ללקוח לפתח שאי אפשר לפתוח.
+     */
+    const blind = blindWidth(c);
+    const atStart = c.corner === 'blindStart';
+    const openX = blind && atStart ? blind : 0;
+    const openW = w - blind;
+    if (blind) {
+      out.push(
+        <rect
+          key="blind"
+          x={atStart ? 0 : openW}
+          y={0}
+          width={blind}
+          height={h}
+          strokeWidth={t}
+          strokeDasharray={`${t * 3} ${t * 2}`}
+          fill="currentColor"
+          fillOpacity={0.08}
+        />,
+      );
+    }
+    const sub: Ctx = blind ? { ...c, w: openW } : c;
     fronts.forEach((f, i) => {
       // האזורים נמדדים מלמטה, והציור מלמעלה
       const top = h - f.toMm;
       const bottom = h - f.fromMm;
-      out.push(<g key={`front-${i}`}>{doorPanels(c, top, bottom, f.doors, `f${i}`)}</g>);
-      out.push(<g key={`mech-${i}`}>{openingMark(c, top, bottom)}</g>);
+      out.push(
+        <g key={`front-${i}`} transform={openX ? `translate(${openX} 0)` : undefined}>
+          {doorPanels(sub, top, bottom, f.doors, `f${i}`)}
+          {openingMark(sub, top, bottom)}
+        </g>,
+      );
       /* הקו שבין חזית לחזית — בלעדיו שתי דלתות נראות כדלת אחת */
       if (top > 0.5) {
         out.push(<line key={`fedge-${i}`} x1={0} y1={top} x2={w} y2={top} strokeWidth={t} />);
@@ -518,13 +555,17 @@ function zonedContainer(c: Ctx) {
 }
 
 /**
+ * רוחב החלק החסום בפינה מתה, או 0 כשאין פינה כזאת.
+ * אותו חשבון עצמו משרת את החזית ואת התלת־ממד.
+ */
+/**
  * פינה מתה: החלק שנחסם על ידי הארון שעל הקיר הסמוך מסומן
  * בקווקוו, והחזית יושבת רק על החלק הנגיש.
  */
 function blindCorner(c: Ctx) {
   const { w, h, t } = c;
-  const blind = Math.min(Math.max(c.blindMm, w * 0.1), w * 0.7);
-  const atStart = c.glyph === 'blindStart';
+  const blind = blindWidth(c);
+  const atStart = blindSide(c) === 'blindStart';
   const blindX = atStart ? 0 : w - blind;
   const openX = atStart ? blind : 0;
   const openW = w - blind;
@@ -599,6 +640,11 @@ function doorPanelsIn(
   ];
 }
 
+/** רוחב הפינה המתה בציור, במידות הציור. */
+function blindWidth(c: Ctx): number {
+  return blindWidthMm({ corner: c.corner, glyph: c.glyph, blindMm: c.blindMm, widthMm: c.w });
+}
+
 /** קולבים מתחת למוט, בגובה נתון. */
 function hangersAt(w: number, rodY: number, drop: number, t: number, key: string) {
   return [0.28, 0.5, 0.72].map((f, i) => (
@@ -659,8 +705,20 @@ function doorPanels(c: Ctx, top: number, bottom: number, n: number, key = '') {
     const inset = panelW * 0.12;
     const x =
       n === 1 ? w - inset : i % 2 === 0 ? panelW * (i + 1) - inset : panelW * i + inset;
+    /*
+     * הסימון הזה הוא גם צד הפתיחה וגם הידית, ולכן הוא תמיד מצויר:
+     * מי שביקש פתיחה בלחיצה עדיין צריך לדעת מאיזה צד נפתחת הדלת.
+     * מה שמשתנה הוא העובי — ידית אמיתית נראית ידית.
+     */
     out.push(
-      <line key={`${key}h${i}`} x1={x} y1={hy1} x2={x} y2={hy2} strokeWidth={t} />,
+      <line
+        key={`${key}h${i}`}
+        x1={x}
+        y1={c.handles ? top + zoneH * 0.36 : hy1}
+        x2={x}
+        y2={c.handles ? top + zoneH * 0.64 : hy2}
+        strokeWidth={c.handles ? t * 2.6 : t}
+      />,
     );
   }
   return out;
@@ -781,11 +839,5 @@ function drawerGrid(
 
 /** קולבים מתחת למוט תלייה. */
 function hangers(w: number, h: number, rodY: number, t: number, key = '') {
-  return [0.28, 0.5, 0.72].map((f, i) => (
-    <path
-      key={`hg${key}${i}`}
-      d={`M ${w * f} ${h * rodY} l 0 ${h * 0.06} m ${-w * 0.09} ${h * 0.12} L ${w * f} ${h * (rodY + 0.06)} l ${w * 0.09} ${h * 0.12} Z`}
-      strokeWidth={t}
-    />
-  ));
+  return hangersAt(w, h * rodY, h * 0.3, t, key);
 }

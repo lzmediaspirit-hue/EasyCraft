@@ -1,4 +1,4 @@
-import { alongWallMm } from '../../db/types';
+import { alongWallMm, bodyHeightMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 import { featureBiteMm, featureDef } from '../projects/wallFeatures';
 import { MAX_BODY_MM } from '../../catalog/zones';
@@ -98,7 +98,7 @@ export function analyzeWall(
 
   // ארון גבוה מדי — קשה להרים, להוביל ולהתקין
   for (const u of units) {
-    const bodyH = u.heightMm - (u.socleMm ?? 0);
+    const bodyH = bodyHeightMm(u);
     if (bodyH > MAX_BODY_MM) {
       warnings.push({
         text: `${u.name} בגובה ${cm(bodyH)} ס"מ — מעל ${cm(MAX_BODY_MM)} עדיף לפצל`,

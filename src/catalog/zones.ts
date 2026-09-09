@@ -1,6 +1,33 @@
 import { autoShelves } from './CabinetGlyph';
 import { glyphDef } from './glyphList';
-import type { PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../db/types';
+import type { CornerKind, PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../db/types';
+
+/** מה שצריך לדעת על ארגז כדי לחשב את הפינה המתה שלו. */
+type BlindSource = Partial<Pick<PlacedUnit, 'corner' | 'glyph' | 'blindMm'>> & { widthMm: number };
+
+/**
+ * רוחב החלק החסום בפינה מתה.
+ *
+ * זו המידה שהחזית נעצרת לפניה, שלוח הסתימה מכסה, ושיוצאת משטח
+ * הדלתות בחישוב — ולכן היא נמדדת פעם אחת בלבד. פינה מתה שנמדדה
+ * אחרת בציור ואחרת בתמחור היא ארון שנראה נכון ומתומחר לא נכון.
+ *
+ * הצד נקבע לפי השדה, ולפי הצורה כשאין שדה: ארגזים ישנים תוארו
+ * בצורה בלבד. הרוחב מוגבל לרצועה הגיונית — פחות מעשירית הארגז אין
+ * מה לסתום, ויותר משני שלישים כבר לא נשאר פתח.
+ */
+export function blindWidthMm(u: BlindSource): number {
+  if (!blindSide(u)) return 0;
+  return Math.min(Math.max(u.blindMm ?? 300, u.widthMm * 0.1), u.widthMm * 0.7);
+}
+
+/** מאיזה קצה הפינה המתה חסומה, או `null` כשאין פינה מתה. */
+export function blindSide(
+  u: Partial<Pick<PlacedUnit, 'corner' | 'glyph'>>,
+): 'blindStart' | 'blindEnd' | null {
+  const side: CornerKind | string | undefined = u.corner ?? u.glyph;
+  return side === 'blindStart' || side === 'blindEnd' ? side : null;
+}
 
 /**
  * אזורי הפנים של ארון.
@@ -395,6 +422,8 @@ export function unitFronts(
    */
   const bands = zoneBands(unitZones(u), bodyMm);
   const out: { fromMm: number; toMm: number; doors: number }[] = [];
+  /** לאיזו חזית נבחר מספר הדלתות באזור עצמו, ולא נגזר ממנו */
+  const own: boolean[] = [];
   for (const { zone: z, top, bottom } of bands) {
     // zoneBands מודד מלמעלה; החזיתות נמדדות מלמטה, כמו האזורים
     const from = bodyMm - bottom;
@@ -411,13 +440,19 @@ export function unitFronts(
      */
     if (!outerDrawers && !open) {
       if (last && !z.frontSplit && Math.abs(last.toMm - from) < 1) last.toMm = to;
-      else out.push({ fromMm: from, toMm: to, doors: Math.max(z.doors ?? 1, 1) });
+      else {
+        out.push({ fromMm: from, toMm: to, doors: Math.max(z.doors ?? 1, 1) });
+        own.push(z.doors != null);
+      }
     }
   }
   /*
    * חזית אחת = הארון כולו, ואז מספר הדלתות הוא של הארגז — זה
    * המספר שנבחר בשורת "דלתות", והוא מה שהנגר מצפה לו.
+   *
+   * אלא אם האזור ביקש מספר משלו: מי שכתב "דלת אחת" על התא הזה
+   * התכוון לדלת אחת, גם כשבסוף רק הוא קיבל חזית.
    */
-  if (out.length === 1) out[0].doors = doors;
+  if (out.length === 1 && !own[0]) out[0].doors = doors;
   return out;
 }

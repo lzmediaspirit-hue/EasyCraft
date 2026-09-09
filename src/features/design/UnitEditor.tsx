@@ -14,7 +14,7 @@ import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { BookmarkIcon, CloseIcon, PencilIcon } from '../../ui/icons';
-import { DRAWER_BOXES } from '../../db/types';
+import { DRAWER_BOXES, bodyHeightMm } from '../../db/types';
 import type {
   ExposedSides,
   LedSpot,
@@ -126,8 +126,7 @@ export function UnitEditor({
   const locked = unit.floorLocked ?? false;
   const exposed = unit.exposed ?? {};
   const glassSides = unit.glassSides ?? {};
-  // הרגליים אינן חלק מהגוף, ולכן האזהרה נמדדת בלעדיהן
-  const bodyH = unit.heightMm - (unit.socleMm ?? 0);
+  const bodyH = bodyHeightMm(unit);
   const led = unit.led ?? [];
   const container = isContainer(unit.glyph);
   /*

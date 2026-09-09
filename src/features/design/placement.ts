@@ -37,7 +37,7 @@ export interface UnitBox {
  * תשעים מעלות ממנו. הסיבוב של הארגז מתווסף לזה, ולכן ארבעת המצבים
  * הם חשבון אחד ולא ארבעה מקרים.
  */
-export function wallFacingDeg(headingDeg: number, rotationDeg = 0): number {
+function wallFacingDeg(headingDeg: number, rotationDeg = 0): number {
   return headingDeg + 90 + rotationDeg;
 }
 

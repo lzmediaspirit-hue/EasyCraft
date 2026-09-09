@@ -409,6 +409,8 @@ export function WallIso({
             key={f.key}
             points={f.points}
             fill={f.fill}
+            /* זכוכית: רואים דרכה את מה שכבר צויר מאחוריה */
+            fillOpacity={f.glass ? 0.42 : undefined}
             /*
               בהצגה הקו בין לוח ללוח נעלם: הוא מה שהופך רהיט לשרטוט.
               נשאר קו דק מאוד בגוון המשטח עצמו, כדי שפאה בהירה על
