@@ -23,7 +23,7 @@ import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
 import { orderedStats, viewOptions, useViewOptions } from './viewOptions';
 import { useDesignView } from './designView';
-import { StatGrid, statTile } from './StatGrid';
+import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatGrid';
 import { DesignToolbar } from './DesignToolbar';
 import type { SheetName } from './sheets';
 import { history, useHistory } from './history';
@@ -37,6 +37,8 @@ import {
   CalcIcon,
   ChevronIcon,
   CopyIcon,
+  EyeIcon,
+  EyeOffIcon,
   PlusIcon,
   SlidersIcon,
   TrashIcon,
@@ -68,7 +70,8 @@ export function DesignScreen({
 }) {
   /* איך מסתכלים על הקיר — שבעה מצבים שהם דבר אחד */
   const design = useDesignView();
-  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen } = design.view;
+  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen, noUppers, roomStats } =
+    design.view;
 
   const [wallIndex, setWallIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -167,6 +170,21 @@ export function DesignScreen({
     return [...seen.values()];
   }, [walls, wall, allUnits]);
   const analysis = wall ? analyzeWall(wall, units, clashing) : null;
+  /*
+   * המקור למחוונים: הקיר שעובדים עליו, או כל הקירות יחד. שניהם
+   * נבנים מאותה בדיקה, ולכן אין סיכוי שהמספרים יסתרו זה את זה.
+   */
+  const statSource =
+    wall && analysis
+      ? roomStats
+        ? roomStatsOf(walls ?? [], allUnits ?? [], (w) =>
+            analyzeWall(
+              w,
+              (allUnits ?? []).filter((u) => u.wallId === w.id),
+            ),
+          )
+        : wallStats(wall, units, analysis)
+      : null;
 
   async function addItem(item: CatalogItem) {
     if (!wall) return;
@@ -222,6 +240,14 @@ export function DesignScreen({
     if (copy) setSelectedId(copy.id);
   }
 
+  /** מחזיר לתצוגה את כל מה שהוסתר — צעד אחד, ולא ארגז אחרי ארגז. */
+  async function showHidden() {
+    const back = (allUnits ?? []).filter((u) => u.hidden);
+    if (!back.length) return;
+    await history.capture(projectId, 'show-hidden');
+    for (const u of back) await unitsRepo.update(u.id, { hidden: false });
+  }
+
   async function removeUnit(id: string) {
     await history.capture(projectId, `del:${id}`);
     await unitsRepo.remove(id);
@@ -261,6 +287,7 @@ export function DesignScreen({
         projectId={projectId}
         onCenter={centerWall}
         onClearSelection={() => setSelectedId(null)}
+        onShowHidden={showHidden}
       />
 
       {/*
@@ -300,6 +327,7 @@ export function DesignScreen({
                   : undefined
               }
               inside={inside}
+              noUppers={noUppers}
               finishHex={finishHex ?? {}}
             />
           ) : (
@@ -318,6 +346,7 @@ export function DesignScreen({
               setSelectedId(id);
             }}
             inside={inside}
+            noUppers={noUppers}
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? {}}
@@ -372,6 +401,24 @@ export function DesignScreen({
           <span className="h-1.5 w-12 rounded-full bg-stone-300" />
         </div>
         <span className="absolute end-4 flex items-center gap-1.5">
+          {/*
+            הסתרה, ולא מחיקה: ארגז מוסתר ממשיך להיספר בחומרים,
+            במחיר ובניסור — הוא פשוט יורד מהתמונה כדי שאפשר יהיה
+            לראות מה מאחוריו.
+          */}
+          <button
+            onClick={() => patchUnit(selected.id, { hidden: !selected.hidden }, `hide:${selected.id}`)}
+            aria-label={selected.hidden ? 'החזרת הארגז לתצוגה' : 'הסתרת הארגז מהתצוגה'}
+            aria-pressed={!!selected.hidden}
+            title={selected.hidden ? 'הארגז מוסתר — נספר, אבל לא מצויר' : 'הורדה מהתמונה בלי למחוק'}
+            className={`grid size-9 place-items-center rounded-full shadow-sm ring-1 transition-colors ${
+              selected.hidden
+                ? 'bg-oak-600 text-white ring-oak-600'
+                : 'bg-white text-stone-600 ring-stone-200 hover:text-oak-700'
+            }`}
+          >
+            {selected.hidden ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+          </button>
           <button
             onClick={duplicateSelected}
             aria-label="שכפול הארגז"
@@ -498,13 +545,34 @@ export function DesignScreen({
               למקום אחר. לכל נגר יש מספר אחד שהוא מסתכל עליו קודם,
               והוא צריך להיות ראשון — לא שלישי מפני שכך נכתב בקוד.
             */}
-            {statsOpen && analysis && role === 'manager' && (
-              <StatGrid
-                order={orderedStats(view)}
-                shown={(key) => !!view[key]}
-                render={(key) => statTile(key, wall, units, analysis)}
-                onReorder={(next) => viewOptions.setStatOrder(next)}
-              />
+            {statsOpen && statSource && role === 'manager' && (
+              <>
+                {/*
+                  אותם שישה מחוונים עונים על שתי שאלות שונות: מה יש
+                  על הקיר הזה, ומה יש בחדר. מי שמתמחר עבודה שלמה
+                  צריך את השנייה, ומי שמסדר קיר — את הראשונה.
+                */}
+                <div className="mb-2 flex gap-0.5 rounded-lg bg-stone-200/70 p-0.5">
+                  {([false, true] as const).map((room) => (
+                    <button
+                      key={String(room)}
+                      onClick={() => design.set('roomStats', room)}
+                      aria-pressed={roomStats === room}
+                      className={`flex-1 rounded-md py-1 text-[11px] font-medium transition-colors ${
+                        roomStats === room ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
+                      }`}
+                    >
+                      {room ? 'החדר כולו' : 'הקיר הזה'}
+                    </button>
+                  ))}
+                </div>
+                <StatGrid
+                  order={orderedStats(view)}
+                  shown={(key) => !!view[key]}
+                  render={(key) => statTile(key, statSource)}
+                  onReorder={(next) => viewOptions.setStatOrder(next)}
+                />
+              </>
             )}
 
             {/*
@@ -672,6 +740,7 @@ export function DesignScreen({
       {sheet === 'plan' && (
         <Sheet title="מבט על החדר" onClose={closeSheet} tall>
           <PlanView
+            noUppers={noUppers}
             walls={walls}
             units={allUnits ?? []}
             activeWallId={wall.id}

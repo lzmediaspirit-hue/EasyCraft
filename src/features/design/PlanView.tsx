@@ -1,4 +1,5 @@
 import { buildPlan, planUnits, DEFAULT_TURN_DEG } from './plan';
+import { outOfSight } from './designView';
 import { wallName } from '../projects/wallLayouts';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
@@ -21,6 +22,7 @@ export function PlanView({
   onChangeWall,
   onAddWall,
   onRemoveWall,
+  noUppers,
 }: {
   walls: Wall[];
   units: PlacedUnit[];
@@ -30,6 +32,8 @@ export function PlanView({
   /** הוספת קיר בסוף השרשרת — חדר לא תמיד מסתיים בארבעה קירות */
   onAddWall: () => void;
   onRemoveWall: (id: string) => void;
+  /** העליונים יורדים מהתמונה */
+  noUppers?: boolean;
 }) {
   const plan = buildPlan(walls, units);
   const boxes = planUnits(plan, units);
@@ -98,7 +102,7 @@ export function PlanView({
             אחר מסומן באדום — זו התנגשות שבמבט חזית לא רואים בכלל.
           */}
           {/* ארגז מוסתר עדיין נמדד ונבדק להתנגשות, רק אינו מצויר */}
-          {boxes.filter((b) => !b.unit.hidden).map((b) => (
+          {boxes.filter((b) => !outOfSight(b.unit, noUppers)).map((b) => (
             <g key={b.unit.id} pointerEvents="none">
               <polygon
                 data-plan-unit={b.unit.id}

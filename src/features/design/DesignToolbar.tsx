@@ -10,6 +10,7 @@ import {
   CubeIcon,
   DepthIcon,
   EyeIcon,
+  EyeOffIcon,
   FrontsIcon,
   InsideIcon,
   NestIcon,
@@ -57,6 +58,7 @@ export function DesignToolbar({
   projectId,
   onCenter,
   onClearSelection,
+  onShowHidden,
 }: {
   project: Project;
   walls: Wall[];
@@ -77,8 +79,12 @@ export function DesignToolbar({
   projectId: string;
   onCenter: () => void;
   onClearSelection: () => void;
+  /** מחזיר לתצוגה את כל הארגזים שהוסתרו בפרויקט */
+  onShowHidden: () => void;
 }) {
-  const { iso, inside, measure, rulerPair, rulerAxis, wallsOpen, toolsOpen } = design.view;
+  const { iso, inside, measure, rulerPair, rulerAxis, wallsOpen, toolsOpen, noUppers } =
+    design.view;
+  const hiddenCount = allUnits.filter((u) => u.hidden).length;
 
   return (
     <ScreenHeader
@@ -193,6 +199,31 @@ export function DesignToolbar({
           icon={<PlanIcon className="size-4" />}
           label="מבט על"
         />
+        {/*
+          העליונים יורדים מהתמונה — התנועה שנגר עושה ביד על שרטוט
+          כדי לראות מה קורה מתחת לשורה העליונה. זו הסתכלות ולא
+          שינוי: הארגזים ממשיכים להיספר בכל מקום אחר.
+        */}
+        <Tool
+          active={noUppers}
+          onClick={() => design.toggle('noUppers')}
+          icon={<EyeOffIcon className="size-4" />}
+          label="בלי עליונים"
+          title="מוריד מהתמונה את הארגזים התלויים"
+        />
+        {/*
+          ארגזים שהוסתרו אחד־אחד. הכפתור מופיע רק כשיש כאלה, וגם
+          אומר כמה: ארגז שנעלם ואי אפשר להחזיר הוא ארגז שאבד.
+        */}
+        {hiddenCount > 0 && (
+          <Tool
+            active
+            onClick={onShowHidden}
+            icon={<EyeIcon className="size-4" />}
+            label={`מוסתרים ${hiddenCount}`}
+            title="החזרת כל הארגזים המוסתרים לתצוגה"
+          />
+        )}
         {/*
           לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
           עומק וכיבוי. קודם היה בורר ציר בשורה נפרדת שגזל מקום

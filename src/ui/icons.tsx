@@ -357,6 +357,19 @@ export const EyeIcon = ({ className = 'size-5' }: P) => (
   </svg>
 );
 
+/**
+ * הסתרה — אותה עין, עם קו שחוצה אותה.
+ * הארגז לא נמחק ולא השתנה; רק אי אפשר לראות אותו כרגע.
+ */
+export const EyeOffIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M2.5 12S6 5.5 12 5.5c1.5 0 2.8.4 4 1M19.2 8.6c1.5 1.6 2.3 3.4 2.3 3.4S18 18.5 12 18.5c-1.7 0-3.2-.5-4.5-1.2" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    <path d="M4 20 20 4" />
+  </svg>
+);
+
 /** גוונים — לוח צבעים, כי זו הבחירה שהלקוח עושה בעיניים. */
 export const PaletteIcon = ({ className = 'size-5' }: P) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"

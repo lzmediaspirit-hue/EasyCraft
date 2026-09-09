@@ -5,6 +5,7 @@ import { glyphDef } from '../../catalog/glyphList';
 import { shade } from '../../ui/color';
 import { MATERIAL } from '../../catalog/standards';
 import { buildPlan, cornerZones } from './plan';
+import { outOfSight } from './designView';
 import type { PlanWall } from './plan';
 import { wallName } from '../projects/wallLayouts';
 import { featureBiteMm, featureDef } from '../projects/wallFeatures';
@@ -242,6 +243,7 @@ export function WallIso({
   onMoveTo,
   onRotate,
   inside,
+  noUppers,
   finishHex,
   present = false,
 }: {
@@ -269,6 +271,8 @@ export function WallIso({
   onRotate?: (id: string, deg: 0 | 90 | 180 | 270) => void;
   /** חזיתות מוסתרות — רואים את הגוף והמדפים */
   inside: boolean;
+  /** העליונים יורדים מהתמונה */
+  noUppers?: boolean;
   finishHex: Record<string, string>;
   /**
    * תצוגת הצגה: אותו חדר, בלי שרטוט.
@@ -487,7 +491,7 @@ export function WallIso({
     }
 
     /* ארגז מוסתר אינו מצויר כאן, אבל נשאר בחומרים, במחיר ובניסור */
-    for (const u of units.filter((x) => x.wallId === w0.id && !x.hidden)) {
+    for (const u of units.filter((x) => x.wallId === w0.id && !outOfSight(x, noUppers))) {
       const frontId = inside ? u.carcassFinishId : (u.frontFinishId ?? u.finishId);
       const tone = (frontId && finishHex[frontId]) || '#d9c3a5';
       const carcassTone = u.carcassFinishId ? (finishHex[u.carcassFinishId] ?? '#e8dcc8') : '#e8dcc8';
@@ -808,7 +812,7 @@ export function WallIso({
    */
   /* המשתנים נכתבים בתוך הלולאה; כאן הם כבר סופיים */
   const spinAt: { x: number; y: number } | null = spin;
-  const selectedUnit = units.find((u) => u.id === selectedId && !u.hidden) ?? null;
+  const selectedUnit = units.find((u) => u.id === selectedId && !outOfSight(u, noUppers)) ?? null;
 
   /*
    * הזזת ארון על המסך, בחזרה למידות של החדר.

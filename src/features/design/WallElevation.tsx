@@ -9,6 +9,7 @@ import { cm } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
 import { SNAP, SNAP_PX, collides, snapX, snapY } from './snapping';
 import type { CornerZones } from './plan';
+import { outOfSight } from './designView';
 import { alongWallMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 
@@ -64,6 +65,8 @@ type Props = {
    * להזיז ארגז בטעות.
    */
   work?: boolean;
+  /** העליונים יורדים מהתמונה */
+  noUppers?: boolean;
 };
 
 /**
@@ -85,6 +88,7 @@ export function WallElevation({
   rulerPair,
   rulerAxis = 'w',
   work,
+  noUppers,
 }: Props) {
   /*
    * חיפוי קיר מצויר ראשון: הוא מכסה את הקיר, והארגזים עומדים לפניו.
@@ -97,7 +101,7 @@ export function WallElevation({
    * בקיר, עדיין חוסם גרירה, ועדיין נספר בחומרים ובניסור. ההסתרה
    * היא של העין בלבד.
    */
-  const shown = units.filter((u) => !u.hidden);
+  const shown = units.filter((u) => !outOfSight(u, noUppers));
 
   const svgRef = useRef<SVGSVGElement>(null);
 
