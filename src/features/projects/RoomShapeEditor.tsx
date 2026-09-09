@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { clamp } from '../../ui/units';
 import { cm, count, unitLabel } from '../../ui/units';
 import {
   CloseIcon,
@@ -212,8 +213,8 @@ export function RoomShapeEditor({
       }
     : { x: AREA_MM / 2, y: AREA_MM / 2 };
   const view = {
-    x: Math.min(Math.max(focus.x - span / 2, 0), Math.max(AREA_MM - span, 0)),
-    y: Math.min(Math.max(focus.y - span / 2, 0), Math.max(AREA_MM - span, 0)),
+    x: clamp(focus.x - span / 2, 0, Math.max(AREA_MM - span, 0)),
+    y: clamp(focus.y - span / 2, 0, Math.max(AREA_MM - span, 0)),
   };
 
   return (

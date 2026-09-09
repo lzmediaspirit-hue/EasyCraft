@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { clamp } from '../../ui/units';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { EqualizeIcon, LockIcon, UnlockIcon } from '../../ui/icons';
@@ -46,7 +47,7 @@ export function ShelfGaps({
 
     const fixed = current.reduce((sum, g, i) => (free[i] ? sum : sum + (i === index ? 0 : g)), 0);
     const maxForEdited = heightMm - fixed - 20 * freeCount;
-    const clamped = Math.min(Math.max(value, 20), Math.max(maxForEdited, 20));
+    const clamped = clamp(value, 20, Math.max(maxForEdited, 20));
 
     const rest = heightMm - fixed - clamped;
     const freeTotal = current.reduce((sum, g, i) => (free[i] ? sum + g : sum), 0);

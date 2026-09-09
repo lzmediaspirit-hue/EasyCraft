@@ -1,14 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { COS30, DEFAULT_VIEW, MAX_RISE, MIN_RISE, ORBIT_SLOP } from './isoMath';
+import { DEFAULT_VIEW, MAX_RISE, MIN_RISE, ORBIT_SLOP, unitScreenBox } from './isoMath';
 import type { IsoView } from './isoMath';
 import { buildScene } from './isoScene';
-import { buildPlan, cornerZones } from './plan';
+import { buildPlan } from './plan';
 import { outOfSight } from './designView';
-import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
-import { blocked } from './collision';
-import { unitBox } from './placement';
 import { LockIcon, UnlockIcon } from '../../ui/icons';
-import { alongWallMm } from '../../db/types';
+import { solveDrag } from './dragSolve';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -231,29 +228,7 @@ export function WallIso({
   const spinAt: { x: number; y: number } | null = spin;
   const selectedUnit = units.find((u) => u.id === selectedId && !outOfSight(u, noUppers)) ?? null;
 
-  /**
-   * התיבה שארגז תופס על המסך.
-   *
-   * הכפתורים יושבים עליה, ולכן היא נמדדת מהפאות שכבר צוירו ולא
-   * מחושבת שוב: מה שרואים הוא מה שהכפתור נצמד אליו.
-   */
-  function screenBox(id: string): { x0: number; y0: number; x1: number; y1: number } | null {
-    let x0 = Infinity;
-    let y0 = Infinity;
-    let x1 = -Infinity;
-    let y1 = -Infinity;
-    for (const f of faces) {
-      if (f.unitId !== id) continue;
-      for (const pt of f.points.split(' ')) {
-        const [px, py] = pt.split(',').map(Number);
-        if (px < x0) x0 = px;
-        if (px > x1) x1 = px;
-        if (py < y0) y0 = py;
-        if (py > y1) y1 = py;
-      }
-    }
-    return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null;
-  }
+  const screenBox = (id: string) => unitScreenBox(faces, id);
 
   /** כפתור עגול על הציור, במידות שנשארות אמיתיות בכל זום. */
   const ringButton = (
@@ -295,119 +270,37 @@ export function WallIso({
     u.free ? { free: u.free } : { xMm: u.xMm, yMm: u.yMm, wallId: u.wallId };
 
   /*
-   * הזזת ארון על המסך, בחזרה למידות של החדר.
+   * גרירה: מהאצבע אל מקום בחדר.
    *
-   * ארגז על קיר זז לאורך הקיר ולגובה; אי זז על הרצפה, בשני הצירים
-   * שלה. אלה שתי מערכות שונות, ולכן שני פתרונות — אבל שניהם אותו
-   * חשבון: היפוך המטריצה שההיטל מפעיל על התנועה.
+   * החשבון עצמו יושב ב-dragSolve, כי הוא מתמטיקה ולא ממשק. כאן
+   * נשאר רק מה ששייך למגע — מאיפה התחילה התנועה, ומתי היא נחשבת
+   * גרירה ולא נגיעה — ושליחת התוצאה החוצה.
    */
   function moveDrag(e: React.PointerEvent) {
     const d = drag.current;
     if (!d || !onMoveTo) return;
-    const mdx = (e.clientX - d.startX) / pxPerUnit;
-    const mdy = (e.clientY - d.startY) / pxPerUnit;
     if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < ORBIT_SLOP) return;
     d.moved = true;
 
-    const yaw = (shown.yawDeg * Math.PI) / 180;
-    const c = Math.cos(yaw);
-    const s2 = Math.sin(yaw);
-    const tol = Math.max(SNAP, SNAP_PX / pxPerUnit);
-    const step = (v: number) => Math.round(v / 10) * 10;
-
-    /* אי: התנועה על הרצפה נפתרת בשני הצירים, ותמיד יש לה פתרון */
-    if (d.from.free) {
-      const det = 2 * COS30 * shown.rise;
-      const dx = ((c - s2) * shown.rise * mdx + (s2 + c) * COS30 * mdy) / det;
-      const dz = (-(c + s2) * shown.rise * mdx + (c - s2) * COS30 * mdy) / det;
-      const next = {
-        ...d.from.free,
-        xMm: step(d.from.free.xMm + dx),
-        zMm: step(d.from.free.zMm + dz),
-      };
-      const box = unitBox({ ...d.from, free: next }, plan);
-      if (box && !blocked(d.from, box, units, plan)) onMoveTo(d.from.id, { free: next });
-      return;
-    }
-
-    const from = plan.find((q) => q.wall.id === d.from.wallId);
-    if (!from) return;
-    // הכיוון של "מטר אחד לאורך הקיר" על המסך, בזווית המבט הנוכחית
-    const theta = ((from.headingDeg + shown.yawDeg) * Math.PI) / 180;
-    const ax = (Math.cos(theta) - Math.sin(theta)) * COS30;
-    const ay = (Math.cos(theta) + Math.sin(theta)) * shown.rise;
-    // קיר שנראה כמעט מקצהו אינו נותן תשובה לאורך — עדיף לא לנחש
-    const alongMm = Math.abs(ax) < 0.05 ? 0 : mdx / ax;
-    const upMm = ay * alongMm - mdy;
-
-    /*
-     * מעבר לקיר השכן: הגרירה נמדדת תמיד מנקודת המוצא, ולכן היא
-     * הפיכה — מי שגרר רחוק מדי חוזר וממשיך מהמקום שהיה.
-     */
-    let target = from.wall;
-    let x = d.from.xMm + alongMm;
-    const i = walls.findIndex((w) => w.id === d.from.wallId);
-    if (x < -80 && i > 0) {
-      target = walls[i - 1];
-      x += target.lengthMm;
-    } else if (x > from.wall.lengthMm + 80 && i < walls.length - 1) {
-      target = walls[i + 1];
-      x -= from.wall.lengthMm;
-    }
-
-    const mates = units.filter((u) => u.wallId === target.id);
-    const nx = snapX(x, d.from, mates, target.lengthMm, cornerZones(walls, target, units), tol);
-    const ny = d.from.floorLocked
-      ? d.from.yMm
-      : snapY(d.from.yMm + upMm, d.from, mates, target.heightMm, tol, nx);
-
-    /*
-     * חוקי הפיזיקה של החדר: נגיעה והכלה מותרות, חדירה חלקית לא.
-     * ארגז שכבר חודר במקום שהוא עומד בו הוא היוצא מן הכלל — דווקא
-     * ממנו צריך להיות אפשר לצאת.
-     */
-    const at = (px: number, py: number) =>
-      unitBox({ ...d.from, wallId: target.id, xMm: px, yMm: py }, plan);
-    const here = unitBox(d.from, plan);
-    const stuck = !!here && blocked(d.from, here, units, plan);
-    const ok = (px: number, py: number) => {
-      const b = at(px, py);
-      return !!b && (stuck || !blocked(d.from, b, units, plan));
-    };
-    /*
-     * ארגז שנתקל בשכן נעצר עליו, ולא נשאר במקום.
-     *
-     * קודם הוא פשוט לא זז — מי שגרר לתוך ארון אחר קיבל ארגז
-     * שנתקע באוויר בלי סיבה נראית. עכשיו נבחרת המידה הקרובה ביותר
-     * שבה הוא באמת נכנס: זו בדיוק הדופן של השכן, וזו גם התנועה
-     * שהנגר עושה בשטח — דוחף עד שנוגע.
-     */
-    const stops = [nx];
-    for (const other of mates) {
-      if (other.id === d.from.id || other.level !== d.from.level) continue;
-      stops.push(other.xMm + alongWallMm(other), other.xMm - alongWallMm(d.from));
-    }
-    const near = stops
-      .map((v) => Math.round(Math.min(Math.max(v, 0), Math.max(target.lengthMm - alongWallMm(d.from), 0))))
-      .sort((a, b) => Math.abs(a - nx) - Math.abs(b - nx));
-    const slid = near.find((v) => ok(v, ny)) ?? near.find((v) => ok(v, d.from.yMm));
-    const [fx, fy] = ok(nx, ny)
-      ? [nx, ny]
-      : slid !== undefined && ok(slid, ny)
-        ? [slid, ny]
-        : slid !== undefined
-          ? [slid, d.from.yMm]
-          : ok(d.from.xMm, ny)
-            ? [d.from.xMm, ny]
-            : [d.from.xMm, d.from.yMm];
-    onMoveTo(d.from.id, { xMm: fx, yMm: fy, wallId: target.id });
+    const next = solveDrag({
+      from: d.from,
+      dxMm: (e.clientX - d.startX) / pxPerUnit,
+      dyMm: (e.clientY - d.startY) / pxPerUnit,
+      view: shown,
+      plan,
+      walls,
+      units,
+      pxPerUnit,
+    });
+    if (!next) return;
+    onMoveTo(d.from.id, next);
 
     /*
      * קבוצה זזה יחד, באותו הפרש בדיוק. מה שנשמר הוא היחס בין
      * הארגזים — פינה שנבנתה נכון נשארת נכונה גם אחרי שהוזזה.
      */
-    const dx = fx - d.from.xMm;
-    const dy = fy - d.from.yMm;
+    const dx = (next.xMm ?? d.from.xMm) - d.from.xMm;
+    const dy = (next.yMm ?? d.from.yMm) - d.from.yMm;
     if (!placing || (!dx && !dy)) return;
     for (const mate of placing.from) {
       if (mate.id === d.from.id || mate.free) continue;

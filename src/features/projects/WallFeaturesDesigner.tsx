@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { clamp } from '../../ui/units';
 import {
   FEATURE_DEFS,
   HEIGHT_REF_LABEL,
@@ -101,8 +102,8 @@ export function WallFeaturesDesigner({
       return hit ?? Math.round(v / STEP) * STEP;
     };
     onPatch(d.id, {
-      xMm: Math.min(Math.max(snap(rawX, [0, maxX]), 0), maxX),
-      yMm: Math.min(Math.max(snap(rawY, [0, maxY]), 0), maxY),
+      xMm: clamp(snap(rawX, [0, maxX]), 0, maxX),
+      yMm: clamp(snap(rawY, [0, maxY]), 0, maxY),
     });
   }
 

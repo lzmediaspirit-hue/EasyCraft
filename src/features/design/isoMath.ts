@@ -1,4 +1,5 @@
 import { shade } from '../../ui/color';
+import { clamp } from '../../ui/units';
 import type { PlanWall } from './plan';
 
 /**
@@ -78,7 +79,7 @@ export function projector(view: IsoView) {
    * הופך ללוח שחור מצד אחד.
    */
   const lit = (nx: number, ny: number, nz: number): number =>
-    Math.min(Math.max(0.78 + 0.34 * ny + 0.24 * (nx * sin + nz * cos), 0.66), 1.14);
+    clamp(0.78 + 0.34 * ny + 0.24 * (nx * sin + nz * cos), 0.66, 1.14);
   return { project, toward, depth, lit };
 }
 
@@ -440,6 +441,33 @@ export function orderSolids(solids: Solid[], v: View): Solid[] {
     if (!moved) break;
   }
   return sorted.map((i) => items[i].s);
+}
+
+/**
+ * התיבה שארגז תופס על המסך.
+ *
+ * נמדדת מהפאות שכבר צוירו ולא מחושבת שוב מהגיאומטריה: מה שרואים
+ * הוא מה שהכפתורים נצמדים אליו, גם כשחלק מהארגז מוסתר.
+ */
+export function unitScreenBox(
+  faces: Face[],
+  unitId: string,
+): { x0: number; y0: number; x1: number; y1: number } | null {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const f of faces) {
+    if (f.unitId !== unitId) continue;
+    for (const pt of f.points.split(' ')) {
+      const [px, py] = pt.split(',').map(Number);
+      if (px < x0) x0 = px;
+      if (px > x1) x1 = px;
+      if (py < y0) y0 = py;
+      if (py > y1) y1 = py;
+    }
+  }
+  return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null;
 }
 
 /**

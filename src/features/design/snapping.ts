@@ -1,4 +1,5 @@
 import { cornerDepth } from './plan';
+import { clamp } from '../../ui/units';
 import type { CornerZones } from './plan';
 import { alongWallMm } from '../../db/types';
 import type { PlacedUnit } from '../../db/types';
@@ -77,7 +78,7 @@ export function snapX(
     targets.push(other.xMm + alongWallMm(other), other.xMm - alongWallMm(unit));
   }
   const snapped = nearest(x, targets, tol);
-  return Math.round(Math.min(Math.max(snapped, min), max));
+  return Math.round(clamp(snapped, min, max));
 }
 
 /**
@@ -113,6 +114,6 @@ export function snapY(
     if (sameRun) rest = Math.max(rest, other.yMm + other.heightMm);
   }
   const snapped = nearest(y, targets, tol);
-  const maxY = Math.min(Math.max(ceiling, rest), Math.max(wallHeight - 50, 0));
-  return Math.round(Math.min(Math.max(snapped, 0), Math.max(maxY, 0)));
+  const maxY = clamp(ceiling, rest, Math.max(wallHeight - 50, 0));
+  return Math.round(clamp(snapped, 0, Math.max(maxY, 0)));
 }

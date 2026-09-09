@@ -9,6 +9,17 @@ import { readPref, writePref } from './prefs';
  * העדפה של המשתמש, ולכן היא לא נוגעת באחסון ולא בחישוב.
  */
 
+/**
+ * מספר בתוך תחום.
+ *
+ * `Math.min(Math.max(...))` חזר בעשרה מקומות ובכל אחד היה צריך
+ * לקרוא פעמיים כדי לדעת מי הגבול העליון ומי התחתון. כאן זה נקרא
+ * פעם אחת, בשם.
+ */
+export function clamp(value: number, lo: number, hi: number): number {
+  return Math.min(Math.max(value, lo), hi);
+}
+
 export type DisplayUnit = 'cm' | 'mm';
 
 const KEY = 'easycraft.unit';

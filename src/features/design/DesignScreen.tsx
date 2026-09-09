@@ -29,6 +29,7 @@ import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatG
 import { DesignToolbar } from './DesignToolbar';
 import type { SheetName } from './sheets';
 import { readPref, writePref } from '../../ui/prefs';
+import { clamp } from '../../ui/units';
 import { history, useHistory } from './history';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
@@ -63,7 +64,7 @@ const NO_HEX: Record<string, string> = {};
 
 const PANEL_KEY = 'easycraft.panelRatio';
 /* גובה לוח העריכה כחלק מגובה המסך — בין רבע למסך כמעט מלא */
-const clampRatio = (r: number) => Math.min(Math.max(r, 0.2), 0.85);
+const clampRatio = (r: number) => clamp(r, 0.2, 0.85);
 
 /**
  * מסך ההדמיה. רואים קיר אחד בכל רגע, ופעולה ראשית אחת:

@@ -1,4 +1,5 @@
 import { autoShelves } from './CabinetGlyph';
+import { clamp } from '../ui/units';
 import { glyphDef } from './glyphList';
 import type { CornerKind, PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../db/types';
 
@@ -18,7 +19,7 @@ type BlindSource = Partial<Pick<PlacedUnit, 'corner' | 'glyph' | 'blindMm'>> & {
  */
 export function blindWidthMm(u: BlindSource): number {
   if (!blindSide(u)) return 0;
-  return Math.min(Math.max(u.blindMm ?? 300, u.widthMm * 0.1), u.widthMm * 0.7);
+  return clamp(u.blindMm ?? 300, u.widthMm * 0.1, u.widthMm * 0.7);
 }
 
 /** מאיזה קצה הפינה המתה חסומה, או `null` כשאין פינה מתה. */

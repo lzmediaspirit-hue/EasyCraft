@@ -1,4 +1,5 @@
 import { blindSide, blindWidthMm, unitFronts, unitZones, zoneBands, zoneColumns } from '../../catalog/zones';
+import { clamp } from '../../ui/units';
 import { shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
 import { shade } from '../../ui/color';
@@ -96,7 +97,7 @@ export function buildScene({
   const heading = plan.find((p) => p.wall.id === activeWallId)?.headingDeg ?? 0;
   const shown: IsoView = {
     ...view,
-    yawDeg: Math.min(Math.max(view.yawDeg, -120 - heading), 30 - heading),
+    yawDeg: clamp(view.yawDeg, -120 - heading, 30 - heading),
   };
   const v = projector(shown);
   const project = v.project;
