@@ -26,6 +26,18 @@ export interface PlanWall {
 
 export const DEFAULT_TURN_DEG = 90;
 
+/**
+ * חדר שאינו שרשרת פשוטה של קירות ישרים.
+ *
+ * קיר אחד או פינה אחת מצוירים היטב במבט חזית — זה השרטוט שנגר
+ * מכיר. מרגע שיש שלושה קירות, או פינה שאינה ישרה, החזית כבר אינה
+ * מספרת מה קורה בחדר, והמבט התלת־ממדי הוא זה שמספר. לכן פרויקט
+ * כזה נפתח בו.
+ */
+export function isComplexRoom(walls: Wall[]): boolean {
+  return walls.length > 2 || walls.some((w, i) => i > 0 && (w.turnDeg ?? DEFAULT_TURN_DEG) !== 90);
+}
+
 /** בונה את קו הקירות מהאורכים ומהזוויות. */
 export function buildPlan(walls: Wall[], units: PlacedUnit[]): PlanWall[] {
   const out: PlanWall[] = [];

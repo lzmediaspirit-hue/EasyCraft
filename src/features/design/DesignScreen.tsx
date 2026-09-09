@@ -27,7 +27,7 @@ import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatG
 import { DesignToolbar } from './DesignToolbar';
 import type { SheetName } from './sheets';
 import { history, useHistory } from './history';
-import { buildPlan, cornerDepth, cornerZones, planUnits } from './plan';
+import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
@@ -103,6 +103,17 @@ export function DesignScreen({
 
   const project = useLiveQuery(() => projectsRepo.get(projectId), [projectId]);
   const walls = useLiveQuery(() => wallsRepo.listForProject(projectId), [projectId]);
+  /*
+   * חדר מורכב נפתח בתלת־ממד, פעם אחת בכניסה.
+   * מי שסגר את המבט אחר כך התכוון לסגור אותו, ולכן הפתיחה אינה
+   * חוזרת בכל רענון של הקירות.
+   */
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || !walls?.length) return;
+    opened.current = true;
+    if (isComplexRoom(walls)) design.set('iso', true);
+  }, [walls, design]);
   const allUnits = useLiveQuery(() => unitsRepo.listForProject(projectId), [projectId]);
   const customer = useLiveQuery(
     () => customersRepo.get(project?.customerId ?? ''),

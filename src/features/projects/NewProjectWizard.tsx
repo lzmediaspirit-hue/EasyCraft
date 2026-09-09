@@ -4,7 +4,7 @@ import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { cmToMm, mmToCm } from '../../ui/units';
 import { ROOMS, roomDef } from '../../catalog/rooms';
-import { WALL_LAYOUTS, wallName } from './wallLayouts';
+import { ASK_COUNT, WALL_COUNTS, WALL_LAYOUTS, wallName } from './wallLayouts';
 import { WallFeaturesDesigner } from './WallFeaturesDesigner';
 import { RoomShapeEditor, shapeWalls, type ShapePoint } from './RoomShapeEditor';
 import { projectsRepo, type NewWallInput } from './projectsRepo';
@@ -60,6 +60,8 @@ export function NewProjectWizard({
   const [roomKind, setRoomKind] = useState<RoomKind>('kitchen');
   const [name, setName] = useState('');
   const [wallCount, setWallCount] = useState(1);
+  /** "כמה קירות" נבחר, והמספר עצמו עוד לא */
+  const [askCount, setAskCount] = useState(false);
   const [marksFeatures, setMarksFeatures] = useState(false);
   /*
    * מידות לכל קיר בנפרד. חדר אמיתי אינו קופסה: יש בו קיר עם תקרה
@@ -119,9 +121,16 @@ export function NewProjectWizard({
 
   function pickLayout(walls: number) {
     if (walls === 0) {
+      setAskCount(false);
       setStep('shape');
       return;
     }
+    /* "כמה קירות" היא שאלה ולא תשובה — המספר נבחר מיד מתחתיה */
+    if (walls === ASK_COUNT) {
+      setAskCount(true);
+      return;
+    }
+    setAskCount(false);
     setTurns([]);
     setWallCount(walls);
     /* קיר שנוסף מקבל את אותה מידה שהקיר הראשון נפתח בה */
@@ -296,13 +305,17 @@ export function NewProjectWizard({
       )}
 
       {step === 'layout' && (
+        <>
         <div className="grid grid-cols-2 gap-3">
           {WALL_LAYOUTS.map((layout) => (
             <button
               key={layout.walls}
               onClick={() => pickLayout(layout.walls)}
               className={`flex flex-col items-start gap-2 rounded-2xl border bg-white p-4 text-start transition-colors hover:border-oak-400 hover:bg-oak-50 ${
-                wallCount === layout.walls ? 'border-oak-400' : 'border-stone-200'
+                /* בחירה אחת מסומנת: כשנשאל המספר, "קיר יחיד" כבר לא נבחר */
+                (layout.walls === ASK_COUNT ? askCount : !askCount && wallCount === layout.walls)
+                  ? 'border-oak-400'
+                  : 'border-stone-200'
               }`}
             >
               <svg viewBox="0 0 40 36" className="h-10 w-14 text-oak-600" fill="none"
@@ -314,6 +327,24 @@ export function NewProjectWizard({
             </button>
           ))}
         </div>
+        {askCount && (
+          <div className="mt-3">
+            <span className="text-xs text-stone-500">כמה קירות בשרשרת?</span>
+            <div className="mt-1.5 flex gap-1.5">
+              {WALL_COUNTS.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => pickLayout(n)}
+                  aria-label={`${n} קירות`}
+                  className="num flex-1 rounded-xl border border-stone-200 bg-white py-2.5 text-sm font-semibold text-stone-900 transition-colors hover:border-oak-400 hover:bg-oak-50"
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {step === 'shape' && <RoomShapeEditor points={shape} onChange={setShape} />}
