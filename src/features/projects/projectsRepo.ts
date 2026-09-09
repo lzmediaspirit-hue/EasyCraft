@@ -202,6 +202,43 @@ export const unitsRepo = {
    * מוסיף ארגז לקיר. המידות מועתקות מהספרייה ברגע ההנחה, כדי שעריכה
    * מאוחרת בספרייה לא תשנה פרויקט שכבר תומחר.
    */
+  /**
+   * הנחת פריט מורכב: כמה ארגזים בבת אחת, במרחקים ששמרנו להם.
+   *
+   * הקבוצה מונחת מפינה אחת, ולכן היא נשארת מחוברת גם אחרי שהוזזה:
+   * מה שנשמר הוא היחס בין החלקים, לא המקום שבו הם היו.
+   */
+  async addGroup(
+    projectId: string,
+    wallId: string,
+    item: CatalogItem,
+    xMm: number,
+  ): Promise<PlacedUnit[]> {
+    const now = Date.now();
+    const out: PlacedUnit[] = [];
+    for (const [i, part] of (item.parts ?? []).entries()) {
+      out.push({
+        level: item.level,
+        widthMm: item.defaultWidthMm,
+        heightMm: item.defaultHeightMm,
+        depthMm: item.defaultDepthMm,
+        ...part.unit,
+        id: crypto.randomUUID(),
+        projectId,
+        wallId,
+        catalogItemId: item.id,
+        name: part.unit.name ?? item.name,
+        glyph: part.unit.glyph ?? item.glyph,
+        xMm: xMm + part.dxMm,
+        yMm: part.dyMm,
+        createdAt: now + i,
+        updatedAt: now + i,
+      } as PlacedUnit);
+    }
+    if (out.length) await db.units.bulkAdd(out);
+    return out;
+  },
+
   async add(
     projectId: string,
     wallId: string,

@@ -8,6 +8,7 @@ import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
 import { blocked } from './collision';
 import { unitBox } from './placement';
 import { LockIcon, UnlockIcon } from '../../ui/icons';
+import { alongWallMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -34,6 +35,8 @@ export function WallIso({
   onSelect,
   onMoveTo,
   onRotate,
+  onEdit,
+  onBulk,
   inside,
   noUppers,
   finishHex,
@@ -61,6 +64,16 @@ export function WallIso({
    * ארון אמיתי כשמעמידים אותו בפינה, ולא בחירה מתוך רשימה.
    */
   onRotate?: (id: string, patch: Partial<PlacedUnit>) => void;
+  /** עיפרון — פותח את העריכה המהירה של הארגז */
+  onEdit?: (id: string) => void;
+  /**
+   * פעולה על כמה ארגזים שנבחרו יחד.
+   *
+   * מחיקה, הסתרה ושמירה כפריט אחד הן פעולות על אוסף, ולכן הן
+   * יוצאות החוצה כאוסף — המסך שמכיר את בסיס הנתונים מבצע אותן.
+   * הזזה נשארת כאן, כי היא תנועה על הציור.
+   */
+  onBulk?: (ids: string[], action: 'delete' | 'hide' | 'library') => void;
   /** חזיתות מוסתרות — רואים את הגוף והמדפים */
   inside: boolean;
   /** העליונים יורדים מהתמונה */
@@ -87,6 +100,16 @@ export function WallIso({
    * גם מה שמונע מהחדר להסתובב בכל פעם שמישהו נגע בארון.
    */
   const [locked, setLocked] = useState(false);
+  /*
+   * מצב הנחה: הארגז ביד עד שמניחים אותו או מבטלים.
+   *
+   * כל עוד הוא פתוח החדר אינו מסתובב והאצבע שייכת לארגז בלבד —
+   * זו בדיוק התנועה של להעמיד ארון במקום, ובה אין רגע שבו לא ברור
+   * מה זז. הביטול מחזיר בדיוק את מה שהיה כשנכנסנו.
+   */
+  const [placing, setPlacing] = useState<{ ids: string[]; from: PlacedUnit[] } | null>(null);
+  /** בחירה מרובה. `null` = המצב כבוי */
+  const [picked, setPicked] = useState<string[] | null>(null);
   const drag = useRef<{
     /** הארגז כפי שהיה בתחילת הגרירה — ממנו נמדד הכול, ולכן היא הפיכה */
     from: PlacedUnit;
@@ -208,6 +231,69 @@ export function WallIso({
   const spinAt: { x: number; y: number } | null = spin;
   const selectedUnit = units.find((u) => u.id === selectedId && !outOfSight(u, noUppers)) ?? null;
 
+  /**
+   * התיבה שארגז תופס על המסך.
+   *
+   * הכפתורים יושבים עליה, ולכן היא נמדדת מהפאות שכבר צוירו ולא
+   * מחושבת שוב: מה שרואים הוא מה שהכפתור נצמד אליו.
+   */
+  function screenBox(id: string): { x0: number; y0: number; x1: number; y1: number } | null {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const f of faces) {
+      if (f.unitId !== id) continue;
+      for (const pt of f.points.split(' ')) {
+        const [px, py] = pt.split(',').map(Number);
+        if (px < x0) x0 = px;
+        if (px > x1) x1 = px;
+        if (py < y0) y0 = py;
+        if (py > y1) y1 = py;
+      }
+    }
+    return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null;
+  }
+
+  /** כפתור עגול על הציור, במידות שנשארות אמיתיות בכל זום. */
+  const ringButton = (
+    label: string,
+    d: string,
+    cx: number,
+    cy: number,
+    r: number,
+    onTap: () => void,
+    tone = '#a06236',
+  ) => (
+    <g
+      key={label}
+      role="button"
+      aria-label={label}
+      className="cursor-pointer"
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+        onTap();
+      }}
+    >
+      <circle cx={cx} cy={cy} r={r} fill="#ffffff" stroke={tone} strokeWidth={r * 0.09} />
+      <g
+        transform={`translate(${cx} ${cy}) scale(${r / 11})`}
+        fill="none"
+        stroke={tone}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d={d} />
+      </g>
+    </g>
+  );
+
+  /** מה שמחזיר ארגז למקום שממנו יצא — קיר או רצפה, לפי מה שהוא */
+  const restore = (u: PlacedUnit): Partial<PlacedUnit> =>
+    u.free ? { free: u.free } : { xMm: u.xMm, yMm: u.yMm, wallId: u.wallId };
+
   /*
    * הזזת ארון על המסך, בחזרה למידות של החדר.
    *
@@ -288,14 +374,47 @@ export function WallIso({
       const b = at(px, py);
       return !!b && (stuck || !blocked(d.from, b, units, plan));
     };
+    /*
+     * ארגז שנתקל בשכן נעצר עליו, ולא נשאר במקום.
+     *
+     * קודם הוא פשוט לא זז — מי שגרר לתוך ארון אחר קיבל ארגז
+     * שנתקע באוויר בלי סיבה נראית. עכשיו נבחרת המידה הקרובה ביותר
+     * שבה הוא באמת נכנס: זו בדיוק הדופן של השכן, וזו גם התנועה
+     * שהנגר עושה בשטח — דוחף עד שנוגע.
+     */
+    const stops = [nx];
+    for (const other of mates) {
+      if (other.id === d.from.id || other.level !== d.from.level) continue;
+      stops.push(other.xMm + alongWallMm(other), other.xMm - alongWallMm(d.from));
+    }
+    const near = stops
+      .map((v) => Math.round(Math.min(Math.max(v, 0), Math.max(target.lengthMm - alongWallMm(d.from), 0))))
+      .sort((a, b) => Math.abs(a - nx) - Math.abs(b - nx));
+    const slid = near.find((v) => ok(v, ny)) ?? near.find((v) => ok(v, d.from.yMm));
     const [fx, fy] = ok(nx, ny)
       ? [nx, ny]
-      : ok(nx, d.from.yMm)
-        ? [nx, d.from.yMm]
-        : ok(d.from.xMm, ny)
-          ? [d.from.xMm, ny]
-          : [d.from.xMm, d.from.yMm];
+      : slid !== undefined && ok(slid, ny)
+        ? [slid, ny]
+        : slid !== undefined
+          ? [slid, d.from.yMm]
+          : ok(d.from.xMm, ny)
+            ? [d.from.xMm, ny]
+            : [d.from.xMm, d.from.yMm];
     onMoveTo(d.from.id, { xMm: fx, yMm: fy, wallId: target.id });
+
+    /*
+     * קבוצה זזה יחד, באותו הפרש בדיוק. מה שנשמר הוא היחס בין
+     * הארגזים — פינה שנבנתה נכון נשארת נכונה גם אחרי שהוזזה.
+     */
+    const dx = fx - d.from.xMm;
+    const dy = fy - d.from.yMm;
+    if (!placing || (!dx && !dy)) return;
+    for (const mate of placing.from) {
+      if (mate.id === d.from.id || mate.free) continue;
+      const now = units.find((u) => u.id === mate.id);
+      if (!now) continue;
+      onMoveTo(mate.id, { xMm: now.xMm + dx, yMm: now.yMm + dy });
+    }
   }
 
   return (
@@ -313,6 +432,18 @@ export function WallIso({
          */
         const hit = (e.target as Element).getAttribute?.('data-unit') ?? null;
         const held = hit ? units.find((u) => u.id === hit) : undefined;
+        /*
+         * מצב הנחה: החדר עומד, וכל תנועה על הציור מזיזה את הארגז
+         * שביד — גם כשהאצבע ירדה על הרצפה. אחרת היה צריך לפגוע
+         * בארגז בדיוק, וזו בדיוק התנועה שקשה באצבע.
+         */
+        if (placing && onMoveTo) {
+          const anchor = units.find((u) => u.id === placing.ids[0]);
+          if (anchor) {
+            drag.current = { from: anchor, startX: e.clientX, startY: e.clientY, moved: false };
+            return;
+          }
+        }
         /*
          * כשהחדר נעול האצבע שייכת לארונות בלבד: אצבע על ארון גוררת
          * אותו, ואצבע על הרצפה לא עושה דבר. חדר שהמשיך להסתובב
@@ -342,8 +473,8 @@ export function WallIso({
         const dy = e.clientY - o.y;
         if (!o.moved && Math.hypot(dx, dy) < ORBIT_SLOP) return;
         o.moved = true;
-        /* חדר נעול אינו מסתובב; הגרירה רק מבטלת את הבחירה בהרפיה */
-        if (locked) return;
+        /* חדר נעול או ארגז שביד — המבט אינו זז */
+        if (locked || placing) return;
         const box = e.currentTarget.getBoundingClientRect();
         setView({
           // סיבוב מלא כשגוררים על פני רוחב המסך פעמיים, עד גבול הקיר
@@ -369,6 +500,11 @@ export function WallIso({
          */
         if (d) return onSelect(d.from.id);
         if (!o || o.moved) return;
+        /* בבחירה מרובה נגיעה מוסיפה ומורידה מהאוסף במקום להחליף אותו */
+        if (picked && o.hit) {
+          setPicked(picked.includes(o.hit) ? picked.filter((q) => q !== o.hit) : [...picked, o.hit]);
+          return;
+        }
         onSelect(o.hit);
       }}
       onPointerCancel={() => {
@@ -490,12 +626,116 @@ export function WallIso({
         ))}
 
       {/*
+        טבעת הכפתורים, מעל הארגז הנבחר.
+
+        כאן ולא בלוח הצדדי: כל מה שעושים לארגז עומד לידו, ורואים
+        את התוצאה באותה תנועה. במצב הנחה הטבעת מתחלפת בשני כפתורים
+        בלבד — להניח או לבטל — כי בזמן שארגז ביד אין פעולה אחרת.
+      */}
+      {!present && selectedUnit && (() => {
+        const b = screenBox(placing ? placing.ids[0] : selectedUnit.id);
+        if (!b) return null;
+        const r = Math.min(19 / pxPerUnit, vbW / 13);
+        const cy = Math.max(b.y0 - r * 1.5, minY + r * 1.2);
+        /* כפתור שנדחף אל מחוץ למסגרת אינו כפתור — הטבעת נשארת בתוכה */
+        const at = (i: number, n: number) =>
+          Math.min(
+            Math.max(b.x0 + (b.x1 - b.x0) / 2 + (i - (n - 1) / 2) * r * 2.3, minX + r * 1.2),
+            minX + vbW - r * 1.2,
+          );
+
+        if (placing) {
+          return (
+            <g>
+              {ringButton(
+                'הנחת הארגז',
+                'M-6 0 l4 4 l8 -9',
+                at(0, 2),
+                cy,
+                r,
+                () => setPlacing(null),
+                '#0f766e',
+              )}
+              {ringButton(
+                'ביטול ההזזה',
+                'M-5 -5 l10 10 M5 -5 l-10 10',
+                at(1, 2),
+                cy,
+                r,
+                () => {
+                  for (const u of placing.from) onMoveTo?.(u.id, restore(u));
+                  setPlacing(null);
+                },
+                '#b91c1c',
+              )}
+            </g>
+          );
+        }
+
+        const tools: { label: string; d: string; run: () => void }[] = [];
+        if (onMoveTo) {
+          tools.push({
+            label: 'תזוזה',
+            d: 'M0 -8 V8 M-8 0 H8 M0 -8 l-3 3 M0 -8 l3 3 M0 8 l-3 -3 M0 8 l3 -3 M-8 0 l3 -3 M-8 0 l3 3 M8 0 l-3 -3 M8 0 l-3 3',
+            run: () => {
+              const ids = picked?.length ? picked : [selectedUnit.id];
+              const from = units.filter((u) => ids.includes(u.id));
+              if (from.length) setPlacing({ ids, from });
+              setPicked(null);
+            },
+          });
+        }
+        if (onBulk) {
+          tools.push({
+            label: 'בחירה מרובה',
+            d: 'M-8 -8 h10 v10 h-10 z M-2 -2 h10 v10 h-10 z',
+            run: () => setPicked(picked ? null : [selectedUnit.id]),
+          });
+        }
+        if (onEdit) {
+          tools.push({
+            label: 'עריכה מהירה',
+            d: 'M-7 7 l1.8 -4.6 L3 -7 l4 4 l-9.4 8.2 z M2 -6 l4 4',
+            run: () => onEdit(selectedUnit.id),
+          });
+        }
+        return (
+          <g>
+            {tools.map((t, i) =>
+              ringButton(t.label, t.d, at(i, tools.length), cy, r, t.run,
+                t.label === 'בחירה מרובה' && picked ? '#0f766e' : '#a06236'),
+            )}
+          </g>
+        );
+      })()}
+
+      {/* הארגזים שנבחרו יחד, מסומנים במסגרת */}
+      {!present && picked?.map((id) => {
+        const b = screenBox(id);
+        if (!b) return null;
+        return (
+          <rect
+            key={`pick-${id}`}
+            x={b.x0}
+            y={b.y0}
+            width={b.x1 - b.x0}
+            height={b.y1 - b.y0}
+            fill="none"
+            stroke="#0f766e"
+            strokeWidth={stroke * 2}
+            strokeDasharray={`${stroke * 4} ${stroke * 3}`}
+            pointerEvents="none"
+          />
+        );
+      })}
+
+      {/*
         שני חצי הסיבוב, מתחת לארגז הנבחר.
         כאן ולא בלוח הצדדי: מסובבים ארון כשמסתכלים עליו, ורואים את
         התוצאה באותה תנועה. כל לחיצה היא רבע סיבוב, ושמונה לחיצות
         מחזירות למקום — אין מצב שאי אפשר לצאת ממנו.
       */}
-      {spinAt && selectedUnit && onRotate && (
+      {spinAt && selectedUnit && onRotate && !placing && !picked && (
         <g>
           {([
             { dir: -1 as const, label: 'סיבוב שמאלה', at: -1 },
@@ -605,6 +845,48 @@ export function WallIso({
         {locked ? <LockIcon className="size-3.5" /> : <UnlockIcon className="size-3.5" />}
         {locked ? 'נעול' : 'חופשי'}
       </button>
+    )}
+
+    {/*
+      פס הפעולות של בחירה מרובה.
+
+      כאן ולא על הציור: הפעולות נוגעות לאוסף ולא למקום מסוים בו,
+      ורשימה קריאה עדיפה על עוד כפתורים עגולים שמתחרים על אותו
+      מקום. הפס אומר גם כמה נבחרו — בלעדיו לא ברור על מה לוחצים.
+    */}
+    {picked && onBulk && !present && (
+      <div className="absolute inset-x-2 bottom-2 flex flex-wrap items-center gap-1.5 rounded-2xl bg-stone-900/90 px-2.5 py-2 text-white shadow-lg backdrop-blur">
+        <span className="ms-1 me-auto text-xs font-medium">
+          {picked.length ? `${picked.length} ארגזים` : 'בחרו ארגזים'}
+        </span>
+        {[
+          { label: 'מחיקה', run: () => { onBulk(picked, 'delete'); setPicked(null); } },
+          { label: 'הסתרה', run: () => { onBulk(picked, 'hide'); setPicked(null); } },
+          { label: 'שמירה כארגז', run: () => { onBulk(picked, 'library'); setPicked(null); } },
+        ].map((a) => (
+          <button
+            key={a.label}
+            disabled={!picked.length}
+            onClick={a.run}
+            className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-white/30 disabled:opacity-40"
+          >
+            {a.label}
+          </button>
+        ))}
+        <button
+          onClick={() => setPicked(null)}
+          className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-white/70 hover:text-white"
+        >
+          סיום
+        </button>
+      </div>
+    )}
+
+    {/* בזמן שארגז ביד, נאמר במפורש שהחדר עומד */}
+    {placing && !present && (
+      <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-stone-900/90 px-3 py-1 text-[11px] font-medium text-white">
+        גוררים למקום, ואז מניחים
+      </span>
     )}
 
     {/* חזרה לזווית ההתחלתית, אחרי שהסתובבנו למקום שקשה לחזור ממנו */}

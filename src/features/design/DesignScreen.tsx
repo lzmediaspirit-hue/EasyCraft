@@ -8,6 +8,7 @@ import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { UnitEditor } from './UnitEditor';
 import { UnitEditSheet } from './UnitEditSheet';
+import { SaveGroupSheet } from './SaveGroupSheet';
 import { MaterialsSheet } from './MaterialsSheet';
 import { NestingSheet } from './NestingSheet';
 import { SaleSheet } from '../projects/SaleSheet';
@@ -91,6 +92,8 @@ export function DesignScreen({
   const dragPanel = useRef<{ startY: number; startRatio: number } | null>(null);
   const [wallIndex, setWallIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /* קבוצת ארגזים שממתינה לשמירה בספרייה כפריט אחד */
+  const [groupToSave, setGroupToSave] = useState<PlacedUnit[] | null>(null);
   /*
    * מגירה אחת פתוחה בכל רגע. אחד־עשר דגלים נפרדים תיארו מצב אחד —
    * "מה פתוח" — ואפשרו לשניים להיפתח יחד; זה גם הפך "לסגור הכול"
@@ -216,6 +219,27 @@ export function DesignScreen({
     [wall, analysis, roomStats, walls, allUnits, units],
   );
 
+  /**
+   * פעולה על כמה ארגזים שנבחרו יחד בתלת־ממד.
+   *
+   * הכול נשמר כצעד אחד בהיסטוריה: מי שמחק חמישה ארגזים בטעות רוצה
+   * להחזיר חמישה בביטול אחד, ולא ללחוץ חמש פעמים.
+   */
+  async function runBulk(ids: string[], action: 'delete' | 'hide' | 'library') {
+    const chosen = (allUnits ?? NO_UNITS).filter((u) => ids.includes(u.id));
+    if (!chosen.length) return;
+    if (action === 'library') return setGroupToSave(chosen);
+    await history.capture(projectId, `bulk:${action}:${Date.now()}`);
+    if (action === 'delete') {
+      await Promise.all(ids.map((id) => unitsRepo.remove(id)));
+      if (ids.includes(selectedId ?? '')) setSelectedId(null);
+      return;
+    }
+    /* הסתרה היא מתג: אם כולם מוסתרים הפעולה מחזירה אותם */
+    const hide = !chosen.every((u) => u.hidden);
+    await Promise.all(chosen.map((u) => unitsRepo.update(u.id, { hidden: hide })));
+  }
+
   async function addItem(item: CatalogItem) {
     if (!wall) return;
     /*
@@ -227,9 +251,13 @@ export function DesignScreen({
     // הארגז נכנס בתוך הקיר, ולא נדחף אל מעבר לקצה שלו
     const maxX = Math.max(wall.lengthMm - item.defaultWidthMm, from);
     await history.capture(projectId, `add:${Date.now()}`);
-    const unit = await unitsRepo.add(projectId, wall.id, item, freeX(Math.min(x, maxX), maxX, item));
+    const at = freeX(Math.min(x, maxX), maxX, item);
+    /* פריט מורכב מניח כמה ארגזים; הראשון הוא זה שנבחר אחריו */
+    const made = item.parts?.length
+      ? await unitsRepo.addGroup(projectId, wall.id, item, at)
+      : [await unitsRepo.add(projectId, wall.id, item, at)];
     closeSheet();
-    setSelectedId(unit.id);
+    if (made[0]) setSelectedId(made[0].id);
   }
 
   /**
@@ -388,6 +416,16 @@ export function DesignScreen({
               onRotate={editable ? (id, patch) => patchUnit(id, patch, `rotate:${id}`) : undefined}
               /* גרירה בתלת־ממד עשויה לעבור לקיר שכן — הארגז עובר איתה */
               onMoveTo={editable ? (id, patch) => patchUnit(id, patch) : undefined}
+              /* העיפרון פותח את אותה עריכה מהירה שיש בסרגל */
+              onEdit={
+                editable
+                  ? (id) => {
+                      setSelectedId(id);
+                      setSheet('edit');
+                    }
+                  : undefined
+              }
+              onBulk={editable ? runBulk : undefined}
               inside={inside}
               noUppers={noUppers}
               finishHex={finishHex ?? NO_HEX}
@@ -841,6 +879,11 @@ export function DesignScreen({
 
       {sheet === 'edit' && selected && (
         <UnitEditSheet unit={selected} onClose={closeSheet} />
+      )}
+
+      {/* שמירת אוסף שנבחר בתלת־ממד כפריט אחד */}
+      {groupToSave && (
+        <SaveGroupSheet units={groupToSave} onClose={() => setGroupToSave(null)} />
       )}
 
       {sheet === 'sale' && (

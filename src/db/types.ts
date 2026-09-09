@@ -492,6 +492,22 @@ export type ExposedSides = BoxSides;
 /** קבוצה בספרייה — הכרטיסייה שבה המוצר מופיע. */
 export type CatalogGroup = 'base' | 'upper' | 'tall' | 'storage' | 'panel';
 
+/**
+ * חלק בפריט מורכב.
+ *
+ * עמודת תנור שלמה, פינה, או קיר שנבנה פעם אחת — כמה ארגזים
+ * שנשמרו יחד ומוזמנים שוב כיחידה אחת. כל חלק שומר את מה שמתאר
+ * אותו ואת המרחק שלו מפינת הקבוצה; המקום בחדר נקבע רק בהנחה.
+ */
+export interface CatalogGroupPart {
+  /** מרחק מפינת הקבוצה לאורך הקיר */
+  dxMm: number;
+  /** מרחק מפינת הקבוצה לגובה */
+  dyMm: number;
+  /** תיאור הארגז עצמו — בלי זהות, בלי קיר ובלי מיקום */
+  unit: Partial<PlacedUnit>;
+}
+
 export interface CatalogItem extends Entity {
   /** באילו חדרים המוצר רלוונטי */
   rooms: RoomKind[];
@@ -545,6 +561,11 @@ export interface CatalogItem extends Entity {
   sortOrder: number;
   /** הערת תקן קצרה — למה המידות האלה */
   note?: string;
+  /**
+   * פריט מורכב: ההנחה שלו יוצרת כמה ארגזים ולא אחד.
+   * ריק = פריט רגיל, ארגז אחד.
+   */
+  parts?: CatalogGroupPart[];
 }
 
 /* ------------------------------------------------------------------ */
