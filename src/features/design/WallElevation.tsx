@@ -426,6 +426,12 @@ export function WallElevation({
         const rot = ((u.rotationDeg ?? 0) % 360 + 360) % 360;
         const sideOn = rot !== 0;
         const uw = alongWallMm(u);
+        /*
+         * ארגז חופשי עומד בתוך החדר ולא על הקיר. במבט חזית אי אפשר
+         * לראות את זה — הוא נראה בדיוק כמו שכנו הצמוד — ולכן הוא
+         * מסומן בקו מקווקו ובמידה, ולא נשאר שקר שקט על השרטוט.
+         */
+        const offMm = Math.max(u.offsetMm ?? 0, 0);
         // הגב יושב עמוק יותר ולכן נראה כהה מעט מהגוף; בלי גב רואים את הקיר
         const backKind = u.backKind ?? 'thin';
         const backFill =
@@ -527,6 +533,28 @@ export function WallElevation({
             )}
             {!sideOn && ledStrips(u, stroke, carcassH)}
             {!sideOn && exposedPanels(u, stroke, carcassH)}
+            {offMm > 0 && (
+              <g pointerEvents="none">
+                <rect
+                  width={uw}
+                  height={carcassH}
+                  fill="none"
+                  stroke="#0d9488"
+                  strokeWidth={stroke * 1.2}
+                  strokeDasharray={`${stroke * 3} ${stroke * 2.5}`}
+                />
+                <text
+                  x={uw / 2}
+                  y={-stroke * 3}
+                  textAnchor="middle"
+                  fontSize={Math.max(wall.lengthMm / 46, 62)}
+                  fill="#0f766e"
+                  direction="ltr"
+                >
+                  {`${cm(offMm)} ס״מ מהקיר`}
+                </text>
+              </g>
+            )}
             {selected && (
               <rect
                 x={-stroke * 2}

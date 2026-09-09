@@ -67,7 +67,8 @@ export function buildPlan(walls: Wall[], units: PlacedUnit[]): PlanWall[] {
 function wallDepth(wall: Wall, units: PlacedUnit[]): number {
   return units
     .filter((u) => u.wallId === wall.id && u.level !== 'wall')
-    .reduce((max, u) => Math.max(max, intoRoomMm(u)), 0);
+    /* ארגז חופשי נמדד מהקיר ועד קצהו הרחוק — כולל האוויר שביניהם */
+    .reduce((max, u) => Math.max(max, (u.offsetMm ?? 0) + intoRoomMm(u)), 0);
 }
 
 /**
@@ -135,7 +136,7 @@ function zonesAt(wall: Wall, units: PlacedUnit[], side: 'start' | 'end'): Corner
     const same = touching.filter((u) => (u.level === 'wall') === wallLevel);
     if (!same.length) continue;
     out.push({
-      depthMm: same.reduce((max, u) => Math.max(max, intoRoomMm(u)), 0),
+      depthMm: same.reduce((max, u) => Math.max(max, (u.offsetMm ?? 0) + intoRoomMm(u)), 0),
       yMm: same.reduce((min, u) => Math.min(min, u.yMm), Infinity),
       heightMm:
         same.reduce((max, u) => Math.max(max, u.yMm + u.heightMm), 0) -
@@ -174,9 +175,11 @@ export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
     const normal = { x: -Math.sin(rad), y: Math.cos(rad) };
 
     for (const u of units.filter((x) => x.wallId === p.wall.id)) {
+      /* ארגז חופשי עומד בתוך החדר, ולא על הקיר */
+      const off = Math.max(u.offsetMm ?? 0, 0);
       const a = {
-        x: p.start.x + dir.x * u.xMm,
-        y: p.start.y + dir.y * u.xMm,
+        x: p.start.x + dir.x * u.xMm + normal.x * off,
+        y: p.start.y + dir.y * u.xMm + normal.y * off,
       };
       /* ארגז מסובב תופס על הקיר את עומקו ונכנס לחדר ברוחבו */
       const along = alongWallMm(u);

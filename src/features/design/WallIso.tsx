@@ -127,10 +127,13 @@ function unitFrame(u: PlacedUnit, tf: Tf): Tf {
   const x0 = u.xMm;
   const W = u.widthMm;
   const D = u.depthMm;
-  if (r === 90) return (x, z) => tf(x0 + D - z, x);
-  if (r === 180) return (x, z) => tf(x0 + W - x, D - z);
-  if (r === 270) return (x, z) => tf(x0 + z, W - x);
-  return (x, z) => tf(x0 + x, z);
+  /* ארגז חופשי עומד בתוך החדר — כל המסגרת שלו נדחפת מהקיר פנימה */
+  const off = Math.max(u.offsetMm ?? 0, 0);
+  const at: Tf = (x, z) => tf(x, z + off);
+  if (r === 90) return (x, z) => at(x0 + D - z, x);
+  if (r === 180) return (x, z) => at(x0 + W - x, D - z);
+  if (r === 270) return (x, z) => at(x0 + z, W - x);
+  return (x, z) => at(x0 + x, z);
 }
 
 type Face = {

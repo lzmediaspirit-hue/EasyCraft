@@ -1,7 +1,7 @@
 import { glyphDef } from '../../catalog/glyphList';
 import { cornerDepth } from './plan';
 import type { CornerZones } from './plan';
-import { alongWallMm } from '../../db/types';
+import { alongWallMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit } from '../../db/types';
 
 /*
@@ -51,7 +51,10 @@ function nearest(value: number, targets: number[], limit: number): number {
  * שההצמדה נועדה לעשות.
  */
 export function collides(
-  unit: Pick<PlacedUnit, 'id' | 'glyph' | 'widthMm' | 'depthMm' | 'heightMm' | 'rotationDeg'>,
+  unit: Pick<
+    PlacedUnit,
+    'id' | 'glyph' | 'widthMm' | 'depthMm' | 'heightMm' | 'rotationDeg' | 'offsetMm'
+  >,
   x: number,
   y: number,
   units: PlacedUnit[],
@@ -59,8 +62,18 @@ export function collides(
   if (glyphDef(unit.glyph).cladding) return false;
   const right = x + alongWallMm(unit);
   const top = y + unit.heightMm;
+  /* הרצועה שהארגז תופס בעומק החדר — ממנה נובע מי בכלל יכול לפגוש אותו */
+  const near = Math.max(unit.offsetMm ?? 0, 0);
+  const far = near + intoRoomMm(unit);
   return units.some((o) => {
     if (o.id === unit.id || glyphDef(o.glyph).cladding) return false;
+    /*
+     * אי שעומד באמצע החדר עובר מעל ארון שצמוד לקיר בלי לגעת בו:
+     * הם חולקים מקום בחזית, אבל לא באותו עומק. בלי הבדיקה הזאת
+     * אי אפשר היה להעמיד אי מול מטבח קיים בכלל.
+     */
+    const oNear = Math.max(o.offsetMm ?? 0, 0);
+    if (oNear >= far - 1 || oNear + intoRoomMm(o) <= near + 1) return false;
     return (
       x < o.xMm + alongWallMm(o) && right > o.xMm && y < o.yMm + o.heightMm && top > o.yMm
     );

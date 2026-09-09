@@ -62,6 +62,9 @@ type Axis = 'w' | 'h' | 'd';
  * דלתות, מנגנון פתיחה, גוון ודפנות זרות. כשהחזיתות מוסתרות מוצג פנים
  * הארון — אזורים, מדפים ומגירות. כך אין על המסך הגדרות שלא רואים.
  */
+/** מרחקים נפוצים של אי מהקיר — מעבר לזה מקלידים. */
+const FREE_OFFSETS = [600, 900, 1200];
+
 export function UnitEditor({
   unit,
   inside,
@@ -69,6 +72,7 @@ export function UnitEditor({
   fillWidth,
   fillHeight,
   defaultSocleMm = 0,
+  freeStanding = false,
   onChange,
   onApplyChoiceAll,
   onEdit,
@@ -87,6 +91,8 @@ export function UnitEditor({
   fillHeight?: { startMm: number; sizeMm: number };
   /** גובה הרגליים שהעסק עובד בו — לארגז שחוזר לרצפה */
   defaultSocleMm?: number;
+  /** המתג בסרגל פתוח — מציגים גם את המרחק מהקיר */
+  freeStanding?: boolean;
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
@@ -118,6 +124,7 @@ export function UnitEditor({
 
   const caps = glyphDef(unit.glyph);
   const locked = unit.floorLocked ?? false;
+  const offMm = Math.max(unit.offsetMm ?? 0, 0);
   const exposed = unit.exposed ?? {};
   const glassSides = unit.glassSides ?? {};
   // הרגליים אינן חלק מהגוף, ולכן האזהרה נמדדת בלעדיהן
@@ -655,6 +662,40 @@ export function UnitEditor({
           </Pill>
         ))}
       </Row>
+
+      {/*
+        אי וחצי־אי: כמה הארגז מרוחק מהקיר.
+        השורה נפתחת מהמתג בסרגל, ונשארת פתוחה כל עוד הארגז באמת
+        עומד בתוך החדר — אחרת ארגז שכבר הועמד כאי היה מאבד את
+        המידה שלו ברגע שהמתג נכבה.
+      */}
+      {(freeStanding || offMm > 0) && (
+        <Row label="מרחק מהקיר" hint="אי או חצי־אי">
+          <Pill active={offMm === 0} ariaLabel="צמוד לקיר" onClick={() => onChange({ offsetMm: 0 })}>
+            צמוד
+          </Pill>
+          {FREE_OFFSETS.map((mm) => (
+            <Pill
+              key={mm}
+              active={offMm === mm}
+              ariaLabel={`${cm(mm)} מהקיר`}
+              onClick={() => onChange({ offsetMm: mm })}
+            >
+              <span className="num">{cm(mm)}</span>
+            </Pill>
+          ))}
+          <label className="flex items-center gap-1 rounded-full bg-stone-100 px-2.5 py-1">
+            <MeasureInput
+              value={offMm}
+              onChange={(mm) => onChange({ offsetMm: Math.max(mm, 0) })}
+              minMm={0}
+              ariaLabel="מרחק מהקיר"
+              className="num w-10 bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
+            />
+            <span className="text-[10px] text-stone-400">{unitLabel()}</span>
+          </label>
+        </Row>
+      )}
 
       <div className="mt-3 flex items-stretch gap-2">
         <button

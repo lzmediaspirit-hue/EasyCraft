@@ -70,7 +70,7 @@ export function DesignScreen({
 }) {
   /* איך מסתכלים על הקיר — שבעה מצבים שהם דבר אחד */
   const design = useDesignView();
-  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen, noUppers, roomStats } =
+  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen, noUppers, roomStats, freeStanding } =
     design.view;
 
   const [wallIndex, setWallIndex] = useState(0);
@@ -470,6 +470,7 @@ export function DesignScreen({
           fillWidth={turned(selected) ? undefined : fillSpan(selected, units, wall, 'w')}
           fillHeight={fillSpan(selected, units, wall, 'h')}
           defaultSocleMm={settings?.defaults.socleMm ?? 0}
+          freeStanding={freeStanding}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }

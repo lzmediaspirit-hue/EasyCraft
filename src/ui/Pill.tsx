@@ -8,16 +8,20 @@ export function Pill({
   active,
   onClick,
   size = 'md',
+  ariaLabel,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   size?: 'md' | 'sm';
+  /** שם לקורא מסך, כשהמספר לבדו אינו אומר במה מדובר */
+  ariaLabel?: string;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
+      aria-label={ariaLabel}
       /* בורר ולא מתג, אבל קורא מסך צריך לדעת מה נבחר */
       aria-pressed={active}
       className={`num shrink-0 font-medium transition-colors ${
