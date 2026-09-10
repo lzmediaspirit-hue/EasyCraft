@@ -216,6 +216,20 @@ export function layoutFor(plan: PlanWall[]): LayoutKind | null {
   return options.reduce((a, b) => (cover(b) > cover(a) ? b : a));
 }
 
+/**
+ * האם שרשרת הקירות נסגרת — הקיר האחרון חוזר אל תחילת הראשון.
+ *
+ * בחדר סגור גם הפינה שבין האחרון לראשון היא פינה: מי שלא ידע את
+ * זה הניח ארון בתחילת הקיר הראשון בדיוק במקום שבו כבר עומדת
+ * העמודה של הקיר האחרון, ושני ארונות נכנסו זה לזה.
+ */
+function closedRing(run: PlanWall[]): boolean {
+  if (run.length < 3) return false;
+  const a = run[0].start;
+  const b = run[run.length - 1].end;
+  return Math.hypot(a.x - b.x, a.y - b.y) < KITCHEN.baseDepthMm;
+}
+
 /** המרווח בין שתי שורות ארונות מקבילות. */
 function aisleOf(run: PlanWall[]): number {
   if (run.length < 2) return Infinity;
@@ -568,10 +582,12 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
    * שמניחים ארגז אחד, כי הרצף חייב לדעת כמה קיר עומד לרשותו.
    */
   const areas: { p: PlanWall; spans: Span[] }[] = [];
+  /* פינה פנימית קיימת רק בין קירות עוקבים, ולכן לא במטבח מקבילי */
+  const corner = layout === 'l' || layout === 'u';
+  /* בחדר סגור גם המפגש שבין הקיר האחרון לראשון הוא פינה */
+  const ring = corner && closedRing(run);
   for (const [wi, p] of run.entries()) {
-    /* פינה פנימית קיימת רק בין קירות עוקבים, ולכן לא במטבח מקבילי */
-    const corner = layout === 'l' || layout === 'u';
-    const startMm = corner && wi > 0 ? CORNER_START : 0;
+    const startMm = corner && (wi > 0 || ring) ? CORNER_START : 0;
     let endMm = p.wall.lengthMm;
 
     /*
@@ -579,7 +595,7 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
      * שמאחורי הקיר הבא פשוט אובד. בגרסה החסכונית מוותרים עליו —
      * ארון פינה יקר, והשטח שהוא מציל קטן.
      */
-    if (corner && wi < run.length - 1) {
+    if (corner && (wi < run.length - 1 || ring)) {
       const w = CORNER_WIDTH;
       if (priority !== 'economical' && endMm - startMm >= w + MIN_BOX) {
         put(p, 'k-base-blind-end', endMm - w, w, 'corner', CORNER_BLIND);
