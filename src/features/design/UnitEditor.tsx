@@ -15,7 +15,7 @@ import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { BookmarkIcon, CloseIcon, PencilIcon } from '../../ui/icons';
-import { DRAWER_BOXES, bodyHeightMm } from '../../db/types';
+import { BACK_KINDS, DRAWER_BOXES, RAIL_WIDTH_MM, bodyHeightMm } from '../../db/types';
 import type {
   ExposedSides,
   LedSpot,
@@ -137,6 +137,8 @@ export function UnitEditor({
   const glassSides = unit.glassSides ?? {};
   const bodyH = bodyHeightMm(unit);
   const led = unit.led ?? [];
+  const rails = unit.rails ?? {};
+  const backKind = unit.backKind ?? 'thin';
   const container = isContainer(unit.glyph);
   /*
    * לארגז יש חזיתות אם יש לו דלתות או מגירות חיצוניות. ארגז פתוח
@@ -670,14 +672,6 @@ export function UnitEditor({
         </>
       )}
 
-      <Row label="פס לד">
-        {LED_SPOTS.map((s) => (
-          <Pill key={s.key} active={led.includes(s.key)} onClick={() => toggleLed(s.key)}>
-            {s.label}
-          </Pill>
-        ))}
-      </Row>
-
       {/*
         עריכה מתקדמת: מה שנגר עושה פעם בעשרה ארגזים.
 
@@ -696,6 +690,108 @@ export function UnitEditor({
 
       {advanced && (
         <>
+          <Row label="פס לד">
+            {LED_SPOTS.map((s) => (
+              <Pill key={s.key} active={led.includes(s.key)} onClick={() => toggleLed(s.key)}>
+                {s.label}
+              </Pill>
+            ))}
+          </Row>
+
+          {/*
+            הגב. שלוש דרכים לבנות אותו ואחת לוותר עליו — וזו החלטה
+            של הארגז הזה, לא של העסק: ארון שנצמד לקיר גמור לא צריך
+            גב, וארון שעומד באמצע החדר צריך אותו בעובי הגוף.
+          */}
+          <Row label="גב">
+            {BACK_KINDS.map((b) => (
+              <Pill
+                key={b.key}
+                active={backKind === b.key}
+                onClick={() => onChange({ backKind: b.key })}
+              >
+                {b.label}
+              </Pill>
+            ))}
+          </Row>
+
+          {backKind !== 'none' && (
+            <>
+              {/*
+                קושרות במקום לוח: שתי רצועות של 10 ס"מ שמחזיקות את
+                הארון מרובע. זה מה שנגר בונה כשאין מה לכסות — ומה
+                שיורד כאן יורד גם מהפלטה ומהמחיר.
+              */}
+              <Row label="קושרות" hint={`רצועות ${cm(RAIL_WIDTH_MM)} ${unitLabel()} במקום לוח`}>
+                <Pill
+                  active={!!rails.top}
+                  onClick={() => onChange({ rails: { ...rails, top: !rails.top } })}
+                >
+                  תקרה
+                </Pill>
+                <Pill
+                  active={!!rails.back}
+                  onClick={() => onChange({ rails: { ...rails, back: !rails.back } })}
+                >
+                  גב
+                </Pill>
+              </Row>
+
+              {/*
+                גובה הגב, כשהוא אינו מכסה את כל הגוף. ריק = הגב
+                מגיע עד למעלה, וזה המצב הרגיל.
+              */}
+              {!rails.back && (
+                <Row label="גובה הגב" hint={`ריק = מלא, ${cm(bodyH)} ${unitLabel()}`}>
+                  <MeasureInput
+                    value={unit.backHeightMm ?? bodyH}
+                    onChange={(mm) =>
+                      onChange({ backHeightMm: mm >= bodyH ? undefined : Math.max(mm, 0) })
+                    }
+                    maxMm={bodyH}
+                    ariaLabel="גובה הגב"
+                    className="num w-24 rounded-lg bg-stone-100 px-2 py-1.5 text-center text-sm font-medium text-stone-900 focus:bg-white focus:ring-1 focus:ring-oak-400 focus:outline-none"
+                  />
+                </Row>
+              )}
+            </>
+          )}
+
+          {/*
+            גוון הגוף והגב. הם נראים כשפותחים את הארון, ולכן מקומם
+            הטבעי הוא תצוגת הפנים — ושם הם כבר מוצגים. מי שעובד
+            בחזית לא מצא אותם בכלל, ולכן הם חוזרים כאן, ורק כאן.
+          */}
+          {!inside && (
+          <PartChoiceRow
+            label="צבע גוף"
+            role="carcass"
+            finishes={allFinishes}
+            materials={materials}
+            value={{ finishId: unit.carcassFinishId, materialId: unit.carcassMaterialId }}
+            effective={choiceOf('carcass')}
+            onChange={(c) =>
+              onChange({ carcassFinishId: c.finishId, carcassMaterialId: c.materialId })
+            }
+            onApplyAll={(c) => onApplyChoiceAll('carcass', c)}
+            onAddFinish={() => setAddingFinish(true)}
+          />
+          )}
+
+          {!inside && backKind !== 'none' && (
+            <PartChoiceRow
+              label="גוון הגב"
+              role="back"
+              finishes={allFinishes}
+              materials={materials}
+              value={{ finishId: unit.backFinishId, materialId: unit.backMaterialId }}
+              effective={choiceOf('back')}
+              onChange={(c) => onChange({ backFinishId: c.finishId, backMaterialId: c.materialId })}
+              onApplyAll={(c) => onApplyChoiceAll('back', c)}
+              onAddFinish={() => setAddingFinish(true)}
+            />
+          )}
+
           {/*
             צד שלא נבנה. ארגז שנצמד לשכן נשען עליו ואינו צריך דופן
             משלו, וארגז בנישה יכול לוותר על התקרה. מה שיורד כאן יורד

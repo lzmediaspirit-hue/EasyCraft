@@ -12,8 +12,8 @@ import { blocked } from './collision';
 import { unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
 import { outOfSight } from './designView';
-import { alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
-import type { PlacedUnit, Wall } from '../../db/types';
+import { RAIL_WIDTH_MM, alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
+import type { PlacedUnit, RailSides, Wall } from '../../db/types';
 
 /**
  * פינות הקיר כקצה סרגל.
@@ -491,15 +491,34 @@ export function WallElevation({
               />
             )}
             {/* פנים הארון: הגב נראה מאחורי המדפים והמגירות */}
+            {/*
+              הגב, כשמסתכלים לתוך הארון. גב מקושרות הוא שתי רצועות
+              ולא לוח, וגב בגובה חלקי מגיע רק עד לאן שהוא מגיע —
+              ומי שרואה לוח מלא בציור יזמין לוח מלא.
+            */}
             {inside && backFill && (
-              <rect
-                x={stroke * 2}
-                y={stroke * 2}
-                width={Math.max(uw - stroke * 4, 0)}
-                height={Math.max(carcassH - stroke * 4, 0)}
-                fill={backFill}
-                stroke="transparent"
-              />
+              rails(u).back ? (
+                [0, 1].map((i) => (
+                  <rect
+                    key={`rail${i}`}
+                    x={stroke * 2}
+                    y={i === 0 ? stroke * 2 : Math.max(carcassH - stroke * 2 - RAIL_WIDTH_MM, 0)}
+                    width={Math.max(uw - stroke * 4, 0)}
+                    height={Math.min(RAIL_WIDTH_MM, Math.max(carcassH - stroke * 4, 0))}
+                    fill={backFill}
+                    stroke="transparent"
+                  />
+                ))
+              ) : (
+                <rect
+                  x={stroke * 2}
+                  y={Math.max(carcassH - stroke * 2 - backH(u, carcassH), 0)}
+                  width={Math.max(uw - stroke * 4, 0)}
+                  height={Math.max(backH(u, carcassH) - stroke * 2, 0)}
+                  fill={backFill}
+                  stroke="transparent"
+                />
+              )
             )}
             {sideOn ? (
               /* לוח: מסגרת, קו מקווקו במקום שאליו פונה החזית, ותווית */
@@ -1044,4 +1063,17 @@ function measureOverlay(
       {label(cx, cy + fontSize * 0.35, `${cm(intoRoomMm(u))} ↕`)}
     </g>
   );
+}
+
+/** הקושרות של הארגז, כשיש כאלה. */
+function rails(u: PlacedUnit): RailSides {
+  return u.rails ?? {};
+}
+
+/**
+ * גובה לוח הגב בציור.
+ * ריק = הגב מכסה את הגוף כולו, וזה המצב הרגיל.
+ */
+function backH(u: PlacedUnit, bodyMm: number): number {
+  return Math.min(u.backHeightMm ?? bodyMm, bodyMm);
 }

@@ -337,6 +337,8 @@ export const unitsRepo = {
       exposed: item.exposed,
       // הגב שהפריט הגיע איתו, ואם אין — דרך העבודה של הנגרייה
       backKind: item.backKind ?? defaults.backKind,
+      backHeightMm: item.backHeightMm,
+      rails: item.rails,
       handles: item.handles,
       glassDoors: item.glassDoors,
       led: item.led,

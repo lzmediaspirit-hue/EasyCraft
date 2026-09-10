@@ -51,6 +51,8 @@ export function SaveToLibrarySheet({
       drawerStyle: unit.drawerStyle,
       exposed: unit.exposed,
       backKind: unit.backKind,
+      backHeightMm: unit.backHeightMm,
+      rails: unit.rails,
       handles: unit.handles,
       glassDoors: unit.glassDoors,
       led: unit.led,

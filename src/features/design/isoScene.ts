@@ -13,6 +13,7 @@ import { unitBox, unitFrame } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import type { Face, IsoView, Solid, Tf } from './isoMath';
+import { RAIL_WIDTH_MM } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /** גוון הזכוכית — מה שרואים דרכו נשאר קר וכחלחל, כמו זכוכית אמיתית. */
@@ -212,14 +213,38 @@ function unitSolids(
       !!gs.end,
     );
   if (!off.bottom) add(slab(frame, x + t, y, 0, w - 2 * t, t, d, carcassTone, `${u.id}-b`));
-  if (!off.top) add(slab(frame, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`));
+  /*
+   * התקרה. כשהיא מקושרות היא שתי רצועות ולא לוח — בדיוק מה שיושב
+   * מתחת למשטח בארגז תחתון, ומה שרואים כשמסתכלים מלמעלה.
+   */
+  const rails = u.rails ?? {};
+  if (!off.top) {
+    if (rails.top) {
+      const railD = Math.min(RAIL_WIDTH_MM, d);
+      add(slab(frame, x + t, y + h - t, 0, w - 2 * t, t, railD, carcassTone, `${u.id}-t0`));
+      add(
+        slab(frame, x + t, y + h - t, d - railD, w - 2 * t, t, railD, carcassTone, `${u.id}-t1`),
+      );
+    } else {
+      add(slab(frame, x + t, y + h - t, 0, w - 2 * t, t, d, carcassTone, `${u.id}-t`));
+    }
+  }
   const back = u.backKind ?? 'thin';
   // גב בעובי גוף נבנה כמו דופן, וגב דק יושב בחריץ — וזה נראה
   const bt = back === 'none' ? 0 : back === 'carcass' ? t : MATERIAL.backMm;
-  if (bt) {
+  const backTone = shade(carcassTone, 0.86);
+  if (bt && rails.back) {
+    /* גב מקושרות: רצועה למעלה ורצועה למטה, ובאמצע רואים את הקיר */
+    const railH = Math.min(RAIL_WIDTH_MM, Math.max(h - 2 * t, 0));
+    add(slab(frame, x + t, y + t, 0, w - 2 * t, railH, bt, backTone, `${u.id}-bk0`));
     add(
-      slab(frame, x + t, y + t, 0, w - 2 * t, h - 2 * t, bt, shade(carcassTone, 0.86), `${u.id}-bk`),
+      slab(frame, x + t, y + h - t - railH, 0, w - 2 * t, railH, bt, backTone, `${u.id}-bk1`),
     );
+  } else if (bt) {
+    /* גב בגובה חלקי יושב על התחתית ומגיע עד לאן שהוא מגיע */
+    const full = Math.max(h - 2 * t, 0);
+    const backH = Math.min(u.backHeightMm ?? full, full);
+    add(slab(frame, x + t, y + t, 0, w - 2 * t, backH, bt, backTone, `${u.id}-bk`));
   }
   /*
    * הפנים מתחיל לפני הגב ולא בתוכו.

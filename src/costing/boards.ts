@@ -10,7 +10,7 @@ import {
   unitZones,
   zoneCells,
 } from '../catalog/zones';
-import { bodyHeightMm, materialForRole } from '../db/types';
+import { RAIL_WIDTH_MM, bodyHeightMm, materialForRole } from '../db/types';
 import type {
   Material,
   PartChoice,
@@ -235,7 +235,14 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
       edgeMm: carcassH,
     });
   }
-  const decks = 2 - (off.top ? 1 : 0) - (off.bottom ? 1 : 0);
+  /*
+   * תחתית ותקרה. תקרה מקושרות אינה לוח: שתי רצועות של 10 ס"מ
+   * מחזיקות את הדפנות, והמשטח יושב עליהן. זה מה שנגר בונה בארגז
+   * תחתון, וזה גם מה שיורד מהפלטה ומהמחיר.
+   */
+  const rails = u.rails ?? {};
+  const railedTop = !!rails.top && !off.top;
+  const decks = 2 - (off.top ? 1 : 0) - (off.bottom ? 1 : 0) - (railedTop ? 1 : 0);
   if (decks > 0) parts.push({
     role: 'carcass',
     label: 'תחתית ותקרה',
@@ -244,6 +251,15 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     widthMm: innerW,
     heightMm: d,
     qty: decks,
+    edgeMm: innerW,
+  });
+  if (railedTop) parts.push({
+    role: 'carcass',
+    label: 'קושרת עליונה',
+    grain: 'free',
+    widthMm: innerW,
+    heightMm: RAIL_WIDTH_MM,
+    qty: 2,
     edgeMm: innerW,
   });
 
@@ -311,18 +327,38 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
     });
   }
 
-  // הגב: דק בחריץ, בעובי הגוף, או בכלל לא
+  /*
+   * הגב: דק בחריץ, בעובי הגוף, קושרות, או בכלל לא.
+   *
+   * גב מקושרות הוא שתי רצועות שמחזיקות את הארון מרובע — מה שנגר
+   * עושה כשהארון נצמד לקיר גמור ואין מה לכסות. גב בגובה חלקי הוא
+   * אותו לוח, נמוך יותר.
+   */
   const backKind = u.backKind ?? 'thin';
   if (backKind !== 'none') {
     const groove = backKind === 'thin' ? s.backGrooveMm : 0;
-    parts.push({
-      role: backKind === 'thin' ? 'back' : 'carcass',
-      label: backKind === 'thin' ? 'גב' : 'גב בעובי גוף',
-      grain: 'free',
-      widthMm: Math.max(carcassW - 2 * t + 2 * groove, 0),
-      heightMm: Math.max(carcassH - 2 * t + 2 * groove, 0),
-      qty: 1,
-    });
+    const role = backKind === 'thin' ? 'back' : 'carcass';
+    const backW = Math.max(carcassW - 2 * t + 2 * groove, 0);
+    const fullH = Math.max(carcassH - 2 * t + 2 * groove, 0);
+    if (rails.back) {
+      parts.push({
+        role,
+        label: 'קושרת גב',
+        grain: 'free',
+        widthMm: backW,
+        heightMm: RAIL_WIDTH_MM,
+        qty: 2,
+      });
+    } else {
+      parts.push({
+        role,
+        label: backKind === 'thin' ? 'גב' : 'גב בעובי גוף',
+        grain: 'free',
+        widthMm: backW,
+        heightMm: Math.min(u.backHeightMm ?? fullH, fullH),
+        qty: 1,
+      });
+    }
   }
 
   /*
