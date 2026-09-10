@@ -1,0 +1,698 @@
+import { AISLE, BLIND_CORNER, ISLAND, KITCHEN, LANDING, PREP, SAFETY, TRIANGLE } from '../../catalog/kitchenRules';
+import type { FreePlacement, UnitLevel, Wall, WallFeature } from '../../db/types';
+import type { PlanWall } from './plan';
+
+/**
+ * תכנון מטבח אוטומטי.
+ *
+ * נכנס חדר ורשימת מכשירים, יוצאות כמה הצעות מלאות. זו פונקציה
+ * טהורה: אין בה React ואין בה בסיס נתונים, ואפשר להריץ אותה על
+ * מספרים ולבדוק שהתוצאה מקיימת את הכללים.
+ *
+ * הרעיון אינו "למלא ארונות". הוא סדר התנועה במטבח — מוציאים
+ * מהמקרר, שוטפים, מכינים, מבשלים — ולכן זה סדר האזורים לאורך
+ * הקיר, וממנו נגזר הכול. פריסה שמכבדת אותו נוחה גם בלי לחשב
+ * משולש עבודה.
+ *
+ * מה שיוצא אינו ארגז מוכן אלא הפניה לפריט ספרייה: ההנחה עצמה
+ * נעשית באותו נתיב שבו נגר מניח ארגז ביד, ולכן ההצעה מתומחרת,
+ * מנוסרת ונצבעת בדיוק כמו מטבח שסודר ידנית. ההסבר המלא לכללים
+ * יושב ב-`docs/kitchen-design.md`, והמספרים ב-`kitchenRules.ts`.
+ */
+
+/** מה יש במטבח. כיור תמיד יש. */
+export interface Appliances {
+  fridge: boolean;
+  oven: boolean;
+  hob: boolean;
+  microwave: boolean;
+  dishwasher: boolean;
+  hood: boolean;
+}
+
+/** מה שהמשתמש מסמן לפני שהוא לוחץ. */
+export interface AutoInput {
+  walls: Wall[];
+  plan: PlanWall[];
+  appliances: Appliances;
+  /** כיסאות באי או בחצי־אי */
+  seating: boolean;
+  /**
+   * רמת הגימור, והיא גם רמת התקציב.
+   * `plain` בוחר ארונות רחבים ודלתות; `rich` בוחר מגירות.
+   */
+  finish: 'plain' | 'standard' | 'rich';
+}
+
+export type LayoutKind = 'single' | 'galley' | 'l' | 'u';
+export type Priority = 'ergonomic' | 'economical' | 'storage';
+
+/** תפקיד של ארגז ברצף — זה מה שקובע את סדר התנועה. */
+export type Role =
+  | 'fridge' | 'sink' | 'dishwasher' | 'hob' | 'oven'
+  | 'prep' | 'store' | 'corner' | 'upper' | 'hood' | 'island';
+
+/**
+ * ארגז אחד בהצעה, כהפניה לספרייה.
+ *
+ * אין כאן מידות גוף, גימורים או רגליים — כל אלה מגיעים מהפריט
+ * ומהגדרות הפרויקט ברגע ההנחה. שכפול שלהם כאן היה יוצר מטבח
+ * אוטומטי שנראה אחרת ממטבח ידני.
+ */
+export interface Placement {
+  /** מפתח הפריט בספרייה, למשל `k-base-sink` */
+  catalogKey: string;
+  wallId: string;
+  xMm: number;
+  widthMm: number;
+  level: UnitLevel;
+  role: Role;
+  /** אי: מיקום ברצפת החדר במקום על הקיר */
+  free?: FreePlacement;
+}
+
+export interface Proposal {
+  key: string;
+  layout: LayoutKind;
+  priority: Priority;
+  title: string;
+  units: Placement[];
+  /** מה שלא נכנס, ולמה */
+  dropped: string[];
+  /** מה שנכון בהצעה הזאת ושווה לומר */
+  notes: string[];
+  score: Score;
+}
+
+export interface Score {
+  /** משולש העבודה — 1 כשכל הצלעות בתחום */
+  triangle: number;
+  /** אזור ההכנה הרציף הגדול ביותר, במ"מ */
+  prepMm: number;
+  /** מטר רץ תחתון */
+  runMm: number;
+  /** מספר הארגזים — פחות ארגזים, פחות דפנות וצירים */
+  boxes: number;
+  /** הציון הכולל שלפיו ההצעות מסודרות */
+  total: number;
+}
+
+/** רוחב מזערי שמתחתיו אין טעם להתחיל ארגז. */
+const MIN_BOX = 300;
+/** קיר קצר מזה אינו קיר עבודה. */
+const MIN_WALL = 1200;
+
+/**
+ * מאיפה מתחיל הקיר השני בפינה.
+ *
+ * הארונות של הקיר הראשון תופסים את הפינה לכל עומקם, ומעליהם עוד
+ * לוח סתימה — בלעדיו הדלת של הארון הפינתי והמגירה של הניצב לו
+ * נפגשות באוויר.
+ */
+const CORNER_START = KITCHEN.baseDepthMm + BLIND_CORNER.fillerMm;
+
+/* ------------------------------------------------------------------ */
+/* בחירת הקירות                                                        */
+/* ------------------------------------------------------------------ */
+
+const usableWalls = (plan: PlanWall[]): PlanWall[] =>
+  plan.filter((p) => p.wall.lengthMm >= MIN_WALL);
+
+/** האם שני קירות מקבילים ופונים זה אל זה. */
+const parallel = (a: PlanWall, b: PlanWall): boolean => {
+  const d = Math.abs(((b.headingDeg - a.headingDeg) % 360 + 360) % 360 - 180);
+  return d < 20;
+};
+
+/**
+ * הקירות שהפריסה רצה עליהם, בסדר שבו הם נפגשים.
+ *
+ * הסדר אינו קישוט: פינה נוצרת רק בין קירות עוקבים, ורק שם צריך
+ * ארון פינתי והסטה. בחירה של "שני הארוכים ביותר" הייתה מייצרת L
+ * בין קירות שאין ביניהם פינה בכלל.
+ */
+function runOf(plan: PlanWall[], layout: LayoutKind): PlanWall[] {
+  const usable = usableWalls(plan);
+  if (!usable.length) return [];
+  if (layout === 'single') {
+    return [usable.reduce((a, b) => (b.wall.lengthMm > a.wall.lengthMm ? b : a))];
+  }
+  if (layout === 'galley') {
+    for (const a of usable) {
+      const b = usable.find((o) => o !== a && parallel(a, o));
+      if (b) return [a, b];
+    }
+    return [];
+  }
+  /* L ו-U רצים על קירות עוקבים; נבחר את הרצף הארוך ביותר */
+  const n = layout === 'l' ? 2 : 3;
+  let best: PlanWall[] = [];
+  for (let i = 0; i + n <= plan.length; i++) {
+    const run = plan.slice(i, i + n);
+    if (run.some((p) => p.wall.lengthMm < MIN_WALL)) continue;
+    const total = run.reduce((s, p) => s + p.wall.lengthMm, 0);
+    if (total > best.reduce((s, p) => s + p.wall.lengthMm, 0)) best = run;
+  }
+  return best;
+}
+
+/**
+ * אילו פריסות החדר בכלל מרשה.
+ *
+ * לא כל פריסה מתאימה לכל חדר, וזה לא עניין של טעם: שתי שורות
+ * ארונות בחדר צר יותר ממעבר עבודה הן מטבח שאי אפשר לפתוח בו
+ * מגירה. הבדיקה נעשית כאן, ולא אחרי שכבר סודרו ארונות.
+ */
+export function layoutsFor(plan: PlanWall[]): LayoutKind[] {
+  const all: LayoutKind[] = ['single', 'galley', 'l', 'u'];
+  return all.filter((k) => {
+    const run = runOf(plan, k);
+    if (run.length < (k === 'single' ? 1 : k === 'u' ? 3 : 2)) return false;
+    if (k === 'galley') return aisleOf(run) >= AISLE.workMm;
+    return true;
+  });
+}
+
+/** המרווח בין שתי שורות ארונות מקבילות. */
+function aisleOf(run: PlanWall[]): number {
+  if (run.length < 2) return Infinity;
+  const [a, b] = run;
+  const dx = b.start.x - a.start.x;
+  const dy = b.start.y - a.start.y;
+  const rad = (a.headingDeg * Math.PI) / 180;
+  /* המרחק הניצב בין הקירות, פחות שתי שורות ארונות */
+  const gap = Math.abs(-Math.sin(rad) * dx + Math.cos(rad) * dy);
+  return Math.max(0, gap - 2 * KITCHEN.baseDepthMm);
+}
+
+/* ------------------------------------------------------------------ */
+/* סדר האזורים לאורך הקיר                                              */
+/* ------------------------------------------------------------------ */
+
+interface Slot {
+  role: Role;
+  key: string;
+  /** הרוחב שהתפקיד דורש; המילוי יתאים אותו לרוחבי התקן */
+  wantMm: number;
+  /** רוחב מזערי שמתחתיו אין טעם להניח אותו */
+  minMm: number;
+}
+
+/**
+ * הרצף שהמטבח נבנה ממנו, בסדר התנועה.
+ *
+ * מקרר בקצה, אחריו משטח, אחריו הכיור עם המדיח לידו, אחריו משטח
+ * ההכנה, ואז הבישול. זה הסדר שנגר מסדר בו מטבח ביד, וזה גם מה
+ * שהכללים דורשים: משטח נחיתה משני צדי הכיור, ומשטח בין הכיור
+ * לכיריים.
+ */
+function sequence(input: AutoInput, priority: Priority): Slot[] {
+  const a = input.appliances;
+  /* מגירות עולות יותר מדלתות, ולכן הן נכנסות לפי רמת הגימור */
+  const prepKey = input.finish === 'plain' || priority === 'economical'
+    ? 'k-base-door2'
+    : 'k-base-dr3';
+  const out: Slot[] = [];
+  if (a.fridge) out.push({ role: 'fridge', key: 'k-tall-fridge', wantMm: 700, minMm: 600 });
+  out.push({ role: 'prep', key: prepKey, wantMm: LANDING.fridgeMm, minMm: MIN_BOX });
+  out.push({ role: 'sink', key: 'k-base-sink', wantMm: 800, minMm: 600 });
+  if (a.dishwasher) out.push({ role: 'dishwasher', key: 'k-base-dw', wantMm: 600, minMm: 450 });
+  /* אזור ההכנה — המשטח הרציף שבין הכיור לכיריים */
+  out.push({ role: 'prep', key: prepKey, wantMm: PREP.widthMm, minMm: 400 });
+  if (a.hob) out.push({ role: 'hob', key: 'k-base-hob', wantMm: 600, minMm: 600 });
+  if (a.oven) {
+    out.push({
+      role: 'oven',
+      key: a.microwave ? 'k-tall-ovenmicro' : 'k-tall-oven',
+      wantMm: 600,
+      minMm: 600,
+    });
+  }
+  return out;
+}
+
+const NAME: Record<string, string> = {
+  'k-tall-fridge': 'עמודת מקרר',
+  'k-tall-oven': 'עמודת תנור',
+  'k-tall-ovenmicro': 'עמודת תנור ומיקרוגל',
+  'k-tall-pantry': 'עמודת מזווה',
+  'k-base-sink': 'ארגז כיור',
+  'k-base-dw': 'ארגז מדיח',
+  'k-base-hob': 'ארגז כיריים',
+  'k-base-door1': 'ארגז דלת',
+  'k-base-door2': 'ארגז דלתות',
+  'k-base-dr3': 'ארגז מגירות',
+  'k-base-blind-end': 'ארון פינה מתה',
+  'k-tall-door': 'עמודת דלתות',
+  'k-up-door1': 'עליון דלת',
+  'k-up-door2': 'עליון דלתות',
+  'k-up-micro': 'ארון מיקרוגל',
+  'k-up-hood': 'ארון קולט אדים',
+};
+
+/** ארגז עמודה מגיע עד התקרה ואינו נושא ארון עליון. */
+const isColumn = (key: string): boolean => key.startsWith('k-tall');
+
+/**
+ * הפריט שמתאים לרוחב שנבחר בפועל.
+ *
+ * הרצף מבקש תפקיד, לא רוחב, והרוחב נקבע רק אחרי שידוע מה נשאר על
+ * הקיר. ארגז דלתות ברוחב 400 הוא ארגז דלת אחת, ועמודת מזווה אינה
+ * נבנית ברוחב 900 — התאמה כאן שומרת על ההצעה בתוך מה שהספרייה
+ * באמת יודעת לבנות.
+ */
+function keyForWidth(key: string, widthMm: number): string {
+  if (key === 'k-base-door1' || key === 'k-base-door2') {
+    return widthMm >= 600 ? 'k-base-door2' : 'k-base-door1';
+  }
+  if (key === 'k-tall-pantry' && widthMm > 600) return 'k-tall-door';
+  return key;
+}
+
+/* ------------------------------------------------------------------ */
+/* מילוי קיר                                                           */
+/* ------------------------------------------------------------------ */
+
+/** קטע פנוי על קיר — מה שנשאר אחרי דלתות ועמודים. */
+interface Span {
+  fromMm: number;
+  toMm: number;
+}
+
+/**
+ * הקטעים שאפשר להעמיד בהם ארונות תחתונים.
+ *
+ * דלת חוסמת לגמרי; חלון אינו חוסם ארון תחתון אלא רק עליון, כי
+ * הוא מתחיל מעל המשטח. עמוד ומדרגה גונבים עומק ולכן הם נחשבים
+ * חסימה לתחתונים גם הם.
+ */
+function baseSpans(p: PlanWall, fromMm: number, toMm: number): Span[] {
+  const blocks = p.wall.features
+    .filter((f) => f.kind === 'door' || f.kind === 'pillar' || f.kind === 'step')
+    .map((f) => ({ from: f.xMm, to: f.xMm + f.widthMm }))
+    .sort((x, y) => x.from - y.from);
+  const out: Span[] = [];
+  let at = fromMm;
+  for (const b of blocks) {
+    if (b.to <= fromMm || b.from >= toMm) continue;
+    if (b.from - at >= MIN_BOX) out.push({ fromMm: at, toMm: b.from });
+    at = Math.max(at, b.to);
+  }
+  if (toMm - at >= MIN_BOX) out.push({ fromMm: at, toMm });
+  return out;
+}
+
+/** האם ארון עליון ברוחב הזה יתנגש בחלון או בדלת. */
+function upperBlocked(wall: Wall, fromMm: number, widthMm: number): boolean {
+  return wall.features.some((f: WallFeature) => {
+    if (f.kind !== 'window' && f.kind !== 'door') return false;
+    if (f.yMm + f.heightMm <= KITCHEN.upperBottomMm) return false;
+    return f.xMm < fromMm + widthMm && f.xMm + f.widthMm > fromMm;
+  });
+}
+
+/**
+ * הרוחב מרשימת התקן שנכנס למקום שנשאר.
+ *
+ * `wide` מבקש את הרחב ביותר האפשרי — ארגז אחד רחב זול משניים
+ * צרים, כי יש בו פחות דפנות ופחות צירים.
+ */
+function fitWidth(availableMm: number, slot: Slot, wide: boolean): number | null {
+  const options = KITCHEN.widthsMm.filter((w) => w <= availableMm && w >= slot.minMm);
+  if (!options.length) return null;
+  if (wide) return options[options.length - 1];
+  return options.reduce((best, w) =>
+    Math.abs(w - slot.wantMm) < Math.abs(best - slot.wantMm) ? w : best,
+  );
+}
+
+/** תפקידים שאפשר לצמצם: משטח הוא משטח גם כשהוא צר יותר. */
+const FLEXIBLE: Role[] = ['prep', 'store'];
+
+/**
+ * מכווץ את הרצף כדי שייכנס לאורך הקיר שיש בפועל.
+ *
+ * קודם מצטמצמים המשטחים, ורק אם עדיין אין מקום — גם ארגזי
+ * המכשירים, עד הרוחב המזערי שלהם. זה הסדר שנגר עובד בו: מקצרים
+ * את המשטח לפני שמוותרים על המדיח.
+ */
+function squeeze(slots: Slot[], capacityMm: number): Slot[] {
+  const trim = (list: Slot[], roles: Role[] | null, excess: number): [Slot[], number] => {
+    const room = list.reduce(
+      (n, s) => n + (!roles || roles.includes(s.role) ? s.wantMm - s.minMm : 0), 0,
+    );
+    if (room <= 0 || excess <= 0) return [list, excess];
+    const take = Math.min(excess, room);
+    return [
+      list.map((s) => {
+        if (roles && !roles.includes(s.role)) return s;
+        const share = ((s.wantMm - s.minMm) / room) * take;
+        return { ...s, wantMm: Math.round(s.wantMm - share) };
+      }),
+      excess - take,
+    ];
+  };
+  let excess = slots.reduce((n, s) => n + s.wantMm, 0) - capacityMm;
+  if (excess <= 0) return slots;
+  let out = slots;
+  [out, excess] = trim(out, FLEXIBLE, excess);
+  [out] = trim(out, null, excess);
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* הצעה אחת                                                            */
+/* ------------------------------------------------------------------ */
+
+function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority): Proposal | null {
+  const run = runOf(input.plan, layout);
+  if (!run.length) return null;
+
+  const units: Placement[] = [];
+  const dropped: string[] = [];
+  const notes: string[] = [];
+  const wide = priority === 'economical';
+  let queue = sequence(input, priority);
+
+  const put = (p: PlanWall, key: string, xMm: number, widthMm: number, role: Role) => {
+    units.push({
+      catalogKey: keyForWidth(key, widthMm),
+      wallId: p.wall.id,
+      xMm: Math.round(xMm),
+      widthMm,
+      level: isColumn(key) ? 'tall' : 'floor',
+      role,
+    });
+  };
+
+  /*
+   * שלב ראשון: מה יש. הפינות נסגרות והקטעים הפנויים נמדדים לפני
+   * שמניחים ארגז אחד, כי הרצף חייב לדעת כמה קיר עומד לרשותו.
+   */
+  const areas: { p: PlanWall; spans: Span[] }[] = [];
+  for (const [wi, p] of run.entries()) {
+    /* פינה פנימית קיימת רק בין קירות עוקבים, ולכן לא במטבח מקבילי */
+    const corner = layout === 'l' || layout === 'u';
+    const startMm = corner && wi > 0 ? CORNER_START : 0;
+    let endMm = p.wall.lengthMm;
+
+    /*
+     * הפינה עצמה: ארון פינה מתה בקצה הקיר היוצא. בלעדיו העומק
+     * שמאחורי הקיר הבא פשוט אובד. בגרסה החסכונית מוותרים עליו —
+     * ארון פינה יקר, והשטח שהוא מציל קטן.
+     */
+    if (corner && wi < run.length - 1) {
+      const w = 900;
+      if (priority !== 'economical' && endMm - startMm >= w + MIN_BOX) {
+        put(p, 'k-base-blind-end', endMm - w, w, 'corner');
+        endMm -= w;
+      } else {
+        endMm -= KITCHEN.baseDepthMm;
+        if (priority === 'economical') notes.push('הפינה נשארת ריקה — בלי ארון פינה');
+      }
+    }
+    areas.push({ p, spans: baseSpans(p, startMm, endMm) });
+  }
+
+  /*
+   * שלב שני: להתאים את הרצף לקיר שיש. בלי זה המילוי החמדני היה
+   * נותן לארגז ההכנה את הרוחב המלא ומגלה רק בסוף שלכיריים לא נשאר
+   * מקום — ובמטבח אמיתי מצמצמים ארגז הכנה ולא מוותרים על הבישול.
+   */
+  const capacity = areas.reduce(
+    (n, a) => n + a.spans.reduce((m, sp) => m + (sp.toMm - sp.fromMm), 0), 0,
+  );
+  const hobTail = queue.some((q) => q.role === 'hob') ? SAFETY.hobFromWallMm : 0;
+  queue = squeeze(queue, capacity - hobTail);
+
+  /* שלב שלישי: המילוי עצמו */
+  for (const { p, spans } of areas) {
+    for (const span of spans) {
+      let at = span.fromMm;
+      while (span.toMm - at >= MIN_BOX) {
+        const slot = queue[0] ?? {
+          role: 'store' as Role,
+          key: priority === 'storage' ? 'k-tall-pantry' : 'k-base-door2',
+          wantMm: priority === 'storage' ? 500 : 600,
+          minMm: MIN_BOX,
+        };
+        const w = fitWidth(span.toMm - at, slot, wide && slot.role === 'store');
+        if (w === null) break;
+
+        /*
+         * כיריים לא נצמדות לקיר ניצב: ידית סיר בולטת אל המעבר,
+         * וזה גם מסוכן וגם לא נוח. כשאין מקום — ממלאים ומחכים
+         * למקום הבא ברצף.
+         */
+        const tooClose =
+          slot.role === 'hob' &&
+          (at - span.fromMm < SAFETY.hobFromWallMm || span.toMm - (at + w) < SAFETY.hobFromWallMm);
+        if (tooClose) {
+          const filler = fitWidth(span.toMm - at, { ...slot, minMm: MIN_BOX }, false);
+          if (filler === null) break;
+          put(p, 'k-base-door2', at, filler, 'store');
+          at += filler;
+          continue;
+        }
+
+        put(p, slot.key, at, w, slot.role);
+        if (queue[0]) queue = queue.slice(1);
+        at += w;
+      }
+    }
+  }
+
+  for (const missed of queue) {
+    dropped.push(`${NAME[missed.key] ?? missed.key} — לא נשאר קיר פנוי ברוחב ${missed.minMm} מ"מ`);
+  }
+
+  /* ---- ארונות עליונים ---- */
+  if (priority === 'economical') {
+    notes.push('בלי ארונות עליונים — הגרסה החסכונית');
+  } else {
+    const hood = input.appliances.hood && input.appliances.hob;
+    for (const u of [...units]) {
+      if (u.level !== 'floor') continue;
+      const wall = wallOf(input, u.wallId);
+      if (upperBlocked(wall, u.xMm, u.widthMm)) continue;
+      /* מעל כיריים תלוי קולט אדים ולא ארון; ובלי קולט — כלום */
+      if (u.role === 'hob') {
+        if (hood) units.push({ ...u, catalogKey: 'k-up-hood', role: 'hood', level: 'wall' });
+        continue;
+      }
+      units.push({
+        ...u,
+        catalogKey: u.widthMm > 600 ? 'k-up-door2' : 'k-up-door1',
+        role: 'upper',
+        level: 'wall',
+      });
+    }
+    /* מיקרוגל בלי תנור יושב בארון עליון מעל אזור ההכנה */
+    if (input.appliances.microwave && !input.appliances.oven) {
+      const spot = units.find((u) => u.role === 'upper' && u.widthMm >= 600);
+      if (spot) {
+        spot.catalogKey = 'k-up-micro';
+        spot.role = 'oven';
+        spot.widthMm = 600;
+      } else {
+        dropped.push('מיקרוגל — אין ארון עליון ברוחב 600 מ"מ שאפשר לשים בו אותו');
+      }
+    }
+  }
+
+  if (input.appliances.hood && input.appliances.hob) {
+    notes.push(`תחתית קולט האדים ${SAFETY.hoodElectricMm} מ"מ מעל הכיריים`);
+  }
+
+  /* ---- ישיבה ---- */
+  if (input.seating) {
+    const island = islandFor(input, layout);
+    if (island) {
+      units.push(island);
+      notes.push(`אי לישיבה — מרווח ${ISLAND.clearMm} מ"מ מסביבו, ומשטח בולט ${ISLAND.overhangMm} מ"מ לכיסאות`);
+    } else {
+      dropped.push(`ישיבה — לחדר אין מקום לאי: צריך ${ISLAND.roomAreaM2} מ"ר ומרווח ${ISLAND.clearMm} מ"מ מכל צד`);
+    }
+  }
+
+  if (layout === 'galley') {
+    const advice = aisleAdvice(aisleOf(run));
+    if (advice) notes.push(advice);
+  }
+
+  return {
+    key: `${layout}-${priority}`,
+    layout,
+    priority,
+    title: `${LAYOUT_NAMES[layout]} · ${PRIORITY_NAMES[priority]}`,
+    units,
+    dropped,
+    notes,
+    score: scoreOf(units, priority),
+  };
+}
+
+const LAYOUT_NAMES: Record<LayoutKind, string> = {
+  single: 'קו אחד',
+  galley: 'שני קווים',
+  l: 'פינת L',
+  u: 'פרסה',
+};
+
+const PRIORITY_NAMES: Record<Priority, string> = {
+  ergonomic: 'נוח לעבודה',
+  economical: 'חסכוני',
+  storage: 'מקסימום אחסון',
+};
+
+function wallOf(input: AutoInput, wallId: string): Wall {
+  return input.walls.find((w) => w.id === wallId) ?? input.walls[0];
+}
+
+/* ------------------------------------------------------------------ */
+/* אי                                                                  */
+/* ------------------------------------------------------------------ */
+
+/** שטח החדר במ"ר, לפי מצולע הקירות. */
+function roomAreaM2(plan: PlanWall[]): number {
+  if (plan.length < 3) return 0;
+  let sum = 0;
+  for (const p of plan) sum += p.start.x * p.end.y - p.end.x * p.start.y;
+  return Math.abs(sum) / 2 / 1e6;
+}
+
+/**
+ * אי, אם החדר באמת מרשה אותו.
+ *
+ * אי אינו שאלה של רצון אלא של מרווח: צריך מעבר מלא מכל צד, ולכן
+ * הרוחב הפנוי חייב להכיל שורת ארונות, שני מעברים ואת האי עצמו.
+ * חדר שלא עומד בזה מקבל "לא נכנס" ולא אי צפוף.
+ */
+function islandFor(input: AutoInput, layout: LayoutKind): Placement | null {
+  const { plan } = input;
+  if (layout === 'galley' || plan.length < 3) return null;
+  if (roomAreaM2(plan) < ISLAND.roomAreaM2) return null;
+
+  const xs = plan.map((p) => p.start.x);
+  const ys = plan.map((p) => p.start.y);
+  const w = Math.max(...xs) - Math.min(...xs);
+  const h = Math.max(...ys) - Math.min(...ys);
+  const rows = layout === 'single' ? 1 : 2;
+  const need = rows * KITCHEN.baseDepthMm + 2 * ISLAND.clearMm + ISLAND.minDepthMm;
+  if (Math.min(w, h) < need) return null;
+
+  const long = Math.max(w, h);
+  const widthMm = Math.min(1200, Math.max(ISLAND.minWidthMm, long - 2 * ISLAND.clearMm));
+  return {
+    catalogKey: 'k-base-door2',
+    wallId: plan[0].wall.id,
+    xMm: 0,
+    widthMm,
+    level: 'floor',
+    role: 'island',
+    free: {
+      xMm: Math.round(Math.min(...xs) + w / 2 - widthMm / 2),
+      zMm: Math.round(Math.min(...ys) + h / 2 - KITCHEN.baseDepthMm / 2),
+      headingDeg: plan[0].headingDeg,
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* ניקוד                                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * כמה ההצעה טובה.
+ *
+ * שלושה דברים נמדדים: משולש העבודה, אורך משטח ההכנה הרציף, ומספר
+ * הארגזים. השניים הראשונים הם נוחות, האחרון הוא מחיר — ארגז אחד
+ * רחב זול משניים צרים. העדיפות שהמשתמש בחר קובעת את המשקלות,
+ * ולכן אותה פריסה מקבלת ציון אחר בכל עדיפות.
+ */
+function scoreOf(units: Placement[], priority: Priority): Score {
+  const floor = units.filter((u) => !u.free && u.level !== 'wall');
+  const runMm = floor.reduce((n, u) => n + u.widthMm, 0);
+
+  /* משולש העבודה — נמדד לאורך הקיר, וקירות שונים אינם משווים */
+  const centre = (role: Role) => {
+    const u = floor.find((x) => x.role === role);
+    return u ? { wall: u.wallId, at: u.xMm + u.widthMm / 2 } : null;
+  };
+  const pts = [centre('sink'), centre('hob'), centre('fridge')].filter((v) => v !== null);
+  const legs: number[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      const a = pts[i]!;
+      const b = pts[j]!;
+      /* על קירות שונים אין מדידה ישרה; ההערכה היא סכום המרחקים לפינה */
+      legs.push(a.wall === b.wall ? Math.abs(a.at - b.at) : a.at + b.at);
+    }
+  }
+  const inRange = legs.filter((l) => l >= TRIANGLE.minLegMm && l <= TRIANGLE.maxLegMm).length;
+  const triangle = legs.length ? inRange / legs.length : 0;
+
+  /* משטח ההכנה: הרצף הארוך ביותר של ארגזים שאינם מכשיר */
+  const appliance: Role[] = ['sink', 'hob', 'oven', 'fridge', 'dishwasher'];
+  let prepMm = 0;
+  for (const wallId of new Set(floor.map((u) => u.wallId))) {
+    let run = 0;
+    for (const u of floor.filter((x) => x.wallId === wallId).sort((a, b) => a.xMm - b.xMm)) {
+      run = appliance.includes(u.role) ? 0 : run + u.widthMm;
+      prepMm = Math.max(prepMm, run);
+    }
+  }
+
+  const boxes = units.length;
+  const weight =
+    priority === 'ergonomic' ? { t: 50, p: 30, r: 10, b: 10 }
+    : priority === 'economical' ? { t: 20, p: 15, r: 15, b: 50 }
+    : { t: 20, p: 15, r: 50, b: 15 };
+  const total =
+    weight.t * triangle +
+    weight.p * Math.min(prepMm / PREP.widthMm, 1) +
+    weight.r * Math.min(runMm / 5000, 1) +
+    weight.b * Math.max(0, 1 - boxes / 30);
+  return { triangle, prepMm, runMm, boxes, total: Math.round(total) };
+}
+
+/* ------------------------------------------------------------------ */
+/* הכניסה                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * כל ההצעות שהחדר מרשה, מהטובה לפחות.
+ *
+ * פריסה × עדיפות: קודם נבחרות הפריסות שהחדר בכלל מאפשר, ולכל
+ * אחת נבנות שלוש גרסאות. מה שלא נכנס יורד עם הסבר ולא נדחס בכוח —
+ * מטבח שנראה שלם ואי אפשר לפתוח בו מגירה גרוע ממטבח שאומר מראש
+ * מה לא נכנס.
+ */
+export function planKitchen(input: AutoInput): Proposal[] {
+  const out: Proposal[] = [];
+  for (const layout of layoutsFor(input.plan)) {
+    for (const priority of ['ergonomic', 'economical', 'storage'] as const) {
+      const p = buildProposal(input, layout, priority);
+      if (p && p.units.length) out.push(p);
+    }
+  }
+  return out.sort((a, b) => b.score.total - a.score.total);
+}
+
+/** מה מפריע לתכנון, כשאין אף הצעה. */
+export function whyNothing(plan: PlanWall[]): string {
+  if (!plan.length) return 'אין קירות בחדר';
+  const longest = Math.max(...plan.map((p) => p.wall.lengthMm));
+  if (longest < MIN_WALL) return `הקיר הארוך ביותר הוא ${longest} מ"מ, וצריך לפחות ${MIN_WALL}`;
+  return 'הדלתות והעמודים לא משאירים קטע קיר פנוי';
+}
+
+/** המרווח שבין שתי שורות ארונות, כדי לומר אם הוא מספיק. */
+export function aisleAdvice(widthMm: number): string | null {
+  if (!Number.isFinite(widthMm) || widthMm >= AISLE.twoCooksMm) return null;
+  if (widthMm >= AISLE.workMm) return `מעבר ${Math.round(widthMm)} מ"מ — מספיק לטבח אחד; לשניים צריך ${AISLE.twoCooksMm}`;
+  return `המעבר ${Math.round(widthMm)} מ"מ — מעבר עבודה מתחיל ב-${AISLE.workMm} מ"מ`;
+}
+
+/** שם קריא לארגז בהצעה, לתצוגה ברשימה. */
+export const placementName = (p: Placement): string => NAME[p.catalogKey] ?? 'ארגז';
