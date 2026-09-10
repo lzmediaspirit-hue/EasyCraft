@@ -10,6 +10,7 @@ import { Field, NumField, PriceField, inputClass, selectOnFocus } from '../../ui
 import { displayUnit } from '../../ui/units';
 import { useDisplayUnit } from '../../ui/useDisplayUnit';
 import { ChevronIcon, PlusIcon, SheetIcon, TeamIcon } from '../../ui/icons';
+import { PART_ROLES } from '../../db/types';
 import type { BackKind, Finish, Material } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
@@ -51,7 +52,7 @@ export function SettingsScreen() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
-      <ScreenHeader title="הגדרות" subtitle="צוות, גוונים, חומרים וחישוב" />
+      <ScreenHeader title="הגדרות" subtitle="צוות, גוונים, לוחות וחישוב" />
 
       <main className="flex-1 space-y-8 px-5 pt-5 pb-28">
         <section>
@@ -134,22 +135,34 @@ export function SettingsScreen() {
         </section>
 
         <section>
-          <SectionTitle>חומרים</SectionTitle>
+          <SectionTitle>לוחות</SectionTitle>
+          {/*
+            לוח מורכב משניים: ליבה וגוון. כאן יושבות הליבות — הגוף
+            הפיזי, העובי והצבע שהוא מגיע בהם. הגוון מודבק עליהן,
+            והמחיר יושב בהצטלבות שביניהם.
+          */}
+          <p className="mb-2 text-xs leading-snug text-stone-500">
+            ליבה היא הגוף הפיזי של הלוח — סנדוויץ׳, MDF או דיקט. הגוון הוא מה
+            שמודבק עליה, וצבע ומרקם יחד קובעים אותו.
+          </p>
           <ul className="divide-y divide-stone-200/80 overflow-hidden rounded-2xl border border-stone-200 bg-white">
             {materials.map((m) => (
               <li key={m.id}>
-                {/*
-                  החומרים הם רשימה קצרה שבקושי משתנה, ומידות הפלטה
-                  והעובי שייכים לעריכה ולא לרשימה. שם ואייקון מספיקים
-                  כדי לבחור מי מהם לפתוח.
-                */}
                 <button
                   onClick={() => setEditingMaterial(m)}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-start transition-colors hover:bg-stone-50"
                 >
                   <SheetIcon className="size-5 shrink-0 text-stone-400" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
-                    {m.name}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-stone-900">
+                      {m.name}
+                    </span>
+                    {/* מה הלוח משמש, כדי שהרשימה תיקרא כמו המחסן ולא כמו טבלה */}
+                    {m.roles?.length ? (
+                      <span className="block truncate text-[11px] text-stone-400">
+                        {m.roles.map((r) => PART_ROLES.find((x) => x.key === r)?.label).join(' · ')}
+                      </span>
+                    ) : null}
                   </span>
                   <ChevronIcon className="size-4 shrink-0 text-stone-300" />
                 </button>
@@ -162,7 +175,7 @@ export function SettingsScreen() {
             className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-stone-300 py-3 text-sm font-medium text-stone-500 transition-colors hover:border-oak-400 hover:text-oak-700"
           >
             <PlusIcon className="size-4" />
-            חומר חדש
+            לוח חדש
           </button>
         </section>
 

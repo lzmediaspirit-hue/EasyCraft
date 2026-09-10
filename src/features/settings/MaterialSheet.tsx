@@ -1,18 +1,22 @@
 import { useState } from 'react';
-import { materialsRepo } from '../../materials/materialsRepo';
+import { boardName, materialsRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { SheetFooter } from '../../ui/SheetFooter';
 import { Chip, Field, inputClass, selectOnFocus } from '../../ui/Field';
-import { PART_ROLES, SHEET_HEIGHTS_MM, SHEET_WIDTH_MM } from '../../db/types';
+import { CORES, PART_ROLES, SHEET_HEIGHTS_MM, SHEET_WIDTH_MM, coreOf } from '../../db/types';
 import { cm, unitLabel } from '../../ui/units';
-import type { Material, PartRole } from '../../db/types';
+import type { CoreKind, Material, PartRole } from '../../db/types';
 
 /**
- * חומר גלם.
+ * ליבה — הבסיס הפיזי של הלוח.
  *
- * החומר הוא הבסיס הפיזי — סנדוויץ׳, MDF, דיקט — ואין לו צבע ואין
- * לו מחיר: המחיר נקבע בהצטלבות עם הגוון, כי אותו לבן עולה אחרת על
- * כל אחד מהם. לכן הרשימה הזו קצרה וכמעט לא משתנה.
+ * לוח מורכב משניים: ליבה וגוון. כאן נקבעת הליבה — סנדוויץ׳, MDF או
+ * דיקט — והעובי והצבע שהיא מגיעה בהם. אין כאן צבע פני שטח ואין
+ * מחיר: המחיר נקבע בהצטלבות עם הגוון, כי אותו לבן עולה אחרת על כל
+ * ליבה.
+ *
+ * שורה כאן היא לוח שאפשר להצביע עליו במחסן, ולכן MDF 18 ו-MDF 9
+ * הם שתי שורות ולא אחת עם שני עוביים.
  */
 export function MaterialSheet({
   material,
@@ -23,24 +27,41 @@ export function MaterialSheet({
   onSaved?: (materialId: string) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(material?.name ?? '');
-  const [thickness, setThickness] = useState(
-    material?.thicknessMm !== undefined ? String(material.thicknessMm) : '',
-  );
+  const [core, setCore] = useState<CoreKind | undefined>(material?.core);
+  const [coreColor, setCoreColor] = useState<string | undefined>(material?.coreColor);
+  const [thickness, setThickness] = useState<number | undefined>(material?.thicknessMm);
   const [sheetHeight, setSheetHeight] = useState(material?.sheetHeightMm ?? SHEET_HEIGHTS_MM[0]);
   /*
-   * לאילו חלקים החומר משמש. זו ההחלטה שקובעת אילו גוונים מוצעים
+   * שם משלו, כשהנגר רוצה כזה. ריק = השם נגזר מהליבה, מהצבע ומהעובי,
+   * כדי ששני אנשים שיוסיפו את אותו לוח יקראו לו אותו דבר.
+   */
+  const [name, setName] = useState(material?.name ?? '');
+  /*
+   * לאילו חלקים הלוח משמש. זו ההחלטה שקובעת אילו גוונים מוצעים
    * לגוף ואילו לחזיתות — ולכן היא נקבעת כאן, פעם אחת, ולא בכל ארגז.
    */
   const [roles, setRoles] = useState<PartRole[]>(material?.roles ?? []);
 
-  const canSave = name.trim().length > 0;
+  const spec = coreOf(core);
+  const auto = boardName({ core, coreColor, thicknessMm: thickness });
+  const finalName = name.trim() || auto;
+  const canSave = finalName.length > 0;
+
+  /** בחירת ליבה מאפסת את מה ששייך לליבה הקודמת ולא קיים בחדשה. */
+  function pickCore(key: CoreKind) {
+    const next = coreOf(key);
+    setCore(key);
+    setThickness(next?.thicknessMm[0]);
+    setCoreColor(next?.colors?.[0]);
+  }
 
   async function save() {
     const id = await materialsRepo.save({
       id: material?.id,
-      name: name.trim(),
-      thicknessMm: thickness.trim() ? Number(thickness) : undefined,
+      name: finalName,
+      core,
+      coreColor: spec?.colors ? coreColor : undefined,
+      thicknessMm: thickness,
       sheetWidthMm: SHEET_WIDTH_MM,
       sheetHeightMm: sheetHeight,
       roles: roles.length ? roles : undefined,
@@ -51,13 +72,13 @@ export function MaterialSheet({
 
   return (
     <Sheet
-      title={material ? 'עריכת חומר' : 'חומר חדש'}
+      title={material ? 'עריכת לוח' : 'לוח חדש'}
       onClose={onClose}
       footer={
         <SheetFooter
           canSave={canSave}
           onSave={save}
-          removeLabel="מחיקת החומר"
+          removeLabel="מחיקת הלוח"
           onRemove={
             material
               ? async () => {
@@ -70,34 +91,64 @@ export function MaterialSheet({
       }
     >
       <div className="space-y-5">
-        <Field label="שם החומר">
+        {/*
+          הליבה קודמת לכול: היא שקובעת אילו עוביים קיימים, אם יש
+          צבע ליבה בכלל, ואם הלוח יכול להגיע מודבק משני הצדדים.
+        */}
+        <Field group label="ליבה" hint="הגוף הפיזי של הלוח">
+          <div className="flex flex-wrap gap-1.5">
+            {CORES.map((c) => (
+              <Chip key={c.key} active={core === c.key} onClick={() => pickCore(c.key)}>
+                {c.label}
+              </Chip>
+            ))}
+          </div>
+          {spec && <p className="mt-1.5 text-[11px] leading-snug text-stone-400">{spec.hint}</p>}
+        </Field>
+
+        {spec && (
+          <Field group label="עובי" hint="מ״מ · הראשון הוא התקן">
+            <div className="flex flex-wrap gap-1.5">
+              {spec.thicknessMm.map((t) => (
+                <Chip key={t} active={thickness === t} onClick={() => setThickness(t)}>
+                  <span className="num">{t}</span>
+                </Chip>
+              ))}
+            </div>
+          </Field>
+        )}
+
+        {/*
+          צבע הליבה אינו הגוון: הגוון מודבק מעל, וצבע הליבה הוא מה
+          שנראה בחתך ובקנט — ולכן הנגר בוחר אותו.
+        */}
+        {spec?.colors && (
+          <Field group label="צבע הליבה" hint="נראה בחתך ובקנט">
+            <div className="flex flex-wrap gap-1.5">
+              {spec.colors.map((c) => (
+                <Chip key={c} active={coreColor === c} onClick={() => setCoreColor(c)}>
+                  {c}
+                </Chip>
+              ))}
+            </div>
+          </Field>
+        )}
+
+        <Field label="שם הלוח" hint="ריק = לפי הליבה">
           <input
-            autoFocus={!material}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onFocus={selectOnFocus}
             className={inputClass}
-            placeholder="למשל: דיקט 5 מ״מ"
-          />
-        </Field>
-
-        <Field label="עובי" hint="מ״מ · לא חובה">
-          <input
-            value={thickness}
-            onChange={(e) => setThickness(e.target.value)}
-            onFocus={selectOnFocus}
-            type="number"
-            inputMode="decimal"
-            placeholder="—"
-            className={`${inputClass} num text-end placeholder:text-stone-300`}
+            placeholder={auto || 'למשל: דיקט 5 מ״מ'}
           />
         </Field>
 
         {/*
           החומר שכל חלק נבנה ממנו הוא החלטה של הנגרייה: הגוף
           מסנדוויץ׳, החזיתות מ-MDF, הגב מדיקט. מה שנבחר כאן קובע גם
-          איזה חומר נבחר אוטומטית לחלק, וגם אילו גוונים בכלל מוצעים
-          לו — כי גוון קיים על חומר רק אם נקבע לו מחיר עליו.
+          איזה לוח נבחר אוטומטית לחלק, וגם אילו גוונים בכלל מוצעים
+          לו — כי גוון קיים על לוח רק אם נקבע לו מחיר עליו.
         */}
         <Field group label="משמש ל" hint="אפשר כמה">
           <div className="flex flex-wrap gap-1.5">
@@ -116,12 +167,12 @@ export function MaterialSheet({
             ))}
           </div>
           <p className="mt-1.5 text-[11px] leading-snug text-stone-400">
-            חומר בלי שיוך לא ייבחר אוטומטית, אבל אפשר לבחור בו ביד.
+            לוח בלי שיוך לא ייבחר אוטומטית, אבל אפשר לבחור בו ביד.
           </p>
         </Field>
 
         {/*
-          מידת הפלטה היא מאפיין של החומר אצל הספק ולא של החישוב.
+          מידת הפלטה היא מאפיין של הלוח אצל הספק ולא של החישוב.
           הרוחב תמיד 122 ס"מ; הגובה משתנה בין ספקים, ולכן הוא נבחר
           מהגבהים שקיימים בשוק.
         */}
@@ -138,8 +189,8 @@ export function MaterialSheet({
         </Field>
 
         <p className="text-xs leading-snug text-stone-500">
-          המחיר אינו נקבע כאן: אותו גוון עולה אחרת על כל חומר, ולכן הוא
-          נקבע בגוון עצמו — מחיר לכל חומר שהגוון קיים עליו.
+          המחיר אינו נקבע כאן: אותו גוון עולה אחרת על כל ליבה, ולכן הוא נקבע בגוון
+          עצמו — מחיר לכל לוח שהגוון קיים עליו.
         </p>
       </div>
     </Sheet>

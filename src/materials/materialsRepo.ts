@@ -1,8 +1,11 @@
 import { db } from '../db/db';
 import { KITCHEN } from '../catalog/standards';
+import { CORES } from '../db/types';
 import type {
+  CoreKind,
   Finish,
   Material,
+  Offcut,
   ProjectPrice,
   Settings,
   StockItem,
@@ -53,20 +56,26 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 /**
- * החומרים שכל נגרייה עובדת איתם, כנקודת פתיחה.
- * הרשימה קצרה ובקושי משתנה — מה שגדל הוא רשימת הגוונים.
+ * הליבות שכל נגרייה עובדת איתן, כנקודת פתיחה.
+ *
+ * שלוש שורות ולא יותר: הגוף מסנדוויץ׳, החזיתות מ-MDF, הגב מדיקט.
+ * זו נקודת הפתיחה ולא כלל — מי שמוסיף MDF בעובי אחר או ליבה בצבע
+ * אחר מוסיף שורה, וכל שורה כאן היא לוח שאפשר להצביע עליו במחסן.
  */
 const SEED_MATERIALS: Omit<Material, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
-    name: 'סנדוויץ׳',
+    name: 'סנדוויץ׳ 17 מ״מ',
+    core: 'sandwich',
     roles: ['carcass'],
     sheetWidthMm: 1220,
     sheetHeightMm: 2440,
-    thicknessMm: 18,
+    thicknessMm: 17,
     sortOrder: 0,
   },
   {
-    name: 'MDF',
+    name: 'MDF חום 18 מ״מ',
+    core: 'mdf',
+    coreColor: 'חום',
     roles: ['front', 'exposed'],
     sheetWidthMm: 1220,
     sheetHeightMm: 2440,
@@ -75,6 +84,7 @@ const SEED_MATERIALS: Omit<Material, 'id' | 'createdAt' | 'updatedAt'>[] = [
   },
   {
     name: 'דיקט 5 מ״מ',
+    core: 'plywood',
     roles: ['back'],
     sheetWidthMm: 1220,
     sheetHeightMm: 2440,
@@ -82,6 +92,24 @@ const SEED_MATERIALS: Omit<Material, 'id' | 'createdAt' | 'updatedAt'>[] = [
     sortOrder: 2,
   },
 ];
+
+/**
+ * שם הלוח מהחלקים שלו: ליבה, צבע ליבה ועובי.
+ *
+ * השם אינו שדה חופשי שנכתב מחדש בכל פעם אלא תיאור של מה שנבחר,
+ * כדי ש"MDF שחור 18" יישמע אותו דבר אצל כל מי שיוסיף אותו. מי
+ * שרוצה שם משלו עדיין יכול לכתוב אותו.
+ */
+export function boardName(input: {
+  core?: CoreKind;
+  coreColor?: string;
+  thicknessMm?: number;
+}): string {
+  const core = CORES.find((c) => c.key === input.core);
+  return [core?.label, input.coreColor, input.thicknessMm ? `${input.thicknessMm} מ״מ` : '']
+    .filter(Boolean)
+    .join(' ');
+}
 
 /**
  * גוונים לפתיחה, עם מחיר לכל חומר.
@@ -276,7 +304,13 @@ export const stockRepo = {
   async set(
     finishId: string,
     materialId: string,
-    patch: { sheets?: number; ordered?: number; edgeInStock?: boolean },
+    patch: {
+      sheets?: number;
+      ordered?: number;
+      edgeInStock?: boolean;
+      backFinishId?: string;
+      offcuts?: Offcut[];
+    },
   ): Promise<void> {
     const rows = await db.stock.toArray();
     const existing = rows.find((r) => r.finishId === finishId && r.materialId === materialId);
@@ -285,8 +319,12 @@ export const stockRepo = {
       sheets: patch.sheets ?? existing?.sheets ?? 0,
       ordered: patch.ordered ?? existing?.ordered ?? 0,
       edgeInStock: patch.edgeInStock ?? existing?.edgeInStock,
+      backFinishId: patch.backFinishId ?? existing?.backFinishId,
+      offcuts: patch.offcuts ?? existing?.offcuts,
     };
-    const empty = next.sheets === 0 && next.ordered === 0 && !next.edgeInStock;
+    /* שורה ריקה נמחקת — אבל פחת הוא לוח שקיים, ולכן הוא מחזיק אותה */
+    const empty =
+      next.sheets === 0 && next.ordered === 0 && !next.edgeInStock && !next.offcuts?.length;
 
     if (existing) {
       if (empty) await db.stock.delete(existing.id);

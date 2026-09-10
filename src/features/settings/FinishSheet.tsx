@@ -248,7 +248,7 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
 
         <section className="border-t border-stone-100 pt-5">
           <div className="mb-3 flex items-baseline justify-between gap-2">
-            <h3 className="text-sm font-semibold text-stone-700">מחיר לפלטה, לפי חומר</h3>
+            <h3 className="text-sm font-semibold text-stone-700">מחיר לפלטה, לפי ליבה</h3>
             {/*
               רוב הגוונים אצל אותו ספק חולקים מחירון: העתקה מגוון
               קיים חוסכת הקלדה של אותם מספרים שוב ושוב, ומשאירה
@@ -301,7 +301,7 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
                         {f.name}
                       </span>
                       <span className="num shrink-0 text-[11px] text-stone-500">
-                        {Object.keys(f.prices ?? {}).length} חומרים
+                        {Object.keys(f.prices ?? {}).length} ליבות
                       </span>
                     </button>
                   </li>
@@ -309,7 +309,7 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
             </ul>
           )}
           <p className="-mt-1 mb-3 text-xs leading-snug text-stone-500">
-            אותו גוון עולה אחרת על כל חומר. חומר שנשאר ריק לא יוצע לגוון
+            אותו גוון עולה אחרת על כל ליבה. ליבה שנשארה ריקה לא תוצע לגוון
             הזה כשבונים ארגז.
           </p>
 

@@ -9,7 +9,10 @@ import { selectOnFocus } from '../../ui/Field';
 import { CheckIcon, PlusIcon } from '../../ui/icons';
 import type { ProjectCosting } from '../../costing/boards';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
+import { count } from '../../ui/units';
+import { QuickCalcButton } from '../../ui/QuickCalc';
 import { AddStockSheet } from './AddStockSheet';
+import { OffcutsSheet } from './OffcutsSheet';
 
 type SortKey = 'finish' | 'texture' | 'material' | 'need' | 'have' | 'ordered' | 'missing';
 
@@ -51,6 +54,8 @@ export function StockScreen() {
   const [sort, setSort] = useState<SortKey>('finish');
   const [onlyNeeded, setOnlyNeeded] = useState(false);
   const [adding, setAdding] = useState(false);
+  /** שורת הלוח שעורכים לה פחתים, כ-`finishId:materialId` */
+  const [offcutsFor, setOffcutsFor] = useState<string | null>(null);
 
   /**
    * כמה פלטות דורש כל צירוף של גוון וחומר.
@@ -100,6 +105,15 @@ export function StockScreen() {
             .reduce((a, c) => a + c.sheets, 0);
           const cutFor = (used ?? []).filter((c) => c.lineKey === key).length;
           const left = Math.max(need.sold - cut, 0);
+          /*
+            פלטה דו-צדדית נספרת פעם אחת, בשורה של הצד שהוזן. בשורה
+            של הצד השני היא מופיעה כרזרבה בלבד ולא נכנסת ל"חסר":
+            מי שינסר אותה לצד אחד שרף גם את השני, וספירה כפולה
+            הייתה מבטיחה לוח שאינו קיים.
+          */
+          const reserve = stock
+            .filter((s) => s.materialId === m.id && s.backFinishId === f.id)
+            .reduce((a, s) => a + s.sheets, 0);
           return {
             finish: f,
             material: m,
@@ -110,6 +124,9 @@ export function StockScreen() {
             cut,
             cutFor,
             edge: !!item?.edgeInStock,
+            pairedWith: finishes.find((x) => x.id === item?.backFinishId),
+            reserve,
+            offcuts: item?.offcuts ?? [],
             missing: Math.max(left - have - ordered, 0),
           };
         }),
@@ -118,7 +135,7 @@ export function StockScreen() {
       שורה ריקה — בלי דרישה, בלי מלאי, בלי הזמנה ובלי חיתוך — אינה
       החלטה שמישהו צריך לקבל, ולכן היא לא ברשימה.
     */
-    .filter((r) => r.sold + r.quoted + r.have + r.ordered + r.cut > 0)
+    .filter((r) => r.sold + r.quoted + r.have + r.ordered + r.cut + r.reserve + r.offcuts.length > 0)
     .filter((r) => !materialId || r.material.id === materialId)
     .filter((r) => !texture || r.finish.texture === texture)
     .filter((r) => !onlyNeeded || r.missing > 0)
@@ -154,6 +171,8 @@ export function StockScreen() {
       );
     });
 
+  const offcutRow = rows.find((r) => `${r.finish.id}:${r.material.id}` === offcutsFor);
+
   const totals = rows.reduce(
     (a, r) => ({
       have: a.have + r.have,
@@ -165,7 +184,12 @@ export function StockScreen() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
-      <ScreenHeader title="מלאי לוחות" subtitle="מה יש, מה בדרך ומה חסר" />
+      {/* המחשבון יושב כאן כי ספירת מלאי היא חשבון: פלטות, מידות ופחתים */}
+      <ScreenHeader
+        title="מלאי לוחות"
+        subtitle="מה יש, מה בדרך ומה חסר"
+        action={<QuickCalcButton />}
+      />
 
       <main className="flex-1 space-y-3 px-4 pt-4 pb-10">
         {/*
@@ -194,9 +218,9 @@ export function StockScreen() {
           />
         </div>
 
-        {/* סינון לפי חומר — ככה מזמינים: כל הסנדוויץ׳ מספק אחד */}
+        {/* סינון לפי ליבה — ככה מזמינים: כל הסנדוויץ׳ מספק אחד */}
         <Filters
-          label="חומר"
+          label="ליבה"
           options={materials.map((m) => ({ key: m.id, label: m.name }))}
           value={materialId}
           onChange={setMaterialId}
@@ -217,7 +241,7 @@ export function StockScreen() {
             [
               ['finish', 'גוון'],
               ['texture', 'מרקם'],
-              ['material', 'חומר'],
+              ['material', 'ליבה'],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -254,7 +278,7 @@ export function StockScreen() {
           <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
             {/* כותרת שהיא גם מיון — לוחצים על העמודה שמעניינת */}
             <div className="grid grid-cols-[1fr_2.6rem_3.4rem_4.2rem] items-center gap-1 border-b border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[10px] font-medium text-stone-500">
-              <span>גוון · חומר</span>
+              <span>גוון · ליבה</span>
               <SortHead label="צריך" active={sort === 'need'} onClick={() => setSort(sort === 'need' ? 'finish' : 'need')} />
               <SortHead label="מלאי" active={sort === 'have'} onClick={() => setSort(sort === 'have' ? 'finish' : 'have')} />
               <SortHead label="הוזמן" active={sort === 'ordered'} onClick={() => setSort(sort === 'ordered' ? 'finish' : 'ordered')} />
@@ -286,6 +310,11 @@ export function StockScreen() {
                             {r.cut}
                             {r.cutFor > 1 ? ` ב-${r.cutFor} פרויקטים` : ''}
                           </span>
+                        )}
+                        {/* הפלטה הזו מודבקת בשני גוונים — היא אחת, לא שתיים */}
+                        {r.pairedWith && <span> · דו-צדדי עם {r.pairedWith.name}</span>}
+                        {r.reserve > 0 && (
+                          <span className="num text-sky-700"> · {r.reserve} בצד השני</span>
                         )}
                         {r.missing > 0 && (
                           <span className="num font-semibold text-red-600"> · חסר {r.missing}</span>
@@ -331,19 +360,43 @@ export function StockScreen() {
                     ללוחות. נגר שמגלה בשולחן שאין קנט בגוון עוצר את
                     כל הארגז, ולכן הוא יושב באותה שורה.
                   */}
-                  <button
-                    onClick={() =>
-                      stockRepo.set(r.finish.id, r.material.id, { edgeInStock: !r.edge })
-                    }
-                    aria-pressed={r.edge}
-                    className={`col-span-4 mt-1 rounded-lg px-2 py-1 text-start text-[11px] font-medium transition-colors ${
-                      r.edge
-                        ? 'bg-emerald-50 text-emerald-800'
-                        : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
-                    }`}
-                  >
-                    {r.edge ? '✓ יש קנט תואם' : '— אין קנט תואם'}
-                  </button>
+                  <div className="col-span-4 mt-1 flex gap-1">
+                    <button
+                      onClick={() =>
+                        stockRepo.set(r.finish.id, r.material.id, { edgeInStock: !r.edge })
+                      }
+                      aria-pressed={r.edge}
+                      className={`flex-1 rounded-lg px-2 py-1 text-start text-[11px] font-medium transition-colors ${
+                        r.edge
+                          ? 'bg-emerald-50 text-emerald-800'
+                          : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                      }`}
+                    >
+                      {r.edge ? '✓ יש קנט תואם' : '— אין קנט תואם'}
+                    </button>
+
+                    {/*
+                      פחת הוא לוח שקיים אבל אינו פלטה שלמה. נגר
+                      שיודע שיש לו חצי פלטה בגוון הזה לא מזמין חדשה
+                      בשביל דלת אחת, ולכן המידות עצמן נשמרות.
+                    */}
+                    <button
+                      onClick={() => setOffcutsFor(`${r.finish.id}:${r.material.id}`)}
+                      className={`flex-1 rounded-lg px-2 py-1 text-start text-[11px] font-medium transition-colors ${
+                        r.offcuts.length
+                          ? 'bg-amber-50 text-amber-800'
+                          : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                      }`}
+                    >
+                      {r.offcuts.length
+                        ? `✓ ${count(
+                            r.offcuts.reduce((a, o) => a + (o.qty ?? 1), 0),
+                            'פחת אחד',
+                            'פחתים',
+                          )}`
+                        : '— אין פחתים'}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -374,6 +427,15 @@ export function StockScreen() {
           finishes={finishes}
           materials={materials}
           onClose={() => setAdding(false)}
+        />
+      )}
+
+      {offcutRow && (
+        <OffcutsSheet
+          finish={offcutRow.finish}
+          material={offcutRow.material}
+          offcuts={offcutRow.offcuts}
+          onClose={() => setOffcutsFor(null)}
         />
       )}
     </div>
