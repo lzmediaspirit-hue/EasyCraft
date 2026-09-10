@@ -363,6 +363,17 @@ export function orderSolids(solids: Solid[], v: View): Solid[] {
     const bLo = local ? b.s.lo : b.wLo;
     const bHi = local ? b.s.hi : b.wHi;
     for (let i = 0; i < 3; i++) {
+      /*
+       * ציר שאין בו עומק אינו מכריע.
+       *
+       * בזוויות מסוימות — 45° ו-135° ומה שמשלים אותן — ציר שלם
+       * ניצב לקו המבט, ו-`d[i]` מתאפס. הפרדה על ציר כזה אומרת
+       * "זה לצד זה", לא "זה לפני זה", והמבחן `d[i] > 0` עליו הוא
+       * הטלת מטבע: הוא החזיר תשובה הפוכה בדיוק במחצית המקרים.
+       * ממשיכים לציר הבא, ורק אם אף אחד אינו מכריע נופלים לפינה
+       * הקרובה.
+       */
+      if (Math.abs(d[i]) < 1e-6) continue;
       if (aLo[i] >= bHi[i] - TOUCH) return d[i] > 0 ? 1 : -1;
       if (bLo[i] >= aHi[i] - TOUCH) return d[i] > 0 ? -1 : 1;
     }

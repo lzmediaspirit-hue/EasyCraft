@@ -50,6 +50,14 @@ export interface WallMark {
 export interface Scene {
   /** זווית המבט אחרי ההגבלה — לא תמיד מה שביקשו */
   view: IsoView;
+  /**
+   * הלוחות עצמם, בסדר הציור. הפאות נגזרות מהם.
+   *
+   * הם יוצאים החוצה כדי שאפשר יהיה לשאול על התמונה שאלה שאינה
+   * תלויה בקוד המיון — איזה לוח קרן פוגשת ראשון — ולהשוות אותה
+   * למה שנצבע. בלי זה אין דרך לבדוק את סדר הציור אלא בעין.
+   */
+  solids: Solid[];
   faces: Face[];
   backdrops: Backdrop[];
   marks: WallMark[];
@@ -138,9 +146,10 @@ export function buildScene({
    * הרחוק מצויר קודם. הסדר נקבע בין הלוחות, ורק אז כל לוח נפרש
    * לפאות שנראות ממנו — כך שאותו סדר משרת את כל הפאות שלו.
    */
-  const faces = orderSolids(solids, v).flatMap((q) => solidFaces(q, v));
+  const ordered = orderSolids(solids, v);
+  const faces = ordered.flatMap((q) => solidFaces(q, v));
 
-  return { view: shown, faces, backdrops, marks, floor, bounds, spin };
+  return { view: shown, solids: ordered, faces, backdrops, marks, floor, bounds, spin };
 }
 
 /**
@@ -184,7 +193,7 @@ function unitSolids(
   if (def.noCarcass) {
     const th = u.panelThicknessMm ?? MATERIAL.frontMm;
     if (def.noCarcass === 'horizontal') {
-      add(slab(frame, x, u.yMm, def.cladding ? 0 : 0, w, th, d, tone, `${u.id}-slab`));
+      add(slab(frame, x, u.yMm, 0, w, th, d, tone, `${u.id}-slab`));
     } else {
       add(slab(frame, x, u.yMm, 0, w, u.heightMm, th, tone, `${u.id}-panel`));
     }
@@ -452,12 +461,17 @@ function unitSolids(
   }
 
   /*
-   * משטח העבודה — מה שהעין תופסת ראשון במטבח. הוא יושב על
-   * הארגז, גולש מעט לצדדים ומעט קדימה, בדיוק כמו שיש אמיתי.
+   * משטח העבודה — מה שהעין תופסת ראשון במטבח. הוא יושב על הארגז
+   * וגולש מעט קדימה, כמו שיש אמיתי.
+   *
+   * לצדדים הוא אינו גולש: משטח רץ ברצף על כל השורה, ושני ארגזים
+   * צמודים שכל אחד מהם מרחיב את שלו החוצה יוצרים שני לוחות באותו
+   * מקום ממש. סדר הציור בין שניים כאלה אינו מוגדר, וזה בדיוק מה
+   * שהעין תופסת כהבהוב כשמסובבים את החדר.
    */
   if (u.counterMm) {
     add(
-      slab(frame, x - 20, u.yMm + u.heightMm, 0, w + 40, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`),
+      slab(frame, x, u.yMm + u.heightMm, 0, w, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`),
     );
   }
 
@@ -568,10 +582,9 @@ function wallScenery(
      * חלון, פתח ושקע מצוירים על הקיר גם כאן ולא רק בחזית: מי
      * שמסתובב בחדר רוצה לראות שהארון עומד מתחת לחלון, ולא לחזור
      * למבט אחר כדי לבדוק.
-     */
-    /*
-     * שטוח על הקיר, או נכנס לתוכו. עמוד ומדרגה, שבולטים אל
-     * החדר, אינם כאן אלא בין הארונות — הם עומדים באותו מרחב
+     *
+     * כאן רק מה ששטוח על הקיר או נכנס לתוכו. עמוד ומדרגה, שבולטים
+     * אל החדר, אינם כאן אלא בין הארונות — הם עומדים באותו מרחב
      * ולכן הם צריכים להסתיר ולהיות מוסתרים יחד איתם.
      */
     onWall: facing

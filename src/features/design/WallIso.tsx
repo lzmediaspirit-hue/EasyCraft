@@ -72,7 +72,7 @@ export function WallIso({
   onBulk?: (ids: string[], action: 'delete' | 'hide' | 'library') => void;
   /** חזיתות מוסתרות — רואים את הגוף והמדפים */
   inside: boolean;
-  /** העליונים יורדים מהתמונה */
+  /** צבע התצוגה לכל גוון, לפי מזהה */
   finishHex: Record<string, string>;
   /**
    * תצוגת הצגה: אותו חדר, בלי שרטוט.
