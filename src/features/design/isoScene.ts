@@ -73,7 +73,6 @@ export function buildScene({
   activeWallId,
   selectedId,
   inside,
-  noUppers,
   finishHex,
   present,
   view,
@@ -83,7 +82,6 @@ export function buildScene({
   activeWallId: string;
   selectedId: string | null;
   inside: boolean;
-  noUppers?: boolean;
   finishHex: Record<string, string>;
   present: boolean;
   view: IsoView;
@@ -128,7 +126,7 @@ export function buildScene({
    * כאן, אבל נשאר בחומרים, במחיר ובניסור.
    */
   for (const u of units) {
-    if (outOfSight(u, noUppers)) continue;
+    if (outOfSight(u)) continue;
     const place = unitBox(u, plan);
     if (!place) continue;
     if (u.id === selectedId && !present) spin = spinPoint(u, place, v);

@@ -72,7 +72,6 @@ type Props = {
    */
   work?: boolean;
   /** העליונים יורדים מהתמונה */
-  noUppers?: boolean;
 };
 
 /**
@@ -96,7 +95,6 @@ export function WallElevation({
   rulerPair,
   rulerAxis = 'w',
   work,
-  noUppers,
 }: Props) {
   /*
    * חיפוי קיר מצויר ראשון: הוא מכסה את הקיר, והארגזים עומדים לפניו.
@@ -109,7 +107,7 @@ export function WallElevation({
    * בקיר, עדיין חוסם גרירה, ועדיין נספר בחומרים ובניסור. ההסתרה
    * היא של העין בלבד.
    */
-  const shown = units.filter((u) => !outOfSight(u, noUppers));
+  const shown = units.filter((u) => !outOfSight(u));
   const here = plan.find((p) => p.wall.id === wall.id);
   /** אי: הצל שלו על הקיר הזה. ארגז רגיל מחזיר ריק ומצויר כרגיל. */
   const free = (u: PlacedUnit) => {
@@ -155,10 +153,19 @@ export function WallElevation({
      * בציר השני — שם הסרגל יצויר.
      */
     const at = (id: string) => {
+      /*
+       * גם סימון על הקיר הוא קצה מדידה. "כמה מהחלון עד הארון" ו"כמה
+       * בין הדלת לעמוד" הן השאלות שנשאלות בשטח בדיוק כמו "כמה בין
+       * שני הארגזים", ואין סיבה שהסרגל יידע לענות רק על האחרונה.
+       */
+      const f = wall.features.find((x) => x.id === id);
       if (rulerAxis === 'w') {
         if (id === CORNER_START) return { near: 0, far: 0, mid: wall.heightMm / 2 };
         if (id === CORNER_END) {
           return { near: wall.lengthMm, far: wall.lengthMm, mid: wall.heightMm / 2 };
+        }
+        if (f) {
+          return { near: f.xMm, far: f.xMm + f.widthMm, mid: f.yMm + f.heightMm / 2 };
         }
         const u = units.find((x) => x.id === id);
         return u
@@ -169,6 +176,7 @@ export function WallElevation({
       if (id === EDGE_CEILING) {
         return { near: wall.heightMm, far: wall.heightMm, mid: wall.lengthMm / 2 };
       }
+      if (f) return { near: f.yMm, far: f.yMm + f.heightMm, mid: f.xMm + f.widthMm / 2 };
       const u = units.find((x) => x.id === id);
       return u ? { near: u.yMm, far: u.yMm + u.heightMm, mid: u.xMm + alongWallMm(u) / 2 } : null;
     };
@@ -247,8 +255,9 @@ export function WallElevation({
     const here = unitBox(unit, plan);
     const stuck = !!here && blocked(unit, here, allUnits, plan);
     const at = (nx: number, ny: number) => {
-      const b = unitBox({ ...unit, xMm: nx, yMm: ny }, plan);
-      return !!b && (stuck || !blocked(unit, b, allUnits, plan));
+      const probe = { ...unit, xMm: nx, yMm: ny };
+      const b = unitBox(probe, plan);
+      return !!b && (stuck || !blocked(probe, b, allUnits, plan));
     };
     const [fx, fy] = at(x, y)
       ? [x, y]
@@ -680,7 +689,7 @@ export function WallElevation({
       )}
 
       {/*
-        סרגל: המרחק הפנוי בין שני ארגזים שנבחרו.
+        סרגל: המרחק הפנוי בין שני הדברים שנבחרו על הקיר.
         זו השאלה שנשאלת בשטח — "כמה נשאר ביניהם" — ועד עכשיו היה
         צריך לחשב אותה בראש משתי המידות ומשני המיקומים.
       */}
@@ -688,6 +697,41 @@ export function WallElevation({
         יעדי הפינות, רק כשהסרגל פתוח: רצועה דקה בכל קצה של הקיר,
         רחבה מספיק כדי לפגוע בה באצבע.
       */}
+      {/*
+        הסימונים עצמם הופכים ליעדי מדידה כשהסרגל פתוח: אותו מלבן
+        שכבר מצויר, רק שעכשיו אפשר לפגוע בו. מסומן = צבע הסרגל,
+        כדי שיהיה ברור מה נבחר.
+      */}
+      {rulerPair && (
+        <g>
+          {wall.features.map((f) => {
+            const on = rulerPair.includes(f.id);
+            const w = Math.max(f.widthMm, 90);
+            const h = Math.max(f.heightMm, 90);
+            return (
+              <rect
+                key={`ruler-${f.id}`}
+                data-feature-id={f.id}
+                x={f.xMm}
+                y={flip(f.yMm + h)}
+                width={w}
+                height={h}
+                fill="#0f766e"
+                fillOpacity={on ? 0.35 : 0.06}
+                stroke="#0f766e"
+                strokeWidth={on ? stroke * 1.4 : stroke * 0.7}
+                strokeDasharray={on ? undefined : `${stroke * 3} ${stroke * 3}`}
+                className="cursor-pointer"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onSelect(f.id);
+                }}
+              />
+            );
+          })}
+        </g>
+      )}
+
       {rulerPair && (
         <g>
           {(rulerAxis === 'w'

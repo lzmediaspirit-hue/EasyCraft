@@ -14,6 +14,7 @@ import {
 import { unitLabel } from '../../ui/units';
 import { wallName } from '../projects/wallLayouts';
 import { WallFeaturesDesigner } from '../projects/WallFeaturesDesigner';
+import { growToCeiling } from '../projects/wallFeatures';
 import type { Wall } from '../../db/types';
 
 /**
@@ -69,7 +70,16 @@ export function WallToolsSheet({
             <Field label="גובה" hint={unitLabel()}>
               <MeasureInput
                 value={wall.heightMm}
-                onChange={(mm) => onChange({ heightMm: mm })}
+                /*
+                  עמוד ומדרגה עולים עד התקרה, ולכן הם עולים עם הקיר.
+                  מי שקבע להם גובה משלו שומר עליו.
+                */
+                onChange={(mm) =>
+                  onChange({
+                    heightMm: mm,
+                    features: growToCeiling(wall.features, wall.heightMm, mm),
+                  })
+                }
                 minMm={1500}
                 ariaLabel="גובה הקיר"
                 className={`${inputClass} num text-end`}

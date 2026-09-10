@@ -94,6 +94,72 @@ export const projectsRepo = {
     await stagesRepo.start(id);
   },
 
+  /**
+   * שכפול פרויקט: אותו חדר, אותם ארגזים, אותם גימורים.
+   *
+   * דירות בבניין אחד חוזרות על עצמן, ולקוח שמזמין מטבח שני רוצה
+   * את הראשון בשינוי אחד — לא לשרטט אותו מחדש. לכן מועתקים
+   * הקירות, הסימונים שעליהם והארגזים עם כל מה שכוונן בהם.
+   *
+   * מה שלא מועתק הוא מה ששייך למכירה הקודמת ולא לתכנון: הפרויקט
+   * החדש אינו מכור, אין לו תשלומים, אין לו קבצים ואין לו היסטוריית
+   * ייצור. הוא הצעה חדשה שנראית כמו הקודמת.
+   */
+  async duplicate(id: string, name?: string): Promise<Project | undefined> {
+    const source = await db.projects.get(id);
+    if (!source) return undefined;
+    const now = Date.now();
+    const project: Project = {
+      ...source,
+      id: crypto.randomUUID(),
+      name: (name ?? `${source.name} — עותק`).trim(),
+      soldAt: undefined,
+      payments: undefined,
+      editRequest: undefined,
+      editGrantedAt: undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const [walls, units] = await Promise.all([
+      db.walls.where('projectId').equals(id).toArray(),
+      db.units.where('projectId').equals(id).toArray(),
+    ]);
+    /* מזהה חדש לכל קיר, והארגזים עוברים איתו */
+    const wallId = new Map(walls.map((w) => [w.id, crypto.randomUUID()]));
+
+    await db.transaction('rw', db.projects, db.walls, db.units, async () => {
+      await db.projects.add(project);
+      await db.walls.bulkAdd(
+        walls.map((w) => ({
+          ...w,
+          id: wallId.get(w.id)!,
+          projectId: project.id,
+          /* הסימונים הם אובייקטים; העתקה רדודה הייתה משתפת אותם */
+          features: w.features.map((f) => ({ ...f, id: crypto.randomUUID() })),
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+      await db.units.bulkAdd(
+        units.map((u, i) => ({
+          ...u,
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          wallId: wallId.get(u.wallId) ?? u.wallId,
+          /* תהליך העבודה שייך לארגז שכבר נבנה, לא לעותק שלו */
+          work: undefined,
+          /* הסדר נשמר: `listForProject` ממיין לפי מועד ההוספה */
+          createdAt: now + i,
+          updatedAt: now,
+        })),
+      );
+    });
+
+    await stagesRepo.ensure(project.id, false);
+    return project;
+  },
+
   async remove(id: string): Promise<void> {
     /* קודם המלאי: פלטות שנחתכו בפרויקט חוזרות אליו לפני שהוא נעלם */
     await releaseConsumption(id);

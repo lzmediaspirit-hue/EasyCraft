@@ -7,7 +7,7 @@ import { SaleSheet } from './SaleSheet';
 import { roomDef } from '../../catalog/rooms';
 import { nav } from '../../nav/navigation';
 import { ScreenHeader } from '../../ui/ScreenHeader';
-import { BoxesIcon, ChevronIcon, PlusIcon, TagIcon, TrashIcon } from '../../ui/icons';
+import { BoxesIcon, ChevronIcon, CopyIcon, PlusIcon, TagIcon, TrashIcon } from '../../ui/icons';
 import { stagesRepo, currentStage } from '../../workflow/workflowRepo';
 import { useCurrentMember } from '../../workflow/useMember';
 import { useEffectiveRole } from '../../workflow/viewRole';
@@ -236,12 +236,28 @@ function ProjectCard({
           מחיקת פרויקט אחד, בלי לגעת בלקוח ובשאר הפרויקטים שלו.
           המחיקה אינה הפיכה, ולכן היא נשאלת לפני ולא נעשית בלחיצה.
         */}
+        {/*
+          שכפול: דירות בבניין אחד חוזרות על עצמן, ולקוח שמזמין מטבח
+          שני רוצה את הראשון בשינוי אחד — לא לשרטט אותו מחדש.
+          העותק אינו מכור ואין לו תהליך עבודה: הוא הצעה חדשה.
+        */}
+        {isManager && (
+          <button
+            onClick={() => projectsRepo.duplicate(project.id)}
+            aria-label={`שכפול הפרויקט ${project.name}`}
+            title="שכפול הפרויקט"
+            className="ms-auto shrink-0 rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-oak-700"
+          >
+            <CopyIcon className="size-4" />
+          </button>
+        )}
+
         {isManager && (
           <button
             onClick={() => setConfirm(true)}
             aria-label={`מחיקת הפרויקט ${project.name}`}
             title="מחיקת הפרויקט"
-            className="ms-auto shrink-0 rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-red-50 hover:text-red-600"
+            className="shrink-0 rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-red-50 hover:text-red-600"
           >
             <TrashIcon className="size-4" />
           </button>

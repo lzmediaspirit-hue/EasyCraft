@@ -1,6 +1,6 @@
 import { alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
-import { featureBiteMm, featureDef } from '../projects/wallFeatures';
+import { featureBiteMm, featureDef, featureOverlaps } from '../projects/wallFeatures';
 import { MAX_BODY_MM, blindSide, blindWidthMm } from '../../catalog/zones';
 import { BLIND_CORNER } from '../../catalog/kitchenRules';
 import { glyphDef } from '../../catalog/glyphList';
@@ -77,7 +77,7 @@ export function analyzeWall(
       continue;
     }
 
-    const blocking = onWall.find((u) => overlaps(u, f));
+    const blocking = onWall.find((u) => featureOverlaps(u, f));
     if (!blocking) continue;
 
     /*
@@ -157,15 +157,6 @@ function contains(u: PlacedUnit, f: Wall['features'][number]): boolean {
     u.xMm + alongWallMm(u) >= f.xMm + f.widthMm &&
     u.yMm <= f.yMm &&
     u.yMm + u.heightMm >= f.yMm + f.heightMm
-  );
-}
-
-function overlaps(u: PlacedUnit, f: Wall['features'][number]): boolean {
-  return (
-    u.xMm < f.xMm + f.widthMm &&
-    u.xMm + alongWallMm(u) > f.xMm &&
-    u.yMm < f.yMm + f.heightMm &&
-    u.yMm + u.heightMm > f.yMm
   );
 }
 

@@ -498,3 +498,24 @@ db.version(18)
         delete u.offsetMm;
       }),
   );
+
+/*
+ * גובה הארגז התחתון התאחד על 880 מ"מ כולל הרגליים.
+ *
+ * עד כאן הספרייה החזיקה שני גבהים שונים לאותו דבר — 870 לארגזי
+ * המטבח ו-820 לארגזים הכלליים — ואף אחד מהם לא היה המידה שהנגר
+ * מודד. השדרוג מתקן רק פריטים שנשארו בדיוק על אחד משני המספרים
+ * האלה: מי שכבר קבע לעצמו גובה אחר קבע אותו במפורש, ולא מחליפים
+ * לו אותו מאחורי הגב.
+ */
+db.version(19)
+  .stores(TABLES_V14)
+  .upgrade((tx) =>
+    tx
+      .table('catalog')
+      .toCollection()
+      .modify((i: Record<string, unknown>) => {
+        if (i.isBuiltin !== true || i.level !== 'floor') return;
+        if (i.defaultHeightMm === 870 || i.defaultHeightMm === 820) i.defaultHeightMm = 880;
+      }),
+  );

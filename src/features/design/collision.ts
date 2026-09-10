@@ -1,4 +1,5 @@
 import { glyphDef } from '../../catalog/glyphList';
+import { featureDef, featureOverlaps } from '../projects/wallFeatures';
 import { boxCorners, unitBox } from './placement';
 import type { UnitBox } from './placement';
 import type { PlacedUnit } from '../../db/types';
@@ -45,12 +46,29 @@ export function blocked(
   plan: PlanWall[],
 ): boolean {
   if (glyphDef(unit.glyph).cladding) return false;
+  if (hitsFeature(unit, plan)) return true;
   for (const o of others) {
     if (o.id === unit.id || glyphDef(o.glyph).cladding) continue;
     const ob = unitBox(o, plan);
     if (ob && clash(at, ob)) return true;
   }
   return false;
+}
+
+/**
+ * האם הארגז עומד על סימון שאי אפשר לבנות לתוכו.
+ *
+ * דלת וחלון הם פתח, ועמוד הוא בטון. עד היום ההנחה הצליחה והנגר
+ * קיבל אזהרה אחריה — אבל אזהרה על מה שממילא לא ייבנה היא רעש:
+ * הארגז פשוט לא נכנס לשם, ולכן הוא נעצר כמו מול ארגז אחר.
+ *
+ * שקע ונקודת מים אינם חוסמים: הם נקדחים בגב הארון, וארגז שעומד
+ * עליהם הוא הדבר הרגיל ולא התקלה.
+ */
+function hitsFeature(unit: PlacedUnit, plan: PlanWall[]): boolean {
+  if (unit.free) return false;
+  const wall = plan.find((q) => q.wall.id === unit.wallId)?.wall;
+  return !!wall?.features.some((f) => featureDef(f.kind).blocks && featureOverlaps(unit, f));
 }
 
 /** האם שתי תיבות חודרות זו לזו בפועל. */

@@ -1,4 +1,11 @@
-import type { HeightRef, WallFeature, WallFeatureKind, WallSide } from '../../db/types';
+import { alongWallMm } from '../../db/types';
+import type {
+  HeightRef,
+  PlacedUnit,
+  WallFeature,
+  WallFeatureKind,
+  WallSide,
+} from '../../db/types';
 
 /** שדה מידה אחד בטופס הסימון. */
 interface FeatureField {
@@ -33,6 +40,22 @@ export interface FeatureDef {
   /** הסימון תמיד יושב על הרצפה, ואין מה למדוד לתחתית שלו */
   onFloor?: boolean;
   /**
+   * הסימון עולה מהרצפה עד התקרה, ולכן הגובה שלו הוא גובה החדר.
+   *
+   * עמוד בדירה אינו עומד לגובה שרירותי — הוא חלק מהבניין ומגיע עד
+   * התקרה. לכן הוא נולד בגובה הקיר וממשיך להתאים את עצמו כשגובה
+   * הקיר משתנה, כל עוד לא נקבע לו במפורש גובה אחר.
+   */
+  fullHeight?: boolean;
+  /**
+   * ארגז אינו יכול לעמוד על הסימון הזה.
+   *
+   * דלת וחלון הם פתח, ועמוד הוא בטון — אי אפשר לבנות לתוכם, ולכן
+   * ההנחה נחסמת ולא מסתפקת באזהרה. שקע ונקודת מים לעומת זאת
+   * נקדחים בגב הארון, ומדרגה רק גונבת עומק — אלה מותרים.
+   */
+  blocks?: boolean;
+  /**
    * אילו מידות מבקשים, ובאילו מילים.
    * לשדה הגובה נוספת בתצוגה המילה "מהרצפה" או "מהתקרה", לפי המנין
    * שנבחר — ולכן התווית שלו היא שם העצם בלבד.
@@ -55,6 +78,7 @@ export const FEATURE_DEFS: FeatureDef[] = [
     h: 1200,
     y: 900,
     tone: '#7dd3fc',
+    blocks: true,
     fields: [
       { key: 'x', label: 'מהקיר לקצה' },
       { key: 'width', label: 'רוחב החלון' },
@@ -71,6 +95,7 @@ export const FEATURE_DEFS: FeatureDef[] = [
     y: 0,
     tone: '#a8a29e',
     onFloor: true,
+    blocks: true,
     fields: [
       { key: 'x', label: 'מהקיר לקצה' },
       { key: 'width', label: 'רוחב הפתח' },
@@ -119,6 +144,8 @@ export const FEATURE_DEFS: FeatureDef[] = [
     depth: 250,
     tone: '#d6d3d1',
     onFloor: true,
+    fullHeight: true,
+    blocks: true,
     fields: [
       { key: 'x', label: 'מהקיר לקצה' },
       { key: 'width', label: 'רוחב העמוד' },
@@ -154,6 +181,7 @@ export const FEATURE_DEFS: FeatureDef[] = [
     depth: 60,
     tone: '#e7d8c4',
     onFloor: true,
+    fullHeight: true,
     fields: [
       { key: 'x', label: 'מהקיר לקצה' },
       { key: 'width', label: 'רוחב המדרגה' },
@@ -168,8 +196,12 @@ export function featureDef(kind: WallFeatureKind): FeatureDef {
   return FEATURE_DEFS.find((f) => f.kind === kind) ?? FEATURE_DEFS[0];
 }
 
-/** סימון חדש עם מידות פתיחה סבירות לסוג שלו. */
-export function newFeature(kind: WallFeatureKind): WallFeature {
+/**
+ * סימון חדש עם מידות פתיחה סבירות לסוג שלו.
+ * סימון שעולה עד התקרה נולד בגובה החדר עצמו, ולא בגובה קבוע שנכתב
+ * פעם אחת בקוד ולא מתאים לשום דירה במיוחד.
+ */
+export function newFeature(kind: WallFeatureKind, wallHeightMm?: number): WallFeature {
   const def = featureDef(kind);
   return {
     id: crypto.randomUUID(),
@@ -177,11 +209,50 @@ export function newFeature(kind: WallFeatureKind): WallFeature {
     xMm: 0,
     yMm: def.y,
     widthMm: def.w,
-    heightMm: def.h,
+    heightMm: def.fullHeight && wallHeightMm ? wallHeightMm : def.h,
     depthMm: def.depth,
     fromSide: 'start',
     heightRef: 'floor',
   };
+}
+
+/**
+ * גובה הקיר השתנה — הסימונים שעולים עד התקרה עולים איתו.
+ *
+ * רק סימון שעמד בדיוק על הגובה הקודם ממשיך: מי שקבע לעמוד גובה
+ * אחר קבע אותו במפורש, ולא מחליפים לו אותו מאחורי הגב.
+ */
+export function growToCeiling(
+  features: WallFeature[],
+  fromHeightMm: number,
+  toHeightMm: number,
+): WallFeature[] {
+  if (fromHeightMm === toHeightMm) return features;
+  return features.map((f) =>
+    featureDef(f.kind).fullHeight && f.heightMm === fromHeightMm
+      ? { ...f, heightMm: toHeightMm }
+      : f,
+  );
+}
+
+/**
+ * האם הארגז והסימון תופסים את אותו מקום על הקיר.
+ *
+ * שניהם נמדדים באותה מערכת — מרחק מתחילת הקיר וגובה מהרצפה — ולכן
+ * זו חפיפת מלבנים פשוטה. היא יושבת כאן ולא בשני מקומות, כי אותה
+ * שאלה נשאלת גם כשחוסמים הנחה וגם כשמזהירים עליה, ושתי תשובות
+ * שונות לאותה שאלה הן באג שממתין לקרות.
+ */
+export function featureOverlaps(
+  u: Pick<PlacedUnit, 'xMm' | 'yMm' | 'heightMm' | 'widthMm' | 'depthMm' | 'rotationDeg'>,
+  f: WallFeature,
+): boolean {
+  return (
+    u.xMm < f.xMm + f.widthMm &&
+    u.xMm + alongWallMm(u) > f.xMm &&
+    u.yMm < f.yMm + f.heightMm &&
+    u.yMm + u.heightMm > f.yMm
+  );
 }
 
 /*

@@ -99,11 +99,15 @@ export function CustomItemSheet({
     onClose();
   }
 
+  /*
+   * הסרה מהספרייה. ארגז שהמשתמש בנה נמחק; ארגז שהגיע עם האפליקציה
+   * רק יורד מהרשימות, ואפשר להחזיר אותו משם. בשני המקרים פרויקטים
+   * קיימים אינם נפגעים — הארגז שהונח שמר את המידות שלו בעצמו.
+   */
   async function remove() {
-    if (item && !item.isBuiltin) {
-      await catalogRepo.removeCustom(item.id);
-      onClose();
-    }
+    if (!item) return;
+    await catalogRepo.remove(item.id);
+    onClose();
   }
 
   return (
@@ -113,7 +117,7 @@ export function CustomItemSheet({
       tall
       footer={
         <div className="flex items-center gap-2">
-          {item && !item.isBuiltin && (
+          {item && (
             <button
               onClick={remove}
               aria-label="מחיקה מהספרייה"

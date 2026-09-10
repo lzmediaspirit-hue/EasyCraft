@@ -93,8 +93,9 @@ export function solveDrag(input: DragInput): Partial<PlacedUnit> | null {
   const start = unitBox(from, plan);
   const stuck = !!start && blocked(from, start, units, plan);
   const ok = (px: number, py: number) => {
-    const b = unitBox({ ...from, wallId: target.id, xMm: px, yMm: py }, plan);
-    return !!b && (stuck || !blocked(from, b, units, plan));
+    const probe = { ...from, wallId: target.id, xMm: px, yMm: py };
+    const b = unitBox(probe, plan);
+    return !!b && (stuck || !blocked(probe, b, units, plan));
   };
 
   /*

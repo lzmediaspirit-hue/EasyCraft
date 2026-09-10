@@ -10,7 +10,6 @@ import {
   CubeIcon,
   DepthIcon,
   EyeIcon,
-  EyeOffIcon,
   FrontsIcon,
   InsideIcon,
   NestIcon,
@@ -82,7 +81,7 @@ export function DesignToolbar({
   /** מחזיר לתצוגה את כל הארגזים שהוסתרו בפרויקט */
   onShowHidden: () => void;
 }) {
-  const { iso, inside, measure, rulerPair, rulerAxis, wallsOpen, toolsOpen, noUppers } =
+  const { iso, inside, measure, rulerPair, rulerAxis, wallsOpen, toolsOpen } =
     design.view;
   const hiddenCount = allUnits.filter((u) => u.hidden).length;
 
@@ -154,6 +153,44 @@ export function DesignToolbar({
           label={inside ? 'פנים' : 'חזית'}
           title={inside ? 'הצגת חזיתות' : 'הסתרת חזיתות'}
         />
+        {/*
+          סרגל: מודדים את המרחק בין שני דברים על הקיר — ארגז, חלון,
+          דלת, עמוד או קצה הקיר עצמו. אלה השאלות שנשאלות בשטח —
+          "כמה נשאר בין השניים" ו"כמה מהחלון עד הארון" — ועד עכשיו
+          היה צריך לחשב אותן בראש.
+
+          הוא יושב בשורת החזית ולא בין כלי התצוגה: מדידה היא עבודה
+          על הקיר, לא דרך להסתכל עליו.
+        */}
+        <Tool
+          active={rulerPair !== null}
+          onClick={() => {
+            design.toggleRuler();
+            onClearSelection();
+          }}
+          icon={<RulerIcon className="size-4" />}
+          label="סרגל"
+          title="מרחק בין ארגז, חלון, דלת, עמוד או קצה הקיר"
+        />
+        {/*
+          הציר נבחר לפני המדידה ולא נגזר ממנה: שני ארגזים זה על זה
+          אפשר למדוד גם לרוחב וגם לגובה, ורק הנגר יודע מה הוא שאל.
+        */}
+        {rulerPair !== null &&
+          (['w', 'h'] as const).map((ax) => (
+            <button
+              key={ax}
+              onClick={() => design.setRulerAxis(ax)}
+              aria-pressed={rulerAxis === ax}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                rulerAxis === ax
+                  ? 'bg-teal-700 text-white'
+                  : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              {ax === 'w' ? 'רוחב' : 'גובה'}
+            </button>
+          ))}
         <Tool
           active={sheet === 'nesting'}
           onClick={() => onSheet('nesting')}
@@ -200,18 +237,6 @@ export function DesignToolbar({
           label="מבט על"
         />
         {/*
-          העליונים יורדים מהתמונה — התנועה שנגר עושה ביד על שרטוט
-          כדי לראות מה קורה מתחת לשורה העליונה. זו הסתכלות ולא
-          שינוי: הארגזים ממשיכים להיספר בכל מקום אחר.
-        */}
-        <Tool
-          active={noUppers}
-          onClick={() => design.toggle('noUppers')}
-          icon={<EyeOffIcon className="size-4" />}
-          label="בלי עליונים"
-          title="מוריד מהתמונה את הארגזים התלויים"
-        />
-        {/*
           ארגזים שהוסתרו אחד־אחד. הכפתור מופיע רק כשיש כאלה, וגם
           אומר כמה: ארגז שנעלם ואי אפשר להחזיר הוא ארגז שאבד.
         */}
@@ -244,40 +269,6 @@ export function DesignToolbar({
           }
           title="לחיצה נוספת מחליפה ציר"
         />
-        {/*
-          סרגל: מודדים את המרחק בין שני ארגזים, או בין ארגז לפינת
-          הקיר. אלה השאלות שנשאלות בשטח — "כמה נשאר בין השניים"
-          ו"כמה עד הפינה" — ועד עכשיו היה צריך לחשב אותן בראש.
-        */}
-        <Tool
-          active={rulerPair !== null}
-          onClick={() => {
-            design.toggleRuler();
-            onClearSelection();
-          }}
-          icon={<RulerIcon className="size-4" />}
-          label="סרגל"
-          title="מרחק בין שני ארגזים או עד קצה הקיר"
-        />
-        {/*
-          הציר נבחר לפני המדידה ולא נגזר ממנה: שני ארגזים זה על זה
-          אפשר למדוד גם לרוחב וגם לגובה, ורק הנגר יודע מה הוא שאל.
-        */}
-        {rulerPair !== null &&
-          (['w', 'h'] as const).map((ax) => (
-            <button
-              key={ax}
-              onClick={() => design.setRulerAxis(ax)}
-              aria-pressed={rulerAxis === ax}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                rulerAxis === ax
-                  ? 'bg-teal-700 text-white'
-                  : 'bg-stone-200/70 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              {ax === 'w' ? 'רוחב' : 'גובה'}
-            </button>
-          ))}
       </div>
 
       {/*

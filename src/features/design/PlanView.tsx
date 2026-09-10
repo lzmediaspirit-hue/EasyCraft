@@ -22,7 +22,6 @@ export function PlanView({
   onChangeWall,
   onAddWall,
   onRemoveWall,
-  noUppers,
 }: {
   walls: Wall[];
   units: PlacedUnit[];
@@ -33,7 +32,6 @@ export function PlanView({
   onAddWall: () => void;
   onRemoveWall: (id: string) => void;
   /** העליונים יורדים מהתמונה */
-  noUppers?: boolean;
 }) {
   const plan = buildPlan(walls, units);
   const boxes = planUnits(plan, units);
@@ -102,7 +100,7 @@ export function PlanView({
             אחר מסומן באדום — זו התנגשות שבמבט חזית לא רואים בכלל.
           */}
           {/* ארגז מוסתר עדיין נמדד ונבדק להתנגשות, רק אינו מצויר */}
-          {boxes.filter((b) => !outOfSight(b.unit, noUppers)).map((b) => (
+          {boxes.filter((b) => !outOfSight(b.unit)).map((b) => (
             <g key={b.unit.id} pointerEvents="none">
               <polygon
                 data-plan-unit={b.unit.id}

@@ -85,7 +85,7 @@ export function DesignScreen({
 }) {
   /* איך מסתכלים על הקיר — שבעה מצבים שהם דבר אחד */
   const design = useDesignView();
-  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen, noUppers, roomStats } =
+  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen, roomStats } =
     design.view;
 
   const [panelRatio, setPanelRatio] = useState(() => {
@@ -293,8 +293,9 @@ export function DesignScreen({
       xMm: from,
     } as PlacedUnit;
     for (let x = from; x <= maxX; x += 50) {
-      const b = unitBox({ ...probe, xMm: x }, plan);
-      if (b && !blocked(probe, b, allUnits ?? NO_UNITS, plan)) return x;
+      const at = { ...probe, xMm: x };
+      const b = unitBox(at, plan);
+      if (b && !blocked(at, b, allUnits ?? NO_UNITS, plan)) return x;
     }
     return from;
   }
@@ -439,7 +440,6 @@ export function DesignScreen({
               }
               onBulk={editable ? runBulk : undefined}
               inside={inside}
-              noUppers={noUppers}
               finishHex={finishHex ?? NO_HEX}
             />
           ) : (
@@ -460,7 +460,6 @@ export function DesignScreen({
               setSelectedId(id);
             }}
             inside={inside}
-            noUppers={noUppers}
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? NO_HEX}
@@ -875,7 +874,6 @@ export function DesignScreen({
       {sheet === 'plan' && (
         <Sheet title="מבט על החדר" onClose={closeSheet} tall>
           <PlanView
-            noUppers={noUppers}
             walls={walls}
             units={allUnits ?? NO_UNITS}
             activeWallId={wall.id}

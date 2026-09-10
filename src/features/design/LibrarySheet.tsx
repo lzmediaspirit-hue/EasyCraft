@@ -6,7 +6,7 @@ import { GlyphPreview } from '../../catalog/GlyphPreview';
 import { CustomItemSheet } from './CustomItemSheet';
 import { Sheet } from '../../ui/Sheet';
 import { cm } from '../../ui/units';
-import { BedroomIcon, KitchenIcon, LivingIcon, PencilIcon, PlusIcon } from '../../ui/icons';
+import { BedroomIcon, KitchenIcon, LivingIcon, PencilIcon, PlusIcon, TrashIcon } from '../../ui/icons';
 import type { CatalogGroup, CatalogItem, RoomKind } from '../../db/types';
 
 /** תצוגות הספרייה: הקלאסית, ספרייה לכל חדר, ותיקיית הדפנות. */
@@ -42,6 +42,7 @@ export function LibrarySheet({
   onClose: () => void;
 }) {
   const items = useLiveQuery(() => catalogRepo.all(), []);
+  const removed = useLiveQuery(() => catalogRepo.removed(), []);
   const [view, setView] = useState<View>('classic');
   const [group, setGroup] = useState<CatalogGroup | null>(null);
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
@@ -144,6 +145,19 @@ export function LibrarySheet({
                   <PencilIcon className="size-3.5" />
                 </button>
               )}
+              {/*
+                הסרה מהספרייה. נגר לא בונה את כל מה שמגיע עם
+                האפליקציה, ורשימה שחצייה לא רלוונטי היא רשימה שקשה
+                למצוא בה. מה שהוסר נשמר וניתן להחזרה, וארגזים
+                שכבר הונחו בפרויקטים אינם נוגעים בזה.
+              */}
+              <button
+                onClick={() => catalogRepo.remove(item.id)}
+                aria-label={`הסרת ${item.name} מהספרייה`}
+                className="absolute top-1 end-1 rounded-lg p-1 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600"
+              >
+                <TrashIcon className="size-3.5" />
+              </button>
             </div>
           ))}
 
@@ -208,6 +222,24 @@ export function LibrarySheet({
               </button>
             </div>
           </section>
+        )}
+
+        {/*
+          מה שהוסר. השורה מופיעה רק כשיש מה להחזיר — הסרה שאי אפשר
+          לבטל היא דלת בכיוון אחד, וזה לא מה שנגר מצפה מכפתור פח.
+        */}
+        {!!removed?.length && (
+          <div className="mt-5 flex items-center gap-2 rounded-2xl bg-stone-100 px-4 py-2.5">
+            <span className="min-w-0 flex-1 text-xs text-stone-600">
+              <span className="num">{removed.length}</span> ארגזים הוסרו מהספרייה
+            </span>
+            <button
+              onClick={() => catalogRepo.restoreAll()}
+              className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50"
+            >
+              החזרה
+            </button>
+          </div>
         )}
 
         {visible.some((i) => i.note) && (

@@ -35,7 +35,6 @@ export function WallIso({
   onEdit,
   onBulk,
   inside,
-  noUppers,
   finishHex,
   present = false,
 }: {
@@ -74,7 +73,6 @@ export function WallIso({
   /** חזיתות מוסתרות — רואים את הגוף והמדפים */
   inside: boolean;
   /** העליונים יורדים מהתמונה */
-  noUppers?: boolean;
   finishHex: Record<string, string>;
   /**
    * תצוגת הצגה: אותו חדר, בלי שרטוט.
@@ -129,8 +127,8 @@ export function WallIso({
    * מגע בכפתור, רענון של שאילתה — בנה את החדר כולו מחדש.
    */
   const scene = useMemo(
-    () => buildScene({ walls, units, activeWallId, selectedId, inside, noUppers, finishHex, present, view }),
-    [walls, units, activeWallId, selectedId, inside, noUppers, finishHex, present, view],
+    () => buildScene({ walls, units, activeWallId, selectedId, inside, finishHex, present, view }),
+    [walls, units, activeWallId, selectedId, inside, finishHex, present, view],
   );
   const { faces, backdrops, marks, floor, bounds, spin } = scene;
   /* הזווית שבאמת מצוירת — היא מוגבלת כדי לא לצאת אל מאחורי הקיר */
@@ -226,7 +224,7 @@ export function WallIso({
    */
   /* המשתנים נכתבים בתוך הלולאה; כאן הם כבר סופיים */
   const spinAt: { x: number; y: number } | null = spin;
-  const selectedUnit = units.find((u) => u.id === selectedId && !outOfSight(u, noUppers)) ?? null;
+  const selectedUnit = units.find((u) => u.id === selectedId && !outOfSight(u)) ?? null;
 
   const screenBox = (id: string) => unitScreenBox(faces, id);
 

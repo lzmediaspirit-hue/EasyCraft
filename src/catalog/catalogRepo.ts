@@ -58,15 +58,20 @@ function toCatalogItem(s: SeedItem, now: number, order: number): CatalogItem {
 export const catalogRepo = {
   /** פריטי הספרייה הרלוונטיים לחדר מסוים. חדר בהגדרה אישית מקבל הכול. */
   async forRoom(room: RoomKind): Promise<CatalogItem[]> {
-    const all = await db.catalog.toArray();
-    const relevant = room === 'custom' ? all : all.filter((i) => i.rooms.includes(room));
-    return relevant.sort((a, b) => a.sortOrder - b.sortOrder);
+    const all = await catalogRepo.all();
+    return room === 'custom' ? all : all.filter((i) => i.rooms.includes(room));
   },
 
-  /** כל הפריטים, ממוינים לפי הסדר בספרייה. */
+  /** כל הפריטים שבספרייה, ממוינים לפי הסדר שלה. מה שהוסר אינו כאן. */
   async all(): Promise<CatalogItem[]> {
     const rows = await db.catalog.toArray();
-    return rows.sort((a, b) => a.sortOrder - b.sortOrder);
+    return rows.filter((i) => !i.hiddenAt).sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+
+  /** מה שהוסר מהספרייה — כדי שאפשר יהיה להחזיר. */
+  async removed(): Promise<CatalogItem[]> {
+    const rows = await db.catalog.toArray();
+    return rows.filter((i) => i.hiddenAt).sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
   async get(id: string): Promise<CatalogItem | undefined> {
@@ -107,10 +112,27 @@ export const catalogRepo = {
     return id;
   },
 
-  /** מחיקה מותרת רק לפריטים שהמשתמש יצר. */
-  async removeCustom(id: string): Promise<void> {
+  /**
+   * הסרת פריט מהספרייה.
+   *
+   * מה שהמשתמש בנה נמחק; מה שהגיע עם האפליקציה רק מסומן כמוסר,
+   * כי מחיקה אמיתית שלו הייתה חוזרת בעדכון הבא. בשני המקרים הוא
+   * יורד מהרשימות — וזו הבקשה.
+   */
+  async remove(id: string): Promise<void> {
     const item = await db.catalog.get(id);
-    if (item && !item.isBuiltin) await db.catalog.delete(id);
+    if (!item) return;
+    if (item.isBuiltin) await db.catalog.update(id, { hiddenAt: Date.now() });
+    else await db.catalog.delete(id);
+  },
+
+  /** מחזיר לספרייה את כל מה שהוסר ממנה. */
+  async restoreAll(): Promise<void> {
+    await db.catalog
+      .toCollection()
+      .modify((i) => {
+        if (i.hiddenAt) delete i.hiddenAt;
+      });
   },
 };
 

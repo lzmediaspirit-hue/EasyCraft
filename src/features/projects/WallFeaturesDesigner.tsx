@@ -185,7 +185,7 @@ export function WallFeaturesDesigner({
             key={def.kind}
             onClick={() => {
               /* נוחת במרכז הקיר: משם גוררים למקום, ולא מאפס */
-              const f = newFeature(def.kind);
+              const f = newFeature(def.kind, wallHeightMm);
               f.xMm = Math.max(Math.round((wallLengthMm - f.widthMm) / 2 / STEP) * STEP, 0);
               onAdd(f);
               setSelectedId(f.id);

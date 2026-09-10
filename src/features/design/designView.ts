@@ -41,7 +41,6 @@ export interface DesignView {
    * לראות מה קורה מתחתיה. היא שייכת לרגע ההסתכלות ולא לפרויקט,
    * ולכן היא כאן ולא בשדה של הארגז.
    */
-  noUppers: boolean;
   /** המחוונים סופרים את החדר כולו ולא את הקיר שעובדים עליו */
   roomStats: boolean;
 }
@@ -56,23 +55,21 @@ const INITIAL: DesignView = {
   statsOpen: false,
   wallsOpen: true,
   toolsOpen: true,
-  noUppers: false,
   roomStats: false,
 };
 
 /**
  * ארגז שאינו מצויר עכשיו.
  *
- * שתי סיבות, ומקום אחד שיודע עליהן: הנגר הסתיר אותו בעצמו, או
- * שהוא עליון והמתג "בלי עליונים" דלוק. שני הציורים והמבט מלמעלה
- * שואלים כאן ולא כל אחד לחוד, כדי שלא ייווצר מצב שארגז נעלם
- * במבט אחד ונשאר באחר.
+ * סיבה אחת, ומקום אחד שיודע עליה: הנגר הסתיר אותו בעצמו. שני
+ * הציורים והמבט מלמעלה שואלים כאן ולא כל אחד לחוד, כדי שלא ייווצר
+ * מצב שארגז נעלם במבט אחד ונשאר באחר.
  *
  * זו הסתכלות ולא מחיקה: הארגז ממשיך לתפוס מקום על הקיר, לחסום
  * גרירה ולהיספר בחומרים, במחיר ובניסור.
  */
-export function outOfSight(u: { hidden?: boolean; level: string }, noUppers?: boolean): boolean {
-  return !!u.hidden || (!!noUppers && u.level === 'wall');
+export function outOfSight(u: { hidden?: boolean }): boolean {
+  return !!u.hidden;
 }
 
 export function useDesignView() {
@@ -92,7 +89,6 @@ export function useDesignView() {
         | 'statsOpen'
         | 'wallsOpen'
         | 'toolsOpen'
-        | 'noUppers'
         | 'roomStats'
     ) =>
       setView((v) => ({ ...v, [key]: !v[key] })),
