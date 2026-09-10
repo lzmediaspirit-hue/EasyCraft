@@ -5,7 +5,8 @@ import { unitsRepo } from '../projects/projectsRepo';
 import { history } from './history';
 import { buildPlan } from './plan';
 import type { PlanWall } from './plan';
-import { planKitchen, placementName, whyNothing } from './autoPlan';
+import { planKitchen, placementName, previewUnits, whyNothing } from './autoPlan';
+import { PlanThumb } from './PlanThumb';
 import type { Appliances, AutoInput, Proposal } from './autoPlan';
 import type { PlacedUnit, Wall } from '../../db/types';
 
@@ -211,6 +212,7 @@ export function AutoPlanSheet({
           <ProposalCard
             key={p.key}
             proposal={p}
+            walls={walls}
             active={applied === p.key}
             onPick={() => apply(p)}
           />
@@ -257,14 +259,18 @@ function Toggle({
  */
 function ProposalCard({
   proposal,
+  walls,
   active,
   onPick,
 }: {
   proposal: Proposal;
+  walls: Wall[];
   active: boolean;
   onPick: () => void;
 }) {
   const { score } = proposal;
+  /* הארגזים לציור בלבד — הם לא נשמרים, ולכן הם נבנים פעם אחת */
+  const preview = useMemo(() => previewUnits(proposal), [proposal]);
   const counts = new Map<string, number>();
   for (const u of proposal.units) {
     const name = placementName(u);
@@ -278,8 +284,20 @@ function ProposalCard({
         active ? 'border-oak-600 bg-oak-50' : 'border-stone-200 bg-white hover:border-stone-300'
       }`}
     >
+      {/*
+        תמונה של המטבח, מאותו מנוע שמצייר את ההדמיה הגדולה. כרטיס
+        שמתאר מטבח במילים מבקש מהנגר לדמיין אותו; כרטיס שמראה אותו
+        לא מבקש כלום.
+      */}
+      <PlanThumb walls={walls} units={preview} className="mb-3 h-32 w-full" />
+
       <div className="flex items-center justify-between gap-2">
-        <span className="text-base font-semibold text-stone-900">{proposal.title}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-base font-semibold text-stone-900">
+            {proposal.title}
+          </span>
+          <span className="block text-xs text-stone-400">{proposal.layoutName}</span>
+        </span>
         {active ? (
           <span className="flex items-center gap-1 rounded-full bg-oak-600 px-2.5 py-1 text-xs font-semibold text-white">
             <CheckIcon className="size-3.5" />
@@ -303,13 +321,13 @@ function ProposalCard({
         {[...counts].map(([name, n]) => (n > 1 ? `${n}× ${name}` : name)).join(' · ')}
       </p>
 
-      {proposal.notes.map((n) => (
-        <p key={n} className="mt-1.5 text-xs leading-snug text-stone-500">
+      {proposal.notes.map((n, i) => (
+        <p key={`n${i}`} className="mt-1.5 text-xs leading-snug text-stone-500">
           {n}
         </p>
       ))}
-      {proposal.dropped.map((d) => (
-        <p key={d} className="mt-1.5 text-xs leading-snug text-amber-700">
+      {proposal.dropped.map((d, i) => (
+        <p key={`d${i}`} className="mt-1.5 text-xs leading-snug text-amber-700">
           לא נכנס: {d}
         </p>
       ))}

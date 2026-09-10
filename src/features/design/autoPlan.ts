@@ -1,5 +1,5 @@
 import { AISLE, BLIND_CORNER, ISLAND, KITCHEN, LANDING, PREP, SAFETY, TRIANGLE } from '../../catalog/kitchenRules';
-import type { FreePlacement, UnitLevel, Wall, WallFeature } from '../../db/types';
+import type { FreePlacement, PlacedUnit, UnitLevel, Wall, WallFeature } from '../../db/types';
 import { SEED_CATALOG } from '../../catalog/builtins';
 import type { PlanWall } from './plan';
 
@@ -78,7 +78,10 @@ export interface Proposal {
   key: string;
   layout: LayoutKind;
   priority: Priority;
+  /** הקטגוריה שההצעה הזאת הכי טובה בה */
   title: string;
+  /** צורת הפריסה — היא זהה לכל ההצעות, ולכן היא שורת משנה */
+  layoutName: string;
   units: Placement[];
   /** מה שלא נכנס, ולמה */
   dropped: string[];
@@ -157,12 +160,24 @@ function runOf(plan: PlanWall[], layout: LayoutKind): PlanWall[] {
     }
     return [];
   }
-  /* L ו-U רצים על קירות עוקבים; נבחר את הרצף הארוך ביותר */
+  /*
+   * L ו-U רצים על קירות עוקבים.
+   *
+   * L הוא בדיוק שניים; U הוא כל מה שיש — שלושה קירות ומעלה. חדר
+   * עם ארבעה קירות שימושיים מקבל ארונות על ארבעתם, כי קיר ריק
+   * במטבח הוא מקום אחסון שלא נבנה.
+   */
   const n = layout === 'l' ? 2 : 3;
   let best: PlanWall[] = [];
   for (let i = 0; i + n <= plan.length; i++) {
-    const run = plan.slice(i, i + n);
+    /* הרצף הארוך ביותר שמתחיל כאן — עוצר בקיר הראשון שאינו שימושי */
+    let run = plan.slice(i, i + n);
     if (run.some((p) => p.wall.lengthMm < MIN_WALL)) continue;
+    if (layout === 'u') {
+      let j = i + n;
+      while (j < plan.length && plan[j].wall.lengthMm >= MIN_WALL) j++;
+      run = plan.slice(i, j);
+    }
     const total = run.reduce((s, p) => s + p.wall.lengthMm, 0);
     if (total > best.reduce((s, p) => s + p.wall.lengthMm, 0)) best = run;
   }
@@ -184,6 +199,21 @@ export function layoutsFor(plan: PlanWall[]): LayoutKind[] {
     if (k === 'galley') return aisleOf(run) >= AISLE.workMm;
     return true;
   });
+}
+
+/**
+ * הפריסה שמנצלת את כל הקירות.
+ *
+ * קיר ריק במטבח הוא מקום אחסון שלא נבנה, ולכן הבחירה אינה בין
+ * פריסות אלא בין מה שהחדר מרשה — והגדולה שבהן היא זו שמכסה הכי
+ * הרבה קיר. `runOf` כבר מחזיר את הרצף הארוך ביותר לכל פריסה,
+ * ולכן די להשוות אורך.
+ */
+export function layoutFor(plan: PlanWall[]): LayoutKind | null {
+  const options = layoutsFor(plan);
+  if (!options.length) return null;
+  const cover = (k: LayoutKind) => runOf(plan, k).reduce((s, p) => s + p.wall.lengthMm, 0);
+  return options.reduce((a, b) => (cover(b) > cover(a) ? b : a));
 }
 
 /** המרווח בין שתי שורות ארונות מקבילות. */
@@ -691,10 +721,12 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
     key: `${layout}-${priority}`,
     layout,
     priority,
-    title: `${LAYOUT_NAMES[layout]} · ${PRIORITY_NAMES[priority]}`,
+    title: PRIORITY_NAMES[priority],
+    layoutName: LAYOUT_NAMES[layout],
     units,
-    dropped,
-    notes,
+    /* אותה הערה על שתי פינות היא אותה הערה — פעם אחת מספיקה */
+    dropped: [...new Set(dropped)],
+    notes: [...new Set(notes)],
     score: scoreOf(units),
   };
 }
@@ -833,23 +865,36 @@ function scoreOf(units: Placement[]): Score {
  */
 export function planKitchen(input: AutoInput): Proposal[] {
   /*
+   * פריסה אחת, שלוש עדיפויות — ולכן שלוש הצעות: הטובה ביותר
+   * לנוחות, לאחסון ולמחיר. הפריסה אינה נבחרת מתוך רשימה אלא היא
+   * הגדולה שהחדר מרשה, כי קיר ריק במטבח הוא אחסון שלא נבנה.
+   *
    * חדר צר אינו משאיר מרווח לבחור בו, ואז שתי עדיפויות מגיעות
    * לאותו מטבח בדיוק. שני כרטיסים זהים אינם בחירה אלא רעש, ולכן
-   * נשאר אחד — הראשון בסדר שלמטה, שהוא סדר החשיבות.
+   * נשאר אחד — ובכותרת שלו כתובות שתי העדיפויות שהוא משרת.
    */
+  const layout = layoutFor(input.plan);
+  if (!layout) return [];
+  const out: Proposal[] = [];
   const seen = new Map<string, Proposal>();
   for (const priority of ['ergonomic', 'storage', 'economical'] as const) {
-    for (const layout of layoutsFor(input.plan)) {
-      const p = buildProposal(input, layout, priority);
-      if (!p || !p.units.length) continue;
-      const sig = p.units
-        .map((u) => `${u.catalogKey}|${u.wallId}|${u.xMm}|${u.widthMm}`)
-        .sort()
-        .join(';');
-      if (!seen.has(sig)) seen.set(sig, p);
-    }
+    const p = buildProposal(input, layout, priority);
+    if (!p || !p.units.length) continue;
+    const sig = p.units
+      .map((u) => `${u.catalogKey}|${u.wallId}|${u.xMm}|${u.widthMm}`)
+      .sort()
+      .join(';');
+    /*
+     * הצעה זהה לקודמת נשארת ברשימה ומסומנת ככזו. חדר צר לא משאיר
+     * מרווח לבחור בו, ואז האופטימום לנוחות ולאחסון הוא אותו מטבח
+     * — וזו תשובה שכדאי לראות, לא כרטיס שנעלם בלי הסבר.
+     */
+    const twin = seen.get(sig);
+    if (twin) p.notes.push(`אותה פריסה כמו "${twin.title}"`);
+    else seen.set(sig, p);
+    out.push(p);
   }
-  return [...seen.values()].sort((a, b) => b.score.total - a.score.total);
+  return out;
 }
 
 /** מה מפריע לתכנון, כשאין אף הצעה. */
@@ -869,3 +914,47 @@ export function aisleAdvice(widthMm: number): string | null {
 
 /** שם קריא לארגז בהצעה, לתצוגה ברשימה. */
 export const placementName = (p: Placement): string => NAME[p.catalogKey] ?? 'ארגז';
+
+/**
+ * הצעה כארגזים לציור, בלי לגעת בבסיס הנתונים.
+ *
+ * הכרטיס מראה תמונה של המטבח לפני שבוחרים בו, ותמונה כזאת צריכה
+ * ארגזים ולא הפניות. הם נבנים מאותה שורה בספרייה שממנה ייבנו
+ * הארגזים האמיתיים — ולכן מה שרואים בכרטיס הוא מה שיעמוד על הקיר.
+ *
+ * המזהים כאן זמניים ואינם נשמרים: זו תמונה, לא מטבח.
+ */
+export function previewUnits(proposal: Proposal): PlacedUnit[] {
+  const now = 0;
+  return proposal.units.flatMap((p, i) => {
+    const item = seedOf(p.catalogKey);
+    if (!item) return [];
+    return [
+      {
+        id: `preview-${i}`,
+        projectId: 'preview',
+        wallId: p.wallId,
+        catalogItemId: p.catalogKey,
+        name: NAME[p.catalogKey] ?? item.name,
+        glyph: item.glyph,
+        doors: item.doors,
+        drawers: item.drawers,
+        drawerCols: item.drawerCols,
+        shelves: item.shelves,
+        level: p.level,
+        xMm: p.xMm,
+        yMm: p.level === 'wall' ? item.y : 0,
+        widthMm: p.widthMm,
+        heightMm: item.h,
+        depthMm: item.d,
+        socleMm: item.socle,
+        counterMm: item.counter,
+        corner: item.corner,
+        blindMm: p.blindMm ?? item.blind,
+        free: p.free,
+        createdAt: now,
+        updatedAt: now,
+      } satisfies PlacedUnit,
+    ];
+  });
+}
