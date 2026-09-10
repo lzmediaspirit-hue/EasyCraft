@@ -425,3 +425,13 @@ export const ToolsIcon = ({ className = 'size-5' }: P) => (
     <path d="M18 3.2 15.4 5.8" />
   </svg>
 );
+
+/** מטה קסמים — התכנון האוטומטי, מה שקורה בלחיצה אחת. */
+export const WandIcon = ({ className = 'size-5' }: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M14.2 4.6 4.6 14.2a1.4 1.4 0 0 0 0 2l1.2 1.2a1.4 1.4 0 0 0 2 0l9.6-9.6a1.4 1.4 0 0 0 0-2l-1.2-1.2a1.4 1.4 0 0 0-2 0Z" />
+    <path d="M12.5 6.3 15.7 9.5" />
+    <path d="M18.5 3v3M20 4.5h-3M18.5 15v2.5M19.75 16.25h-2.5" />
+  </svg>
+);

@@ -6,6 +6,7 @@
  */
 export type SheetName =
   | 'library'
+  | 'autoPlan'
   | 'edit'
   | 'materials'
   | 'nesting'

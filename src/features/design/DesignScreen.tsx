@@ -6,6 +6,7 @@ import { blocked } from './collision';
 import { unitBox, wallShadow } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
+import { AutoPlanSheet } from './AutoPlanSheet';
 import { UnitEditor } from './UnitEditor';
 import { UnitEditSheet } from './UnitEditSheet';
 import { SaveGroupSheet } from './SaveGroupSheet';
@@ -46,6 +47,7 @@ import {
   PlusIcon,
   SlidersIcon,
   TrashIcon,
+  WandIcon,
 } from '../../ui/icons';
 import { turned } from '../../db/types';
 import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
@@ -713,20 +715,38 @@ export function DesignScreen({
 
             {statsOpen && units.length === 0 && (
               <p className="mt-6 text-center text-[15px] text-stone-500">
-                הקיר ריק. פתח את הספרייה והוסף את הארגז הראשון.
+                {project.roomKind === 'kitchen'
+                  ? 'הקיר ריק. אפשר לתכנן מטבח שלם בלחיצה, או להוסיף ארגז אחד מהספרייה.'
+                  : 'הקיר ריק. פתח את הספרייה והוסף את הארגז הראשון.'}
               </p>
             )}
           </main>
 
           <div className="shrink-0 px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             {editable ? (
-              <button
-                onClick={() => setSheet('library')}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"
-              >
-                <PlusIcon />
-                הוספת ארגז
-              </button>
+              /*
+                שתי דרכים להתחיל קיר: ארגז אחד ביד, או מטבח שלם
+                בלחיצה. התכנון האוטומטי יושב לצד ההוספה ולא במקומה —
+                הוא נקודת פתיחה שממשיכים לערוך, לא תחליף לעריכה.
+              */
+              <div className="flex gap-2">
+                {project.roomKind === 'kitchen' && (
+                  <button
+                    onClick={() => setSheet('autoPlan')}
+                    className="flex shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-oak-600 bg-white px-4 py-4 text-base font-semibold text-oak-700 transition-colors hover:bg-oak-50"
+                  >
+                    <WandIcon />
+                    תכנון אוטומטי
+                  </button>
+                )}
+                <button
+                  onClick={() => setSheet('library')}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"
+                >
+                  <PlusIcon />
+                  הוספת ארגז
+                </button>
+              </div>
             ) : (
               <EditGate
                 project={project}
@@ -906,6 +926,15 @@ export function DesignScreen({
           projectId={projectId}
           onPickFinishes={() => setSheet('finishes')}
           onStart={() => setSheet('sale')}
+          onClose={closeSheet}
+        />
+      )}
+
+      {sheet === 'autoPlan' && walls && (
+        <AutoPlanSheet
+          projectId={projectId}
+          walls={walls}
+          units={allUnits ?? NO_UNITS}
           onClose={closeSheet}
         />
       )}

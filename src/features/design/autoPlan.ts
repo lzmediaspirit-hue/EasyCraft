@@ -189,8 +189,20 @@ function aisleOf(run: PlanWall[]): number {
 /* סדר האזורים לאורך הקיר                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * האזור שהתפקיד שייך אליו.
+ *
+ * שלושת האזורים הם שלושת קודקודי משולש העבודה: קר (מקרר ואחסון),
+ * רטוב (כיור ומדיח), חם (כיריים ותנור). החלוקה הזאת היא מה שמאפשר
+ * לקפל את המשולש סביב הפינה במקום למתוח אותו לאורך קיר אחד.
+ */
+type Zone = 'cold' | 'wet' | 'hot';
+
+const ZONES: Zone[] = ['cold', 'wet', 'hot'];
+
 interface Slot {
   role: Role;
+  zone: Zone;
   key: string;
   /** הרוחב שהתפקיד דורש; המילוי יתאים אותו לרוחבי התקן */
   wantMm: number;
@@ -212,21 +224,88 @@ function sequence(input: AutoInput, priority: Priority): Slot[] {
   const prepKey = input.finish === 'plain' || priority === 'economical'
     ? 'k-base-door2'
     : 'k-base-dr3';
+  const fridgeMm = 700;
+  const sinkMm = 800;
+  /*
+   * המשטח שבין המקרר לכיור אינו רק "משטח נחיתה": הוא גם מה שקובע
+   * את הצלע הראשונה של משולש העבודה. ארגז צר מדי כאן דוחס את שני
+   * המכשירים זה על זה, ולכן הרוחב נגזר מהצלע המזערית ולא מהמינימום
+   * של הנחיתה.
+   */
+  const toSink = Math.max(
+    LANDING.fridgeMm,
+    TRIANGLE.minLegMm - fridgeMm / 2 - sinkMm / 2,
+  );
+
   const out: Slot[] = [];
-  if (a.fridge) out.push({ role: 'fridge', key: 'k-tall-fridge', wantMm: 700, minMm: 600 });
-  out.push({ role: 'prep', key: prepKey, wantMm: LANDING.fridgeMm, minMm: MIN_BOX });
-  out.push({ role: 'sink', key: 'k-base-sink', wantMm: 800, minMm: 600 });
-  if (a.dishwasher) out.push({ role: 'dishwasher', key: 'k-base-dw', wantMm: 600, minMm: 450 });
-  /* אזור ההכנה — המשטח הרציף שבין הכיור לכיריים */
-  out.push({ role: 'prep', key: prepKey, wantMm: PREP.widthMm, minMm: 400 });
-  if (a.hob) out.push({ role: 'hob', key: 'k-base-hob', wantMm: 600, minMm: 600 });
+  if (a.fridge) {
+    out.push({ role: 'fridge', zone: 'cold', key: 'k-tall-fridge', wantMm: fridgeMm, minMm: 600 });
+  }
+  /* הרוחב הזה אינו מילוי אלא צלע במשולש, ולכן הוא גם המינימום */
+  out.push({
+    role: 'prep', zone: 'cold', key: prepKey,
+    wantMm: toSink, minMm: a.fridge ? toSink : MIN_BOX,
+  });
+  out.push({ role: 'sink', zone: 'wet', key: 'k-base-sink', wantMm: sinkMm, minMm: 600 });
+  if (a.dishwasher) {
+    out.push({ role: 'dishwasher', zone: 'wet', key: 'k-base-dw', wantMm: 600, minMm: 450 });
+  }
+  /*
+   * אזור ההכנה — המשטח הרציף שבין הכיור לכיריים.
+   *
+   * זה גם המקום שבו העדיפות באמת מוכרעת: "מקסימום אחסון" מקצר
+   * אותו למינימום כדי שיישאר קיר לעמודת מזווה, ו"נוח לעבודה"
+   * שומר עליו מלא. זה בדיוק הוויתור שבין השניים.
+   */
+  out.push({
+    role: 'prep', zone: 'wet', key: prepKey,
+    wantMm: priority === 'storage' ? 400 : PREP.widthMm, minMm: 400,
+  });
+  if (a.hob) out.push({ role: 'hob', zone: 'hot', key: 'k-base-hob', wantMm: 600, minMm: 600 });
   if (a.oven) {
     out.push({
       role: 'oven',
+      zone: 'hot',
       key: a.microwave ? 'k-tall-ovenmicro' : 'k-tall-oven',
       wantMm: 600,
       minMm: 600,
     });
+  }
+  return out;
+}
+
+/**
+ * מחלק את הרצף בין קירות הפריסה.
+ *
+ * זה הלב של תכנון פינתי: על קיר אחד המשולש נמתח לקו ישר, והצלע
+ * מהמקרר לכיריים יוצאת ארוכה מכל מה שמותר. ברגע שהבישול עובר את
+ * הפינה המשולש נסגר, וזה בדיוק מה שמבדיל מטבח L ממטבח קו אחד
+ * שנשפך לשני קירות.
+ *
+ * מה שלא נכנס לקיר שלו זולג לקיר הבא בסדר, ולא נעלם.
+ */
+function spread(slots: Slot[], caps: number[]): Slot[][] {
+  const out: Slot[][] = caps.map(() => []);
+  if (caps.length <= 1) return [slots];
+  for (const slot of slots) {
+    const wall = Math.floor((ZONES.indexOf(slot.zone) * caps.length) / ZONES.length);
+    out[Math.min(wall, caps.length - 1)].push(slot);
+  }
+  /* זליגה: קיר שאין בו מקום מעביר את העודף הלאה */
+  for (let i = 0; i < out.length - 1; i++) {
+    let used = 0;
+    const keep: Slot[] = [];
+    const spill: Slot[] = [];
+    for (const slot of out[i]) {
+      if (used + slot.minMm <= caps[i]) {
+        keep.push(slot);
+        used += slot.wantMm;
+      } else {
+        spill.push(slot);
+      }
+    }
+    out[i] = keep;
+    out[i + 1] = [...spill, ...out[i + 1]];
   }
   return out;
 }
@@ -330,6 +409,36 @@ function fitWidth(availableMm: number, slot: Slot, wide: boolean): number | null
 const FLEXIBLE: Role[] = ['prep', 'store'];
 
 /**
+ * סדר הוויתור, מהראשון שיורד לאחרון.
+ *
+ * כשהחדר קטן מדי לכל מה שסומן, השאלה אינה "מה נחתך" אלא "על מה
+ * מוותרים". מדיח הוא נוחות; כיריים וכיור הם מטבח. עמודת תנור
+ * יורדת לפני הכיריים כי אפשר לבנות תנור מתחת למשטח, ומקרר יורד
+ * אחרון שבאחרונים כי הוא נשאר בחדר גם כשאין לו ארון.
+ */
+const SACRIFICE: Role[] = ['store', 'dishwasher', 'oven', 'prep', 'fridge', 'hob', 'sink'];
+
+/**
+ * מוריד מהרצף את מה שהחדר לא יכול להכיל.
+ *
+ * הבדיקה היא על הרוחב המזערי ולא המבוקש: מה שנכנס מכווץ יישאר,
+ * וירד רק מה שאין לו מקום בכלל.
+ */
+function sacrifice(slots: Slot[], capacityMm: number): { slots: Slot[]; cut: Slot[] } {
+  const keep = [...slots];
+  const cut: Slot[] = [];
+  const need = () => keep.reduce((n, x) => n + x.minMm, 0);
+  while (need() > capacityMm) {
+    const role = SACRIFICE.find((r) => keep.some((x) => x.role === r));
+    if (role === undefined) break;
+    const i = keep.map((x) => x.role).lastIndexOf(role);
+    cut.push(keep[i]);
+    keep.splice(i, 1);
+  }
+  return { slots: keep, cut };
+}
+
+/**
  * מכווץ את הרצף כדי שייכנס לאורך הקיר שיש בפועל.
  *
  * קודם מצטמצמים המשטחים, ורק אם עדיין אין מקום — גם ארגזי
@@ -415,23 +524,35 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
   }
 
   /*
-   * שלב שני: להתאים את הרצף לקיר שיש. בלי זה המילוי החמדני היה
-   * נותן לארגז ההכנה את הרוחב המלא ומגלה רק בסוף שלכיריים לא נשאר
-   * מקום — ובמטבח אמיתי מצמצמים ארגז הכנה ולא מוותרים על הבישול.
+   * שלב שני: לחלק את הרצף בין הקירות ולהתאים כל חלק לאורך שיש.
+   *
+   * בלי הכיווץ המילוי החמדני היה נותן לארגז ההכנה את הרוחב המלא
+   * ומגלה רק בסוף שלכיריים לא נשאר מקום — ובמטבח אמיתי מצמצמים
+   * ארגז הכנה ולא מוותרים על הבישול.
    */
-  const capacity = areas.reduce(
-    (n, a) => n + a.spans.reduce((m, sp) => m + (sp.toMm - sp.fromMm), 0), 0,
-  );
-  const hobTail = queue.some((q) => q.role === 'hob') ? SAFETY.hobFromWallMm : 0;
-  queue = squeeze(queue, capacity - hobTail);
+  const caps = areas.map((a) => a.spans.reduce((m, sp) => m + (sp.toMm - sp.fromMm), 0));
+  const room = caps.reduce((n, c) => n + c, 0)
+    - (queue.some((x) => x.role === 'hob') ? SAFETY.hobFromWallMm : 0);
+  const trimmed = sacrifice(queue, room);
+  queue = trimmed.slots;
+  for (const gone of trimmed.cut) {
+    dropped.push(`${NAME[gone.key] ?? gone.key} — אין בחדר מקום גם ברוחב המזערי`);
+  }
+  const queues = spread(queue, caps).map((q, i) => {
+    /* הכיריים צריכות משטח גם אחריהן, ולכן הקיר שלהן קצר בכך */
+    const tail = q.some((x) => x.role === 'hob') ? SAFETY.hobFromWallMm : 0;
+    return squeeze(q, caps[i] - tail);
+  });
 
   /* שלב שלישי: המילוי עצמו */
-  for (const { p, spans } of areas) {
+  for (const [i, { p, spans }] of areas.entries()) {
+    let q = queues[i];
     for (const span of spans) {
       let at = span.fromMm;
       while (span.toMm - at >= MIN_BOX) {
-        const slot = queue[0] ?? {
+        const slot = q[0] ?? {
           role: 'store' as Role,
+          zone: 'cold' as const,
           key: priority === 'storage' ? 'k-tall-pantry' : 'k-base-door2',
           wantMm: priority === 'storage' ? 500 : 600,
           minMm: MIN_BOX,
@@ -456,10 +577,13 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
         }
 
         put(p, slot.key, at, w, slot.role);
-        if (queue[0]) queue = queue.slice(1);
+        if (q[0]) q = q.slice(1);
         at += w;
       }
     }
+    /* מה שנשאר בתור של הקיר הזה עובר הלאה, ורק בסוף נחשב "לא נכנס" */
+    if (i + 1 < queues.length) queues[i + 1] = [...q, ...queues[i + 1]];
+    else queue = q;
   }
 
   for (const missed of queue) {
@@ -500,8 +624,10 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
     }
   }
 
-  if (input.appliances.hood && input.appliances.hob) {
+  if (units.some((u) => u.role === 'hood')) {
     notes.push(`תחתית קולט האדים ${SAFETY.hoodElectricMm} מ"מ מעל הכיריים`);
+  } else if (input.appliances.hood && input.appliances.hob) {
+    dropped.push('קולט אדים — אין ארון עליון מעל הכיריים שאפשר לתלות אותו בו');
   }
 
   /* ---- ישיבה ---- */
@@ -528,7 +654,7 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
     units,
     dropped,
     notes,
-    score: scoreOf(units, priority),
+    score: scoreOf(units),
   };
 }
 
@@ -605,12 +731,13 @@ function islandFor(input: AutoInput, layout: LayoutKind): Placement | null {
 /**
  * כמה ההצעה טובה.
  *
- * שלושה דברים נמדדים: משולש העבודה, אורך משטח ההכנה הרציף, ומספר
- * הארגזים. השניים הראשונים הם נוחות, האחרון הוא מחיר — ארגז אחד
- * רחב זול משניים צרים. העדיפות שהמשתמש בחר קובעת את המשקלות,
- * ולכן אותה פריסה מקבלת ציון אחר בכל עדיפות.
+ * שלושה דברים נמדדים: משולש העבודה, אורך משטח ההכנה הרציף, ומטר
+ * רץ. הסולם אחד לכל ההצעות במכוון — ציון שמשתנה לפי העדיפות אינו
+ * ניתן להשוואה, ושתי הצעות זו לצד זו הן בדיוק מה שהמסך מציג.
+ * הגרסה החסכונית תקבל ציון נמוך יותר, וזה נכון: היא ויתור מדעת,
+ * ולא מטבח טוב יותר.
  */
-function scoreOf(units: Placement[], priority: Priority): Score {
+function scoreOf(units: Placement[]): Score {
   const floor = units.filter((u) => !u.free && u.level !== 'wall');
   const runMm = floor.reduce((n, u) => n + u.widthMm, 0);
 
@@ -644,15 +771,10 @@ function scoreOf(units: Placement[], priority: Priority): Score {
   }
 
   const boxes = units.length;
-  const weight =
-    priority === 'ergonomic' ? { t: 50, p: 30, r: 10, b: 10 }
-    : priority === 'economical' ? { t: 20, p: 15, r: 15, b: 50 }
-    : { t: 20, p: 15, r: 50, b: 15 };
   const total =
-    weight.t * triangle +
-    weight.p * Math.min(prepMm / PREP.widthMm, 1) +
-    weight.r * Math.min(runMm / 5000, 1) +
-    weight.b * Math.max(0, 1 - boxes / 30);
+    45 * triangle +
+    30 * Math.min(prepMm / PREP.widthMm, 1) +
+    25 * Math.min(runMm / 5000, 1);
   return { triangle, prepMm, runMm, boxes, total: Math.round(total) };
 }
 
@@ -669,14 +791,24 @@ function scoreOf(units: Placement[], priority: Priority): Score {
  * מה לא נכנס.
  */
 export function planKitchen(input: AutoInput): Proposal[] {
-  const out: Proposal[] = [];
-  for (const layout of layoutsFor(input.plan)) {
-    for (const priority of ['ergonomic', 'economical', 'storage'] as const) {
+  /*
+   * חדר צר אינו משאיר מרווח לבחור בו, ואז שתי עדיפויות מגיעות
+   * לאותו מטבח בדיוק. שני כרטיסים זהים אינם בחירה אלא רעש, ולכן
+   * נשאר אחד — הראשון בסדר שלמטה, שהוא סדר החשיבות.
+   */
+  const seen = new Map<string, Proposal>();
+  for (const priority of ['ergonomic', 'storage', 'economical'] as const) {
+    for (const layout of layoutsFor(input.plan)) {
       const p = buildProposal(input, layout, priority);
-      if (p && p.units.length) out.push(p);
+      if (!p || !p.units.length) continue;
+      const sig = p.units
+        .map((u) => `${u.catalogKey}|${u.wallId}|${u.xMm}|${u.widthMm}`)
+        .sort()
+        .join(';');
+      if (!seen.has(sig)) seen.set(sig, p);
     }
   }
-  return out.sort((a, b) => b.score.total - a.score.total);
+  return [...seen.values()].sort((a, b) => b.score.total - a.score.total);
 }
 
 /** מה מפריע לתכנון, כשאין אף הצעה. */

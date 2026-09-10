@@ -1,3 +1,4 @@
+import type { Placement as PlanPlacement } from '../design/autoPlan';
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { projectCosting, type ProjectCosting } from '../../costing/boards';
@@ -307,6 +308,29 @@ export const unitsRepo = {
     };
     await db.units.add(unit);
     return unit;
+  },
+
+  /**
+   * מניח תכנון מטבח שלם במקום מה שיש.
+   *
+   * ההצעה מגיעה כהפניות לספרייה, וכל אחת עוברת דרך `add` הרגילה —
+   * אותו נתיב שבו נגר מניח ארגז ביד. לכן מטבח אוטומטי מקבל את
+   * אותם גימורים, אותה גובה רגליים ואותה ברירת גב, והוא מתומחר
+   * ומנוסר בלי שום מסלול מיוחד.
+   *
+   * הארגזים הקיימים נמחקים תחילה: הצעה היא מטבח שלם, ולא שכבה
+   * נוספת מעל מה שכבר עומד על הקיר. הביטול נשמר בהיסטוריה של
+   * המסך, ולכן אין כאן גיבוי משלנו.
+   */
+  async applyPlan(projectId: string, placements: PlanPlacement[]): Promise<void> {
+    const items = new Map((await db.catalog.toArray()).map((i) => [i.id, i]));
+    await db.units.where('projectId').equals(projectId).delete();
+    for (const p of placements) {
+      const item = items.get(p.catalogKey);
+      if (!item) continue;
+      const unit = await this.add(projectId, p.wallId, item, p.xMm, p.widthMm);
+      if (p.free) await this.update(unit.id, { free: p.free });
+    }
   },
 
   async update(id: string, patch: Partial<Omit<PlacedUnit, 'id'>>): Promise<void> {
