@@ -4,6 +4,7 @@ import { CheckIcon, WandIcon } from '../../ui/icons';
 import { unitsRepo } from '../projects/projectsRepo';
 import { history } from './history';
 import { buildPlan } from './plan';
+import type { PlanWall } from './plan';
 import { planKitchen, placementName, whyNothing } from './autoPlan';
 import type { Appliances, AutoInput, Proposal } from './autoPlan';
 import type { PlacedUnit, Wall } from '../../db/types';
@@ -61,11 +62,24 @@ export function AutoPlanSheet({
   const [applied, setApplied] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const plan = useMemo(() => buildPlan(walls, units), [walls, units]);
+  /*
+   * החדר נקפא ברגע המעבר להצעות.
+   *
+   * `buildPlan` קורא את עומק הקירות מהארגזים שעומדים עליהם, ולכן
+   * הצעה שהונחה הייתה משנה את הקלט ומרעידה את הרשימה מתחת לאצבע.
+   * מה שנמדד הוא החדר כפי שהיה לפני הלחיצה, וזה גם מה שנכון:
+   * ההצעות נבנו על החדר הזה.
+   */
+  const [frozen, setFrozen] = useState<PlanWall[] | null>(null);
+  const plan = frozen ?? buildPlan(walls, units);
   const proposals = useMemo(
-    () => (step === 'pick' ? planKitchen({ walls, plan, appliances, seating, finish }) : []),
-    [step, walls, plan, appliances, seating, finish],
+    () => (frozen ? planKitchen({ walls, plan: frozen, appliances, seating, finish }) : []),
+    [frozen, walls, appliances, seating, finish],
   );
+  const show = () => {
+    setFrozen(buildPlan(walls, units));
+    setStep('pick');
+  };
 
   async function apply(p: Proposal) {
     if (busy) return;
@@ -88,7 +102,7 @@ export function AutoPlanSheet({
         onClose={onClose}
         footer={
           <button
-            onClick={() => setStep('pick')}
+            onClick={show}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white"
           >
             <WandIcon />
@@ -101,6 +115,13 @@ export function AutoPlanSheet({
             המערכת מסדרת את המטבח לפי מידות החדר, החלונות והדלתות שכבר סימנת.
             צריך רק לומר מה נכנס פנימה.
           </p>
+
+          {units.length > 0 && (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-snug text-amber-900">
+              בפרויקט כבר עומדים <span className="num">{units.length}</span> ארגזים.
+              הצעה שתיבחר תחליף את כולם — "בטל" במסך ההדמיה מחזיר אותם.
+            </p>
+          )}
 
           <section>
             <h3 className="mb-2 text-sm font-semibold text-stone-900">מה יש במטבח</h3>
@@ -157,7 +178,10 @@ export function AutoPlanSheet({
   return (
     <Sheet
       title="הצעות לחדר"
-      onBack={() => setStep('ask')}
+      onBack={() => {
+        setFrozen(null);
+        setStep('ask');
+      }}
       onClose={onClose}
       tall
       footer={
