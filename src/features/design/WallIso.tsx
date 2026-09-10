@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_VIEW, MAX_RISE, MIN_RISE, ORBIT_SLOP, unitScreenBox } from './isoMath';
 import type { IsoView } from './isoMath';
 import { buildScene } from './isoScene';
@@ -139,6 +139,23 @@ export function WallIso({
    * אל מאחוריו. הגרירה צריכה את אותו גבול שהתמונה כבר חושבת לפיו.
    */
   const heading = plan.find((p) => p.wall.id === activeWallId)?.headingDeg ?? 0;
+
+  /*
+   * החלפת קיר מסובבת את החדר אל מולו.
+   *
+   * זווית המבט נמדדת ביחס לחדר, לא לקיר, ולכן קיר שכיוונו 90°
+   * נראה מהצד בדיוק באותה זווית שבה הראשון נראה מלפנים. מי שלחץ
+   * על קיר ב׳ ראה את קיר א׳ מקרוב, וכדי להגיע לקיר שביקש היה
+   * צריך לגרור.
+   *
+   * הכיוון נקרא מתוך ref ולא מרשימת התלויות: שינוי זווית של קיר
+   * בעריכה אינו סיבה לחטוף למשתמש את המבט שהוא בחר.
+   */
+  const headingRef = useRef(heading);
+  headingRef.current = heading;
+  useEffect(() => {
+    setView((v) => ({ ...v, yawDeg: -headingRef.current }));
+  }, [activeWallId]);
 
   /* המסגרת שמכילה הכול. פרישה של אלפי נקודות לתוך Math.min יקרה, ומעל גבול מסוים גם נופלת */
   const pad = 300;
@@ -780,10 +797,13 @@ export function WallIso({
       </span>
     )}
 
-    {/* חזרה לזווית ההתחלתית, אחרי שהסתובבנו למקום שקשה לחזור ממנו */}
-    {(view.yawDeg !== DEFAULT_VIEW.yawDeg || view.rise !== DEFAULT_VIEW.rise) && (
+    {/*
+      חזרה לזווית ההתחלתית, אחרי שהסתובבנו למקום שקשה לחזור ממנו.
+      "התחלתית" היא מול הקיר שעובדים עליו, ולא מול הקיר הראשון.
+    */}
+    {(view.yawDeg !== -heading || view.rise !== DEFAULT_VIEW.rise) && (
       <button
-        onClick={() => setView(DEFAULT_VIEW)}
+        onClick={() => setView({ ...DEFAULT_VIEW, yawDeg: -heading })}
         className="absolute end-1 top-1 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-stone-600 shadow-sm transition-colors hover:text-oak-700"
       >
         זווית התחלתית
