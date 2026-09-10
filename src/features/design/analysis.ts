@@ -1,7 +1,8 @@
-import { alongWallMm, bodyHeightMm } from '../../db/types';
+import { alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 import { featureBiteMm, featureDef } from '../projects/wallFeatures';
-import { MAX_BODY_MM } from '../../catalog/zones';
+import { MAX_BODY_MM, blindSide, blindWidthMm } from '../../catalog/zones';
+import { BLIND_CORNER } from '../../catalog/kitchenRules';
 import { glyphDef } from '../../catalog/glyphList';
 import { cm } from '../../ui/units';
 
@@ -34,6 +35,8 @@ export function analyzeWall(
   units: PlacedUnit[],
   /** ארונות שחודרים בפועל לתוך ארון אחר בחדר */
   clashing: { id: string; name: string }[] = [],
+  /** הארגזים של הקירות השכנים, אחד לכל קצה */
+  neighbours?: { start: PlacedUnit[]; end: PlacedUnit[] },
 ): WallAnalysis {
   /*
    * אי אינו על הקיר, ולכן הוא אינו נמדד בחשבונות שלו: הוא לא תופס
@@ -104,6 +107,34 @@ export function analyzeWall(
         text: `${u.name} בגובה ${cm(bodyH)} ס"מ — מעל ${cm(MAX_BODY_MM)} עדיף לפצל`,
         unitIds: [u.id],
       });
+    }
+  }
+
+  /*
+   * פינה מתה שלא תיפתח בשטח.
+   *
+   * מה שחוסם את הדלת אינו הארגז שנוגע בפינה אלא עומק השורה על
+   * הקיר הניצב: הדלת נפתחת אל תוך החדר, ובדיוק שם עומדת השורה
+   * ההיא. מעליו נכנס גם לוח הסתימה — אחרת הדלת של הארון הזה
+   * והמגירה של הניצב לו נפגשות באוויר. פינה שנמדדה בלי שני אלה
+   * נראית נכון על המסך, והנגר מגלה אותה רק כשהוא מנסה לפתוח.
+   */
+  if (neighbours) {
+    for (const u of onWall) {
+      const side = blindSide(u);
+      if (!side) continue;
+      const isUpper = u.level === 'wall';
+      const taken = (side === 'blindStart' ? neighbours.start : neighbours.end)
+        .filter((n) => !n.free && (n.level === 'wall') === isUpper)
+        .reduce((max, n) => Math.max(max, intoRoomMm(n)), 0);
+      if (!taken) continue;
+      const need = taken + BLIND_CORNER.fillerMm;
+      if (blindWidthMm(u) + 1 < need) {
+        warnings.push({
+          text: `${u.name}: הפינה המתה ${cm(blindWidthMm(u))} ס"מ, וצריך ${cm(need)} כדי שהדלת תיפתח`,
+          unitIds: [u.id],
+        });
+      }
     }
   }
 

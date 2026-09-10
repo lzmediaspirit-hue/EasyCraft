@@ -1,5 +1,6 @@
 import { AISLE, BLIND_CORNER, ISLAND, KITCHEN, LANDING, PREP, SAFETY, TRIANGLE } from '../../catalog/kitchenRules';
 import type { FreePlacement, UnitLevel, Wall, WallFeature } from '../../db/types';
+import { SEED_CATALOG } from '../../catalog/builtins';
 import type { PlanWall } from './plan';
 
 /**
@@ -67,6 +68,8 @@ export interface Placement {
   widthMm: number;
   level: UnitLevel;
   role: Role;
+  /** עומק החלק החסום, בארון פינה מתה בלבד */
+  blindMm?: number;
   /** אי: מיקום ברצפת החדר במקום על הקיר */
   free?: FreePlacement;
 }
@@ -110,6 +113,16 @@ const MIN_WALL = 1200;
  * נפגשות באוויר.
  */
 const CORNER_START = KITCHEN.baseDepthMm + BLIND_CORNER.fillerMm;
+
+/**
+ * ארון הפינה המתה: הרוחב, והחלק שנחסם בתוכו.
+ *
+ * החסום הוא בדיוק מה שהשורה הניצבת תופסת, ועוד לוח הסתימה. הרוחב
+ * נגזר ממנו ולא להפך: הפתח שנשאר חייב להיות אמיתי, ולכן הארון
+ * רחב מספיק כדי שהחסום יישאר בגבול שהמודל מרשה — שני שלישים.
+ */
+const CORNER_BLIND = KITCHEN.baseDepthMm + BLIND_CORNER.fillerMm;
+const CORNER_WIDTH = 1000;
 
 /* ------------------------------------------------------------------ */
 /* בחירת הקירות                                                        */
@@ -333,19 +346,41 @@ const NAME: Record<string, string> = {
 const isColumn = (key: string): boolean => key.startsWith('k-tall');
 
 /**
- * הפריט שמתאים לרוחב שנבחר בפועל.
+ * זוגות פריטים שהם אותו תפקיד בשני רוחבים.
  *
- * הרצף מבקש תפקיד, לא רוחב, והרוחב נקבע רק אחרי שידוע מה נשאר על
- * הקיר. ארגז דלתות ברוחב 400 הוא ארגז דלת אחת, ועמודת מזווה אינה
- * נבנית ברוחב 900 — התאמה כאן שומרת על ההצעה בתוך מה שהספרייה
- * באמת יודעת לבנות.
+ * ארגז דלתות ברוחב 400 הוא ארגז דלת אחת, ועמודת מזווה אינה נבנית
+ * ברוחב 900. הזוג נבחר לפי הרוחב שנמצא בפועל, ולכן רשימת הרוחבים
+ * שלו היא איחוד השניים.
  */
+const PAIRS: Record<string, { narrow: string; wide: string; atMm: number }> = {
+  'k-base-door1': { narrow: 'k-base-door1', wide: 'k-base-door2', atMm: 600 },
+  'k-base-door2': { narrow: 'k-base-door1', wide: 'k-base-door2', atMm: 600 },
+  'k-tall-pantry': { narrow: 'k-tall-pantry', wide: 'k-tall-door', atMm: 601 },
+};
+
+const seedOf = (key: string) => SEED_CATALOG.find((i) => i.key === key);
+
+/** הפריט שמתאים לרוחב שנבחר בפועל. */
 function keyForWidth(key: string, widthMm: number): string {
-  if (key === 'k-base-door1' || key === 'k-base-door2') {
-    return widthMm >= 600 ? 'k-base-door2' : 'k-base-door1';
-  }
-  if (key === 'k-tall-pantry' && widthMm > 600) return 'k-tall-door';
-  return key;
+  const pair = PAIRS[key];
+  if (!pair) return key;
+  return widthMm >= pair.atMm ? pair.wide : pair.narrow;
+}
+
+/**
+ * הרוחבים שהפריט הזה באמת נבנה בהם.
+ *
+ * המקור הוא הספרייה ולא רשימה משלנו: מטבח אוטומטי שמייצר ארגז
+ * כיור ברוחב 700 מציע מידה שהעסק לא עובד בה, וזו תקלה שמתגלה רק
+ * בניסור. פריט לא מוכר נופל לרוחבי התקן הכלליים.
+ */
+function widthsFor(key: string): number[] {
+  const pair = PAIRS[key];
+  const keys = pair ? [pair.narrow, pair.wide] : [key];
+  const all = new Set<number>();
+  for (const k of keys) for (const w of seedOf(k)?.widths ?? []) all.add(w);
+  if (!all.size) return KITCHEN.widthsMm;
+  return [...all].sort((a, b) => a - b);
 }
 
 /* ------------------------------------------------------------------ */
@@ -397,7 +432,9 @@ function upperBlocked(wall: Wall, fromMm: number, widthMm: number): boolean {
  * צרים, כי יש בו פחות דפנות ופחות צירים.
  */
 function fitWidth(availableMm: number, slot: Slot, wide: boolean): number | null {
-  const options = KITCHEN.widthsMm.filter((w) => w <= availableMm && w >= slot.minMm);
+  const options = widthsFor(slot.key).filter(
+    (w) => w <= availableMm && w >= slot.minMm && w >= MIN_BOX,
+  );
   if (!options.length) return null;
   if (wide) return options[options.length - 1];
   return options.reduce((best, w) =>
@@ -483,7 +520,9 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
   const wide = priority === 'economical';
   let queue = sequence(input, priority);
 
-  const put = (p: PlanWall, key: string, xMm: number, widthMm: number, role: Role) => {
+  const put = (
+    p: PlanWall, key: string, xMm: number, widthMm: number, role: Role, blindMm?: number,
+  ) => {
     units.push({
       catalogKey: keyForWidth(key, widthMm),
       wallId: p.wall.id,
@@ -491,6 +530,7 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
       widthMm,
       level: isColumn(key) ? 'tall' : 'floor',
       role,
+      blindMm,
     });
   };
 
@@ -511,9 +551,9 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
      * ארון פינה יקר, והשטח שהוא מציל קטן.
      */
     if (corner && wi < run.length - 1) {
-      const w = 900;
+      const w = CORNER_WIDTH;
       if (priority !== 'economical' && endMm - startMm >= w + MIN_BOX) {
-        put(p, 'k-base-blind-end', endMm - w, w, 'corner');
+        put(p, 'k-base-blind-end', endMm - w, w, 'corner', CORNER_BLIND);
         endMm -= w;
       } else {
         endMm -= KITCHEN.baseDepthMm;
@@ -609,6 +649,8 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
         catalogKey: u.widthMm > 600 ? 'k-up-door2' : 'k-up-door1',
         role: 'upper',
         level: 'wall',
+        /* הארון העליון אינו פינה מתה גם כשמתחתיו יש אחת */
+        blindMm: undefined,
       });
     }
     /* מיקרוגל בלי תנור יושב בארון עליון מעל אזור ההכנה */

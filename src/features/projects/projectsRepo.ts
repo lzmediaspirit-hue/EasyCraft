@@ -329,7 +329,12 @@ export const unitsRepo = {
       const item = items.get(p.catalogKey);
       if (!item) continue;
       const unit = await this.add(projectId, p.wallId, item, p.xMm, p.widthMm);
-      if (p.free) await this.update(unit.id, { free: p.free });
+      if (p.free || p.blindMm) {
+        await this.update(unit.id, {
+          ...(p.free ? { free: p.free } : {}),
+          ...(p.blindMm ? { blindMm: p.blindMm } : {}),
+        });
+      }
     }
   },
 

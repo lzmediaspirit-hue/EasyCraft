@@ -199,9 +199,18 @@ export function DesignScreen({
     }
     return [...seen.values()];
   }, [plan, wall, allUnits]);
+  /*
+   * הארגזים של הקירות משני צדי הקיר הזה. פינה מתה נמדדת מולם:
+   * מה שחוסם את הדלת הוא עומק השורה הניצבת, ולא מה שנוגע בפינה.
+   */
+  const neighbourUnits = useMemo(() => {
+    const at = (i: number) =>
+      walls?.[i] ? (allUnits ?? NO_UNITS).filter((u) => u.wallId === walls[i].id) : NO_UNITS;
+    return { start: at(wallIndex - 1), end: at(wallIndex + 1) };
+  }, [walls, allUnits, wallIndex]);
   const analysis = useMemo(
-    () => (wall ? analyzeWall(wall, units, clashing) : null),
-    [wall, units, clashing],
+    () => (wall ? analyzeWall(wall, units, clashing, neighbourUnits) : null),
+    [wall, units, clashing, neighbourUnits],
   );
   /*
    * המקור למחוונים: הקיר שעובדים עליו, או כל הקירות יחד. שניהם
