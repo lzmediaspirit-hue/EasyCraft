@@ -372,14 +372,13 @@ function keyForWidth(key: string, widthMm: number): string {
  *
  * המקור הוא הספרייה ולא רשימה משלנו: מטבח אוטומטי שמייצר ארגז
  * כיור ברוחב 700 מציע מידה שהעסק לא עובד בה, וזו תקלה שמתגלה רק
- * בניסור. פריט לא מוכר נופל לרוחבי התקן הכלליים.
+ * בניסור.
  */
 function widthsFor(key: string): number[] {
   const pair = PAIRS[key];
   const keys = pair ? [pair.narrow, pair.wide] : [key];
   const all = new Set<number>();
   for (const k of keys) for (const w of seedOf(k)?.widths ?? []) all.add(w);
-  if (!all.size) return KITCHEN.widthsMm;
   return [...all].sort((a, b) => a - b);
 }
 
