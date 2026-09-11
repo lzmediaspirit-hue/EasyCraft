@@ -12,24 +12,11 @@ import { blocked } from './collision';
 import { unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
 import { outOfSight } from './designView';
+import { RulerMeasure, RulerTargets, rulerSpan } from './wallRuler';
+import type { RulerAxis } from './wallRuler';
 import { RAIL_WIDTH_MM, alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, RailSides, Wall } from '../../db/types';
 
-/**
- * פינות הקיר כקצה סרגל.
- *
- * "כמה נשאר מהארון עד הפינה" היא שאלה שנשאלת בשטח לא פחות מ"כמה
- * בין שני הארונות", ולכן הפינה נבחרת בדיוק כמו ארגז — עם מזהה
- * משלה, שאינו יכול להתנגש במזהה אמיתי.
- */
-const CORNER_START = 'corner:start';
-const CORNER_END = 'corner:end';
-/** קצוות הסרגל האנכי: הרצפה והתקרה, כמו שהפינות הן קצוות האופקי. */
-const EDGE_FLOOR = 'edge:floor';
-const EDGE_CEILING = 'edge:ceiling';
-
-/** מה הסרגל מודד — מרווח לרוחב הקיר או לגובהו. */
-export type RulerAxis = 'w' | 'h';
 
 export type MeasureAxis = 'w' | 'h' | 'd';
 
@@ -139,60 +126,8 @@ export function WallElevation({
   const vbW = wall.lengthMm + padX * 2;
   const vbH = wall.heightMm + padTop + padBottom;
   const stroke = Math.max(wall.lengthMm / 420, 4);
-  /*
-   * המרחק הפנוי בין שני הארגזים שנבחרו לסרגל.
-   * נמדד מהפאה הפנימית של האחד לפאה הפנימית של השני — זה המרווח
-   * שבאמת קיים על הקיר, ולא המרחק בין נקודות ההתחלה שלהם.
-   */
-  const rulerSpan = (() => {
-    if (!rulerPair || rulerPair.length < 2) return null;
-    /*
-     * קצה הסרגל הוא ארגז או קצה של הקיר. קצה הוא נקודה ולא מלבן,
-     * ולכן שתי הפאות שלו זהות — וכל השאר מתנהג בדיוק אותו דבר.
-     * `near` ו-`far` הן שתי הפאות בציר הנמדד, ו-`mid` הוא המרכז
-     * בציר השני — שם הסרגל יצויר.
-     */
-    const at = (id: string) => {
-      /*
-       * גם סימון על הקיר הוא קצה מדידה. "כמה מהחלון עד הארון" ו"כמה
-       * בין הדלת לעמוד" הן השאלות שנשאלות בשטח בדיוק כמו "כמה בין
-       * שני הארגזים", ואין סיבה שהסרגל יידע לענות רק על האחרונה.
-       */
-      const f = wall.features.find((x) => x.id === id);
-      if (rulerAxis === 'w') {
-        if (id === CORNER_START) return { near: 0, far: 0, mid: wall.heightMm / 2 };
-        if (id === CORNER_END) {
-          return { near: wall.lengthMm, far: wall.lengthMm, mid: wall.heightMm / 2 };
-        }
-        if (f) {
-          return { near: f.xMm, far: f.xMm + f.widthMm, mid: f.yMm + f.heightMm / 2 };
-        }
-        const u = units.find((x) => x.id === id);
-        return u
-          ? { near: u.xMm, far: u.xMm + alongWallMm(u), mid: u.yMm + u.heightMm / 2 }
-          : null;
-      }
-      if (id === EDGE_FLOOR) return { near: 0, far: 0, mid: wall.lengthMm / 2 };
-      if (id === EDGE_CEILING) {
-        return { near: wall.heightMm, far: wall.heightMm, mid: wall.lengthMm / 2 };
-      }
-      if (f) return { near: f.yMm, far: f.yMm + f.heightMm, mid: f.xMm + f.widthMm / 2 };
-      const u = units.find((x) => x.id === id);
-      return u ? { near: u.yMm, far: u.yMm + u.heightMm, mid: u.xMm + alongWallMm(u) / 2 } : null;
-    };
-    const [a, b] = rulerPair.map(at);
-    if (!a || !b) return null;
-    const first = a.near <= b.near ? a : b;
-    const second = first === a ? b : a;
-    const from = first.far;
-    const to = second.near;
-    return {
-      from: Math.min(from, to),
-      to: Math.max(from, to),
-      gap: Math.max(to - from, 0),
-      mid: Math.round((a.mid + b.mid) / 2),
-    };
-  })();
+  /* המרווח שנמדד בין שני הקצוות שנבחרו, כשהסרגל פתוח */
+  const span = rulerSpan(wall, units, rulerPair, rulerAxis);
   const fontSize = Math.max(wall.lengthMm / 40, 70);
   /** גובה המסך של נקודה שנמדדת מהרצפה. */
   const flip = (yFromFloor: number) => wall.heightMm - yFromFloor;
@@ -708,159 +643,22 @@ export function WallElevation({
       )}
 
       {/*
-        סרגל: המרחק הפנוי בין שני הדברים שנבחרו על הקיר.
-        זו השאלה שנשאלת בשטח — "כמה נשאר ביניהם" — ועד עכשיו היה
-        צריך לחשב אותה בראש משתי המידות ומשני המיקומים.
-      */}
-      {/*
-        יעדי הפינות, רק כשהסרגל פתוח: רצועה דקה בכל קצה של הקיר,
-        רחבה מספיק כדי לפגוע בה באצבע.
-      */}
-      {/*
-        הסימונים עצמם הופכים ליעדי מדידה כשהסרגל פתוח: אותו מלבן
-        שכבר מצויר, רק שעכשיו אפשר לפגוע בו. מסומן = צבע הסרגל,
-        כדי שיהיה ברור מה נבחר.
+        הסרגל: היעדים שאפשר לבחור, והמידה שנמדדה ביניהם. שניהם
+        יושבים ב-`wallRuler`, כי מדידה היא עבודה בפני עצמה.
       */}
       {rulerPair && (
-        <g>
-          {wall.features.map((f) => {
-            const on = rulerPair.includes(f.id);
-            const w = Math.max(f.widthMm, 90);
-            const h = Math.max(f.heightMm, 90);
-            return (
-              <rect
-                key={`ruler-${f.id}`}
-                data-feature-id={f.id}
-                x={f.xMm}
-                y={flip(f.yMm + h)}
-                width={w}
-                height={h}
-                fill="#0f766e"
-                fillOpacity={on ? 0.35 : 0.06}
-                stroke="#0f766e"
-                strokeWidth={on ? stroke * 1.4 : stroke * 0.7}
-                strokeDasharray={on ? undefined : `${stroke * 3} ${stroke * 3}`}
-                className="cursor-pointer"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  onSelect(f.id);
-                }}
-              />
-            );
-          })}
-        </g>
+        <RulerTargets
+          wall={wall}
+          axis={rulerAxis}
+          picked={rulerPair}
+          stroke={stroke}
+          flip={flip}
+          onPick={onSelect}
+        />
       )}
-
-      {rulerPair && (
-        <g>
-          {(rulerAxis === 'w'
-            ? [
-                { id: CORNER_START, x: 0, y: 0, w: 0, h: wall.heightMm },
-                { id: CORNER_END, x: wall.lengthMm, y: 0, w: 0, h: wall.heightMm },
-              ]
-            : [
-                { id: EDGE_FLOOR, x: 0, y: wall.heightMm, w: wall.lengthMm, h: 0 },
-                { id: EDGE_CEILING, x: 0, y: 0, w: wall.lengthMm, h: 0 },
-              ]
-          ).map((t) => {
-            const on = rulerPair.includes(t.id);
-            // רצועה דקה, רחבה מספיק כדי לפגוע בה באצבע
-            const band = Math.max(wall.lengthMm / 50, 60);
-            const vertical = rulerAxis === 'w';
-            return (
-              <rect
-                key={t.id}
-                data-corner={t.id}
-                x={vertical ? (t.x === 0 ? 0 : t.x - band) : 0}
-                y={vertical ? 0 : t.y === 0 ? 0 : t.y - band}
-                width={vertical ? band : wall.lengthMm}
-                height={vertical ? wall.heightMm : band}
-                fill="#0f766e"
-                fillOpacity={on ? 0.35 : 0.1}
-                stroke="#0f766e"
-                strokeWidth={on ? stroke * 1.4 : stroke * 0.7}
-                strokeDasharray={on ? undefined : `${stroke * 3} ${stroke * 3}`}
-                className="cursor-pointer"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  onSelect(t.id);
-                }}
-              />
-            );
-          })}
-        </g>
+      {span && (
+        <RulerMeasure span={span} axis={rulerAxis} wall={wall} stroke={stroke} flip={flip} />
       )}
-
-      {rulerSpan &&
-        (rulerAxis === 'w' ? (
-          <g pointerEvents="none">
-            <line
-              x1={rulerSpan.from}
-              y1={flip(rulerSpan.mid)}
-              x2={rulerSpan.to}
-              y2={flip(rulerSpan.mid)}
-              stroke="#0f766e"
-              strokeWidth={stroke * 1.4}
-            />
-            {/* שני הקצוות עשויים ליפול על אותה נקודה כשאין מרווח בכלל */}
-            {[rulerSpan.from, rulerSpan.to].map((x, i) => (
-              <line
-                key={i}
-                x1={x}
-                y1={flip(rulerSpan.mid) - 90}
-                x2={x}
-                y2={flip(rulerSpan.mid) + 90}
-                stroke="#0f766e"
-                strokeWidth={stroke * 1.4}
-              />
-            ))}
-            <text
-              x={(rulerSpan.from + rulerSpan.to) / 2}
-              y={flip(rulerSpan.mid) - 130}
-              textAnchor="middle"
-              fontSize={Math.max(wall.lengthMm / 34, 95)}
-              fontWeight={600}
-              fill="#0f766e"
-              direction="ltr"
-            >
-              {cm(rulerSpan.gap)}
-            </text>
-          </g>
-        ) : (
-          <g pointerEvents="none">
-            <line
-              x1={rulerSpan.mid}
-              y1={flip(rulerSpan.from)}
-              x2={rulerSpan.mid}
-              y2={flip(rulerSpan.to)}
-              stroke="#0f766e"
-              strokeWidth={stroke * 1.4}
-            />
-            {[rulerSpan.from, rulerSpan.to].map((y, i) => (
-              <line
-                key={i}
-                x1={rulerSpan.mid - 90}
-                y1={flip(y)}
-                x2={rulerSpan.mid + 90}
-                y2={flip(y)}
-                stroke="#0f766e"
-                strokeWidth={stroke * 1.4}
-              />
-            ))}
-            {/* התווית יושבת לצד הקו, כי מעליו היא נופלת על הארגז */}
-            <text
-              x={rulerSpan.mid + 130}
-              y={flip((rulerSpan.from + rulerSpan.to) / 2)}
-              dominantBaseline="middle"
-              fontSize={Math.max(wall.lengthMm / 34, 95)}
-              fontWeight={600}
-              fill="#0f766e"
-              direction="ltr"
-            >
-              {cm(rulerSpan.gap)}
-            </text>
-          </g>
-        ))}
     </svg>
   );
 }

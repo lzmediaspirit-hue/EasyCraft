@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import type { MeasureAxis, RulerAxis } from './WallElevation';
+import type { MeasureAxis } from './WallElevation';
+import type { RulerAxis } from './wallRuler';
 
 /**
  * איך מסתכלים על הקיר.
