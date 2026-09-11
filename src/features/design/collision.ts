@@ -1,6 +1,6 @@
 import { glyphDef } from '../../catalog/glyphList';
-import { featureDef, featureOverlaps } from '../projects/wallFeatures';
-import { boxCorners, unitBox } from './placement';
+import { featureBiteMm, featureDef, featureOverlaps } from '../projects/wallFeatures';
+import { boxCorners, featureBox, unitBox } from './placement';
 import type { UnitBox } from './placement';
 import type { PlacedUnit } from '../../db/types';
 import type { PlanWall } from './plan';
@@ -46,7 +46,7 @@ export function blocked(
   plan: PlanWall[],
 ): boolean {
   if (glyphDef(unit.glyph).cladding) return false;
-  if (hitsFeature(unit, plan)) return true;
+  if (hitsFeature(unit, at, plan)) return true;
   for (const o of others) {
     if (o.id === unit.id || glyphDef(o.glyph).cladding) continue;
     const ob = unitBox(o, plan);
@@ -62,13 +62,29 @@ export function blocked(
  * קיבל אזהרה אחריה — אבל אזהרה על מה שממילא לא ייבנה היא רעש:
  * הארגז פשוט לא נכנס לשם, ולכן הוא נעצר כמו מול ארגז אחר.
  *
+ * שני מבחנים, כי אלה שתי שאלות שונות. על הקיר של הארגז עצמו די
+ * בחפיפת מלבנים: שניהם נמדדים באותה מערכת. עמוד שבולט אל החדר הוא
+ * גוף בחלל, והוא חוסם גם ארגז שעומד על הקיר השכן — עמוד בפינת
+ * מטבח הוא בדיוק המקרה — ולכן שם נשאלת אותה שאלה שנשאלת על שני
+ * ארגזים.
+ *
  * שקע ונקודת מים אינם חוסמים: הם נקדחים בגב הארון, וארגז שעומד
  * עליהם הוא הדבר הרגיל ולא התקלה.
  */
-function hitsFeature(unit: PlacedUnit, plan: PlanWall[]): boolean {
-  if (unit.free) return false;
-  const wall = plan.find((q) => q.wall.id === unit.wallId)?.wall;
-  return !!wall?.features.some((f) => featureDef(f.kind).blocks && featureOverlaps(unit, f));
+function hitsFeature(unit: PlacedUnit, at: UnitBox, plan: PlanWall[]): boolean {
+  for (const p of plan) {
+    const own = !unit.free && p.wall.id === unit.wallId;
+    for (const f of p.wall.features) {
+      if (!featureDef(f.kind).blocks) continue;
+      if (own) {
+        if (featureOverlaps(unit, f)) return true;
+        continue;
+      }
+      const bite = featureBiteMm(f);
+      if (bite > 0 && clash(at, featureBox(f, p, bite))) return true;
+    }
+  }
+  return false;
 }
 
 /** האם שתי תיבות חודרות זו לזו בפועל. */

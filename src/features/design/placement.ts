@@ -1,5 +1,5 @@
 import { alongWallMm, intoRoomMm } from '../../db/types';
-import type { PlacedUnit } from '../../db/types';
+import type { PlacedUnit, WallFeature } from '../../db/types';
 import type { PlanWall } from './plan';
 
 /**
@@ -63,6 +63,28 @@ export function unitBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
     cx: p.start.x + dir.x * (u.xMm + along / 2) + normal.x * (into / 2),
     cz: p.start.y + dir.z * (u.xMm + along / 2) + normal.z * (into / 2),
     facing: rad(wallFacingDeg(p.headingDeg, u.rotationDeg)),
+  };
+}
+
+/**
+ * המקום שסימון על הקיר תופס בחדר.
+ *
+ * עמוד ומדרגה אינם ציור על הקיר אלא גוף שעומד בחלל, ולכן הם נמדדים
+ * באותה מערכת שבה נמדד ארגז — ואפשר לשאול עליהם את אותה שאלה.
+ * סימון שטוח, כמו חלון או שקע, אינו תופס עומק ולכן אינו כאן.
+ */
+export function featureBox(f: WallFeature, p: PlanWall, biteMm: number): UnitBox {
+  const a = rad(p.headingDeg);
+  const dir = { x: Math.cos(a), z: Math.sin(a) };
+  const normal = { x: -Math.sin(a), z: Math.cos(a) };
+  return {
+    w: f.widthMm,
+    d: biteMm,
+    y: f.yMm,
+    h: f.heightMm,
+    cx: p.start.x + dir.x * (f.xMm + f.widthMm / 2) + normal.x * (biteMm / 2),
+    cz: p.start.y + dir.z * (f.xMm + f.widthMm / 2) + normal.z * (biteMm / 2),
+    facing: rad(wallFacingDeg(p.headingDeg)),
   };
 }
 
