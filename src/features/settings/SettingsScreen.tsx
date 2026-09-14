@@ -266,9 +266,11 @@ export function SettingsScreen() {
             <NumField
               label="עובי גוף לחישוב"
               inMm
+              help="משמש רק ללוח שלא נקבע לו עובי משלו. ללוח שיש לו עובי — העובי שלו הוא שקובע את החיתוך, כי הוא זה שיושב במסור."
               value={settings.carcassThicknessMm}
               onChange={(v) => settingsRepo.save({ carcassThicknessMm: v })}
             />
+
             <NumField
               label="שקע הגב בחריץ"
               inMm

@@ -15,7 +15,9 @@ import { outOfSight } from './designView';
 import { RulerMeasure, RulerTargets, rulerSpan } from './wallRuler';
 import type { RulerAxis } from './wallRuler';
 import { RAIL_WIDTH_MM, alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
-import type { PlacedUnit, RailSides, Wall } from '../../db/types';
+import { partChoice } from '../../costing/boards';
+import type { PlacedUnit, Project, RailSides, Wall } from '../../db/types';
+
 
 
 export type MeasureAxis = 'w' | 'h' | 'd';
@@ -58,8 +60,10 @@ type Props = {
    * להזיז ארגז בטעות.
    */
   work?: boolean;
-  /** העליונים יורדים מהתמונה */
+  /** הפרויקט — ממנו נגזר הגוון של חלק שלא נבחר לו גוון משלו */
+  project?: Project;
 };
+
 
 /**
  * הדמיית חזית של קיר אחד.
@@ -82,7 +86,9 @@ export function WallElevation({
   rulerPair,
   rulerAxis = 'w',
   work,
+  project,
 }: Props) {
+
   /*
    * חיפוי קיר מצויר ראשון: הוא מכסה את הקיר, והארגזים עומדים לפניו.
    * בלי הסדר הזה לוח שנוסף אחרון היה מסתיר את מה שהוא אמור לגבות.
@@ -360,8 +366,13 @@ export function WallElevation({
          * הגוף עצמו, ולכן הוא נצבע בגוון הגוף — וזה מה שהלקוח יראה
          * כשייפתח הארון.
          */
-        const frontFinish = u.frontFinishId ?? u.finishId;
-        const shownFinish = inside ? u.carcassFinishId : frontFinish;
+        /*
+         * הגוון נפתר כמו בתמחור: הארגז גובר על הפרויקט. קודם נקרא
+         * כאן רק השדה של הארגז, ולכן גוון שנבחר לפרויקט כולו לא הגיע
+         * לשרטוט — הלקוח ראה חזית לבנה בזמן שנבחרה לו אדומה.
+         */
+        const shownFinish = partChoice(u, inside ? 'carcass' : 'front', project).finishId;
+
         /*
          * במצב תהליך עבודה הצבע הוא הדוח: מי שנכנס למסך רואה מיד
          * מה נתקע ומה מוכן, ולכן הגוון שנבחר ללקוח נדחק הצידה.
@@ -399,8 +410,16 @@ export function WallElevation({
         const awayMm = shadow ? Math.max(shadow.awayMm, 0) : 0;
         // הגב יושב עמוק יותר ולכן נראה כהה מעט מהגוף; בלי גב רואים את הקיר
         const backKind = u.backKind ?? 'thin';
+        /* לגב יש גוון משלו כשנבחר לו אחד; אחרת הוא הצללה של מה שרואים */
+        const backHex = partChoice(u, 'back', project).finishId;
+        const backBase = (backHex && finishHex[backHex]) || hex;
         const backFill =
-          backKind === 'none' ? null : hex ? shade(hex, backKind === 'carcass' ? 0.9 : 0.82) : '#f0ede8';
+          backKind === 'none'
+            ? null
+            : backBase
+              ? shade(backBase, backKind === 'carcass' ? 0.9 : 0.82)
+              : '#f0ede8';
+
 
         return (
           <g

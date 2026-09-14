@@ -143,7 +143,24 @@ export function DesignScreen({
     return Object.fromEntries(all.map((f) => [f.id, f.hex]));
   }, []);
 
+  /*
+   * העוביים שלפיהם נחתך, לפי הלוח שנבחר בפועל. השרטוט והניסור
+   * חייבים לעבוד על אותו מספר, אחרת דופן זרה מגדילה את הארגז על
+   * המסך ולא בפלטה.
+   */
+  const parts = useMemo(
+    () =>
+      settings && {
+        ...settings,
+        thicknessById: Object.fromEntries(
+          (allMaterials ?? []).filter((m) => m.thicknessMm).map((m) => [m.id, m.thicknessMm!]),
+        ),
+      },
+    [settings, allMaterials],
+  );
+
   const wall = walls?.[Math.min(wallIndex, (walls?.length ?? 1) - 1)];
+
   const units = useMemo(
     () => (wall ? (allUnits ?? NO_UNITS).filter((u) => u.wallId === wall.id) : []),
     [allUnits, wall],
@@ -441,16 +458,21 @@ export function DesignScreen({
               onBulk={editable ? runBulk : undefined}
               inside={inside}
               finishHex={finishHex ?? NO_HEX}
+              project={project}
+              parts={parts ?? undefined}
             />
           ) : (
+
           <WallElevation
             wall={wall}
             units={units}
             allUnits={allUnits ?? NO_UNITS}
             plan={plan}
             selectedId={selectedId}
+            project={project}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
+
             rulerAxis={rulerAxis}
             work={workMode}
             onSelect={(id) => {

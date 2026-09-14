@@ -14,7 +14,10 @@ import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import type { Face, IsoView, Solid, Tf } from './isoMath';
 import { RAIL_WIDTH_MM } from '../../db/types';
-import type { PlacedUnit, Wall } from '../../db/types';
+import { partChoice, partThicknessMm } from '../../costing/boards';
+import type { PartSettings } from '../../costing/boards';
+import type { PartRole, PlacedUnit, Project, Wall } from '../../db/types';
+
 
 /** גוון הזכוכית — מה שרואים דרכו נשאר קר וכחלחל, כמו זכוכית אמיתית. */
 const GLASS_TONE = '#dbeafe';
@@ -85,6 +88,8 @@ export function buildScene({
   finishHex,
   present,
   view,
+  project,
+  parts,
 }: {
   walls: Wall[];
   units: PlacedUnit[];
@@ -94,7 +99,12 @@ export function buildScene({
   finishHex: Record<string, string>;
   present: boolean;
   view: IsoView;
+  /** ברירות המחדל של הפרויקט — מהן נגזר הגוון של מי שלא נבחר לו אחד */
+  project?: Project;
+  /** העוביים שלפיהם נחתך, כדי שהציור והניסור יסכימו */
+  parts?: PartSettings;
 }): Scene {
+
   const plan = buildPlan(walls, units);
   /*
    * הסיבוב נעצר לפני שהצופה יוצא אל מאחורי הקיר שעובדים עליו.
@@ -107,7 +117,7 @@ export function buildScene({
     yawDeg: clamp(view.yawDeg, -120 - heading, 30 - heading),
   };
   const v = projector(shown);
-  const project = v.project;
+  const toScreen = v.project;
   const solids: Solid[] = [];
   const backdrops: Backdrop[] = [];
   const marks: WallMark[] = [];
@@ -115,7 +125,7 @@ export function buildScene({
   /* הנקודה שמתחת לארגז הנבחר, שעליה יושבים חצי הסיבוב */
   let spin: { x: number; y: number } | null = null;
 
-  const floorPts = roomFloor(plan).map((q) => project(q.x, 0, q.y));
+  const floorPts = roomFloor(plan).map((q) => toScreen(q.x, 0, q.y));
   const floor = floorPts.map((q) => q.join(',')).join(' ');
   bounds.push(...floorPts);
 
@@ -139,7 +149,8 @@ export function buildScene({
     const place = unitBox(u, plan);
     if (!place) continue;
     if (u.id === selectedId && !present) spin = spinPoint(u, place, v);
-    solids.push(...unitSolids(u, place, inside, finishHex));
+    solids.push(...unitSolids(u, place, inside, finishHex, project, parts));
+
   }
 
   /*
@@ -167,21 +178,45 @@ function unitSolids(
   place: UnitBox,
   inside: boolean,
   finishHex: Record<string, string>,
+  project?: Project,
+  parts?: PartSettings,
 ): Solid[] {
-  const t = MATERIAL.carcassMm;
   const out: Solid[] = [];
-  const frontId = inside ? u.carcassFinishId : (u.frontFinishId ?? u.finishId);
-  const tone = (frontId && finishHex[frontId]) || '#d9c3a5';
-  const carcassTone = u.carcassFinishId ? (finishHex[u.carcassFinishId] ?? '#e8dcc8') : '#e8dcc8';
+  /*
+   * הגוון של כל חלק נפתר בדיוק כמו בתמחור: הארגז גובר על הפרויקט,
+   * והפרויקט על ברירת המחדל. קודם נקראו כאן רק השדות של הארגז,
+   * ולכן גוון שנבחר לפרויקט כולו לא הגיע לשרטוט — הלקוח ראה ארון
+   * לבן בזמן שבחרנו לו אדום.
+   */
+  const hexOf = (role: PartRole, fallback: string) => {
+    const id = partChoice(u, role, project).finishId;
+    return (id && finishHex[id]) || fallback;
+  };
+  const carcassTone = hexOf('carcass', '#e8dcc8');
+  const tone = inside ? hexOf('carcass', '#d9c3a5') : hexOf('front', '#d9c3a5');
+  /* אותם עוביים שלפיהם נחתך, ולא מספר קבוע שאולי אינו של הלוח */
+  const t = parts ? partThicknessMm(u, 'carcass', parts, project) : MATERIAL.carcassMm;
+  const ft = parts ? partThicknessMm(u, 'front', parts, project) : MATERIAL.frontMm;
 
   /* הסיבוב והמיקום יושבים במסגרת בלבד */
   const frame = frameOf(unitFrame(place));
   const socle = u.socleMm ?? 0;
-  const x = 0;
-  const y = u.yMm + socle;
-  const h = Math.max(u.heightMm - socle, 0);
-  const w = u.widthMm;
+  const e = u.exposed ?? {};
+  /* המעטפת: מה שהארגז תופס בחדר, וממנה נגזרת גם ההתנגשות */
+  const envY = u.yMm + socle;
+  const envH = Math.max(u.heightMm - socle, 0);
+  /*
+   * דופן זרה היא חלק מהמעטפת ולא תוספת עליה, בדיוק כמו בחיתוך:
+   * הגוף מתכווץ בעוביה. קודם היא נוספה מחוץ לגוף בגודל מלא, וארגז
+   * שהוגדר ברוחב 700 צויר ברוחב 736 — רחב מהמידה שלפיה נבדקת
+   * ההתנגשות, ולכן שכנים נראו חופפים כשהם רק נוגעים.
+   */
+  const x = e.start ? ft : 0;
+  const y = envY + (e.bottom ? ft : 0);
+  const h = Math.max(envH - (e.top ? ft : 0) - (e.bottom ? ft : 0), 0);
+  const w = Math.max(u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0), 0);
   const d = u.depthMm;
+
   const add = (q: Solid, glass = false) => out.push({ ...q, unitId: u.id, glass });
 
   /*
@@ -241,7 +276,13 @@ function unitSolids(
   const back = u.backKind ?? 'thin';
   // גב בעובי גוף נבנה כמו דופן, וגב דק יושב בחריץ — וזה נראה
   const bt = back === 'none' ? 0 : back === 'carcass' ? t : MATERIAL.backMm;
-  const backTone = shade(carcassTone, 0.86);
+  /*
+   * הגב נצבע בגוון שלו כשנבחר לו אחד. קודם הוא תמיד היה הצללה של
+   * הגוף, ולכן גב ירוק שנבחר במפורש נראה בכחול של הגוף — בארגז
+   * פתוח בלי דלתות זה כל מה שרואים.
+   */
+  const backTone = shade(hexOf('back', carcassTone), 0.86);
+
   if (bt && rails.back) {
     /* גב מקושרות: רצועה למעלה ורצועה למטה, ובאמצע רואים את הקיר */
     const railH = Math.min(RAIL_WIDTH_MM, Math.max(h - 2 * t, 0));
@@ -470,26 +511,24 @@ function unitSolids(
    * שהעין תופסת כהבהוב כשמסובבים את החדר.
    */
   if (u.counterMm) {
+    /* המשטח רץ על כל רוחב הארגז, גם מעל דופן זרה */
     add(
-      slab(frame, x, u.yMm + u.heightMm, 0, w, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`),
+      slab(
+        frame, 0, u.yMm + u.heightMm, 0, u.widthMm, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`,
+      ),
     );
   }
 
-  // דפנות זרות
-  const e = u.exposed ?? {};
+  /* דפנות זרות — בתוך המעטפת, לא מעליה */
   const pd = u.exposedDepthMm ?? d + MATERIAL.exposedExtraMm;
-  const eTone = u.exposedFinishId ? (finishHex[u.exposedFinishId] ?? tone) : tone;
-  if (e.start)
-    add(
-      slab(frame, x - MATERIAL.frontMm, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-l`),
-    );
-  if (e.end)
-    add(slab(frame, x + w, y, 0, MATERIAL.frontMm, h, pd, eTone, `${u.id}-ep-r`));
-  if (e.top) add(slab(frame, x, y + h, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-t`));
-  if (e.bottom)
-    add(slab(frame, x, y - MATERIAL.frontMm, 0, w, MATERIAL.frontMm, pd, eTone, `${u.id}-ep-b`));
+  const eTone = hexOf('exposed', tone);
+  if (e.start) add(slab(frame, 0, envY, 0, ft, envH, pd, eTone, `${u.id}-ep-l`));
+  if (e.end) add(slab(frame, u.widthMm - ft, envY, 0, ft, envH, pd, eTone, `${u.id}-ep-r`));
+  if (e.top) add(slab(frame, 0, envY + envH - ft, 0, u.widthMm, ft, pd, eTone, `${u.id}-ep-t`));
+  if (e.bottom) add(slab(frame, 0, envY, 0, u.widthMm, ft, pd, eTone, `${u.id}-ep-b`));
   return out;
 }
+
 
 /**
  * הנקודה שמתחת לארגז, שעליה יושבים חצי הסיבוב.

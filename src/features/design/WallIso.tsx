@@ -6,7 +6,9 @@ import { buildPlan } from './plan';
 import { outOfSight } from './designView';
 import { LockIcon, UnlockIcon } from '../../ui/icons';
 import { solveDrag } from './dragSolve';
-import type { PlacedUnit, Wall } from '../../db/types';
+import type { PartSettings } from '../../costing/boards';
+import type { PlacedUnit, Project, Wall } from '../../db/types';
+
 
 /**
  * מבט תלת-ממדי על החדר.
@@ -37,8 +39,15 @@ export function WallIso({
   inside,
   finishHex,
   present = false,
+  project,
+  parts,
 }: {
+  /** הפרויקט — ממנו נגזרים הגוונים של מי שלא נבחר לו גוון משלו */
+  project?: Project;
+  /** העוביים שלפיהם נחתך, כדי שהציור והניסור יסכימו */
+  parts?: PartSettings;
   walls: Wall[];
+
   /** כל הארגזים בפרויקט — המבט הזה מציג את החדר כולו */
   units: PlacedUnit[];
   /** הקיר שעובדים עליו כרגע, מסומן בציור */
@@ -127,8 +136,12 @@ export function WallIso({
    * מגע בכפתור, רענון של שאילתה — בנה את החדר כולו מחדש.
    */
   const scene = useMemo(
-    () => buildScene({ walls, units, activeWallId, selectedId, inside, finishHex, present, view }),
-    [walls, units, activeWallId, selectedId, inside, finishHex, present, view],
+    () =>
+      buildScene({
+        walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts,
+      }),
+    [walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts],
+
   );
   const { faces, backdrops, marks, floor, bounds, spin } = scene;
   /* הזווית שבאמת מצוירת — היא מוגבלת כדי לא לצאת אל מאחורי הקיר */

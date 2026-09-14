@@ -173,7 +173,8 @@ function liftCount(u: PlacedUnit): number {
  * דופן זרה בולעת את עובי הלוח מהגוף, הגב יושב בחריץ ולכן קטן מהגוף,
  * והחזית קטנה מהפתח במרווח סביבה.
  */
-export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
+export function unitParts(u: PlacedUnit, s: PartSettings, project?: Project): Part[] {
+
   const w = u.widthMm;
   /*
    * הגובה כולל את הרגליים, והגוף מתחיל מעליהן.
@@ -182,8 +183,10 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
    */
   const h = bodyHeightMm(u);
   const d = u.depthMm;
-  const t = s.carcassThicknessMm;
-  const ft = MATERIAL.frontMm;
+  /* העובי של הלוחות שנבחרו בפועל, ולא מספר כללי שאולי אינו שלהם */
+  const t = partThicknessMm(u, 'carcass', s, project);
+  const ft = partThicknessMm(u, 'front', s, project);
+
 
   /*
    * מכשיר חשמלי נקנה ולא נחתך: מקרר, תנור, מדיח וקולט אדים תופסים
@@ -472,10 +475,35 @@ export function unitParts(u: PlacedUnit, s: PartSettings): Part[] {
 
 /** ההגדרות שנחוצות לפירוק לחלקים. */
 export interface PartSettings {
+  /** עובי הגוף כשללוח שנבחר אין עובי משלו */
   carcassThicknessMm: number;
   backGrooveMm: number;
   frontGapMm: number;
+  /**
+   * העובי של כל לוח, לפי מזהה.
+   *
+   * ארגז נחתך לפי הלוח שנבחר לו בפועל. כשהעובי הזה חסר, ההגדרה
+   * הכללית היא ברירת המחדל — אבל כשהוא קיים הוא גובר: גוף מסנדוויץ׳
+   * 17 שנחתך כאילו הוא 18 נותן תחתית קצרה ב-2 מ"מ, וזה נמדד במסור.
+   */
+  thicknessById?: Record<string, number>;
 }
+
+/**
+ * עובי הלוח שנבחר לחלק מסוים בארגז.
+ * הלוח קודם להגדרה הכללית; ההגדרה היא מה שקורה כשאין ללוח עובי.
+ */
+export function partThicknessMm(
+  u: PlacedUnit,
+  role: PartRole,
+  s: PartSettings,
+  project?: Project,
+): number {
+  const id = partChoice(u, role, project).materialId;
+  const own = id ? s.thicknessById?.[id] : undefined;
+  return own ?? (role === 'carcass' ? s.carcassThicknessMm : MATERIAL.frontMm);
+}
+
 
 /** חלק זכוכית בארגז — דלת או מדף — עם המידה והכמות שלו. */
 interface GlassPart {
@@ -486,12 +514,13 @@ interface GlassPart {
 }
 
 /** כל חלקי הזכוכית בארגז: דלתות ומדפים. */
-function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
+function unitGlassDoors(u: PlacedUnit, s: PartSettings, project?: Project): GlassPart[] {
   const h = bodyHeightMm(u);
   const e = u.exposed ?? {};
-  const ft = MATERIAL.frontMm;
+  const ft = partThicknessMm(u, 'front', s, project);
   const carcassW = u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0);
-  const t = s.carcassThicknessMm;
+  const t = partThicknessMm(u, 'carcass', s, project);
+
   const zones = unitZones({ ...u, heightMm: h });
   const out: GlassPart[] = [];
 
@@ -548,9 +577,10 @@ function unitGlassDoors(u: PlacedUnit, s: PartSettings): GlassPart[] {
  * המדפים והקושרות. הגב וקצוות שנשארים בפנים אינם מקונטים, ולכן
  * הם לא נספרים כאן.
  */
-function unitEdgeMeters(u: PlacedUnit, s: PartSettings): number {
+function unitEdgeMeters(u: PlacedUnit, s: PartSettings, project?: Project): number {
   let mm = 0;
-  for (const p of unitParts(u, s)) {
+  for (const p of unitParts(u, s, project)) {
+
     if (p.role === 'back') continue;
     // חזית ודופן זרה מקונטות בכל ההיקף; חלק גוף רק בצלע שסומנה כגלויה
     if (p.role === 'front' || p.role === 'exposed') mm += 2 * (p.widthMm + p.heightMm) * p.qty;
@@ -644,11 +674,23 @@ export function projectCosting(
   >();
 
   /*
+   * החיתוך נעשה לפי הלוחות שנבחרו בפועל: ההגדרה הכללית היא ברירת
+   * מחדל ללוח בלי עובי, ולא מספר שגובר על הלוח עצמו.
+   */
+  const parts: PartSettings = {
+    ...settings,
+    thicknessById: Object.fromEntries(
+      materials.filter((m) => m.thicknessMm).map((m) => [m.id, m.thicknessMm!]),
+    ),
+  };
+
+  /*
    * כשלא נבחר חומר לחלק — לא לארגז ולא לפרויקט — נופלים לחומר
    * סביר לפי מיקומו ברשימה: הראשון לגוף, השני לחזית, והאחרון
    * לגב. זה ניחוש, אבל הוא שומר על פרויקט ישן מתומחר במקום
    * להשאיר אותו ריק.
    */
+
   const fallbackMaterial = (role: PartRole): string | undefined =>
     materialForRole(role, materials)?.id;
 
@@ -677,7 +719,7 @@ export function projectCosting(
   const glassMap = new Map<string, GlassDoorLine>();
 
   for (const u of units) {
-    for (const part of unitParts(u, settings)) {
+    for (const part of unitParts(u, parts, project)) {
       // שטח נטו. הכרסום נאכל בקווי החיתוך, וזה כבר עניינו של מנוע הניסור
       const area = (part.widthMm * part.heightMm) / 1_000_000;
       const { materialId, finishId } = resolve(u, part.role);
@@ -696,7 +738,7 @@ export function projectCosting(
      * הקנט נספר לפי הגוון של החזיתות: קנט תואם ללוח הוא המצב
      * הרגיל, ולכן מטר קנט של גוון יקר עולה אחרת ממטר של גוון זול.
      */
-    const um = unitEdgeMeters(u, settings);
+    const um = unitEdgeMeters(u, parts, project);
     edgeMeters += um;
     if (um > 0) {
       const front = resolve(u, 'front');
@@ -707,7 +749,7 @@ export function projectCosting(
     doors += effectiveDoors(u);
     lifts += liftCount(u);
     handles += unitHandles(u);
-    for (const g of unitGlassDoors(u, settings)) {
+    for (const g of unitGlassDoors(u, parts, project)) {
       const key = `${g.label} ${g.widthMm}x${g.heightMm}`;
       const line = glassMap.get(key) ?? {
         label: g.label,
