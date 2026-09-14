@@ -46,7 +46,13 @@ const pd = await page.innerText('body');
 ok('planner gets the work view', !pd.includes('הוספת ארגז') && !pd.includes('חישוב'), '');
 ok('planner has no wall stats', !pd.includes('שטח הקיר'), '');
 ok('planner has quick marking', await page.getByRole('button', { name: /סימון מהיר/ }).count() === 1);
-ok('planner has no design toggle', await page.getByRole('button', { name: /^תכנון$|^תהליך עבודה$/ }).count() === 0);
+/*
+ * התכנת נכנס לתצוגת התהליך, אבל יש לו מתג חזרה לתכנון: בלעדיו
+ * אישור עריכה שהמנהל נותן לו לא פותח שום כלי (N2).
+ */
+ok('planner starts in the work view', await btn(/^תהליך עבודה$/).count() === 1);
+ok('and can switch to planning', await page.getByRole('button', { name: /^תכנון$|^תהליך עבודה$/ }).count() === 1);
+
 
 console.log(errs.length ? 'ERRORS: ' + errs.join(' | ') : 'no console errors');
 await b.close();

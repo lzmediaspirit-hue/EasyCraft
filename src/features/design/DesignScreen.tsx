@@ -109,7 +109,12 @@ export function DesignScreen({
    * שנעשה בהם — ובלי כלי עריכה. מי שעומד ליד המסור לא אמור להזיז
    * ארגז בטעות.
    */
-  const [workToggle, setWorkToggle] = useState(!!startInWork);
+  /*
+   * `null` = עוד לא נבחר, ואז ברירת המחדל היא לפי התפקיד: מנהל
+   * נכנס לתכנון, וכל השאר לתהליך. משנבחר, הבחירה של המשתמש גוברת.
+   */
+  const [workToggle, setWorkToggle] = useState<boolean | null>(startInWork ? true : null);
+
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
   /* מחווני הקיר מתקפלים, וההדמיה תופסת את מה שהתפנה */
   /*
@@ -184,7 +189,13 @@ export function DesignScreen({
    * לעריכה" לא הוצג לו — הוא יושב במסך התכנון.
    */
   const plans = role === 'manager' || role === 'planner';
-  const workMode = plans ? workToggle : true;
+  /*
+   * תהליך עבודה קיים רק אחרי המכירה — לפני כן אין מה לחתוך, ולכן
+   * גם אין למה להיכנס. אחריה: מי שמתכנן בוחר, וכל השאר בתהליך.
+   */
+  const workMode = !project?.soldAt ? false : plans ? (workToggle ?? role !== 'manager') : true;
+
+
 
   /** כלי עריכה מוצגים רק למי שמותר לו, ורק כשלא במצב תהליך עבודה */
   const editable = mayEdit && !workMode;
@@ -811,13 +822,14 @@ export function DesignScreen({
               חישוב ומחיר הם עניין של המנהל. התכנת והנגר צריכים את
               הארגזים ואת מה שנשאר לעשות בהם, לא את מה שזה עולה.
             */}
-            {plans &&
+            {/* חישוב ומחיר הם של המנהל; המתג הוא של כל מי שמתכנן */}
+            {(plans || project.soldAt) &&
               (project.soldAt ? (
-
                 <button
                   onClick={() => {
-                    setWorkToggle((v) => !v);
+                    setWorkToggle(!workMode);
                     setSelectedId(null);
+
                     design.clearTools();
                   }}
                   aria-pressed={workMode}
@@ -830,7 +842,7 @@ export function DesignScreen({
                   <FlowIcon className="size-5" />
                   {workMode ? 'תהליך עבודה' : 'תכנון'}
                 </button>
-              ) : (
+              ) : role === 'manager' ? (
                 <button
                   onClick={() => setSheet('materials')}
                   className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
@@ -838,7 +850,8 @@ export function DesignScreen({
                   <CalcIcon />
                   חישוב פרויקט
                 </button>
-              ))}
+              ) : null)}
+
           </div>
         </>
       )}
