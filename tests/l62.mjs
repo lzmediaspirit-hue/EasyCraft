@@ -1,6 +1,7 @@
 /* שכבה 22 — אי חופשי בחדר: מיקום ברצפה ולא לאורך קיר */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -69,7 +70,7 @@ await page.getByRole('button', { name: 'אי בחדר' }).click();
 await page.waitForTimeout(900);
 const island = await first();
 ok('turning it into an island stores a room position', !!island.free, JSON.stringify(island.free));
-await page.screenshot({ path: 'L62-1-island.png' });
+await page.screenshot({ path: SP + 'L62-1-island.png' });
 
 /* --- גרירה בתלת־ממד מזיזה אותו על הרצפה, בשני הצירים --- */
 await page.keyboard.press('Escape');
@@ -87,7 +88,7 @@ ok(
   `${JSON.stringify(island.free)} -> ${JSON.stringify(moved.free)}`,
 );
 ok('and it stays on the floor', moved.yMm === before.yMm, String(moved.yMm));
-await page.screenshot({ path: 'L62-2-dragged.png' });
+await page.screenshot({ path: SP + 'L62-2-dragged.png' });
 
 /* --- החצים מסובבים את האי ביחס לחדר --- */
 await page.locator('[data-unit]').last().click({ force: true });
@@ -100,14 +101,14 @@ ok(
   ((turned.free.headingDeg - moved.free.headingDeg + 360) % 360) === 90,
   `${moved.free.headingDeg} -> ${turned.free.headingDeg}`,
 );
-await page.screenshot({ path: 'L62-3-turned.png' });
+await page.screenshot({ path: SP + 'L62-3-turned.png' });
 
 /* --- בחזית הוא מסומן כאי ולא מתחזה לארגז על הקיר --- */
 await btn(/^תלת/).click();
 await page.waitForTimeout(1100);
 const flat = await page.locator('svg:has([data-unit-id])').first().innerHTML();
 ok('the elevation marks it as an island', /אי ·/.test(flat), (flat.match(/>[^<]*אי[^<]*</) ?? [''])[0]);
-await page.screenshot({ path: 'L62-4-elevation.png' });
+await page.screenshot({ path: SP + 'L62-4-elevation.png' });
 
 /* --- ובחזרה אל הקיר --- */
 await page.locator('[data-unit-id]').first().click();

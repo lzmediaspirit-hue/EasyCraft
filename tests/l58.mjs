@@ -1,6 +1,7 @@
 /* שכבה 21 — עמוד, מדרגת קיר ונישה: תוספת על הקיר עם עומק */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -46,7 +47,7 @@ await dlg().getByRole('button', { name: 'עמוד / פינוי' }).click();
 await page.waitForTimeout(700);
 await dlg().getByLabel('עמוד / פינוי — מהקיר לקצה').fill('10');
 await page.waitForTimeout(500);
-await page.screenshot({ path: 'L58-1-designer.png' });
+await page.screenshot({ path: SP + 'L58-1-designer.png' });
 await page.keyboard.press('Escape');
 await page.waitForTimeout(800);
 
@@ -62,7 +63,7 @@ ok(
 const flat = await page.locator('svg:has([data-unit-id])').first().innerHTML();
 ok('the elevation labels the depth', /עמוד \/ פינוי 25 ס״מ/.test(flat));
 ok('and the step depth as it was typed', /מדרגת קיר 12 ס״מ/.test(flat));
-await page.screenshot({ path: 'L58-2-elevation.png' });
+await page.screenshot({ path: SP + 'L58-2-elevation.png' });
 
 /* --- בתלת־ממד עמוד ומדרגה עומדים בחדר, לא על הקיר --- */
 await btn(/שטוח/).click();
@@ -75,7 +76,7 @@ ok(
   String(await page.locator('[data-wall-solid="pillar"]').count()),
 );
 ok('so is the step', (await page.locator('[data-wall-solid="step"]').count()) === 3);
-await page.screenshot({ path: 'L58-3-iso.png' });
+await page.screenshot({ path: SP + 'L58-3-iso.png' });
 
 /* --- נישה נשארת על הקיר, כי היא נכנסת לתוכו --- */
 await btn(/^תלת/).click();
@@ -93,7 +94,7 @@ ok(
   'and it is drawn recessed into the wall',
   (await page.locator('[data-wall-feature="niche"]').count()) >= 1,
 );
-await page.screenshot({ path: 'L58-4-niche.png' });
+await page.screenshot({ path: SP + 'L58-4-niche.png' });
 
 ok('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
 await browser.close();

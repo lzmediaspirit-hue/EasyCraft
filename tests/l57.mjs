@@ -1,6 +1,7 @@
 /* שכבה 21 — החדר: רצפה אחת, עובי קיר, וסימוני הקיר בתלת־ממד */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -67,7 +68,7 @@ ok('three walls close it into a rectangle', (await floorCorners()) === 4, String
 ok('the wall is drawn with thickness', (await page.locator('[data-wall-thickness]').count()) >= 3);
 ok('the window is on the wall in 3D', (await page.locator('[data-wall-feature="window"]').count()) === 1);
 ok('so is the socket', (await page.locator('[data-wall-feature="socket"]').count()) === 1);
-await page.screenshot({ path: 'L57-1-room.png' });
+await page.screenshot({ path: SP + 'L57-1-room.png' });
 
 /* --- שני קירות: הרצפה מושלמת למלבן שהם מגדירים --- */
 await page.evaluate(async () => {
@@ -86,7 +87,7 @@ await page.evaluate(async () => {
 });
 await toDesign();
 ok('two walls still give a four-cornered floor', (await floorCorners()) === 4, String(await floorCorners()));
-await page.screenshot({ path: 'L57-2-two-walls.png' });
+await page.screenshot({ path: SP + 'L57-2-two-walls.png' });
 
 /* --- קיר בודד: עומק חדר קבוע, ועדיין רצפה אחת --- */
 await page.evaluate(async () => {
@@ -105,7 +106,7 @@ await page.evaluate(async () => {
 });
 await toDesign();
 ok('a lone wall still gets a room floor', (await floorCorners()) === 4, String(await floorCorners()));
-await page.screenshot({ path: 'L57-3-one-wall.png' });
+await page.screenshot({ path: SP + 'L57-3-one-wall.png' });
 
 ok('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
 await browser.close();

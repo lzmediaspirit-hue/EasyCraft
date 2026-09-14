@@ -1,6 +1,7 @@
 /* שכבה 21 — עריכה בתלת־ממד: מתג צפייה/הזזה, גרירה, ומעבר בין קירות */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -69,7 +70,7 @@ ok(
   afterLook.xMm === before.xMm && afterLook.yMm === before.yMm,
   `${JSON.stringify(before)} -> ${JSON.stringify(afterLook)}`,
 );
-await page.screenshot({ path: 'L56-1-orbited.png' });
+await page.screenshot({ path: SP + 'L56-1-orbited.png' });
 
 /* --- כשהחדר נעול, אותה גרירה מזיזה את הארון לאורך הקיר --- */
 await btn(/זווית התחלתית/).click();
@@ -83,7 +84,7 @@ await dragBy({ x: box.x + box.width / 2, y: box.y + box.height / 2 }, 60, 0);
 const moved = await placed();
 ok('a locked room drags the cabinet along the wall', moved.xMm > before.xMm + 100, `${before.xMm} -> ${moved.xMm}`);
 ok('it stays on the floor', moved.yMm === 0, String(moved.yMm));
-await page.screenshot({ path: 'L56-2-moved.png' });
+await page.screenshot({ path: SP + 'L56-2-moved.png' });
 console.log('units:', await page.evaluate(async () => {
   const req = indexedDB.open('easycraft');
   const dbh = await new Promise((res) => (req.onsuccess = () => res(req.result)));
@@ -98,7 +99,7 @@ box = await page.locator('[data-unit]').last().boundingBox();
 await dragBy({ x: box.x + box.width / 2, y: box.y + box.height / 2 }, 260, 0);
 const hopped = await placed();
 ok('dragging past the end moves it to the next wall', hopped.wallId !== before.wallId, `${before.wallId} -> ${hopped.wallId}`);
-await page.screenshot({ path: 'L56-3-next-wall.png' });
+await page.screenshot({ path: SP + 'L56-3-next-wall.png' });
 
 /* --- נגיעה בוחרת גם כשהחדר נעול --- */
 await page.locator('[data-unit]').last().click({ force: true });

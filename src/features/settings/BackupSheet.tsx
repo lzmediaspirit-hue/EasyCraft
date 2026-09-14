@@ -81,9 +81,15 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
       return;
     }
     setBusy(true);
-    const r: ImportResult = await importLibrary(res.backup, mode);
-    setBusy(false);
-    setNote(summary(r));
+    try {
+      const r: ImportResult = await importLibrary(res.backup, mode);
+      setNote(summary(r));
+    } catch (e) {
+      setProblem(failure(e));
+    } finally {
+      // גם כשהייבוא נפל: בלי זה הכפתורים נשארים מושבתים עד סגירת המגירה
+      setBusy(false);
+    }
   }
 
   async function bringAll() {
@@ -95,9 +101,14 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
       return;
     }
     setBusy(true);
-    await importAll(res.backup);
-    setBusy(false);
-    setNote('הכול שוחזר. הקבצים המצורפים נשארו במכשיר שממנו הגיע הגיבוי.');
+    try {
+      await importAll(res.backup);
+      setNote('הכול שוחזר. הקבצים המצורפים נשארו במכשיר שממנו הגיע הגיבוי.');
+    } catch (e) {
+      setProblem(failure(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -234,4 +245,9 @@ function summary(r: ImportResult): string {
   if (r.replaced) parts.push(`${r.replaced} עודכנו`);
   if (r.removed) parts.push(`${r.removed} הוסרו`);
   return parts.length ? parts.join(' · ') : 'הכול כבר היה מעודכן';
+}
+
+/** תקלה מבסיס הנתונים, כמשפט שאפשר לקרוא ולא כאובייקט שנזרק. */
+function failure(e: unknown): string {
+  return `הייבוא נכשל ולא הושלם: ${e instanceof Error ? e.message : String(e)}`;
 }

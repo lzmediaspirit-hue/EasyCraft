@@ -519,3 +519,30 @@ db.version(19)
         if (i.defaultHeightMm === 870 || i.defaultHeightMm === 820) i.defaultHeightMm = 880;
       }),
   );
+
+/*
+ * סוג הגב של ארגז חדש התאחד על שדה אחד.
+ *
+ * היו שניים בשמות דומים: `defaultBackKind` בשורש ההגדרות, שאליו
+ * כתב מסך ההגדרות, ו-`defaults.backKind`, שממנו נולד כל ארגז. לכן
+ * הבחירה במסך נשמרה ולא השפיעה. כאן עוברת הבחירה שכבר נעשתה אל
+ * השדה האמיתי, כדי שמי שביקש גב אחר יקבל אותו סוף סוף.
+ *
+ * רק כשהיא באמת בחירה: 'thin' הוא ערך ברירת המחדל של שני השדות,
+ * ואי אפשר להבחין בו בין מי שבחר לבין מי שלא נגע. לכן מועברת רק
+ * בחירה שאינה ברירת המחדל, ורק כשהצד השני עדיין עליה.
+ */
+db.version(20)
+  .stores(TABLES_V14)
+  .upgrade((tx) =>
+    tx
+      .table('settings')
+      .toCollection()
+      .modify((s: { defaultBackKind?: string; defaults?: { backKind?: string } }) => {
+        const chose = s.defaultBackKind && s.defaultBackKind !== 'thin';
+        if (chose && s.defaults && (s.defaults.backKind ?? 'thin') === 'thin') {
+          s.defaults.backKind = s.defaultBackKind;
+        }
+        delete s.defaultBackKind;
+      }),
+  );

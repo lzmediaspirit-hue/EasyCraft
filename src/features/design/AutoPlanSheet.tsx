@@ -62,6 +62,7 @@ export function AutoPlanSheet({
   const [step, setStep] = useState<'ask' | 'pick'>('ask');
   const [applied, setApplied] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
 
   /*
    * החדר נקפא ברגע המעבר להצעות.
@@ -85,14 +86,20 @@ export function AutoPlanSheet({
   async function apply(p: Proposal) {
     if (busy) return;
     setBusy(true);
+    setProblem(null);
     /*
      * צילום אחד לפני ההצעה הראשונה בלבד: מעבר בין הצעות אינו
      * צעד חדש בהיסטוריה אלא אותה בחירה שמתחלפת, ו"בטל" צריך
      * להחזיר את מה שהיה על הקיר לפני שנפתחה המגירה.
      */
     if (!applied) await history.capture(projectId, `autoplan:${Date.now()}`);
-    await unitsRepo.applyPlan(projectId, p.units);
-    setApplied(p.key);
+    const res = await unitsRepo.applyPlan(projectId, p.units);
+    if (res.ok) setApplied(p.key);
+    else {
+      setProblem(
+        `${res.missing} מהארגזים שבהצעה אינם בספרייה שלך. ההצעה בנויה על ארגזי התקן — אפשר להחזיר אותם ב"גיבוי והעברה" בהגדרות.`,
+      );
+    }
     setBusy(false);
   }
 
@@ -202,7 +209,13 @@ export function AutoPlanSheet({
             {whyNothing(plan)}
           </p>
         )}
+        {problem && (
+          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-snug text-amber-900">
+            {problem}
+          </p>
+        )}
         {applied && (
+
           <p className="rounded-xl bg-stone-100 px-3 py-2 text-xs leading-snug text-stone-500">
             ההצעה כבר עומדת בהדמיה. הקשה על הצעה אחרת מחליפה אותה, ו"בטל" במסך
             ההדמיה מחזיר את מה שהיה.
@@ -280,7 +293,10 @@ function ProposalCard({
   return (
     <button
       onClick={onPick}
+      /* ההצעה שנבחרה מסומנת גם למי שלא רואה את המסגרת הכתומה */
+      aria-pressed={active}
       className={`block w-full rounded-2xl border-2 p-4 text-start transition-colors ${
+
         active ? 'border-oak-600 bg-oak-50' : 'border-stone-200 bg-white hover:border-stone-300'
       }`}
     >

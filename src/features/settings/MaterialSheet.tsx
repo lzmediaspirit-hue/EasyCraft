@@ -41,6 +41,8 @@ export function MaterialSheet({
    * לגוף ואילו לחזיתות — ולכן היא נקבעת כאן, פעם אחת, ולא בכל ארגז.
    */
   const [roles, setRoles] = useState<PartRole[]>(material?.roles ?? []);
+  /** מה מונע את המחיקה, כשמשהו מונע אותה */
+  const [problem, setProblem] = useState<string | null>(null);
 
   const spec = coreOf(core);
   const auto = boardName({ core, coreColor, thicknessMm: thickness });
@@ -82,6 +84,18 @@ export function MaterialSheet({
           onRemove={
             material
               ? async () => {
+                  /*
+                   * לוח שמוצמד לארגזים אינו נמחק. מחיקה שלו הייתה
+                   * משאירה בארגזים הפניה לשום דבר, והחלקים שלו היו
+                   * יוצאים מהתמחור בשקט — הצעת מחיר נמוכה בלי אזהרה.
+                   */
+                  const used = await materialsRepo.usage(material.id);
+                  if (used) {
+                    setProblem(
+                      `הלוח הזה מוצמד ל-${used} ארגזים. החלף אותם ללוח אחר, ואז אפשר יהיה למחוק אותו.`,
+                    );
+                    return;
+                  }
                   await materialsRepo.remove(material.id);
                   onClose();
                 }
@@ -91,6 +105,11 @@ export function MaterialSheet({
       }
     >
       <div className="space-y-5">
+        {problem && (
+          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-snug text-amber-900">
+            {problem}
+          </p>
+        )}
         {/*
           הליבה קודמת לכול: היא שקובעת אילו עוביים קיימים, אם יש
           צבע ליבה בכלל, ואם הלוח יכול להגיע מודבק משני הצדדים.

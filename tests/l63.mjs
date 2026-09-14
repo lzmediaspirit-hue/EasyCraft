@@ -1,6 +1,7 @@
 /* שכבה 22 — חוקי הפיזיקה: נגיעה והכלה מותרות, חדירה חלקית לא */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -59,13 +60,13 @@ ok(
   'one standing on top of another is fine',
   !(await place(side, { ...side, yMm: 800 })),
 );
-await page.screenshot({ path: 'L63-1-stacked.png' });
+await page.screenshot({ path: SP + 'L63-1-stacked.png' });
 
 /* --- ארגז שנכנס כולו לתוך השני: מכשיר בתוך עמודה --- */
 const tall = { xMm: 0, yMm: 0, widthMm: 600, heightMm: 2000, depthMm: 580 };
 const oven = { xMm: 20, yMm: 800, widthMm: 560, heightMm: 590, depthMm: 560 };
 ok('an appliance inside a tall unit is fine', !(await place(tall, oven)));
-await page.screenshot({ path: 'L63-2-nested.png' });
+await page.screenshot({ path: SP + 'L63-2-nested.png' });
 
 /* --- חזית שבולטת קדימה עדיין בפנים --- */
 ok(
@@ -78,7 +79,7 @@ ok(
   'half in and half out is blocked',
   await place(side, { ...side, xMm: 300 }),
 );
-await page.screenshot({ path: 'L63-3-clash.png' });
+await page.screenshot({ path: SP + 'L63-3-clash.png' });
 
 /* --- חדירה חלקית לגובה --- */
 ok('sinking into the one below is blocked', await place(side, { ...side, yMm: 400 }));

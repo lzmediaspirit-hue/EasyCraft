@@ -1,6 +1,7 @@
 /* שכבה 23: נעילת החדר, ביטול גרירת הלוח, צד זכוכית לוויטרינה, אייקון הסיבוב */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 let fail = 0;
 const ok = (name, cond, got = '') => {
@@ -87,7 +88,7 @@ if (await spin.count()) {
   ok('rotate head is a filled triangle', head === 1, String(head));
 }
 await page.locator('svg').filter({ has: page.locator('[data-room-floor]') }).first()
-  .screenshot({ path: 'L74-1-iso.png' });
+  .screenshot({ path: SP + 'L74-1-iso.png' });
 
 await browser.close();
 console.log(fail ? `${fail} FAILED` : 'ALL PASS');

@@ -35,6 +35,23 @@ const TABLES = [
 
 type TableName = (typeof TABLES)[number];
 
+/** שם הטבלה בעברית, כדי שהודעת שגיאה תדבר על מה שחסר ולא על טבלה. */
+const TABLE_LABEL: Record<TableName, string> = {
+  settings: 'ההגדרות',
+  materials: 'הלוחות',
+  finishes: 'הגוונים',
+  catalog: 'הספרייה',
+  team: 'הצוות',
+  customers: 'הלקוחות',
+  projects: 'הפרויקטים',
+  walls: 'הקירות',
+  units: 'הארגזים',
+  stages: 'השלבים',
+  stock: 'המלאי',
+  consumption: 'הצריכה',
+  projectPrices: 'המחירים',
+};
+
 export interface Backup {
   app: 'easycraft';
   format: number;
@@ -80,8 +97,13 @@ export async function exportLibrary(): Promise<Backup> {
 
 /**
  * קריאת קובץ גיבוי מטקסט.
+ *
  * מחזירה הודעה בעברית כשהקובץ אינו מה שהוא אמור להיות — "JSON לא
  * תקין" אינו משפט שנגר אמור לפענח.
+ *
+ * הבדיקה כאן היא התנאי לשחזור, ולא נימוס: שחזור מלא מוחק את מה
+ * שבמכשיר, ולכן קובץ חסר טבלה היה מוחק חצי ומשאיר חצי — ומדווח
+ * שהכול שוחזר. קובץ שאינו שלם נעצר לפני שנגעו בנתונים.
  */
 export function readBackup(text: string): { backup: Backup } | { error: string } {
   let parsed: unknown;
@@ -91,11 +113,27 @@ export function readBackup(text: string): { backup: Backup } | { error: string }
     return { error: 'הטקסט אינו קובץ גיבוי — נראה שהעתקה נקטעה באמצע' };
   }
   const b = parsed as Partial<Backup>;
-  if (b?.app !== 'easycraft' || !b.tables) return { error: 'זה לא קובץ גיבוי של EasyCraft' };
+  if (b?.app !== 'easycraft' || !b.tables || typeof b.tables !== 'object') {
+    return { error: 'זה לא קובץ גיבוי של EasyCraft' };
+  }
   if ((b.format ?? 0) > BACKUP_FORMAT) {
     return { error: 'הקובץ נוצר בגרסה חדשה יותר של האפליקציה' };
   }
+  if (b.kind !== 'all' && b.kind !== 'library') {
+    return { error: 'לא כתוב בקובץ מה יש בו — גיבוי מלא או ספרייה' };
+  }
+  const required: readonly TableName[] = b.kind === 'all' ? TABLES : ['catalog'];
+  for (const name of required) {
+    const rows = b.tables[name];
+    if (!Array.isArray(rows)) return { error: `חסר בקובץ החלק של ${TABLE_LABEL[name]}` };
+    if (!rows.every(isRow)) return { error: `יש שורות פגומות בחלק של ${TABLE_LABEL[name]}` };
+  }
   return { backup: b as Backup };
+}
+
+/** שורה בטבלה היא אובייקט עם מזהה. בלי מזהה אי אפשר לכתוב אותה. */
+function isRow(row: unknown): boolean {
+  return !!row && typeof row === 'object' && typeof (row as { id?: unknown }).id === 'string';
 }
 
 /** מה קרה בייבוא, כדי לומר את זה במספרים ולא ב"בוצע". */
@@ -147,13 +185,17 @@ export async function importLibrary(
  * זו פעולה של "המכשיר החדש מקבל את מה שהיה בישן", ולכן היא מוחקת
  * ולא ממזגת — מיזוג של שני מצבי עולם שונים מייצר פרויקטים כפולים
  * ומלאי שלא מסתדר. הקבצים המצורפים נשארים במכשיר הישן.
+ *
+ * כל הטבלאות מתנקות, גם כאלה שהקובץ ריק בהן: "החלפה" שמשאירה את
+ * הלקוחות הישנים לצד החדשים אינה החלפה. `readBackup` כבר ודאה
+ * שהקובץ שלם, ולכן טבלה ריקה כאן היא ריקה באמת ולא חסרה.
  */
 export async function importAll(backup: Backup): Promise<void> {
-  const names = TABLES.filter((n) => backup.tables[n]);
-  await db.transaction('rw', names.map((n) => db.table(n)), async () => {
-    for (const name of names) {
+  await db.transaction('rw', TABLES.map((n) => db.table(n)), async () => {
+    for (const name of TABLES) {
       await db.table(name).clear();
-      await db.table(name).bulkPut(backup.tables[name] as unknown[]);
+      const rows = backup.tables[name];
+      if (rows?.length) await db.table(name).bulkPut(rows);
     }
   });
 }

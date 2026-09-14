@@ -389,13 +389,22 @@ export const unitsRepo = {
    * הארגזים הקיימים נמחקים תחילה: הצעה היא מטבח שלם, ולא שכבה
    * נוספת מעל מה שכבר עומד על הקיר. הביטול נשמר בהיסטוריה של
    * המסך, ולכן אין כאן גיבוי משלנו.
+   *
+   * לפני המחיקה נבדק שכל ההצעה ניתנת להנחה. ההצעה מפנה לארגזי התקן,
+   * ומי שהחליף את הספרייה בשלו אינו מחזיק אותם: קודם נמחק מה שעמד
+   * על הקיר ואחר כך דולגו הפריטים שלא נמצאו, והפרויקט נשאר ריק.
    */
-  async applyPlan(projectId: string, placements: PlanPlacement[]): Promise<void> {
+  async applyPlan(
+    projectId: string,
+    placements: PlanPlacement[],
+  ): Promise<{ ok: true } | { ok: false; missing: number }> {
     const items = new Map((await db.catalog.toArray()).map((i) => [i.id, i]));
+    const missing = placements.filter((p) => !items.has(p.catalogKey)).length;
+    if (missing) return { ok: false, missing };
+
     await db.units.where('projectId').equals(projectId).delete();
     for (const p of placements) {
-      const item = items.get(p.catalogKey);
-      if (!item) continue;
+      const item = items.get(p.catalogKey)!;
       const unit = await this.add(projectId, p.wallId, item, p.xMm, p.widthMm);
       if (p.free || p.blindMm) {
         await this.update(unit.id, {
@@ -404,6 +413,7 @@ export const unitsRepo = {
         });
       }
     }
+    return { ok: true };
   },
 
   async update(id: string, patch: Partial<Omit<PlacedUnit, 'id'>>): Promise<void> {
@@ -418,13 +428,18 @@ export const unitsRepo = {
    * משכפל ארגז לאותו קיר.
    * הרוב המוחלט של קיר הוא אותו ארגז שוב ושוב במידה אחרת, ולבנות
    * כל אחד מחדש מהספרייה זו עבודה שכבר נעשתה.
+   *
+   * סימוני הייצור אינם מועתקים: הארגז החדש הוא עבודה שעוד לא נעשתה.
+   * בלי זה שכפול של ארגז שכבר הותקן ייצר ארגז שני שנראה מותקן, והוא
+   * יוצא מרשימת מה שנשאר לחתוך בלי שאיש חתך אותו.
    */
   async duplicate(id: string, xMm: number): Promise<PlacedUnit | undefined> {
     const source = await db.units.get(id);
     if (!source) return undefined;
     const now = Date.now();
+    const { work: _fresh, ...rest } = source;
     const copy: PlacedUnit = {
-      ...source,
+      ...rest,
       id: crypto.randomUUID(),
       xMm,
       createdAt: now,

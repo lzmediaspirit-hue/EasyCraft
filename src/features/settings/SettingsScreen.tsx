@@ -288,6 +288,10 @@ export function SettingsScreen() {
           {/*
             סוג הגב הוא דרך עבודה של הנגרייה ולא החלטה לכל ארגז,
             ולכן הוא נקבע פעם אחת. ארגז שצריך אחרת משנה אצלו.
+
+            נכתב אל `defaults.backKind` — אותו שדה שממנו נולד כל ארגז
+            חדש. קודם נכתב לשדה נפרד בשם דומה, ולכן הבחירה כאן נשמרה
+            ולא השפיעה: הארגזים המשיכו לקבל גב דק.
           */}
           <div className="mt-3 rounded-2xl border border-stone-200 bg-white p-4">
             <span className="mb-2 block text-sm font-medium text-stone-700">
@@ -297,10 +301,12 @@ export function SettingsScreen() {
               {BACK_KINDS.map((b) => (
                 <button
                   key={b.key}
-                  onClick={() => settingsRepo.save({ defaultBackKind: b.key })}
-                  aria-pressed={settings.defaultBackKind === b.key}
+                  onClick={() =>
+                    settingsRepo.save({ defaults: { ...settings.defaults, backKind: b.key } })
+                  }
+                  aria-pressed={settings.defaults.backKind === b.key}
                   className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                    settings.defaultBackKind === b.key
+                    settings.defaults.backKind === b.key
                       ? 'bg-oak-600 text-white'
                       : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                   }`}

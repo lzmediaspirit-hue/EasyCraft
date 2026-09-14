@@ -958,13 +958,8 @@ export interface Settings {
   backGrooveMm: number;
   /** מרווח סביב חזית — דלת קטנה מהפתח בכל צד */
   frontGapMm: number;
-  /**
-   * סוג הגב שכל ארגז חדש מקבל.
-   * לנגרייה יש דרך עבודה אחת לגב, ולבחור אותה מחדש בכל ארגז זו
-   * עבודה שחוזרת על עצמה. מי שרוצה אחרת בארגז מסוים משנה שם.
-   */
-  defaultBackKind: BackKind;
   /** המידות שחוזרות בכל פרויקט */
+
   defaults: ProjectDefaults;
   /** מחירי אביזרים, ליחידה */
   accessories: AccessoryPrices;

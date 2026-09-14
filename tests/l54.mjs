@@ -1,6 +1,7 @@
 /* שכבה 21 — תשתית: הסתרת ארגז מהתצוגה וסיבובו ב-90 מעלות */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -80,7 +81,7 @@ ok(
   `${wallBefore} => ${await stats()}`,
 );
 ok('the project still costs the same', /₪\s*\d/.test(priceHidden), priceHidden.replace(/\n/g, ' '));
-await page.screenshot({ path: 'L54-1-hidden.png' });
+await page.screenshot({ path: SP + 'L54-1-hidden.png' });
 
 await btn(/^חישוב/).click();
 await page.waitForTimeout(1800);
@@ -95,14 +96,14 @@ await toDesign();
 await btn(/מבט על/).click();
 await page.waitForTimeout(900);
 const flatBox = await page.locator('[data-plan-unit]').first().boundingBox();
-await page.screenshot({ path: 'L54-2-plan-straight.png' });
+await page.screenshot({ path: SP + 'L54-2-plan-straight.png' });
 
 await patchUnit({ rotationDeg: 90 });
 await toDesign();
 await btn(/מבט על/).click();
 await page.waitForTimeout(900);
 const turnedBox = await page.locator('[data-plan-unit]').first().boundingBox();
-await page.screenshot({ path: 'L54-3-plan-turned.png' });
+await page.screenshot({ path: SP + 'L54-3-plan-turned.png' });
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(1500);
 ok(
@@ -114,7 +115,7 @@ ok(
 await toDesign();
 await btn(/שטוח/).click();
 await page.waitForTimeout(900);
-await page.screenshot({ path: 'L54-4-iso-turned.png' });
+await page.screenshot({ path: SP + 'L54-4-iso-turned.png' });
 ok('the 3D still draws the turned cabinet', (await page.locator('[data-unit]').count()) > 0);
 
 ok('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));

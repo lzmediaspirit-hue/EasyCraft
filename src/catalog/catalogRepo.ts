@@ -6,9 +6,9 @@ import { SHIPPED_LIBRARY, type ShippedItem } from './shipped';
 /**
  * הספרייה נזרעת לתוך בסיס הנתונים בהפעלה הראשונה, כך שכל פריט —
  * גם כזה שהגיע עם האפליקציה — ניתן לעריכה על ידי המשתמש.
- * זריעה חוזרת מוסיפה רק פריטים חדשים ולא דורסת עריכות קיימות.
  */
 let seeding: Promise<void> | null = null;
+
 
 export function seedCatalog(): Promise<void> {
   seeding ??= runSeed();
@@ -26,14 +26,19 @@ export function shippedLibrary(): ShippedItem[] {
   return SHIPPED_LIBRARY.length ? SHIPPED_LIBRARY : SEED_CATALOG.map(toShipped);
 }
 
+/**
+ * זריעה רק לספרייה ריקה — כלומר בהתקנה הראשונה בלבד.
+ *
+ * קודם נזרע בכל טעינה כל מה שחסר, ולכן נגר שמחק ארגזי תקן או החליף
+ * את הספרייה כולה בשלו מצא אותם שוב בפתיחה הבאה: ההסרה החזיקה עד
+ * הרענון ולא יותר. מה שהוסר נשאר מוסר, ומי שרוצה את ארגזי התקן
+ * בחזרה לוחץ על "החזרת ארגזי התקן" בגיבוי והעברה.
+ */
 async function runSeed(): Promise<void> {
-  const existing = new Set((await db.catalog.toArray()).map((i) => i.id));
+  if (await db.catalog.count()) return;
   const now = Date.now();
-  const missing = shippedLibrary()
-    .filter((s) => !existing.has(s.id))
-    .map((s) => ({ ...s, createdAt: now, updatedAt: now }));
   // bulkPut ולא bulkAdd — כדי ששתי הפעלות במקביל לא ייפלו על כפילות
-  if (missing.length) await db.catalog.bulkPut(missing);
+  await db.catalog.bulkPut(shippedLibrary().map((s) => ({ ...s, createdAt: now, updatedAt: now })));
 }
 
 function toShipped(s: SeedItem, order: number): ShippedItem {

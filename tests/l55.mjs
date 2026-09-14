@@ -1,6 +1,7 @@
 /* שכבה 21 — סיבוב הארגז: שני חצים בתלת־ממד, וציור שיודע לאן הוא פונה */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -67,13 +68,13 @@ ok('no arrows before a cabinet is picked', (await page.getByRole('button', { nam
 await page.locator('[data-unit]').last().click({ force: true });
 await page.waitForTimeout(800);
 ok('two arrows under the picked cabinet', (await page.getByRole('button', { name: /^סיבוב/ }).count()) === 2);
-await page.screenshot({ path: 'L55-1-arrows.png' });
+await page.screenshot({ path: SP + 'L55-1-arrows.png' });
 
 /* --- כל לחיצה היא רבע סיבוב, וארבע מחזירות למקום --- */
 await page.getByRole('button', { name: 'סיבוב ימינה' }).click();
 await page.waitForTimeout(800);
 ok('one click turns a quarter', (await rotation()) === 90, String(await rotation()));
-await page.screenshot({ path: 'L55-2-turned.png' });
+await page.screenshot({ path: SP + 'L55-2-turned.png' });
 
 await page.getByRole('button', { name: 'סיבוב שמאלה' }).click();
 await page.waitForTimeout(800);
@@ -98,7 +99,7 @@ ok(
   (html.match(/<rect width="\d+"/) ?? [''])[0],
 );
 ok('no doors are drawn side-on', !/CabinetGlyph|rx="8"/.test(html));
-await page.screenshot({ path: 'L55-3-elevation.png' });
+await page.screenshot({ path: SP + 'L55-3-elevation.png' });
 
 /* --- חצי סיבוב: רואים את הגב, ברוחב המלא --- */
 await btn(/שטוח/).click();
@@ -111,7 +112,7 @@ await btn(/^תלת/).click();
 await page.waitForTimeout(1100);
 const back = await page.locator('[data-unit-id]').first().innerHTML();
 ok('half a turn shows the back', /גב לחדר/.test(back) && /<rect width="900"/.test(back));
-await page.screenshot({ path: 'L55-4-back.png' });
+await page.screenshot({ path: SP + 'L55-4-back.png' });
 
 ok('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
 await browser.close();

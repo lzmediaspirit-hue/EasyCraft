@@ -111,7 +111,11 @@ const total = await all.count();
 for (let i = 0; i < total; i++) {
   const name = (await all.nth(i).innerText()).split('\n')[0];
   await all.nth(i).click();
-  await page.waitForTimeout(900);
+  /* המתנה למצב עצמו ולא לשעון: ההנחה נגמרת כשההצעה מסומנת כנבחרה */
+  for (let t = 0; t < 60 && (await all.nth(i).getAttribute('aria-pressed')) !== 'true'; t++) {
+    await page.waitForTimeout(100);
+  }
+
   const bad = await page.evaluate(async () => {
     const v = '?v=' + Date.now();
     const { db } = await import('/src/db/db.ts' + v);

@@ -1,6 +1,7 @@
 /* שכבה 24ב: טבעת הכפתורים בתלת־ממד — תזוזה, בחירה מרובה, עיפרון */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 let fail = 0;
 const ok = (n, c, g = '') => { if (c) console.log('PASS ', n); else { fail++; console.log('FAIL ', n, g); } };
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -41,7 +42,7 @@ await page.locator('[data-unit]').first().click({ force: true }); await page.wai
 for (const n of ['תזוזה', 'בחירה מרובה', 'עריכה מהירה']) {
   ok(`ring has ${n}`, (await page.getByRole('button', { name: n }).count()) > 0);
 }
-await svg.screenshot({ path: 'L76-1-ring.png' });
+await svg.screenshot({ path: SP + 'L76-1-ring.png' });
 
 /* --- עיפרון פותח את העריכה המהירה --- */
 await page.getByRole('button', { name: 'עריכה מהירה' }).first().click(); await page.waitForTimeout(900);
@@ -87,7 +88,7 @@ await page.locator('[data-unit]').first().click({ force: true }); await page.wai
 await page.getByRole('button', { name: 'בחירה מרובה' }).first().click(); await page.waitForTimeout(500);
 const more = await page.locator('[data-unit]').all();
 if (more.length > 4) { await more[more.length - 1].click({ force: true }); await page.waitForTimeout(500); }
-await svg.screenshot({ path: 'L76-2-picked.png' });
+await svg.screenshot({ path: SP + 'L76-2-picked.png' });
 await page.getByRole('button', { name: 'שמירה כארגז' }).first().click(); await page.waitForTimeout(900);
 ok('the group sheet opens', (await page.getByText('שמירת הצירוף בספרייה').count()) > 0);
 await page.getByRole('dialog').last().getByRole('button', { name: 'שמירה', exact: true }).click({ force: true }); await page.waitForTimeout(1400);

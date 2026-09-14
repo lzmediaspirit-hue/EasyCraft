@@ -36,7 +36,6 @@ const DEFAULT_SETTINGS: Settings = {
   vatPct: 18,
   edgeFactoryPerM: 0,
   edgeConsumerPerM: 0,
-  defaultBackKind: 'thin',
   /*
    * המידות שחוזרות בכל פרויקט. הערכים כאן הם התקן שרוב הנגריות
    * עובדות בו, והם נקודת פתיחה — כל אחד מהם ניתן לשינוי במסך אחד.
@@ -231,6 +230,38 @@ export const materialsRepo = {
       updatedAt: now,
     });
     return id;
+  },
+
+  /**
+   * כמה ארגזים משתמשים בלוח הזה — בפרויקטים, בספרייה ובברירות המחדל.
+   *
+   * לוח שנמחק בזמן שהוא מוצמד לארגזים משאיר אחריו הפניות ריקות:
+   * החלקים שלו יוצאים מהתמחור בלי שאיש רואה, והצעת מחיר יוצאת
+   * נמוכה. לכן המחיקה נעצרת כאן ולא מתגלה בהצעה.
+   */
+  async usage(id: string): Promise<number> {
+    const hits = (r: {
+      carcassMaterialId?: string;
+      frontMaterialId?: string;
+      exposedMaterialId?: string;
+      backMaterialId?: string;
+    }) =>
+      r.carcassMaterialId === id ||
+      r.frontMaterialId === id ||
+      r.exposedMaterialId === id ||
+      r.backMaterialId === id;
+
+    const [units, catalog, projects] = await Promise.all([
+      db.units.toArray(),
+      db.catalog.toArray(),
+      db.projects.toArray(),
+    ]);
+    return (
+      units.filter(hits).length +
+      catalog.filter(hits).length +
+      projects.filter((p) => Object.values(p.defaults ?? {}).some((c) => c?.materialId === id))
+        .length
+    );
   },
 
   /**

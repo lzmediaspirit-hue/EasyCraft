@@ -156,15 +156,21 @@ export function workTone(u: PlacedUnit): WorkTone {
   const tracks = tracksOf(u);
   if (!tracks.length) return 'idle';
   const stages = tracks.map((t) => stageIndex(stageOf(u, t.key)));
-  const min = Math.min(...stages);
   const max = Math.max(...stages);
-  if (min < 0 && max < 0) return 'idle';
+  if (max < 0) return 'idle';
   /*
    * ירוק רק כשכל מסלול הגיע להרכבה או להתקנה. ארגז שעומד בשטח בלי
    * חזיתות אינו מורכב — הוא רק מותקן, וזה מה שהווי מספר.
+   *
+   * הסף נמדד מול סוף המסלול ולא מול שלב קבוע: הגב נגמר בחיתוך, ולכן
+   * דרישה ל"הורכב" ממנו השאירה ארגז גמור לגמרי בצבע של הרכבה — 100%
+   * בהתקדמות, וכתום על הקיר.
    */
-  if (min >= stageIndex('assembled')) return 'done';
+  const ripe = (t: TrackDef) =>
+    stageIndex(stageOf(u, t.key)) >= Math.min(stageIndex('assembled'), stageIndex(t.last));
+  if (tracks.every(ripe)) return 'done';
   if (max >= stageIndex('edged')) return 'assembly';
+
   if (max >= stageIndex('ready')) return 'cutting';
   return 'idle';
 }

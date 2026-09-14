@@ -731,7 +731,17 @@ export function projectCosting(
   const groups: PartGroup[] = [];
   for (const [key, row] of areaByKey) {
     const material = materials.find((m) => m.id === row.materialId);
-    if (!material || row.areaM2 <= 0) continue;
+    /*
+     * הלוח נמחק מההגדרות אחרי שהוצמד לפרויקט. החלקים שלו אינם
+     * מתומחרים — ולכן הם נספרים כחלקים בלי לוח, כמו חלק שמעולם לא
+     * שויך. דילוג שקט כאן הוריד את עלות הלוחות בהצעת מחיר בלי שאיש
+     * ראה שחסר משהו.
+     */
+    if (!material) {
+      unpriced += row.parts.reduce((n, p) => n + p.qty, 0);
+      continue;
+    }
+    if (row.areaM2 <= 0) continue;
 
     const override = overrides.find((o) => o.lineKey === key);
     const finish = row.finishId ? finishes.find((f) => f.id === row.finishId) : undefined;
