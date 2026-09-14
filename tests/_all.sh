@@ -16,7 +16,7 @@ fi
 
 bad_total=0
 ran=0
-for f in l*.mjs _scene.mjs _paint.mjs _angles.mjs _plan.mjs _render.mjs _ray.mjs; do
+for f in l*.mjs _scene.mjs _paint.mjs _angles.mjs _plan.mjs _render.mjs _ray.mjs _rayrot.mjs; do
   if [ ! -f "$f" ]; then
     echo "== $f == חסר"
     bad_total=$((bad_total + 1))

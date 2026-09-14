@@ -6,7 +6,9 @@ import { buildPlan } from './plan';
 import { outOfSight } from './designView';
 import { LockIcon, UnlockIcon } from '../../ui/icons';
 import { solveDrag } from './dragSolve';
+import { alongWallMm } from '../../db/types';
 import type { PartSettings } from '../../costing/boards';
+
 import type { PlacedUnit, Project, Wall } from '../../db/types';
 
 
@@ -117,10 +119,19 @@ export function WallIso({
   const drag = useRef<{
     /** הארגז כפי שהיה בתחילת הגרירה — ממנו נמדד הכול, ולכן היא הפיכה */
     from: PlacedUnit;
+    /**
+     * שאר הקבוצה, כפי שהייתה בתחילת הגרירה.
+     *
+     * גם הם נמדדים מהמצב ההתחלתי ולא מהמצב הנוכחי: חישוב ההפרש
+     * מהמקור והוספתו למיקום שכבר עודכן צבר את אותה תנועה שוב ושוב,
+     * והמרווח בין שני ארגזים גדל מ-1,300 ל-3,320 בכמה אירועי מגע.
+     */
+    mates: PlacedUnit[];
     startX: number;
     startY: number;
     moved: boolean;
   } | null>(null);
+
   const orbit = useRef<{
     x: number;
     y: number;
@@ -329,13 +340,27 @@ export function WallIso({
      */
     const dx = (next.xMm ?? d.from.xMm) - d.from.xMm;
     const dy = (next.yMm ?? d.from.yMm) - d.from.yMm;
-    if (!placing || (!dx && !dy)) return;
-    for (const mate of placing.from) {
-      if (mate.id === d.from.id || mate.free) continue;
-      const now = units.find((u) => u.id === mate.id);
-      if (!now) continue;
-      onMoveTo(mate.id, { xMm: now.xMm + dx, yMm: now.yMm + dy });
+    if (!d.mates.length || (!dx && !dy)) return;
+
+    /*
+     * הקבוצה כולה נבדקת לפני שהיא זזה. שכן שהיה יוצא מקצה הקיר עוצר
+     * את כל התנועה בגבול שלו, ולכן המרווחים בין הארגזים נשמרים —
+     * במקום שאחד ייעצר והשאר ימשיכו.
+     */
+    let limX = dx;
+    let limY = dy;
+    for (const mate of d.mates) {
+      const wall = walls.find((w) => w.id === mate.wallId);
+      if (wall) {
+        const room = Math.max(wall.lengthMm - alongWallMm(mate), 0);
+        limX = Math.min(Math.max(limX, -mate.xMm), room - mate.xMm);
+      }
+      limY = Math.max(limY, -mate.yMm);
     }
+    for (const mate of d.mates) {
+      onMoveTo(mate.id, { xMm: mate.xMm + limX, yMm: mate.yMm + limY });
+    }
+
   }
 
   return (
@@ -361,9 +386,19 @@ export function WallIso({
         if (placing && onMoveTo) {
           const anchor = units.find((u) => u.id === placing.ids[0]);
           if (anchor) {
-            drag.current = { from: anchor, startX: e.clientX, startY: e.clientY, moved: false };
+            drag.current = {
+              from: anchor,
+              mates: placing.ids
+                .filter((id) => id !== anchor.id)
+                .map((id) => units.find((u) => u.id === id))
+                .filter((u): u is PlacedUnit => !!u && !u.free),
+              startX: e.clientX,
+              startY: e.clientY,
+              moved: false,
+            };
             return;
           }
+
         }
         /*
          * כשהחדר נעול האצבע שייכת לארונות בלבד: אצבע על ארון גוררת
@@ -372,7 +407,14 @@ export function WallIso({
          */
         if (locked && !present) {
           if (held && onMoveTo) {
-            drag.current = { from: held, startX: e.clientX, startY: e.clientY, moved: false };
+            drag.current = {
+              from: held,
+              mates: [],
+              startX: e.clientX,
+              startY: e.clientY,
+              moved: false,
+            };
+
           } else {
             orbit.current = { x: e.clientX, y: e.clientY, from: view, moved: false, hit };
           }

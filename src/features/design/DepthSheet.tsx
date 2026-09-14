@@ -3,6 +3,7 @@ import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, Chip } from '../../ui/Field';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { inputClass } from '../../ui/Field';
+import { fromMm, unitLabel } from '../../ui/units';
 
 const DEPTHS = [300, 320, 350, 400, 450, 500, 560, 580, 600, 650];
 
@@ -34,7 +35,12 @@ export function DepthSheet({
       }
     >
       <div className="space-y-5">
-        <Field label="עומק כולל חזית" hint='ס״מ'>
+        {/*
+          התווית נגזרת מיחידת התצוגה ולא נכתבת קבוע. כשההצגה הייתה
+          במ"מ, השדה הראה 600 לצד "ס״מ" — ומי שהקליד 60 לפי התווית
+          קיבל 100 מ"מ אחרי ההגבלה התחתונה.
+        */}
+        <Field label="עומק כולל חזית" hint={unitLabel()}>
           <MeasureInput
             value={depth}
             onChange={setDepth}
@@ -46,7 +52,7 @@ export function DepthSheet({
         <div className="flex flex-wrap gap-1.5">
           {DEPTHS.map((mm) => (
             <Chip key={mm} active={mm === depth} onClick={() => setDepth(mm)}>
-              <span className="num">{mm / 10}</span>
+              <span className="num">{fromMm(mm)}</span>
             </Chip>
           ))}
         </div>

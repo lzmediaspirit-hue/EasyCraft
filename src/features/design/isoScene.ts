@@ -8,7 +8,17 @@ import { buildPlan } from './plan';
 import { outOfSight } from './designView';
 import { wallName } from '../projects/wallLayouts';
 import { featureBiteMm, featureDef } from '../projects/wallFeatures';
-import { WALL_MM, frameOf, orderSolids, projector, roomFloor, slab, solidFaces } from './isoMath';
+import {
+  WALL_MM,
+  frameOf,
+  framePoint,
+  orderSolids,
+  projector,
+  roomFloor,
+  slab,
+  solidFaces,
+} from './isoMath';
+
 import { unitBox, unitFrame } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
@@ -149,9 +159,40 @@ export function buildScene({
     const place = unitBox(u, plan);
     if (!place) continue;
     if (u.id === selectedId && !present) spin = spinPoint(u, place, v);
+    const first = solids.length;
     solids.push(...unitSolids(u, place, inside, finishHex, project, parts));
-
+    /*
+     * הארגז נכנס למסגרת גם הוא.
+     *
+     * המסגרת נבנתה מהרצפה ומהקירות בלבד, ולכן אי שעומד באמצע חדר
+     * עם קיר אחד — שבו הרצפה היא הערכה ולא גבול — נחתך מהתמונה
+     * כמעט כולו. מה שנשמר בפרויקט חייב להיראות בו.
+     *
+     * התחום נלקח מהלוחות עצמם ולא ממידות הארגז: משטח עבודה גולש
+     * קדימה, דופן זרה עמוקה ממנו, ודלת בולטת מחזיתו.
+     */
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = first; i < solids.length; i++) {
+      for (let k = 0; k < 3; k++) {
+        if (solids[i].lo[k] < lo[k]) lo[k] = solids[i].lo[k];
+        if (solids[i].hi[k] > hi[k]) hi[k] = solids[i].hi[k];
+      }
+    }
+    if (solids.length > first) {
+      const box = frameOf(unitFrame(place));
+      for (const cx of [lo[0], hi[0]]) {
+        for (const cy of [lo[1], hi[1]]) {
+          for (const cz of [lo[2], hi[2]]) {
+            const q = framePoint(box, cx, cy, cz);
+            bounds.push(toScreen(q.x, q.y, q.z));
+          }
+        }
+      }
+    }
   }
+
+
 
   /*
    * הרחוק מצויר קודם. הסדר נקבע בין הלוחות, ורק אז כל לוח נפרש

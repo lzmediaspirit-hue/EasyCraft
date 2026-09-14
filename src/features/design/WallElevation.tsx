@@ -121,8 +121,17 @@ export function WallElevation({
     /* מצב הנעילה כפי שהיה בתחילת הגרירה. בלעדיו הצמדה שקורית
        באמצע הגרירה הייתה מקפיאה אותה במקום */
     locked: boolean;
+    /*
+     * אי: המקום שלו ברצפת החדר בתחילת הגרירה.
+     *
+     * אי אינו נמדד מקיר, ולכן `xMm` שלו רדום. גרירה בחזית עדכנה
+     * דווקא אותו — הצורה לא זזה על המסך, והמיקום השמור השתנה בלי
+     * שאיש ראה. מה שזז כאן הוא המקום ברצפה, לאורך הקיר שרואים.
+     */
+    free?: { xMm: number; zMm: number };
     /* המיקום האחרון, כדי להחליט על הצמדה בשחרור ולא תוך כדי */
   } | null>(null);
+
 
   // כשקו הגובה מוצג צריך מקום לצידו, אחרת המידה נחתכת
   const padX = showHeight ? 420 : 120;
@@ -167,7 +176,9 @@ export function WallElevation({
       originY: unit.yMm,
       scale: 1 / ctm.a,
       locked: !!unit.floorLocked,
+      free: unit.free ? { xMm: unit.free.xMm, zMm: unit.free.zMm } : undefined,
     };
+
   }
 
   function moveDrag(e: React.PointerEvent) {
@@ -176,9 +187,30 @@ export function WallElevation({
     const unit = units.find((u) => u.id === d.id);
     if (!unit) return;
 
-    const rawX = d.originX + (e.clientX - d.startX) * d.scale;
+    const alongMm = (e.clientX - d.startX) * d.scale;
+    const rawX = d.originX + alongMm;
     // מסך גדל כלפי מטה, הקיר נמדד כלפי מעלה — ולכן הסימן הפוך
     const rawY = d.originY - (e.clientY - d.startY) * d.scale;
+
+    /*
+     * אי זז ברצפת החדר לאורך הקיר שרואים, ולא במידות הקיר שאינן
+     * בשימוש אצלו. הכיוון נלקח מהקיר עצמו, ולכן זה עובד גם בקיר
+     * שאינו אופקי.
+     */
+    if (d.free && unit.free && here) {
+      const a = (here.headingDeg * Math.PI) / 180;
+      const next = {
+        ...unit.free,
+        xMm: Math.round(d.free.xMm + alongMm * Math.cos(a)),
+        zMm: Math.round(d.free.zMm + alongMm * Math.sin(a)),
+      };
+      const y = d.locked ? d.originY : Math.max(Math.round(rawY), 0);
+      const probe = { ...unit, free: next, yMm: y };
+      const box = unitBox(probe, plan);
+      if (box && !blocked(probe, box, allUnits, plan)) onMove(d.id, { free: next, yMm: y });
+      return;
+    }
+
 
     // סף ההצמדה במ"מ, שקול למרחק קבוע על המסך בכל קנה מידה
     const tol = Math.max(SNAP, SNAP_PX * d.scale);
@@ -193,8 +225,8 @@ export function WallElevation({
      * ארגז שכבר חופף במקום שהוא עומד בו הוא היוצא מן הכלל: חסימה
      * שם הייתה נועלת אותו שם לתמיד, ודווקא ממנו צריך לצאת.
      */
-    const here = unitBox(unit, plan);
-    const stuck = !!here && blocked(unit, here, allUnits, plan);
+    const hereBox = unitBox(unit, plan);
+    const stuck = !!hereBox && blocked(unit, hereBox, allUnits, plan);
     const at = (nx: number, ny: number) => {
       const probe = { ...unit, xMm: nx, yMm: ny };
       const b = unitBox(probe, plan);

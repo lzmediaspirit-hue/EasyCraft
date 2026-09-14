@@ -318,7 +318,13 @@ export const unitsRepo = {
         name: part.unit.name ?? item.name,
         glyph: part.unit.glyph ?? item.glyph,
         xMm: xMm + part.dxMm,
-        yMm: part.dyMm,
+        /*
+         * גובה ההנחה הוא הבסיס ששמור בצירוף ועוד ההפרש של החלק.
+         * קודם נלקח ההפרש בלבד, ולכן קבוצה של ארונות תלויים שנשמרה
+         * בגובה 1,500 הונחה כולה על הרצפה.
+         */
+        yMm: item.defaultYMm + part.dyMm,
+
         createdAt: now + i,
         updatedAt: now + i,
       } as PlacedUnit);
