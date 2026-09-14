@@ -65,21 +65,52 @@ export const stagesRepo = {
    * שהתהליך היה קיים מקבל אותו — בלי לגעת בשלבים שכבר התקדמו.
    */
   async ensure(projectId: string, open = true): Promise<ProjectStage[]> {
-    const existing = await stagesRepo.listForProject(projectId);
-    const have = new Set(existing.map((s) => s.key));
-    const now = Date.now();
-    const missing = STAGES.filter((s) => !have.has(s.key)).map((s, i) => ({
-      id: crypto.randomUUID(),
-      projectId,
-      key: s.key,
-      // התהליך נפתח במכירה; עד אז כל השלבים ממתינים
-      status: (open && !have.size && i === 0 ? 'active' : 'waiting') as ProjectStage['status'],
-      createdAt: now,
-      updatedAt: now,
-    }));
-    if (missing.length) await db.stages.bulkAdd(missing);
+    /*
+     * הקריאה והכתיבה באותה עסקה.
+     *
+     * שתי קריאות במקביל — מסך שנפתח ופרויקט שנוצר באותו רגע — קראו
+     * שתיהן "אין שלבים" וכתבו כל אחת שמונה: שש-עשרה שורות, ובסיום
+     * התכנון אחת סומנה כגמורה ואחות תאומה שלה נשארה פעילה.
+     */
+    await db.transaction('rw', db.stages, async () => {
+      const rows = await db.stages.where('projectId').equals(projectId).toArray();
+      /* תיקון נתונים שכבר נוצרו כפולים: נשמרת השורה שהתקדמה הכי רחוק */
+      const best = new Map<string, ProjectStage>();
+      const drop: string[] = [];
+      const rank: Record<ProjectStage['status'], number> = {
+        waiting: 0,
+        skipped: 1,
+        active: 2,
+        done: 3,
+      };
+
+      for (const row of rows) {
+        const kept = best.get(row.key);
+        if (!kept) {
+          best.set(row.key, row);
+          continue;
+        }
+        const loser = rank[row.status] > rank[kept.status] ? kept : row;
+        if (loser !== kept) best.set(row.key, row);
+        drop.push(loser.id);
+      }
+      if (drop.length) await db.stages.bulkDelete(drop);
+
+      const now = Date.now();
+      const missing = STAGES.filter((s) => !best.has(s.key)).map((s, i) => ({
+        id: crypto.randomUUID(),
+        projectId,
+        key: s.key,
+        // התהליך נפתח במכירה; עד אז כל השלבים ממתינים
+        status: (open && !best.size && i === 0 ? 'active' : 'waiting') as ProjectStage['status'],
+        createdAt: now,
+        updatedAt: now,
+      }));
+      if (missing.length) await db.stages.bulkAdd(missing);
+    });
     return stagesRepo.listForProject(projectId);
   },
+
 
   /** פותח את התהליך: השלב הראשון שעדיין ממתין הופך לפעיל. */
   async start(projectId: string): Promise<void> {

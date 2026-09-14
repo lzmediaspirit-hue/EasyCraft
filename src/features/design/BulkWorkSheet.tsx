@@ -22,21 +22,26 @@ import type { PlacedUnit, UnitWork, UserRole } from '../../db/types';
 export function BulkWorkSheet({
   units,
   role,
+  project,
   onApply,
   onClose,
 }: {
   units: PlacedUnit[];
   role: UserRole | undefined;
+  /** הפרויקט — הייצור נפתח רק אחרי המכירה */
+  project?: { soldAt?: number };
   onApply: (changes: { id: string; work: UnitWork }[]) => void;
   onClose: () => void;
 }) {
+
   const rows = TRACKS.flatMap((track) =>
     STAGE_CHAIN.map((stage) => {
       const targets = units.filter((u) => {
         const def = tracksOf(u).find((t) => t.key === track.key);
         if (!def) return false;
         if (stageOf(u, track.key) === stage.key) return false;
-        return canAdvance(u, def, stage.key, role).ok;
+        return canAdvance(u, def, stage.key, role, project).ok;
+
       });
       return { track, stage, targets };
     }).filter((r) => r.targets.length > 0),

@@ -118,9 +118,22 @@ export function canAdvance(
   track: TrackDef,
   to: Exclude<TrackStage, 'none'>,
   role: UserRole | undefined,
+  /** הפרויקט שהארגז שייך לו — ממנו נקרא אם העבודה בכלל נפתחה */
+  project?: { soldAt?: number },
 ): { ok: boolean; why?: string } {
   const def = STAGE_CHAIN.find((s) => s.key === to)!;
   if (!role || !def.roles.includes(role)) return { ok: false, why: 'לא בתפקיד שלך' };
+  /*
+   * ייצור מתחיל אחרי המכירה.
+   *
+   * ארגז שסומן "מוכן לחיתוך" ואז "נחתך" בפרויקט שעוד לא נמכר הוא
+   * לוח שנצרך מהמלאי על חשבון עבודה שאיש לא הזמין. המסך כבר אומר
+   * "תהליך העבודה נפתח אחרי המכירה", וכאן זה גם נאכף.
+   */
+  if (project && !project.soldAt && stageIndex(to) >= 0) {
+    return { ok: false, why: 'הפרויקט עוד לא נמכר' };
+  }
+
   if (stageIndex(to) > stageIndex(track.last)) return { ok: false, why: 'לא שייך למסלול הזה' };
 
   const current = stageIndex(stageOf(u, track.key));

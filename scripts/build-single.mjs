@@ -24,8 +24,22 @@ if (hasNonAscii(css)) throw new Error('CSS contains non-ASCII characters');
 if (css.includes('</style')) throw new Error('CSS contains a closing style tag');
 if (hasNonAscii(safeJs)) throw new Error('JS still contains non-ASCII characters');
 
-const out = `<title>EasyCraft</title>
+/*
+ * מה שהדפדפן צריך כדי להציג את הדף נכון, ולא רק את התוכן שלו.
+ *
+ * בלי ה-viewport, דפדפן נייד מניח דף שולחני ופורש אותו על 980
+ * פיקסלים: הקובץ הבודד נפתח בטלפון מוקטן פי שניים וחצי, בזמן
+ * שהאפליקציה הרגילה נפתחת ברוחב המסך. הכיוון והשפה נקבעים כאן
+ * מאותה סיבה — RTL אינו החלטה של ה-CSS אלא של המסמך.
+ */
+const out = `<!doctype html>
+<html lang="he" dir="rtl">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c1917">
+<title>EasyCraft</title>
 <style>
+
 ${css}
 </style>
 <div id="root"></div>

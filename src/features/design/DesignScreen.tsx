@@ -175,7 +175,17 @@ export function DesignScreen({
    * מסך אחר — אלה אותם ארגזים באותם מקומות — אבל זו השאלה שהוא
    * בא לענות עליה: מה נשאר לעשות, ולא איך לסדר מחדש.
    */
-  const workMode = role !== 'manager' || workToggle;
+  /*
+   * מי שמתכנן — מנהל, או תכנת שההדמיה נפתחה לו — עובר בין תכנון
+   * לתהליך במתג. כל השאר רואים תהליך בלבד.
+   *
+   * קודם נכתב כאן `role !== 'manager'`, ולכן תכנת היה תמיד במצב
+   * תהליך: האישור שקיבל לא פתח לו דבר, וגם כפתור "בקשת אישור
+   * לעריכה" לא הוצג לו — הוא יושב במסך התכנון.
+   */
+  const plans = role === 'manager' || role === 'planner';
+  const workMode = plans ? workToggle : true;
+
   /** כלי עריכה מוצגים רק למי שמותר לו, ורק כשלא במצב תהליך עבודה */
   const editable = mayEdit && !workMode;
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
@@ -801,8 +811,9 @@ export function DesignScreen({
               חישוב ומחיר הם עניין של המנהל. התכנת והנגר צריכים את
               הארגזים ואת מה שנשאר לעשות בהם, לא את מה שזה עולה.
             */}
-            {role === 'manager' &&
+            {plans &&
               (project.soldAt ? (
+
                 <button
                   onClick={() => {
                     setWorkToggle((v) => !v);
@@ -841,6 +852,7 @@ export function DesignScreen({
         <UnitWorkSheet
           unit={workUnit}
           role={role}
+          project={project}
           onChange={async (work) => {
             await patchUnit(workUnit.id, { work }, `work:${workUnit.id}`);
             /* סימון חיתוך הוא מה שמוריד פלטות מהמלאי — בלי הזנה נוספת */
@@ -862,6 +874,7 @@ export function DesignScreen({
         <BulkWorkSheet
           units={units}
           role={role}
+          project={project}
           onApply={async (changes) => {
             await history.capture(projectId, `bulk:${Date.now()}`);
             for (const c of changes) await unitsRepo.update(c.id, { work: c.work });
