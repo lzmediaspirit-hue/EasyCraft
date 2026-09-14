@@ -1,6 +1,7 @@
 import { db } from '../db/db';
 import type { CatalogItem, RoomKind } from '../db/types';
 import { SEED_CATALOG, type SeedItem } from './builtins';
+import { SHIPPED_LIBRARY, type ShippedItem } from './shipped';
 
 /**
  * הספרייה נזרעת לתוך בסיס הנתונים בהפעלה הראשונה, כך שכל פריט —
@@ -14,17 +15,28 @@ export function seedCatalog(): Promise<void> {
   return seeding;
 }
 
+/**
+ * מה שמגיע עם האפליקציה.
+ *
+ * ספרייה שנבנתה בנגרייה והוכנסה לקוד גוברת על ארגזי התקן: מי שכבר
+ * בנה לעצמו את הארגזים שהוא עובד איתם לא צריך לראות רשימה כללית
+ * לצידם. כשאין כזו — ארגזי התקן הם נקודת הפתיחה.
+ */
+export function shippedLibrary(): ShippedItem[] {
+  return SHIPPED_LIBRARY.length ? SHIPPED_LIBRARY : SEED_CATALOG.map(toShipped);
+}
+
 async function runSeed(): Promise<void> {
   const existing = new Set((await db.catalog.toArray()).map((i) => i.id));
   const now = Date.now();
-  const missing = SEED_CATALOG.filter((s) => !existing.has(s.key)).map((s) =>
-    toCatalogItem(s, now, SEED_CATALOG.indexOf(s)),
-  );
+  const missing = shippedLibrary()
+    .filter((s) => !existing.has(s.id))
+    .map((s) => ({ ...s, createdAt: now, updatedAt: now }));
   // bulkPut ולא bulkAdd — כדי ששתי הפעלות במקביל לא ייפלו על כפילות
   if (missing.length) await db.catalog.bulkPut(missing);
 }
 
-function toCatalogItem(s: SeedItem, now: number, order: number): CatalogItem {
+function toShipped(s: SeedItem, order: number): ShippedItem {
   return {
     id: s.key,
     rooms: s.rooms,
@@ -50,8 +62,6 @@ function toCatalogItem(s: SeedItem, now: number, order: number): CatalogItem {
     isBuiltin: true,
     sortOrder: order,
     note: s.note,
-    createdAt: now,
-    updatedAt: now,
   };
 }
 
@@ -124,6 +134,33 @@ export const catalogRepo = {
     if (!item) return;
     if (item.isBuiltin) await db.catalog.update(id, { hiddenAt: Date.now() });
     else await db.catalog.delete(id);
+  },
+
+  /**
+   * החזרת ארגזי התקן שמגיעים עם האפליקציה.
+   *
+   * `seedCatalog` רץ פעם אחת בהפעלה הראשונה, ולכן מי שמחק את ארגזי
+   * התקן או החליף את הספרייה כולה בשלו נשאר בלעדיהם לתמיד. כאן הם
+   * נזרעים מחדש: מה שחסר נוסף, ומה שהוסתר חוזר לרשימה.
+   *
+   * מה שקיים אינו נדרס — ארגז תקן שהמשתמש ערך נשאר כמו שערך אותו,
+   * כי תיקון של מידה הוא בדיוק מה שלא רוצים לאבד.
+   */
+  async reseed(): Promise<number> {
+    const now = Date.now();
+    let back = 0;
+    await db.transaction('rw', db.catalog, async () => {
+      const existing = new Map((await db.catalog.toArray()).map((i) => [i.id, i]));
+      const missing: CatalogItem[] = [];
+      for (const s of shippedLibrary()) {
+        const have = existing.get(s.id);
+        if (!have) missing.push({ ...s, createdAt: now, updatedAt: now });
+        else if (have.hiddenAt) missing.push({ ...have, hiddenAt: undefined, updatedAt: now });
+      }
+      back = missing.length;
+      if (missing.length) await db.catalog.bulkPut(missing);
+    });
+    return back;
   },
 
   /** מחזיר לספרייה את כל מה שהוסר ממנה. */

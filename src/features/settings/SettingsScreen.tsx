@@ -3,13 +3,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { settingsRepo } from '../../materials/materialsRepo';
 import { MaterialSheet } from './MaterialSheet';
 import { FinishSheet } from './FinishSheet';
+import { BackupSheet } from './BackupSheet';
 import { ExtrasSection } from './ExtrasSection';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { nav } from '../../nav/navigation';
 import { Field, NumField, PriceField, inputClass, selectOnFocus } from '../../ui/Field';
 import { displayUnit } from '../../ui/units';
 import { useDisplayUnit } from '../../ui/useDisplayUnit';
-import { ChevronIcon, PlusIcon, SheetIcon, TeamIcon } from '../../ui/icons';
+import { ArchiveIcon, ChevronIcon, PlusIcon, SheetIcon, TeamIcon } from '../../ui/icons';
 import { PART_ROLES } from '../../db/types';
 import type { BackKind, Finish, Material } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
@@ -29,6 +30,7 @@ const BACK_KINDS: { key: BackKind; label: string }[] = [
 export function SettingsScreen() {
   const [editingMaterial, setEditingMaterial] = useState<Material | 'new' | null>(null);
   const [editingFinish, setEditingFinish] = useState<Finish | 'new' | null>(null);
+  const [backup, setBackup] = useState(false);
   const settings = useLiveQuery(() => settingsRepo.get(), []);
   const { materials, finishes } = useMaterialsAndFinishes();
 
@@ -387,6 +389,30 @@ export function SettingsScreen() {
           </div>
         </section>
 
+        {/*
+          הנתונים יושבים במכשיר הזה בלבד, וזה מה שמאפשר לעבוד בלי
+          אינטרנט. כאן הדלת החוצה: גיבוי, מעבר למכשיר חדש, והעברת
+          הספרייה של הנגרייה למישהו אחר.
+        */}
+        <section>
+          <SectionTitle>גיבוי והעברה</SectionTitle>
+          <button
+            onClick={() => setBackup(true)}
+            className="flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3.5 text-start transition-colors hover:border-oak-400"
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-oak-100 text-oak-700">
+              <ArchiveIcon className="size-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-stone-900">גיבוי והעברת נתונים</span>
+              <span className="block text-xs leading-snug text-stone-500">
+                להוציא הכול כטקסט, ולהחזיר במכשיר אחר
+              </span>
+            </span>
+            <ChevronIcon className="size-4 shrink-0 rotate-180 text-stone-300" />
+          </button>
+        </section>
+
         <section>
           <SectionTitle>תוספות משלך</SectionTitle>
           <ExtrasSection settings={settings} />
@@ -402,6 +428,8 @@ export function SettingsScreen() {
           onClose={() => setEditingFinish(null)}
         />
       )}
+
+      {backup && <BackupSheet onClose={() => setBackup(false)} />}
 
       {editingMaterial && (
         <MaterialSheet
