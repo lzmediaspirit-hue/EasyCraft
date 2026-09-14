@@ -3,7 +3,13 @@
 # האפליקציה כולה רצה בדפדפן — אין שרת, אין בסיס נתונים מרוחק, והכול
 # נשמר ב-IndexedDB במכשיר של המשתמש. לכן אתר סטטי הוא כל מה שצריך.
 #
-# הפעלה חד-פעמית: Settings ← Pages ← Source: GitHub Actions.
+# הפעלה חד-פעמית, ביד: Settings ← Pages ← Source: GitHub Actions.
+#
+# אי אפשר להפעיל את זה מכאן. actions/configure-pages עם enablement
+# נכשל ב-"Resource not accessible by integration": יצירת אתר Pages
+# דורשת הרשאת administration, ו-token של workflow לעולם אינו מקבל
+# אותה. גם קריאת ההגדרות נכשלת כשהאתר לא קיים, ולכן אין כאן שלב
+# configure-pages בכלל — נתיב הבסיס נקבע ב-BASE_PATH שלמטה.
 name: פרסום ל-GitHub Pages
 
 on:
@@ -26,14 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # קורא את הגדרות Pages של הריפו.
-      #
-      # ניסיתי גם enablement: true, שאמור להפעיל את Pages דרך ה-API.
-      # GitHub חוסם את זה: יצירת אתר דורשת הרשאת administration, ו-
-      # token של workflow לעולם אינו מקבל אותה — כדי ש-workflow לא
-      # יוכל לשנות הגדרות ריפו. ההפעלה נעשית פעם אחת ביד:
-      # Settings ← Pages ← Source: GitHub Actions
-      - uses: actions/configure-pages@v5
       - uses: actions/setup-node@v4
         with:
           node-version: 22
