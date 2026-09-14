@@ -124,7 +124,8 @@ function ProjectCard({
   const [confirm, setConfirm] = useState(false);
   const room = roomDef(project.roomKind);
   const quote = projectQuote(project, units, boards);
-  const pay = paymentStatus(project);
+  const pay = paymentStatus(project, quote.amount);
+
   const sold = !!project.soldAt;
 
   return (

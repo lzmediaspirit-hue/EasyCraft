@@ -47,12 +47,25 @@ export function LibrarySheet({
   const [group, setGroup] = useState<CatalogGroup | null>(null);
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
 
+  /*
+   * "נפוץ" ו"מתאים לחדר" הן שתי שאלות נפרדות.
+   *
+   * ארגז שהמשתמש בנה מסומן כנפוץ, ולכן הוא הופיע בספרייה הקלאסית של
+   * כל חדר — גם כשסימן לו חדר שינה בלבד — ובו בזמן נעדר מרשימת חדר
+   * השינה עצמה, כי היא סיננה החוצה את הנפוצים. הבחירה של המשתמש
+   * קובעת איפה הוא מוצע; הנפוצוּת קובעת רק אם הוא בעמוד הראשון.
+   */
   const pool = useMemo(() => {
     if (!items) return [];
-    if (view === 'classic') return items.filter((i) => i.common && i.group !== 'panel');
+    const fitsRoom = (i: CatalogItem) =>
+      manage || roomKind === 'custom' || i.rooms.includes(roomKind);
+    if (view === 'classic') {
+      return items.filter((i) => i.common && i.group !== 'panel' && fitsRoom(i));
+    }
     if (view === 'panel') return items.filter((i) => i.group === 'panel');
-    return items.filter((i) => i.group !== 'panel' && !i.common && i.rooms.includes(view));
-  }, [items, view]);
+    return items.filter((i) => i.group !== 'panel' && i.rooms.includes(view));
+  }, [items, view, manage, roomKind]);
+
 
   const groups = useMemo(() => {
     const present = new Set(pool.map((i) => i.group));

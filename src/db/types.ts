@@ -45,6 +45,16 @@ export interface Project extends Entity {
   /** ₪ למטר רץ של קיר */
   perMeterRate?: number;
   /**
+   * האם המחיר שהוקלד ביד כבר כולל מע"מ.
+   *
+   * חישוב החומרים יודע בעצמו מה לפני מע"מ ומה אחריו, אבל מספר
+   * שנגר כותב ב"מחיר קבוע" או ב"מחיר למטר" הוא מה שהוא אמר ללקוח —
+   * ואצל רוב הנגרים זה כבר המחיר הסופי. ברירת המחדל היא לכן "כולל",
+   * וזו גם ההתנהגות שהייתה עד שהשאלה נשאלה במפורש.
+   */
+  priceIncludesVat?: boolean;
+
+  /**
    * הגוון והחומר שנבחרו לפרויקט, לכל חלק בארגז.
    * זו ברירת המחדל של כל ארגז בפרויקט: רוב המטבח הוא אותו גוף
    * ואותן חזיתות, ולבחור אותם מחדש בכל ארגז זו עבודה כפולה.
@@ -567,14 +577,24 @@ export interface CatalogItem extends Entity {
    */
   drawerStyle?: DrawerStyle;
   exposed?: ExposedSides;
+  exposedDepthMm?: number;
   backKind?: BackKind;
   backHeightMm?: number;
   rails?: RailSides;
   drawerBox?: DrawerBox;
+  doorCells?: number;
+  doubleDividers?: boolean;
   handles?: boolean;
   glassDoors?: boolean;
+  glassSides?: { start?: boolean; end?: boolean };
   led?: LedSpot[];
   shelfGapsMm?: number[];
+  /**
+   * חלקים שהארגז נבנה בלעדיהם — דופן משותפת, בלי תחתית או בלי תקרה.
+   * ארגז שתוכנן פתוח במכוון חייב לחזור פתוח מהספרייה, אחרת הוא
+   * מקבל לוח שלא נבנה לו מקום.
+   */
+  omit?: BoxSides;
   carcassFinishId?: string;
   carcassMaterialId?: string;
   frontFinishId?: string;
@@ -585,6 +605,7 @@ export interface CatalogItem extends Entity {
   backMaterialId?: string;
   level: UnitLevel;
   defaultWidthMm: number;
+
   /** רוחבי תקן נפוצים למוצר הזה */
   widthOptionsMm: number[];
   defaultHeightMm: number;
@@ -616,9 +637,74 @@ export interface CatalogItem extends Entity {
   parts?: CatalogGroupPart[];
 }
 
+/**
+ * תיאור הבנייה שעובר בין ארגז שעומד על הקיר לבין פריט בספרייה.
+ *
+ * זו רשימה אחת ולא שתי רשימות ידניות. שמירה לספרייה והנחה מהספרייה
+ * העתיקו כל אחת את השדות שהיא הכירה, ולכן כל מאפיין שנוסף לארגז
+ * נשמט מאחת מהן: "בלי תקרה" נעלם בשמירה וחזר כלוח מלא, וזכוכית
+ * בצד, עומק דופן זרה וחלוקת תאים לא עברו בכלל.
+ *
+ * מה שאינו כאן שייך למיקום ולא לבנייה — איפה הארגז עומד, מה מידותיו
+ * בפועל ומה מצב הייצור שלו — ואלה נקבעים בהנחה ולא בתבנית.
+ */
+export const REUSABLE_FIELDS = [
+  'glyph',
+  'doors',
+  'drawers',
+  'drawerCols',
+  'shelves',
+  'zones',
+  'opening',
+  'corner',
+  'blindMm',
+  'panelThicknessMm',
+  'drawerStyle',
+  'exposed',
+  'exposedDepthMm',
+  'backKind',
+  'backHeightMm',
+  'rails',
+  'drawerBox',
+  'doorCells',
+  'doubleDividers',
+  'handles',
+  'glassDoors',
+  'glassSides',
+  'led',
+  'shelfGapsMm',
+  'omit',
+  'carcassFinishId',
+  'carcassMaterialId',
+  'frontFinishId',
+  'frontMaterialId',
+  'exposedFinishId',
+  'exposedMaterialId',
+  'backFinishId',
+  'backMaterialId',
+] as const;
+
+export type ReusableField = (typeof REUSABLE_FIELDS)[number];
+
+/**
+ * מוציא את תיאור הבנייה מארגז או מפריט ספרייה.
+ * שדות ריקים מושמטים, כדי שהעתקה לא תכתוב `undefined` על ערך קיים.
+ */
+export function reusableSpec(
+  from: Partial<PlacedUnit> | Partial<CatalogItem>,
+): Partial<Pick<PlacedUnit, ReusableField>> {
+  const out: Record<string, unknown> = {};
+  for (const key of REUSABLE_FIELDS) {
+    const value = (from as Record<string, unknown>)[key];
+    if (value !== undefined) out[key] = value;
+  }
+  return out as Partial<Pick<PlacedUnit, ReusableField>>;
+}
+
 /* ------------------------------------------------------------------ */
 /* חומרים והגדרות                                                      */
 /* ------------------------------------------------------------------ */
+
 
 /**
  * איך מורכב לוח.

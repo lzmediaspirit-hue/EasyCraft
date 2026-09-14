@@ -84,6 +84,8 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
     try {
       const r: ImportResult = await importLibrary(res.backup, mode);
       setNote(summary(r));
+      setProblem(unresolvedNote(r));
+
     } catch (e) {
       setProblem(failure(e));
     } finally {
@@ -244,8 +246,19 @@ function summary(r: ImportResult): string {
   if (r.added) parts.push(`${r.added} נוספו`);
   if (r.replaced) parts.push(`${r.replaced} עודכנו`);
   if (r.removed) parts.push(`${r.removed} הוסרו`);
+  if (r.deps) parts.push(`${r.deps} לוחות וגוונים הגיעו איתם`);
   return parts.length ? parts.join(' · ') : 'הכול כבר היה מעודכן';
 }
+
+/**
+ * אזהרה על ארגזים שהגיעו עם הפניה לגוון או ללוח שאינם כאן.
+ * זה קורה בקובץ מגרסה ישנה, שנשא את הארגזים בלי התלויות שלהם.
+ */
+function unresolvedNote(r: ImportResult): string | null {
+  if (!r.unresolved) return null;
+  return `${r.unresolved} ארגזים מפנים לגוון או ללוח שאינם במכשיר הזה — הם ייראו ויתומחרו לפי ברירת המחדל של הפרויקט. בקש קובץ ספרייה מגרסה עדכנית, שנושא איתו גם את הלוחות והגוונים.`;
+}
+
 
 /** תקלה מבסיס הנתונים, כמשפט שאפשר לקרוא ולא כאובייקט שנזרק. */
 function failure(e: unknown): string {

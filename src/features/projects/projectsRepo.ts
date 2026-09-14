@@ -4,7 +4,9 @@ import { stagesRepo } from '../../workflow/workflowRepo';
 import { projectCosting, type ProjectCosting } from '../../costing/boards';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { releaseConsumption } from '../../materials/consumption';
+import { reusableSpec } from '../../db/types';
 import type {
+
   CatalogItem,
   PartChoice,
   PartRole,
@@ -104,7 +106,13 @@ export const projectsRepo = {
    * מה שלא מועתק הוא מה ששייך למכירה הקודמת ולא לתכנון: הפרויקט
    * החדש אינו מכור, אין לו תשלומים, אין לו קבצים ואין לו היסטוריית
    * ייצור. הוא הצעה חדשה שנראית כמו הקודמת.
+   *
+   * המחירים המיוחדים של הפרויקט כן עוברים. מחיר שנקבע ללוח מסוים הוא
+   * המחיר שהנגר משלם עליו בפועל, ודירה שנייה באותו בניין נבנית מאותם
+   * לוחות — בלעדיו ההצעה המשוכפלת חוזרת למחירון ומשתנה בעשרות אחוזים
+   * בלי שאיש ביקש.
    */
+
   async duplicate(id: string, name?: string): Promise<Project | undefined> {
     const source = await db.projects.get(id);
     if (!source) return undefined;
@@ -121,14 +129,16 @@ export const projectsRepo = {
       updatedAt: now,
     };
 
-    const [walls, units] = await Promise.all([
+    const [walls, units, prices] = await Promise.all([
       db.walls.where('projectId').equals(id).toArray(),
       db.units.where('projectId').equals(id).toArray(),
+      db.projectPrices.where('projectId').equals(id).toArray(),
     ]);
     /* מזהה חדש לכל קיר, והארגזים עוברים איתו */
     const wallId = new Map(walls.map((w) => [w.id, crypto.randomUUID()]));
 
-    await db.transaction('rw', db.projects, db.walls, db.units, async () => {
+    await db.transaction('rw', db.projects, db.walls, db.units, db.projectPrices, async () => {
+
       await db.projects.add(project);
       await db.walls.bulkAdd(
         walls.map((w) => ({
@@ -154,7 +164,18 @@ export const projectsRepo = {
           updatedAt: now,
         })),
       );
+      /* המחיר נקבע לשורה של גוון וחומר, והמפתח הזה זהה בכל פרויקט */
+      await db.projectPrices.bulkAdd(
+        prices.map((p) => ({
+          ...p,
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
     });
+
 
     await stagesRepo.ensure(project.id, false);
     return project;
@@ -316,42 +337,23 @@ export const unitsRepo = {
     const now = Date.now();
     const { defaults } = await settingsRepo.get();
     const unit: PlacedUnit = {
+      /*
+       * כל תיאור הבנייה שנשמר בפריט, מרשימה אחת משותפת עם השמירה
+       * לספרייה. ככה מאפיין שנוסף לארגז אינו נשמט באחד משני הכיוונים.
+       */
+      ...reusableSpec(item),
       id: crypto.randomUUID(),
       projectId,
       wallId,
       catalogItemId: item.id,
       name: item.name,
       glyph: item.glyph,
-      doors: item.doors,
-      drawers: item.drawers,
-      drawerCols: item.drawerCols,
-      shelves: item.shelves,
-      zones: item.zones,
-      opening: item.opening,
-      corner: item.corner,
-      blindMm: item.blindMm,
-      panelThicknessMm: item.panelThicknessMm,
-      // גימור שנשמר עם הפריט חוזר איתו, כדי שלא יידרש אותו כיוונון שוב
-      drawerStyle: item.drawerStyle,
+      // תיבת המגירה היא דרך העבודה של הנגרייה, ולא מאפיין של הפריט
       drawerBox: defaults.drawerBox,
-      exposed: item.exposed,
       // הגב שהפריט הגיע איתו, ואם אין — דרך העבודה של הנגרייה
       backKind: item.backKind ?? defaults.backKind,
-      backHeightMm: item.backHeightMm,
-      rails: item.rails,
-      handles: item.handles,
-      glassDoors: item.glassDoors,
-      led: item.led,
-      shelfGapsMm: item.shelfGapsMm,
-      carcassFinishId: item.carcassFinishId,
-      carcassMaterialId: item.carcassMaterialId,
-      frontFinishId: item.frontFinishId,
-      frontMaterialId: item.frontMaterialId,
-      exposedFinishId: item.exposedFinishId,
-      exposedMaterialId: item.exposedMaterialId,
-      backFinishId: item.backFinishId,
-      backMaterialId: item.backMaterialId,
       level: item.level,
+
       xMm,
       /*
        * ארגז שעומד על הרצפה מתחיל עליה, ולא בגובה שנשמר בספרייה.

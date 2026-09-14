@@ -1,4 +1,6 @@
 import { db } from '../db/db';
+import { SHIPPED_FINISHES, SHIPPED_MATERIALS } from '../catalog/shipped';
+
 import { KITCHEN } from '../catalog/standards';
 import { CORES } from '../db/types';
 import type {
@@ -148,6 +150,23 @@ async function runSeed(): Promise<void> {
     await db.settings.put({ ...DEFAULT_SETTINGS, updatedAt: now });
   }
   if ((await db.materials.count()) === 0) {
+    /*
+     * ספרייה שנבנתה בנגרייה מגיעה עם הלוחות והגוונים שלה, ואז הם
+     * אלה שנזרעים — עם המזהים המקוריים שלהם, כי הארגזים מפנים אליהם.
+     * בלי זה כל ארגז שנבנה עם גוון מפורש היה מגיע למכשיר חדש עם
+     * הפניה לגוון שאינו קיים.
+     */
+    if (SHIPPED_MATERIALS.length) {
+      await db.materials.bulkPut(
+        SHIPPED_MATERIALS.map((m) => ({ ...m, createdAt: now, updatedAt: now })),
+      );
+      if ((await db.finishes.count()) === 0 && SHIPPED_FINISHES.length) {
+        await db.finishes.bulkPut(
+          SHIPPED_FINISHES.map((f) => ({ ...f, createdAt: now, updatedAt: now })),
+        );
+      }
+      return;
+    }
     const materials = SEED_MATERIALS.map((m) => ({
       ...m,
       id: crypto.randomUUID(),

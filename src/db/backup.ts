@@ -1,5 +1,6 @@
 import { db } from './db';
-import type { CatalogItem } from './types';
+import type { CatalogItem, Finish, Material } from './types';
+
 
 /**
  * הוצאת הנתונים מהמכשיר, והחזרתם אליו.
@@ -13,8 +14,15 @@ import type { CatalogItem } from './types';
  * מכשיר אחר.
  */
 
-/** גרסת הפורמט. מי שקורא קובץ ישן צריך לדעת מה הוא מקבל. */
-export const BACKUP_FORMAT = 1;
+/**
+ * גרסת הפורמט. מי שקורא קובץ ישן צריך לדעת מה הוא מקבל.
+ *
+ * 2 — גיבוי ספרייה נושא איתו גם את הלוחות והגוונים שהארגזים מפנים
+ *     אליהם. ב-1 הוא נשא רק את הארגזים, והמקבל קיבל הפניות למזהים
+ *     שאין אצלו: הגוון שנבחר לחזית פשוט לא היה קיים.
+ */
+export const BACKUP_FORMAT = 2;
+
 
 /** הטבלאות שנכנסות לגיבוי מלא, בסדר שבו הן נכתבות בחזרה. */
 const TABLES = [
@@ -84,16 +92,53 @@ export async function exportAll(): Promise<Backup> {
  * זה מה ששולחים כשרוצים שהספרייה של הנגרייה תעבור למכשיר אחר, או
  * תיכנס לאפליקציה עצמה כברירת מחדל. פרויקטים ולקוחות אינם כאן,
  * ולכן אפשר לשלוח אותה בלי לשלוח את הלקוחות.
+ *
+ * הלוחות והגוונים שהארגזים מפנים אליהם נוסעים איתם. ארגז שומר מזהה
+ * של גוון, לא את הגוון עצמו, ולכן ספרייה שנשלחה בלעדיהם הגיעה ליעד
+ * עם הפניות לשום דבר — הצבע לא הופיע והמחיר לא חושב.
  */
 export async function exportLibrary(): Promise<Backup> {
+  const catalog = (await db.table('catalog').toArray()) as CatalogItem[];
+  const [allMaterials, allFinishes] = await Promise.all([
+    db.materials.toArray(),
+    db.finishes.toArray(),
+  ]);
+
+  const need = referenced(catalog);
+  const finishes = allFinishes.filter((f) => need.finishes.has(f.id));
+  /* גוון מתומחר על לוחות מסוימים, וגם הם חלק מהתלות */
+  for (const f of finishes) for (const id of Object.keys(f.prices ?? {})) need.materials.add(id);
+  const materials = allMaterials.filter((m) => need.materials.has(m.id));
+
   return {
     app: 'easycraft',
     format: BACKUP_FORMAT,
     at: Date.now(),
     kind: 'library',
-    tables: { catalog: await db.table('catalog').toArray() },
+    tables: { catalog, materials, finishes },
   };
 }
+
+/** הגוונים והלוחות שארגזי הספרייה מפנים אליהם. */
+function referenced(items: CatalogItem[]): { finishes: Set<string>; materials: Set<string> } {
+  const finishes = new Set<string>();
+  const materials = new Set<string>();
+  for (const i of items) {
+    for (const id of [i.carcassFinishId, i.frontFinishId, i.exposedFinishId, i.backFinishId]) {
+      if (id) finishes.add(id);
+    }
+    for (const id of [
+      i.carcassMaterialId,
+      i.frontMaterialId,
+      i.exposedMaterialId,
+      i.backMaterialId,
+    ]) {
+      if (id) materials.add(id);
+    }
+  }
+  return { finishes, materials };
+}
+
 
 /**
  * קריאת קובץ גיבוי מטקסט.
@@ -141,7 +186,12 @@ export interface ImportResult {
   added: number;
   replaced: number;
   removed: number;
+  /** לוחות וגוונים שהגיעו עם הספרייה ולא היו כאן */
+  deps: number;
+  /** ארגזים שנשארו עם הפניה לגוון או ללוח שאינם במכשיר הזה */
+  unresolved: number;
 }
+
 
 /**
  * ייבוא ספרייה.
@@ -159,10 +209,26 @@ export async function importLibrary(
   mode: 'merge' | 'replace',
 ): Promise<ImportResult> {
   const items = (backup.tables.catalog ?? []) as CatalogItem[];
+  const materials = (backup.tables.materials ?? []) as Material[];
+  const finishes = (backup.tables.finishes ?? []) as Finish[];
   const now = Date.now();
-  const out: ImportResult = { added: 0, replaced: 0, removed: 0 };
+  const out: ImportResult = { added: 0, replaced: 0, removed: 0, deps: 0, unresolved: 0 };
 
-  await db.transaction('rw', db.catalog, async () => {
+  await db.transaction('rw', db.catalog, db.materials, db.finishes, async () => {
+    /*
+     * התלויות ראשונות, ובמזהה המקורי שלהן — כך ההפניות שבארגזים
+     * נשארות תקפות. מה שכבר קיים באותו מזהה אינו נדרס: המחיר של לוח
+     * הוא של העסק הזה, ולא של מי ששלח את הספרייה.
+     */
+    const haveMaterials = new Set((await db.materials.toArray()).map((m) => m.id));
+    const newMaterials = materials.filter((m) => !haveMaterials.has(m.id));
+    if (newMaterials.length) await db.materials.bulkAdd(newMaterials);
+
+    const haveFinishes = new Set((await db.finishes.toArray()).map((f) => f.id));
+    const newFinishes = finishes.filter((f) => !haveFinishes.has(f.id));
+    if (newFinishes.length) await db.finishes.bulkAdd(newFinishes);
+    out.deps = newMaterials.length + newFinishes.length;
+
     const existing = new Map((await db.catalog.toArray()).map((i) => [i.id, i]));
     if (mode === 'replace') {
       const keep = new Set(items.map((i) => i.id));
@@ -175,9 +241,23 @@ export async function importLibrary(
       else out.added++;
     }
     await db.catalog.bulkPut(items.map((i) => ({ ...i, updatedAt: now })));
+
+    /* מה שנשאר בלי כיסוי — נאמר במספר ולא מתגלה אחר כך בהדמיה */
+    const finishIds = new Set((await db.finishes.toArray()).map((f) => f.id));
+
+    const materialIds = new Set((await db.materials.toArray()).map((m) => m.id));
+    out.unresolved = items.filter((i) => {
+      const f = [i.carcassFinishId, i.frontFinishId, i.exposedFinishId, i.backFinishId];
+      const m = [i.carcassMaterialId, i.frontMaterialId, i.exposedMaterialId, i.backMaterialId];
+      return (
+        f.some((id) => id && !finishIds.has(id)) || m.some((id) => id && !materialIds.has(id))
+      );
+    }).length;
   });
+
   return out;
 }
+
 
 /**
  * שחזור מלא: מה שבקובץ מחליף את מה שבמכשיר.

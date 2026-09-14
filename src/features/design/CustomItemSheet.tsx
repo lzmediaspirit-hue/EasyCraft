@@ -58,7 +58,9 @@ export function CustomItemSheet({
     drawers: item?.drawers ?? 3,
     drawerCols: item?.drawerCols ?? 1,
     shelves: item?.shelves ?? autoShelves(item?.defaultHeightMm ?? 720),
-    drawerStyle: 'outer',
+    /* מהארגז השמור, לא מקבוע: מגירה פנימית חזרה להיות חזית בולטת */
+    drawerStyle: item?.drawerStyle ?? 'outer',
+
     widthMm: item?.defaultWidthMm ?? 600,
     heightMm: item?.defaultHeightMm ?? 720,
     depthMm: item?.defaultDepthMm ?? 580,
@@ -85,15 +87,23 @@ export function CustomItemSheet({
       doors: caps.doors ? spec.doors : undefined,
       drawers: caps.drawers ? spec.drawers : undefined,
       drawerCols: caps.drawers ? spec.drawerCols : undefined,
+      drawerStyle: caps.drawers ? spec.drawerStyle : undefined,
       shelves: caps.shelves ? spec.shelves : undefined,
+
       level: LEVEL_BY_GROUP[group],
       defaultWidthMm: spec.widthMm,
       widthOptionsMm: widthLadder(spec.widthMm),
       defaultHeightMm: spec.heightMm,
       defaultDepthMm: spec.depthMm,
       defaultYMm: spec.yMm,
-      socleMm: spec.socleMm || undefined,
-      counterMm: spec.counterMm || undefined,
+      /*
+       * אפס נשמר כאפס ולא כ"לא צוין". `saveCustom` משמיט שדות ריקים
+       * כדי לא לדרוס מה שלא נערך, ולכן ביטול של רגליים או של משטח
+       * נקרא כ"אל תיגע" — והמספר הישן חזר בפתיחה הבאה.
+       */
+      socleMm: spec.socleMm,
+      counterMm: spec.counterMm,
+
       note: item?.note,
     });
     onClose();
