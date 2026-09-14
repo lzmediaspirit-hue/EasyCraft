@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Heebo", "Assistant", -apple-system, "Segoe UI", "Noto Sans Hebrew",
+    "Arial Hebrew", Arial, sans-serif;
+
+  /* עץ/אלון — צבע המותג */
+  --color-oak-50: #fbf7f1;
+  --color-oak-100: #f4e9d8;
+  --color-oak-200: #e8d2b0;
+  --color-oak-300: #d9b483;
+  --color-oak-400: #c8935a;
+  --color-oak-500: #b87a41;
+  --color-oak-600: #a06236;
+  --color-oak-700: #814c2e;
+  --color-oak-800: #6a3f2b;
+  --color-oak-900: #573527;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* נצבע במפורש: כשהדף מוטמע, רקע שקוף שואל את הצבע מהמארח */
+    background-color: var(--color-stone-100);
+    color-scheme: light;
+  }
+  body {
+    @apply bg-stone-100 text-stone-900 font-sans antialiased;
+    overscroll-behavior-y: none;
+  }
+  /* מספרי טלפון תמיד נקראים משמאל לימין, גם בתוך ממשק RTL */
+  .num {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  input:focus-visible,
+  button:focus-visible {
+    @apply outline-2 outline-offset-2 outline-oak-500;
+  }
+}
+
+@theme {
+  --animate-sheet-in: sheet-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-fade-in: fade-in 0.18s ease-out;
+}
+
+@keyframes sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@layer base {
+  /* כפתור הניקוי המובנה של הדפדפן לא מתאים לעיצוב — מוסתר */
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /*
+   * חצי ההגדלה של שדה מספר גוזלים רוחב בשדות מידה צרים ומזיזים את
+   * המספר מהמרכז. המידות משתנות בהקלדה ובמידות התקן, לא בחצים.
+   */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
