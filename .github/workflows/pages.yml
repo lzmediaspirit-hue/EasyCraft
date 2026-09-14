@@ -26,10 +26,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # מפעיל את Pages אם הוא עדיין לא הופעל, במקום להיכשל ב-404
+      # קורא את הגדרות Pages של הריפו.
+      #
+      # ניסיתי גם enablement: true, שאמור להפעיל את Pages דרך ה-API.
+      # GitHub חוסם את זה: יצירת אתר דורשת הרשאת administration, ו-
+      # token של workflow לעולם אינו מקבל אותה — כדי ש-workflow לא
+      # יוכל לשנות הגדרות ריפו. ההפעלה נעשית פעם אחת ביד:
+      # Settings ← Pages ← Source: GitHub Actions
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
