@@ -94,6 +94,11 @@ export function DesignScreen({
   });
   const dragPanel = useRef<{ startY: number; startRatio: number } | null>(null);
   const [wallIndex, setWallIndex] = useState(0);
+  /*
+   * בקשה להתאמת התצוגה. המצלמה עצמה נשארת בתוך התלת־ממד — היא
+   * שייכת לרגע ההסתכלות ולא לפרויקט — ומכאן עוברת הבקשה בלבד.
+   */
+  const [fitAt, setFitAt] = useState<number | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /* קבוצת ארגזים שממתינה לשמירה בספרייה כפריט אחד */
   const [groupToSave, setGroupToSave] = useState<PlacedUnit[] | null>(null);
@@ -109,7 +114,12 @@ export function DesignScreen({
    * שנעשה בהם — ובלי כלי עריכה. מי שעומד ליד המסור לא אמור להזיז
    * ארגז בטעות.
    */
-  const [workToggle, setWorkToggle] = useState(!!startInWork);
+  /*
+   * `null` = עוד לא נבחר, ואז ברירת המחדל היא לפי התפקיד: מנהל
+   * נכנס לתכנון, וכל השאר לתהליך. משנבחר, הבחירה של המשתמש גוברת.
+   */
+  const [workToggle, setWorkToggle] = useState<boolean | null>(startInWork ? true : null);
+
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
   /* מחווני הקיר מתקפלים, וההדמיה תופסת את מה שהתפנה */
   /*
@@ -143,7 +153,24 @@ export function DesignScreen({
     return Object.fromEntries(all.map((f) => [f.id, f.hex]));
   }, []);
 
+  /*
+   * העוביים שלפיהם נחתך, לפי הלוח שנבחר בפועל. השרטוט והניסור
+   * חייבים לעבוד על אותו מספר, אחרת דופן זרה מגדילה את הארגז על
+   * המסך ולא בפלטה.
+   */
+  const parts = useMemo(
+    () =>
+      settings && {
+        ...settings,
+        thicknessById: Object.fromEntries(
+          (allMaterials ?? []).filter((m) => m.thicknessMm).map((m) => [m.id, m.thicknessMm!]),
+        ),
+      },
+    [settings, allMaterials],
+  );
+
   const wall = walls?.[Math.min(wallIndex, (walls?.length ?? 1) - 1)];
+
   const units = useMemo(
     () => (wall ? (allUnits ?? NO_UNITS).filter((u) => u.wallId === wall.id) : []),
     [allUnits, wall],
@@ -151,14 +178,41 @@ export function DesignScreen({
   const selected = units.find((u) => u.id === selectedId) ?? null;
   const workUnit = (allUnits ?? NO_UNITS).find((u) => u.id === workUnitId) ?? null;
   const me = useCurrentMember();
+  /*
+   * שני תפקידים, ובכוונה.
+   *
+   * `role` הוא מה שהמסך **נראה** לפיו — מנהל שבוחר לראות כנגר רואה
+   * את מסך הנגר. `actor` הוא מי שבאמת נכנס, וממנו נגזר מה **מותר**.
+   *
+   * ההפרדה הזאת היא התיקון: התפקידים סודרו כסולם יורד, אבל היכולות
+   * שלהם אינן מוכלות זו בזו. תכנת שבחר לראות כנגר קיבל בדיוק את מה
+   * שאין לו — לסמן "נחתך" — כי נגר נמצא מתחתיו בסולם.
+   */
   const role = useEffectiveRole(me?.role);
-  const mayEdit = can.design(role, project);
+  const actor = me?.role;
+  const mayEdit = can.design(actor, project);
   /*
    * מי שאינו מנהל רואה את מסך התהליך ולא את מסך התכנון. זה לא
    * מסך אחר — אלה אותם ארגזים באותם מקומות — אבל זו השאלה שהוא
    * בא לענות עליה: מה נשאר לעשות, ולא איך לסדר מחדש.
    */
-  const workMode = role !== 'manager' || workToggle;
+  /*
+   * מי שמתכנן — מנהל, או תכנת שההדמיה נפתחה לו — עובר בין תכנון
+   * לתהליך במתג. כל השאר רואים תהליך בלבד.
+   *
+   * קודם נכתב כאן `role !== 'manager'`, ולכן תכנת היה תמיד במצב
+   * תהליך: האישור שקיבל לא פתח לו דבר, וגם כפתור "בקשת אישור
+   * לעריכה" לא הוצג לו — הוא יושב במסך התכנון.
+   */
+  const plans = role === 'manager' || role === 'planner';
+  /*
+   * תהליך עבודה קיים רק אחרי המכירה — לפני כן אין מה לחתוך, ולכן
+   * גם אין למה להיכנס. אחריה: מי שמתכנן בוחר, וכל השאר בתהליך.
+   */
+  const workMode = !project?.soldAt ? false : plans ? (workToggle ?? role !== 'manager') : true;
+
+
+
   /** כלי עריכה מוצגים רק למי שמותר לו, ורק כשלא במצב תהליך עבודה */
   const editable = mayEdit && !workMode;
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
@@ -367,7 +421,20 @@ export function DesignScreen({
     await unitsRepo.centerOnWall(wall.id, wall.lengthMm);
   }
 
+  /**
+   * שינוי ארגז — השער היחיד שדרכו זה קורה.
+   *
+   * הבדיקה כאן ולא רק על הכפתורים: מחווה שנשכח להתנות בה היא דלת
+   * פתוחה, וכך בדיוק נשארה הגרירה בציור החזית פתוחה למי שאסור לו.
+   * מי שאין לו רשות עריכה אינו משנה ארגז — לא בכפתור, לא בגרירה
+   * ולא בשדה מספרי.
+   *
+   * סימון עבודה אינו עריכה: הוא עובר דרך `canAdvance`, ולכן הוא
+   * מותר לנגר דווקא כשההדמיה נעולה בפניו.
+   */
   async function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
+    const workOnly = Object.keys(patch).every((k) => k === 'work');
+    if (!editable && !workOnly) return;
     await history.capture(projectId, tag);
     await unitsRepo.update(id, patch);
   }
@@ -393,6 +460,7 @@ export function DesignScreen({
         canRedo={canRedo}
         projectId={projectId}
         onCenter={centerWall}
+        onFit={() => setFitAt(Date.now())}
         onClearSelection={() => setSelectedId(null)}
         onShowHidden={showHidden}
       />
@@ -441,16 +509,23 @@ export function DesignScreen({
               onBulk={editable ? runBulk : undefined}
               inside={inside}
               finishHex={finishHex ?? NO_HEX}
+              project={project}
+              parts={parts ?? undefined}
+              snap={design.view.snap}
+              fitAt={fitAt}
             />
           ) : (
+
           <WallElevation
             wall={wall}
             units={units}
             allUnits={allUnits ?? NO_UNITS}
             plan={plan}
             selectedId={selectedId}
+            project={project}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
+
             rulerAxis={rulerAxis}
             work={workMode}
             onSelect={(id) => {
@@ -463,7 +538,14 @@ export function DesignScreen({
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? NO_HEX}
-            onMove={(id, patch) => patchUnit(id, patch)}
+            snap={design.view.snap}
+            /*
+             * גרירה היא עריכה, ולכן היא עוברת באותו שער כמו
+             * הכפתורים. בתלת־ממד היא כבר הייתה מותנית ב-`editable`
+             * וכאן לא — ולכן נגר ותכנת בלי אישור יכלו להזיז ארגז
+             * בציור החזית, בלי שאף כפתור עריכה הוצג להם.
+             */
+            onMove={editable ? (id, patch) => patchUnit(id, patch) : undefined}
           />
           )}
 
@@ -758,7 +840,7 @@ export function DesignScreen({
             ) : (
               <EditGate
                 project={project}
-                role={role}
+                role={actor}
                 workMode={workMode}
                 onRequest={(note) =>
                   projectsRepo.update(projectId, {
@@ -779,12 +861,14 @@ export function DesignScreen({
               חישוב ומחיר הם עניין של המנהל. התכנת והנגר צריכים את
               הארגזים ואת מה שנשאר לעשות בהם, לא את מה שזה עולה.
             */}
-            {role === 'manager' &&
+            {/* חישוב ומחיר הם של המנהל; המתג הוא של כל מי שמתכנן */}
+            {(plans || project.soldAt) &&
               (project.soldAt ? (
                 <button
                   onClick={() => {
-                    setWorkToggle((v) => !v);
+                    setWorkToggle(!workMode);
                     setSelectedId(null);
+
                     design.clearTools();
                   }}
                   aria-pressed={workMode}
@@ -797,7 +881,7 @@ export function DesignScreen({
                   <FlowIcon className="size-5" />
                   {workMode ? 'תהליך עבודה' : 'תכנון'}
                 </button>
-              ) : (
+              ) : role === 'manager' ? (
                 <button
                   onClick={() => setSheet('materials')}
                   className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
@@ -805,7 +889,8 @@ export function DesignScreen({
                   <CalcIcon />
                   חישוב פרויקט
                 </button>
-              ))}
+              ) : null)}
+
           </div>
         </>
       )}
@@ -818,7 +903,9 @@ export function DesignScreen({
       {workUnit && (
         <UnitWorkSheet
           unit={workUnit}
-          role={role}
+          role={actor}
+          shown={role}
+          project={project}
           onChange={async (work) => {
             await patchUnit(workUnit.id, { work }, `work:${workUnit.id}`);
             /* סימון חיתוך הוא מה שמוריד פלטות מהמלאי — בלי הזנה נוספת */
@@ -839,7 +926,9 @@ export function DesignScreen({
       {sheet === 'bulk' && (
         <BulkWorkSheet
           units={units}
-          role={role}
+          role={actor}
+          shown={role}
+          project={project}
           onApply={async (changes) => {
             await history.capture(projectId, `bulk:${Date.now()}`);
             for (const c of changes) await unitsRepo.update(c.id, { work: c.work });
@@ -906,7 +995,7 @@ export function DesignScreen({
       )}
 
       {sheet === 'edit' && selected && (
-        <UnitEditSheet unit={selected} onClose={closeSheet} />
+        <UnitEditSheet unit={selected} wallLengthMm={wall.lengthMm} onClose={closeSheet} />
       )}
 
       {/* שמירת אוסף שנבחר בתלת־ממד כפריט אחד */}

@@ -37,7 +37,7 @@ await page.getByRole('button', { name: 'תכנת', exact: true }).click(); await
 await full('3-planner-home');
 ok('planner has no settings', await page.getByRole('button', { name: 'הגדרות' }).count() === 0);
 ok('planner has stock', await page.getByRole('button', { name: 'מלאי לוחות' }).count() === 1);
-ok('planner has no library', await page.getByRole('button', { name: 'ספריית המוצרים' }).count() === 0);
+ok('planner has no library', await page.getByRole('button', { name: 'ספריית הארגזים' }).count() === 0);
 
 await btn(/תפקידים בע״מ/).click(); await page.waitForTimeout(700);
 await btn(/מטבח/).first().click(); await page.waitForTimeout(1200);
@@ -46,7 +46,13 @@ const pd = await page.innerText('body');
 ok('planner gets the work view', !pd.includes('הוספת ארגז') && !pd.includes('חישוב'), '');
 ok('planner has no wall stats', !pd.includes('שטח הקיר'), '');
 ok('planner has quick marking', await page.getByRole('button', { name: /סימון מהיר/ }).count() === 1);
-ok('planner has no design toggle', await page.getByRole('button', { name: /^תכנון$|^תהליך עבודה$/ }).count() === 0);
+/*
+ * התכנת נכנס לתצוגת התהליך, אבל יש לו מתג חזרה לתכנון: בלעדיו
+ * אישור עריכה שהמנהל נותן לו לא פותח שום כלי (N2).
+ */
+ok('planner starts in the work view', await btn(/^תהליך עבודה$/).count() === 1);
+ok('and can switch to planning', await page.getByRole('button', { name: /^תכנון$|^תהליך עבודה$/ }).count() === 1);
+
 
 console.log(errs.length ? 'ERRORS: ' + errs.join(' | ') : 'no console errors');
 await b.close();

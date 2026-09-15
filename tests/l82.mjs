@@ -82,6 +82,7 @@ const state = await page.evaluate(async () => {
     count: units.length,
     plan: walls.map((w, i) => `#${i}=${w.id.slice(0, 4)}`),
     glyphs: [...new Set(units.map((u) => u.glyph))],
+    names: [...new Set(units.map((u) => u.name))],
     levels: [...new Set(units.map((u) => u.level))],
     walls: [...new Set(units.map((u) => u.wallId))].length,
     clashes,
@@ -96,7 +97,11 @@ const state = await page.evaluate(async () => {
 });
 ok('נוצרו ארגזים', state.count > 5, `${state.count}`);
 ok('ארגזים על שני הקירות', state.walls === 2, `${state.walls}`);
-ok('יש מכשירים', state.glyphs.includes('sink') && state.glyphs.includes('hob'), state.glyphs.join());
+/*
+ * לפי השם ולא לפי האיור: ארגז הכיריים של הנגרייה מצויר כמגירות,
+ * והאיור אומר איך הוא נראה — לא איזה תפקיד הוא ממלא.
+ */
+ok('יש מכשירים', state.names.some((n) => n.includes('כיור')) && state.names.some((n) => n.includes('כיריים')), state.names.join(' · '));
 ok('יש עליונים ותחתונים', state.levels.includes('wall') && state.levels.includes('floor'), state.levels.join());
 ok('אין התנגשות פיזית', state.clashes.length === 0, state.clashes.slice(0, 4).join() + ' || ' + state.plan.join(' | '));
 ok('אין ארגז בלי פריט ספרייה', state.orphan === 0, `${state.orphan}`);
@@ -111,7 +116,11 @@ const total = await all.count();
 for (let i = 0; i < total; i++) {
   const name = (await all.nth(i).innerText()).split('\n')[0];
   await all.nth(i).click();
-  await page.waitForTimeout(900);
+  /* המתנה למצב עצמו ולא לשעון: ההנחה נגמרת כשההצעה מסומנת כנבחרה */
+  for (let t = 0; t < 60 && (await all.nth(i).getAttribute('aria-pressed')) !== 'true'; t++) {
+    await page.waitForTimeout(100);
+  }
+
   const bad = await page.evaluate(async () => {
     const v = '?v=' + Date.now();
     const { db } = await import('/src/db/db.ts' + v);

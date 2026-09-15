@@ -2,6 +2,7 @@ import { Sheet } from '../../ui/Sheet';
 import {
   STAGE_CHAIN,
   canAdvance,
+  stageIndex,
   stageOf,
   tracksOf,
   withStage,
@@ -22,21 +23,38 @@ import type { PlacedUnit, UnitWork, UserRole } from '../../db/types';
 export function BulkWorkSheet({
   units,
   role,
+  project,
+  shown,
   onApply,
   onClose,
 }: {
   units: PlacedUnit[];
+  /** מי שנכנס באמת — ממנו נגזרת הסמכות */
   role: UserRole | undefined;
+  /** התפקיד שנבחר לצפייה, כשהוא אינו התפקיד האמיתי */
+  shown?: UserRole;
+  /** הפרויקט — הייצור נפתח רק אחרי המכירה */
+  project?: { soldAt?: number };
   onApply: (changes: { id: string; work: UnitWork }[]) => void;
   onClose: () => void;
 }) {
+
   const rows = TRACKS.flatMap((track) =>
     STAGE_CHAIN.map((stage) => {
       const targets = units.filter((u) => {
         const def = tracksOf(u).find((t) => t.key === track.key);
         if (!def) return false;
-        if (stageOf(u, track.key) === stage.key) return false;
-        return canAdvance(u, def, stage.key, role).ok;
+        /*
+         * סימון מהיר מקדם, ולא מחזיר אחורה.
+         *
+         * הסינון בדק רק "לא באותו שלב", ו-`canAdvance` מרשה תיקון
+         * אחורה — ולכן "מוכן לחיתוך" על הקיר החזיר גם ארגז שכבר
+         * הורכב אל תחילת הדרך, ואיתו את הפלטות שכבר נצרכו. תיקון
+         * לאחור הוא פעולה מכוונת על ארגז אחד, ולא תופעת לוואי של
+         * סימון על כולם.
+         */
+        if (stageIndex(stageOf(u, track.key)) >= stageIndex(stage.key)) return false;
+        return canAdvance(u, def, stage.key, role, project, shown).ok;
       });
       return { track, stage, targets };
     }).filter((r) => r.targets.length > 0),

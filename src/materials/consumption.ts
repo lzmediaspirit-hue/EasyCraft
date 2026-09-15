@@ -114,40 +114,49 @@ async function runSync(projectId: string): Promise<void> {
     db.projects.get(projectId),
   ]);
   const cut = cutLines(units, settings, project);
-  const existing = await db.consumption.where('projectId').equals(projectId).toArray();
   const now = Date.now();
 
-  for (const line of costing.lines) {
-    const was = existing.find((c) => c.lineKey === line.key);
-    const wants = cut.has(line.key) ? line.sheets : 0;
-    const had = was?.sheets ?? 0;
-    if (wants === had) continue;
+  /*
+   * הקריאה של הצריכה והכתיבה למלאי חייבות לשבת באותה עסקה: שני
+   * פרויקטים שמסונכרנים במקביל — בשתי לשוניות, למשל — קראו את אותה
+   * שורת מלאי ודרסו זה את זה, ופלטה אחת נעלמה מההפחתה. התור שלפני
+   * כן מסדר רק פרויקט מול עצמו, והעסקה מסדרת פרויקט מול פרויקט.
+   */
+  await db.transaction('rw', db.consumption, db.stock, async () => {
+    const existing = await db.consumption.where('projectId').equals(projectId).toArray();
 
-    await moveStock(line.finish?.id, line.material.id, had - wants);
-    if (wants === 0) {
-      if (was) await db.consumption.delete(was.id);
-    } else if (was) {
-      await db.consumption.update(was.id, { sheets: wants, updatedAt: now });
-    } else {
-      await db.consumption.add({
-        id: crypto.randomUUID(),
-        projectId,
-        lineKey: line.key,
-        finishId: line.finish?.id,
-        materialId: line.material.id,
-        sheets: wants,
-        createdAt: now,
-        updatedAt: now,
-      });
+    for (const line of costing.lines) {
+      const was = existing.find((c) => c.lineKey === line.key);
+      const wants = cut.has(line.key) ? line.sheets : 0;
+      const had = was?.sheets ?? 0;
+      if (wants === had) continue;
+
+      await moveStock(line.finish?.id, line.material.id, had - wants);
+      if (wants === 0) {
+        if (was) await db.consumption.delete(was.id);
+      } else if (was) {
+        await db.consumption.update(was.id, { sheets: wants, updatedAt: now });
+      } else {
+        await db.consumption.add({
+          id: crypto.randomUUID(),
+          projectId,
+          lineKey: line.key,
+          finishId: line.finish?.id,
+          materialId: line.material.id,
+          sheets: wants,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
     }
-  }
 
-  /* שורה שנעלמה מהתמחור — הגוון הוחלף, הארגז נמחק — מחזירה את שלה */
-  for (const c of existing) {
-    if (costing.lines.some((l) => l.key === c.lineKey)) continue;
-    await moveStock(c.finishId, c.materialId, c.sheets);
-    await db.consumption.delete(c.id);
-  }
+    /* שורה שנעלמה מהתמחור — הגוון הוחלף, הארגז נמחק — מחזירה את שלה */
+    for (const c of existing) {
+      if (costing.lines.some((l) => l.key === c.lineKey)) continue;
+      await moveStock(c.finishId, c.materialId, c.sheets);
+      await db.consumption.delete(c.id);
+    }
+  });
 }
 
 /**
@@ -157,38 +166,46 @@ async function runSync(projectId: string): Promise<void> {
  * נשארות חסרות במלאי לנצח, בלי שום רישום שמסביר לאן הלכו.
  */
 export async function releaseConsumption(projectId: string): Promise<void> {
-  const rows = await db.consumption.where('projectId').equals(projectId).toArray();
-  for (const c of rows) {
-    await moveStock(c.finishId, c.materialId, c.sheets);
-    await db.consumption.delete(c.id);
-  }
+  await db.transaction('rw', db.consumption, db.stock, async () => {
+    const rows = await db.consumption.where('projectId').equals(projectId).toArray();
+    for (const c of rows) {
+      await moveStock(c.finishId, c.materialId, c.sheets);
+      await db.consumption.delete(c.id);
+    }
+  });
 }
 
-/** מוסיף פלטות למלאי (מספר חיובי) או מוריד ממנו (שלילי). */
+/**
+ * מוסיף פלטות למלאי (מספר חיובי) או מוריד ממנו (שלילי).
+ * קריאה וכתיבה באותה עסקה, כדי ששתי הפחתות במקביל לא יקראו את אותו
+ * מצב ויכתבו זו על זו. קריאה מתוך עסקה פתוחה מצטרפת אליה.
+ */
 async function moveStock(
   finishId: string | undefined,
   materialId: string,
   delta: number,
 ): Promise<void> {
   if (!finishId || delta === 0) return;
-  const rows = await db.stock.toArray();
-  const row = rows.find((r) => r.finishId === finishId && r.materialId === materialId);
-  const now = Date.now();
-  /*
-   * מלאי שלילי מותר במכוון: הוא אומר "חתכנו יותר ממה שהיה רשום",
-   * וזה מידע. עיגול לאפס היה מסתיר את הפער במקום להראות אותו.
-   */
-  if (row) {
-    await db.stock.update(row.id, { sheets: row.sheets + delta, updatedAt: now });
-    return;
-  }
-  await db.stock.add({
-    id: crypto.randomUUID(),
-    finishId,
-    materialId,
-    sheets: delta,
-    ordered: 0,
-    createdAt: now,
-    updatedAt: now,
+  await db.transaction('rw', db.stock, async () => {
+    const rows = await db.stock.toArray();
+    const row = rows.find((r) => r.finishId === finishId && r.materialId === materialId);
+    const now = Date.now();
+    /*
+     * מלאי שלילי מותר במכוון: הוא אומר "חתכנו יותר ממה שהיה רשום",
+     * וזה מידע. עיגול לאפס היה מסתיר את הפער במקום להראות אותו.
+     */
+    if (row) {
+      await db.stock.update(row.id, { sheets: row.sheets + delta, updatedAt: now });
+      return;
+    }
+    await db.stock.add({
+      id: crypto.randomUUID(),
+      finishId,
+      materialId,
+      sheets: delta,
+      ordered: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
   });
 }

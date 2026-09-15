@@ -1,6 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BackIcon, CloseIcon } from './icons';
+
+/**
+ * המגירות הפתוחות, מהתחתונה לעליונה.
+ *
+ * Escape סוגר את העליונה בלבד. קודם כל מגירה האזינה בעצמה, ולכן
+ * הקשה אחת סגרה גם את עורך הארגז וגם את הספרייה שממנה הוא נפתח —
+ * והמשתמש איבד את ההקשר שבו עבד.
+ */
+const open: symbol[] = [];
+
+/** מה שאפשר להגיע אליו ב-Tab */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 
 type Props = {
   title: string;
@@ -25,13 +39,55 @@ type Props = {
  * מוציאה אותה מהשרשרת הזו, ומכאן היא תמיד ממלאת את המסך.
  */
 export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack }: Props) {
+  const box = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
+    const me = Symbol('sheet');
+    open.push(me);
+    /* מי שפתח — לשם חוזר המיקוד כשהמגירה נסגרת */
+    const opener = document.activeElement as HTMLElement | null;
+    /*
+     * המיקוד נכנס למגירה. בלי זה הוא נשאר על הכפתור שברקע, ו-Tab
+     * המשיך לטייל במסך שמאחור בזמן שהמגירה פתוחה.
+     */
+    if (!box.current?.contains(document.activeElement)) {
+      box.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    }
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      /* רק העליונה מגיבה */
+      if (open[open.length - 1] !== me || !box.current) return;
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = [...box.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      );
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const now = document.activeElement;
+      const outside = !box.current.contains(now);
+      if (e.shiftKey && (now === first || outside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (now === last || outside)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      const i = open.indexOf(me);
+      if (i >= 0) open.splice(i, 1);
+      opener?.focus?.();
+    };
   }, [onClose]);
+
 
   const Body = onSubmit ? 'form' : 'div';
 
@@ -44,8 +100,10 @@ export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack
         className="absolute inset-0 animate-fade-in bg-stone-900/40"
       />
       <Body
+        ref={box as React.Ref<HTMLDivElement & HTMLFormElement>}
         onSubmit={onSubmit}
         role="dialog"
+
         aria-modal="true"
         aria-label={title}
         className={`relative mx-auto flex w-full max-w-lg animate-sheet-in flex-col rounded-t-3xl bg-white shadow-2xl ${

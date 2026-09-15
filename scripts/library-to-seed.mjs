@@ -23,10 +23,12 @@ const OUT = join(ROOT, 'src/catalog/shipped.ts');
 /** שדות שאינם שייכים לקוד: הם נקבעים מחדש בכל מכשיר. */
 const PER_DEVICE = ['createdAt', 'updatedAt', 'hiddenAt'];
 
-const HEAD = `import type { CatalogItem } from '../db/types';
+const HEAD = `import type { CatalogItem, Finish, Material } from '../db/types';
 
 /** פריט ספרייה מוכן, לפני שנזרע — חותמות הזמן נקבעות בזריעה עצמה. */
 export type ShippedItem = Omit<CatalogItem, 'createdAt' | 'updatedAt'>;
+export type ShippedMaterial = Omit<Material, 'createdAt' | 'updatedAt'>;
+export type ShippedFinish = Omit<Finish, 'createdAt' | 'updatedAt'>;
 
 /**
  * הספרייה שמגיעה עם האפליקציה, כשהיא נבנתה בנגרייה ולא נכתבה בקוד.
@@ -43,6 +45,20 @@ export type ShippedItem = Omit<CatalogItem, 'createdAt' | 'updatedAt'>;
  */
 `;
 
+/**
+ * הלוחות והגוונים שהספרייה מפנה אליהם, עם ההערה שמסבירה למה.
+ */
+const DEPS_DOC = `
+/**
+ * הלוחות והגוונים שהספרייה הזו מפנה אליהם.
+ *
+ * ארגז שומר מזהה של גוון, לא את הגוון עצמו. בלי השניים האלה, ספרייה
+ * שנבנתה בנגרייה הייתה מגיעה למכשיר חדש עם הפניות לשום דבר: הצבע
+ * שנבחר לחזית לא היה קיים, והמחיר לא היה מחושב. הם נזרעים עם
+ * המזהים המקוריים שלהם, וזה מה שמחזיק את ההפניות.
+ */
+`;
+
 const args = process.argv.slice(2);
 if (!args.length || args.includes('--help')) {
   console.log('שימוש: node scripts/library-to-seed.mjs <library.json> | --reset');
@@ -50,7 +66,7 @@ if (!args.length || args.includes('--help')) {
 }
 
 if (args[0] === '--reset') {
-  writeFileSync(OUT, `${HEAD}export const SHIPPED_LIBRARY: ShippedItem[] = [];\n`);
+  writeFileSync(OUT, empty());
   console.log('חזרנו לארגזי התקן שב-builtins.ts');
   process.exit(0);
 }
@@ -59,6 +75,8 @@ const backup = JSON.parse(readFileSync(args[0], 'utf8'));
 if (backup.app !== 'easycraft') die('זה לא קובץ גיבוי של EasyCraft');
 const rows = backup.tables?.catalog;
 if (!Array.isArray(rows) || !rows.length) die('אין ארגזים בקובץ');
+const materialRows = backup.tables?.materials ?? [];
+const finishRows = backup.tables?.finishes ?? [];
 
 /*
  * מה שהוסר מהספרייה אינו נכנס. הוא הוסר בכוונה, ולהחזיר אותו
@@ -75,12 +93,65 @@ const items = rows
     return out;
   });
 
-const body = JSON.stringify(items, null, 2);
-writeFileSync(OUT, `${HEAD}export const SHIPPED_LIBRARY: ShippedItem[] = ${body};\n`);
+/*
+ * הלוחות והגוונים שהארגזים מפנים אליהם נוסעים איתם, במזהה המקורי.
+ * בלעדיהם כל ארגז שנבנה עם גוון מפורש מגיע למכשיר חדש עם הפניה
+ * לשום דבר: הצבע לא מופיע, והמחיר לא מחושב.
+ */
+const needFinishes = new Set();
+const needMaterials = new Set();
+for (const i of items) {
+  for (const k of ['carcassFinishId', 'frontFinishId', 'exposedFinishId', 'backFinishId']) {
+    if (i[k]) needFinishes.add(i[k]);
+  }
+  for (const k of ['carcassMaterialId', 'frontMaterialId', 'exposedMaterialId', 'backMaterialId']) {
+    if (i[k]) needMaterials.add(i[k]);
+  }
+}
+const finishes = finishRows.filter((f) => needFinishes.has(f.id)).map(strip);
+/* גוון מתומחר על לוחות מסוימים, וגם הם נדרשים */
+for (const f of finishes) for (const id of Object.keys(f.prices ?? {})) needMaterials.add(id);
+const materials = materialRows.filter((m) => needMaterials.has(m.id)).map(strip);
+
+const missing = [...needFinishes].filter((id) => !finishes.some((f) => f.id === id)).length
+  + [...needMaterials].filter((id) => !materials.some((m) => m.id === id)).length;
+
+writeFileSync(
+  OUT,
+  HEAD +
+    `export const SHIPPED_LIBRARY: ShippedItem[] = ${JSON.stringify(items, null, 2)};\n` +
+    DEPS_DOC +
+    `export const SHIPPED_MATERIALS: ShippedMaterial[] = ${JSON.stringify(materials, null, 2)};\n` +
+    `export const SHIPPED_FINISHES: ShippedFinish[] = ${JSON.stringify(finishes, null, 2)};\n`,
+);
 console.log(`${items.length} ארגזים נכנסו ל-src/catalog/shipped.ts`);
+console.log(`${materials.length} לוחות ו-${finishes.length} גוונים נכנסו איתם`);
 const dropped = rows.length - items.length;
 if (dropped) console.log(`${dropped} שהוסרו מהספרייה לא נכנסו`);
+if (missing) {
+  console.log(
+    `שים לב: ${missing} הפניות לגוון או ללוח לא נמצאו בקובץ. ייצא את הספרייה מגרסה עדכנית של האפליקציה, שנושאת איתה גם אותם.`,
+  );
+}
 console.log('הרץ npm run typecheck ואז npm run build:single');
+
+/** שורה שמוכנה לקוד: בלי חותמות הזמן שנקבעות בכל מכשיר מחדש */
+function strip(row) {
+  const out = { ...row };
+  for (const k of ['createdAt', 'updatedAt']) delete out[k];
+  return out;
+}
+
+/** הקובץ הריק — כשחוזרים לארגזי התקן */
+function empty() {
+  return (
+    HEAD +
+    'export const SHIPPED_LIBRARY: ShippedItem[] = [];\n' +
+    DEPS_DOC +
+    'export const SHIPPED_MATERIALS: ShippedMaterial[] = [];\n' +
+    'export const SHIPPED_FINISHES: ShippedFinish[] = [];\n'
+  );
+}
 
 function die(msg) {
   console.error(msg);

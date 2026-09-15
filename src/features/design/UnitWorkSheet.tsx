@@ -26,14 +26,22 @@ import type { PlacedUnit, UnitWork, UserRole } from '../../db/types';
 export function UnitWorkSheet({
   unit,
   role,
+  shown,
+  project,
   onChange,
   onClose,
 }: {
   unit: PlacedUnit;
+  /** מי שנכנס באמת — ממנו נגזרת הסמכות */
   role: UserRole | undefined;
+  /** התפקיד שנבחר לצפייה, כשהוא אינו התפקיד האמיתי */
+  shown?: UserRole;
+  /** הפרויקט — הייצור נפתח רק אחרי המכירה */
+  project?: { soldAt?: number };
   onChange: (work: UnitWork) => void;
   onClose: () => void;
 }) {
+
   const [issue, setIssue] = useState(unit.work?.issue ?? '');
   const tone = WORK_TONES[workTone(unit)];
   const tracks = tracksOf(unit);
@@ -73,7 +81,8 @@ export function UnitWorkSheet({
                 <ol className="flex flex-wrap gap-1.5">
                   {steps.map((step, i) => {
                     const done = i <= at;
-                    const check = canAdvance(unit, t, step.key, role);
+                    const check = canAdvance(unit, t, step.key, role, project, shown);
+
                     return (
                       <li key={step.key}>
                         <button

@@ -66,7 +66,9 @@ ok('project created with 3 walls', names.join('|').includes('קיר ג׳'), name
 await full('7-design');
 
 await btn(/הוספת ארגז/).click(); await page.waitForTimeout(700);
-await dlg().locator('div.relative > button').first().click(); await page.waitForTimeout(1200);
+/* ארגז לפי שם: הספרייה היא של הנגרייה, והמחיר נגזר מהארגז שנבחר */
+await dlg().getByRole('button', { name: /^ארגז שתי דלתות/ }).first().click();
+await page.waitForTimeout(1200);
 const ed = await page.innerText('body');
 ok('unit inherits project finish', ed.includes('לבן') && ed.includes('מהפרויקט'), '');
 await full('8-editor');

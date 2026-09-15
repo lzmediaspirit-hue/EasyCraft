@@ -1,7 +1,7 @@
 import { history } from './history';
 import { wallsRepo } from '../projects/projectsRepo';
 import { wallLabel } from '../projects/wallLayouts';
-import { roomDef } from '../../catalog/rooms';
+import { roomDef } from '../../catalog/roomsRepo';
 import { WallThumb } from './WallThumb';
 import {
   CalcIcon,
@@ -9,15 +9,20 @@ import {
   CheckIcon,
   CubeIcon,
   DepthIcon,
+  DimensionsIcon,
+  ElevationIcon,
   EyeIcon,
+  EyeOffIcon,
+  FitIcon,
   FrontsIcon,
   InsideIcon,
+  MagnetIcon,
   NestIcon,
   PlanIcon,
   PlusIcon,
   RedoIcon,
   RulerIcon,
-  TagIcon,
+  SwatchIcon,
   UndoIcon,
   ToolsIcon,
   WallsIcon,
@@ -56,6 +61,7 @@ export function DesignToolbar({
   canRedo,
   projectId,
   onCenter,
+  onFit,
   onClearSelection,
   onShowHidden,
 }: {
@@ -77,12 +83,26 @@ export function DesignToolbar({
   canRedo: boolean;
   projectId: string;
   onCenter: () => void;
+  /** מחזיר את המבט התלת־ממדי לזווית ההתחלתית */
+  onFit: () => void;
   onClearSelection: () => void;
   /** מחזיר לתצוגה את כל הארגזים שהוסתרו בפרויקט */
   onShowHidden: () => void;
 }) {
-  const { iso, inside, measure, rulerPair, rulerAxis, wallsOpen, toolsOpen } =
+  const { iso, inside, measure, rulerPair, rulerAxis, snap, wallsOpen, toolsOpen } =
     design.view;
+  /*
+   * המצב שרואים בו את הקיר — אחד משלושה, ולא מתג שמתאר את ההווה
+   * ועושה משהו אחר. הכפתור אמר "שטוח" ולחיצה עליו פתחה תלת־ממד,
+   * ואת זה היה צריך ללמוד. מבט על הוא מגירה, ולכן פתיחתה היא
+   * המצב שלו.
+   */
+  const mode: ViewMode = sheet === 'plan' ? 'plan' : iso ? 'iso' : 'flat';
+  const setMode = (next: ViewMode) => {
+    if (next === 'plan') return onSheet('plan');
+    if (sheet === 'plan') onSheet(null);
+    design.set('iso', next === 'iso');
+  };
   const hiddenCount = allUnits.filter((u) => u.hidden).length;
 
   return (
@@ -95,6 +115,11 @@ export function DesignToolbar({
           {/*
             ההדמיה ללקוח היא הדבר היחיד כאן שמיועד למישהו אחר,
             ולכן היא אייקון בפינה ולא כפתור בסרגל הכלים.
+
+            המבקר ביקש שתהיה לה תווית נראית ולא עין בלבד. הבעלים
+            ביקש במפורש להוריד את כפתור "ללקוח" מהסרגל, וזו בקשה
+            שגוברת: מה שמבדיל את האייקון הזה משאר העיניים במסך הוא
+            המקום — הפינה, לא סרגל הכלים — ולא צורת הכפתור.
           */}
           {role === 'manager' && (
             <button
@@ -222,20 +247,61 @@ export function DesignToolbar({
       </div>
 
       <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-        <Tool
-          active={iso}
-          onClick={() => design.toggle('iso')}
-          icon={<CubeIcon className="size-4" />}
-          label={iso ? 'תלת־ממד' : 'שטוח'}
-          title={iso ? 'חזרה לציור חזית' : 'מבט תלת־ממדי'}
-        />
-        {/* מבט על זמין תמיד: משם גם מוסיפים קיר לחדר */}
-        <Tool
-          active={sheet === 'plan'}
-          onClick={() => onSheet(sheet === 'plan' ? null : 'plan')}
-          icon={<PlanIcon className="size-4" />}
-          label="מבט על"
-        />
+        {/*
+          שלושת המצבים יחד, והפעיל מסומן.
+
+          קודם היה כאן מתג אחד שכתוב עליו המצב הנוכחי — "שטוח" —
+          ולחיצה עליו פתחה תלת־ממד. כפתור שאומר איפה אתה ועושה
+          משהו אחר הוא כפתור שצריך ללמוד, ונגר לומד אותו פעם
+          אחת בכל חודש שהוא לא נגע באפליקציה.
+        */}
+        <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-stone-200/70 p-0.5">
+          {MODES.map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              aria-pressed={mode === m.key}
+              /*
+               * התווית הנראית היא חלק מהשם הנגיש, כמו בשאר הכלים:
+               * מי שמפעיל את האפליקציה בקול אומר "תלת־ממד" ומקבל
+               * את הכפתור, ומי שמחפש "מבט תלת־ממדי" מקבל אותו גם.
+               */
+              aria-label={`${m.label} — ${m.title}`}
+              title={m.title}
+              className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors ${
+                mode === m.key
+                  ? 'bg-stone-900 text-white'
+                  : 'text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              <m.icon className="size-4" />
+              {m.label}
+            </button>
+          ))}
+        </span>
+        {/*
+          ההצמדה כמתג ולא כמקש שמחזיקים: במגע אין מקש להחזיק,
+          ומרווח מכוון בין שני ארגזים הוא בקשה לגיטימית.
+        */}
+        {editable && (
+          <Tool
+            active={snap}
+            onClick={() => design.toggle('snap')}
+            icon={<MagnetIcon className="size-4" />}
+            label="הצמדה"
+            title={snap ? 'כיבוי, כדי שהארגז ינחת בדיוק במקום שנגררת אליו' : 'הפעלה — הצמדה לשכנים, לפינות ולראש ארגז'}
+          />
+        )}
+        {/* התאמת התצוגה מחזירה את המצלמה, ואינה נוגעת בארגזים */}
+        {iso && (
+          <Tool
+            active={false}
+            onClick={onFit}
+            icon={<FitIcon className="size-4" />}
+            label="התאמת תצוגה"
+            title="חזרה לזווית ההתחלתית מול הקיר"
+          />
+        )}
         {/*
           ארגזים שהוסתרו אחד־אחד. הכפתור מופיע רק כשיש כאלה, וגם
           אומר כמה: ארגז שנעלם ואי אפשר להחזיר הוא ארגז שאבד.
@@ -244,7 +310,7 @@ export function DesignToolbar({
           <Tool
             active
             onClick={onShowHidden}
-            icon={<EyeIcon className="size-4" />}
+            icon={<EyeOffIcon className="size-4" />}
             label={`מוסתרים ${hiddenCount}`}
             title="החזרת כל הארגזים המוסתרים לתצוגה"
           />
@@ -257,7 +323,7 @@ export function DesignToolbar({
         <Tool
           active={measure !== null}
           onClick={design.cycleMeasure}
-          icon={<RulerIcon className="size-4" />}
+          icon={<DimensionsIcon className="size-4" />}
           label={
             measure === null
               ? 'מדידה'
@@ -312,10 +378,14 @@ export function DesignToolbar({
           label="מרכוז"
           title="ממרכז את הארגזים על הקיר"
         />
+        {/*
+          דגימת לוח ולא תווית מחיר: התווית אמרה "מחיר" למי שראה
+          אותה, וזו בדיוק הפעולה השנייה בסרגל.
+        */}
         <Tool
           active={sheet === 'finishes'}
           onClick={() => onSheet('finishes')}
-          icon={<TagIcon className="size-4" />}
+          icon={<SwatchIcon className="size-4" />}
           label="גוון לכולם"
           title="גוון לכל החזיתות, הגופים או הדפנות"
         />
@@ -357,6 +427,20 @@ export function DesignToolbar({
     </ScreenHeader>
   );
 }
+
+/** שלושת המצבים שאפשר לראות בהם את הקיר. */
+type ViewMode = 'flat' | 'iso' | 'plan';
+
+const MODES: { key: ViewMode; label: string; title: string; icon: (p: { className?: string }) => React.ReactElement }[] = [
+  /*
+   * "דו־ממד" ולא "חזית": חזית היא כבר מתג אחר בסרגל — זה שמסיר
+   * את הדלתות — ושני כפתורים באותו שם באותו מסך הם כפתור אחד
+   * שבור.
+   */
+  { key: 'flat', label: 'דו־ממד', title: 'ציור החזית של הקיר', icon: ElevationIcon },
+  { key: 'iso', label: 'תלת־ממד', title: 'מבט תלת־ממדי על החדר', icon: CubeIcon },
+  { key: 'plan', label: 'מבט על', title: 'החדר מלמעלה — ומשם גם מוסיפים קיר', icon: PlanIcon },
+];
 
 function Tool({
   active,

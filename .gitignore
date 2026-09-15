@@ -6,3 +6,5 @@ dist
 # צילומי מסך של הבדיקות — נוצרים מחדש בכל הרצה
 tests/shots
 tests/*.png
+shots
+*.png

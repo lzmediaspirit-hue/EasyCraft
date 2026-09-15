@@ -922,7 +922,7 @@ export function whyNothing(plan: PlanWall[]): string {
 }
 
 /** המרווח שבין שתי שורות ארונות, כדי לומר אם הוא מספיק. */
-export function aisleAdvice(widthMm: number): string | null {
+function aisleAdvice(widthMm: number): string | null {
   if (!Number.isFinite(widthMm) || widthMm >= AISLE.twoCooksMm) return null;
   if (widthMm >= AISLE.workMm) return `מעבר ${Math.round(widthMm)} מ"מ — מספיק לטבח אחד; לשניים צריך ${AISLE.twoCooksMm}`;
   return `המעבר ${Math.round(widthMm)} מ"מ — מעבר עבודה מתחיל ב-${AISLE.workMm} מ"מ`;

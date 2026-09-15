@@ -119,9 +119,12 @@ let seeding: Promise<void> | null = null;
  * חשבון מנהל שמגיע מוכן עם האפליקציה.
  *
  * בלעדיו ההתקנה הראשונה מחייבת למלא טופס לפני שרואים משהו, וזה
- * חיכוך מיותר בנגרייה שרק רוצה לפתוח ולעבוד. החשבון נוצר פעם אחת:
- * אם כבר קיים משתמש בשם הזה — לא נוגעים בו, כדי שסיסמה שהוחלפה
- * לא תידרס בטעינה הבאה.
+ * חיכוך מיותר בנגרייה שרק רוצה לפתוח ולעבוד. הוא נוצר רק כשאין אף
+ * משתמש — כלומר בהתקנה הראשונה בלבד.
+ *
+ * הבדיקה היא על קיום צוות ולא על קיום השם "admin": מנהל ששינה את
+ * שם המשתמש שלו קיבל בטעינה הבאה חשבון מנהל שני, עם סיסמת ברירת
+ * המחדל הידועה, בלי שביקש ובלי שידע.
  *
  * הסיסמה הזו ידועה לכל מי שראה את הקוד, ולכן היא נקודת פתיחה ולא
  * הגנה. מסך הכניסה ומסך הצוות מסמנים אותה כל עוד לא הוחלפה.
@@ -132,8 +135,8 @@ export function seedAdmin(): Promise<void> {
 }
 
 async function runSeed(): Promise<void> {
-  const exists = (await db.team.toArray()).some((m) => m.username === DEFAULT_ADMIN.username);
-  if (exists) return;
+  if (await db.team.count()) return;
+
   const now = Date.now();
   const salt = newSalt();
   const passwordHash = await hashPassword(DEFAULT_ADMIN.password, salt);

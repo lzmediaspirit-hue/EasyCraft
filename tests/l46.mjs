@@ -25,12 +25,16 @@ const order = await page.locator('section').filter({ hasText: 'גוונים' }).
   .locator('h3, button span.font-semibold').allInnerTexts();
 console.log('order:', JSON.stringify(order.slice(0, 12)));
 
-/* --- חומרים: שם ואייקון בלבד --- */
-ok(!body.includes('פלטה 122'), 'רשימת החומרים בלי מידות פלטה');
-const matRow = page.locator('section').filter({ hasText: 'חומרים' }).last()
+/* --- לוחות: שם ואייקון בלבד --- */
+ok(!body.includes('פלטה 122'), 'רשימת הלוחות בלי מידות פלטה');
+const matRow = page.locator('section').filter({ hasText: 'לוחות' }).last()
   .locator('li button').first();
 const matTxt = (await matRow.innerText()).trim();
-ok(/^[^\n]+$/.test(matTxt), 'שורת חומר היא שורה אחת', JSON.stringify(matTxt));
+/* שם הלוח, ומתחתיו למה הוא משמש — ולא טבלה של מידות ומחירים */
+const matLines = matTxt.split('\n').filter(Boolean);
+ok(matLines.length <= 2, 'שורת לוח היא שם ותפקיד בלבד', JSON.stringify(matTxt));
+ok(!/\d{3,}\s*[x×]\s*\d{3,}/.test(matTxt), 'ואין בה מידות פלטה', JSON.stringify(matTxt));
+
 ok(await matRow.locator('svg').count() >= 2, 'לשורת החומר יש אייקון', String(await matRow.locator('svg').count()));
 
 /* --- מרקם חדש מאחורי עיפרון --- */

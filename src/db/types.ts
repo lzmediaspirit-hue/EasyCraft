@@ -26,8 +26,39 @@ export type NewCustomer = Pick<Customer, 'name' | 'city'> & { phone?: string };
 /* פרויקטים                                                            */
 /* ------------------------------------------------------------------ */
 
-/** סוג החדר — קובע אילו מוצרים יוצגו בספרייה. */
-export type RoomKind = 'kitchen' | 'living' | 'bedroom' | 'custom';
+/**
+ * סוג החדר — קובע אילו מוצרים יוצגו בספרייה.
+ *
+ * מזהה חופשי ולא רשימה סגורה: החדרים הם נתונים בטבלת
+ * `rooms`, ונגר שעובד גם על חדר שירות, משרד או ממ״ד מוסיף
+ * אותם בעצמו. הקוד מכיר שם שמור אחד — `custom`, חדר ללא סוג
+ * שכל הספרייה זמינה בו — וכל השאר מגיע מהטבלה.
+ */
+export type RoomKind = string;
+
+/** החדר שאין לו סוג: כל הספרייה זמינה בו, והשם מגיע מהמשתמש. */
+export const CUSTOM_ROOM = 'custom';
+
+/**
+ * חדר בספרייה.
+ *
+ * החדרים שמגיעים עם האפליקציה מסומנים `isBuiltin`, ואפשר רק
+ * להסתיר אותם; חדר שהמשתמש הוסיף נמחק לגמרי. פרויקט שכבר
+ * נפתח בחדר שהוסר אינו נפגע — הוא שומר את שם החדר בעצמו.
+ */
+export interface Room extends Entity {
+  label: string;
+  /** תיאור קצר שמופיע בבחירת החדר */
+  hint: string;
+  /** מפתח האייקון */
+  icon: string;
+  /** הכרטיסיות שמוצגות בספרייה עבור החדר הזה, לפי הסדר */
+  groups: CatalogGroup[];
+  sortOrder: number;
+  isBuiltin: boolean;
+  /** הוסתר מרשימת החדרים */
+  hiddenAt?: number;
+}
 
 export interface Project extends Entity {
   customerId: string;
@@ -44,6 +75,16 @@ export interface Project extends Entity {
   perUnitRate?: number;
   /** ₪ למטר רץ של קיר */
   perMeterRate?: number;
+  /**
+   * האם המחיר שהוקלד ביד כבר כולל מע"מ.
+   *
+   * חישוב החומרים יודע בעצמו מה לפני מע"מ ומה אחריו, אבל מספר
+   * שנגר כותב ב"מחיר קבוע" או ב"מחיר למטר" הוא מה שהוא אמר ללקוח —
+   * ואצל רוב הנגרים זה כבר המחיר הסופי. ברירת המחדל היא לכן "כולל",
+   * וזו גם ההתנהגות שהייתה עד שהשאלה נשאלה במפורש.
+   */
+  priceIncludesVat?: boolean;
+
   /**
    * הגוון והחומר שנבחרו לפרויקט, לכל חלק בארגז.
    * זו ברירת המחדל של כל ארגז בפרויקט: רוב המטבח הוא אותו גוף
@@ -546,10 +587,27 @@ export interface CatalogGroupPart {
 }
 
 export interface CatalogItem extends Entity {
+  /**
+   * מק״ט — המזהה שהנגר קורא לארגז בשמו.
+   *
+   * `id` הוא מזהה פנימי שאיש אינו רואה; המק״ט הוא מה שכתוב על
+   * הארגז ברשימה, ומה שמונע כפילות: שמירה תחת מק״ט שכבר קיים
+   * מעדכנת את הארגז ההוא במקום ליצור עותק שני שלו, וכך גם ייבוא
+   * של ספרייה שכבר יש ממנה חלק.
+   */
+  code?: string;
+  /**
+   * מועדף — הארגז נכנס ל"ארגזים מועדפים".
+   *
+   * זו רשימת העבודה של הנגרייה: מה שבאמת מרכיבים, מתוך כל מה
+   * שקיים. היא נפרדת מהחדר ומהקטגוריה ואינה מחליפה אותם.
+   */
+  favorite?: boolean;
   /** באילו חדרים המוצר רלוונטי */
   rooms: RoomKind[];
   group: CatalogGroup;
   name: string;
+
   /** מפתח האיור של הארגז */
   glyph: string;
   doors?: number;
@@ -567,14 +625,24 @@ export interface CatalogItem extends Entity {
    */
   drawerStyle?: DrawerStyle;
   exposed?: ExposedSides;
+  exposedDepthMm?: number;
   backKind?: BackKind;
   backHeightMm?: number;
   rails?: RailSides;
   drawerBox?: DrawerBox;
+  doorCells?: number;
+  doubleDividers?: boolean;
   handles?: boolean;
   glassDoors?: boolean;
+  glassSides?: { start?: boolean; end?: boolean };
   led?: LedSpot[];
   shelfGapsMm?: number[];
+  /**
+   * חלקים שהארגז נבנה בלעדיהם — דופן משותפת, בלי תחתית או בלי תקרה.
+   * ארגז שתוכנן פתוח במכוון חייב לחזור פתוח מהספרייה, אחרת הוא
+   * מקבל לוח שלא נבנה לו מקום.
+   */
+  omit?: BoxSides;
   carcassFinishId?: string;
   carcassMaterialId?: string;
   frontFinishId?: string;
@@ -585,6 +653,7 @@ export interface CatalogItem extends Entity {
   backMaterialId?: string;
   level: UnitLevel;
   defaultWidthMm: number;
+
   /** רוחבי תקן נפוצים למוצר הזה */
   widthOptionsMm: number[];
   defaultHeightMm: number;
@@ -616,9 +685,74 @@ export interface CatalogItem extends Entity {
   parts?: CatalogGroupPart[];
 }
 
+/**
+ * תיאור הבנייה שעובר בין ארגז שעומד על הקיר לבין פריט בספרייה.
+ *
+ * זו רשימה אחת ולא שתי רשימות ידניות. שמירה לספרייה והנחה מהספרייה
+ * העתיקו כל אחת את השדות שהיא הכירה, ולכן כל מאפיין שנוסף לארגז
+ * נשמט מאחת מהן: "בלי תקרה" נעלם בשמירה וחזר כלוח מלא, וזכוכית
+ * בצד, עומק דופן זרה וחלוקת תאים לא עברו בכלל.
+ *
+ * מה שאינו כאן שייך למיקום ולא לבנייה — איפה הארגז עומד, מה מידותיו
+ * בפועל ומה מצב הייצור שלו — ואלה נקבעים בהנחה ולא בתבנית.
+ */
+export const REUSABLE_FIELDS = [
+  'glyph',
+  'doors',
+  'drawers',
+  'drawerCols',
+  'shelves',
+  'zones',
+  'opening',
+  'corner',
+  'blindMm',
+  'panelThicknessMm',
+  'drawerStyle',
+  'exposed',
+  'exposedDepthMm',
+  'backKind',
+  'backHeightMm',
+  'rails',
+  'drawerBox',
+  'doorCells',
+  'doubleDividers',
+  'handles',
+  'glassDoors',
+  'glassSides',
+  'led',
+  'shelfGapsMm',
+  'omit',
+  'carcassFinishId',
+  'carcassMaterialId',
+  'frontFinishId',
+  'frontMaterialId',
+  'exposedFinishId',
+  'exposedMaterialId',
+  'backFinishId',
+  'backMaterialId',
+] as const;
+
+export type ReusableField = (typeof REUSABLE_FIELDS)[number];
+
+/**
+ * מוציא את תיאור הבנייה מארגז או מפריט ספרייה.
+ * שדות ריקים מושמטים, כדי שהעתקה לא תכתוב `undefined` על ערך קיים.
+ */
+export function reusableSpec(
+  from: Partial<PlacedUnit> | Partial<CatalogItem>,
+): Partial<Pick<PlacedUnit, ReusableField>> {
+  const out: Record<string, unknown> = {};
+  for (const key of REUSABLE_FIELDS) {
+    const value = (from as Record<string, unknown>)[key];
+    if (value !== undefined) out[key] = value;
+  }
+  return out as Partial<Pick<PlacedUnit, ReusableField>>;
+}
+
 /* ------------------------------------------------------------------ */
 /* חומרים והגדרות                                                      */
 /* ------------------------------------------------------------------ */
+
 
 /**
  * איך מורכב לוח.
@@ -697,10 +831,14 @@ export interface Material extends Entity {
   sheetWidthMm: number;
   sheetHeightMm: number;
   /**
-   * עובי נומינלי, לתיאור בלבד.
-   * העובי האמיתי נקבע מול הלוח הפיזי ומשתנה בין משלוחים.
+   * העובי שהלוח הזה נחתך לפיו.
+   *
+   * זה מה שקובע את המידות הפנימיות של הארגז: גוף מסנדוויץ׳ 17 שנחתך
+   * כאילו הוא 18 נותן תחתית קצרה ב-2 מ"מ, וזה נמדד במסור. לוח בלי
+   * עובי נופל לעובי הכללי שבהגדרות.
    */
   thicknessMm?: number;
+
   /**
    * לאילו חלקים בארגז החומר הזה משמש.
    *
@@ -788,8 +926,16 @@ export function finishesForRole(
   return fit.length ? fit : finishes;
 }
 
-/** גבהים נפוצים של פלטה, במ"מ. הרוחב תמיד 1220. */
+/**
+ * מידות פלטה נפוצות, במ"מ.
+ *
+ * אלה הצעות ולא חוק: 122 הוא הרוחב המקובל, אבל יש ספקים שמגיעים
+ * ברוחב אחר, ולוח שיובא עם מידה משלו שומר אותה. הרוחב היה קבוע
+ * בקוד, ולכן עריכה של כל מאפיין אחר בלוח דרסה אותו בחזרה ל-1220.
+ */
+export const SHEET_WIDTHS_MM = [1220, 1250, 1830, 2070];
 export const SHEET_HEIGHTS_MM = [2440, 2750, 3050];
+/** הרוחב שנבחר ללוח חדש, כשלא נאמר אחרת. */
 export const SHEET_WIDTH_MM = 1220;
 
 /** תפקיד החלק במבנה הארון — נגזר מהחיתוך, לא מהלוח. */
@@ -958,13 +1104,8 @@ export interface Settings {
   backGrooveMm: number;
   /** מרווח סביב חזית — דלת קטנה מהפתח בכל צד */
   frontGapMm: number;
-  /**
-   * סוג הגב שכל ארגז חדש מקבל.
-   * לנגרייה יש דרך עבודה אחת לגב, ולבחור אותה מחדש בכל ארגז זו
-   * עבודה שחוזרת על עצמה. מי שרוצה אחרת בארגז מסוים משנה שם.
-   */
-  defaultBackKind: BackKind;
   /** המידות שחוזרות בכל פרויקט */
+
   defaults: ProjectDefaults;
   /** מחירי אביזרים, ליחידה */
   accessories: AccessoryPrices;

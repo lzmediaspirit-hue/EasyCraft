@@ -6,7 +6,11 @@ import { buildPlan } from './plan';
 import { outOfSight } from './designView';
 import { LockIcon, UnlockIcon } from '../../ui/icons';
 import { solveDrag } from './dragSolve';
-import type { PlacedUnit, Wall } from '../../db/types';
+import { alongWallMm } from '../../db/types';
+import type { PartSettings } from '../../costing/boards';
+
+import type { PlacedUnit, Project, Wall } from '../../db/types';
+
 
 /**
  * מבט תלת-ממדי על החדר.
@@ -37,8 +41,17 @@ export function WallIso({
   inside,
   finishHex,
   present = false,
+  project,
+  parts,
+  snap = true,
+  fitAt,
 }: {
+  /** הפרויקט — ממנו נגזרים הגוונים של מי שלא נבחר לו גוון משלו */
+  project?: Project;
+  /** העוביים שלפיהם נחתך, כדי שהציור והניסור יסכימו */
+  parts?: PartSettings;
   walls: Wall[];
+
   /** כל הארגזים בפרויקט — המבט הזה מציג את החדר כולו */
   units: PlacedUnit[];
   /** הקיר שעובדים עליו כרגע, מסומן בציור */
@@ -82,6 +95,16 @@ export function WallIso({
    * במצב הזה נשארים רק המשטחים, עם אור, צל וקרקע.
    */
   present?: boolean;
+  /** ההצמדה פעילה. כבויה = הארגז נוחת במקום שהאצבע לקחה אותו */
+  snap?: boolean;
+  /**
+   * התאמת התצוגה.
+   *
+   * המספר עצמו חסר משמעות; מה שקובע הוא שהוא השתנה. כך כפתור
+   * בסרגל הכלים מחזיר את המצלמה לזווית ההתחלתית בלי שהמצב שלה
+   * יצטרך לעלות למסך — היא שייכת לרגע ההסתכלות, לא לפרויקט.
+   */
+  fitAt?: number;
 }) {
   /*
    * זווית המבט נשמרת במצב ולא בהגדרות: היא שייכת לרגע ההסתכלות,
@@ -95,6 +118,8 @@ export function WallIso({
    * גם מה שמונע מהחדר להסתובב בכל פעם שמישהו נגע בארון.
    */
   const [locked, setLocked] = useState(false);
+  /** על מי הארגז עומד להינחת — מוצג בזמן הגרירה בלבד */
+  const [landing, setLanding] = useState<string | null>(null);
   /*
    * מצב הנחה: הארגז ביד עד שמניחים אותו או מבטלים.
    *
@@ -108,10 +133,21 @@ export function WallIso({
   const drag = useRef<{
     /** הארגז כפי שהיה בתחילת הגרירה — ממנו נמדד הכול, ולכן היא הפיכה */
     from: PlacedUnit;
+    /**
+     * שאר הקבוצה, כפי שהייתה בתחילת הגרירה.
+     *
+     * גם הם נמדדים מהמצב ההתחלתי ולא מהמצב הנוכחי: חישוב ההפרש
+     * מהמקור והוספתו למיקום שכבר עודכן צבר את אותה תנועה שוב ושוב,
+     * והמרווח בין שני ארגזים גדל מ-1,300 ל-3,320 בכמה אירועי מגע.
+     */
+    mates: PlacedUnit[];
+    /** היעד שכבר נבחר להנחה, כדי שהוא לא יקפוץ בין שני שכנים */
+    onId?: string;
     startX: number;
     startY: number;
     moved: boolean;
   } | null>(null);
+
   const orbit = useRef<{
     x: number;
     y: number;
@@ -127,8 +163,12 @@ export function WallIso({
    * מגע בכפתור, רענון של שאילתה — בנה את החדר כולו מחדש.
    */
   const scene = useMemo(
-    () => buildScene({ walls, units, activeWallId, selectedId, inside, finishHex, present, view }),
-    [walls, units, activeWallId, selectedId, inside, finishHex, present, view],
+    () =>
+      buildScene({
+        walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts,
+      }),
+    [walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts],
+
   );
   const { faces, backdrops, marks, floor, bounds, spin } = scene;
   /* הזווית שבאמת מצוירת — היא מוגבלת כדי לא לצאת אל מאחורי הקיר */
@@ -156,6 +196,18 @@ export function WallIso({
   useEffect(() => {
     setView((v) => ({ ...v, yawDeg: -headingRef.current }));
   }, [activeWallId]);
+
+  /*
+   * התאמת התצוגה מסרגל הכלים.
+   *
+   * המצלמה נשארת כאן — היא שייכת לרגע ההסתכלות ולא לפרויקט —
+   * ומה שעובר מבחוץ הוא בקשה ולא מצב. הבקשה הראשונה (`undefined`)
+   * אינה מאפסת דבר, כדי שפתיחת המסך לא תחטוף מבט שכבר נבחר.
+   */
+  useEffect(() => {
+    if (fitAt === undefined) return;
+    setView({ ...DEFAULT_VIEW, yawDeg: -headingRef.current });
+  }, [fitAt]);
 
   /* המסגרת שמכילה הכול. פרישה של אלפי נקודות לתוך Math.min יקרה, ומעל גבול מסוים גם נופלת */
   const pad = 300;
@@ -306,23 +358,46 @@ export function WallIso({
       walls,
       units,
       pxPerUnit,
+      snap,
+      onId: d.onId,
     });
     if (!next) return;
-    onMoveTo(d.from.id, next);
+    d.onId = next.onId;
+    onMoveTo(d.from.id, next.patch);
+    /*
+     * על מי הוא נוחת — כתוב, ולא נרמז בצבע.
+     * בציור החזית מצוירים גם קווי היישור עצמם; כאן יש שם היעד
+     * בלבד, כי קו על פאה מסובבת בתלת־ממד מטעה יותר משהוא עוזר.
+     */
+    setLanding(next.onId ? (units.find((u) => u.id === next.onId)?.name ?? null) : null);
 
     /*
      * קבוצה זזה יחד, באותו הפרש בדיוק. מה שנשמר הוא היחס בין
      * הארגזים — פינה שנבנתה נכון נשארת נכונה גם אחרי שהוזזה.
      */
-    const dx = (next.xMm ?? d.from.xMm) - d.from.xMm;
-    const dy = (next.yMm ?? d.from.yMm) - d.from.yMm;
-    if (!placing || (!dx && !dy)) return;
-    for (const mate of placing.from) {
-      if (mate.id === d.from.id || mate.free) continue;
-      const now = units.find((u) => u.id === mate.id);
-      if (!now) continue;
-      onMoveTo(mate.id, { xMm: now.xMm + dx, yMm: now.yMm + dy });
+    const dx = (next.patch.xMm ?? d.from.xMm) - d.from.xMm;
+    const dy = (next.patch.yMm ?? d.from.yMm) - d.from.yMm;
+    if (!d.mates.length || (!dx && !dy)) return;
+
+    /*
+     * הקבוצה כולה נבדקת לפני שהיא זזה. שכן שהיה יוצא מקצה הקיר עוצר
+     * את כל התנועה בגבול שלו, ולכן המרווחים בין הארגזים נשמרים —
+     * במקום שאחד ייעצר והשאר ימשיכו.
+     */
+    let limX = dx;
+    let limY = dy;
+    for (const mate of d.mates) {
+      const wall = walls.find((w) => w.id === mate.wallId);
+      if (wall) {
+        const room = Math.max(wall.lengthMm - alongWallMm(mate), 0);
+        limX = Math.min(Math.max(limX, -mate.xMm), room - mate.xMm);
+      }
+      limY = Math.max(limY, -mate.yMm);
     }
+    for (const mate of d.mates) {
+      onMoveTo(mate.id, { xMm: mate.xMm + limX, yMm: mate.yMm + limY });
+    }
+
   }
 
   return (
@@ -348,9 +423,19 @@ export function WallIso({
         if (placing && onMoveTo) {
           const anchor = units.find((u) => u.id === placing.ids[0]);
           if (anchor) {
-            drag.current = { from: anchor, startX: e.clientX, startY: e.clientY, moved: false };
+            drag.current = {
+              from: anchor,
+              mates: placing.ids
+                .filter((id) => id !== anchor.id)
+                .map((id) => units.find((u) => u.id === id))
+                .filter((u): u is PlacedUnit => !!u && !u.free),
+              startX: e.clientX,
+              startY: e.clientY,
+              moved: false,
+            };
             return;
           }
+
         }
         /*
          * כשהחדר נעול האצבע שייכת לארונות בלבד: אצבע על ארון גוררת
@@ -359,7 +444,14 @@ export function WallIso({
          */
         if (locked && !present) {
           if (held && onMoveTo) {
-            drag.current = { from: held, startX: e.clientX, startY: e.clientY, moved: false };
+            drag.current = {
+              from: held,
+              mates: [],
+              startX: e.clientX,
+              startY: e.clientY,
+              moved: false,
+            };
+
           } else {
             orbit.current = { x: e.clientX, y: e.clientY, from: view, moved: false, hit };
           }
@@ -401,6 +493,7 @@ export function WallIso({
         const d = drag.current;
         orbit.current = null;
         drag.current = null;
+        setLanding(null);
         e.currentTarget.releasePointerCapture(e.pointerId);
         /*
          * גם גרירה מסתיימת בבחירה: ארון שהועבר לקיר אחר צריך שהמסך
@@ -418,6 +511,7 @@ export function WallIso({
       onPointerCancel={() => {
         orbit.current = null;
         drag.current = null;
+        setLanding(null);
       }}
     >
       {/*
@@ -790,11 +884,21 @@ export function WallIso({
       </div>
     )}
 
-    {/* בזמן שארגז ביד, נאמר במפורש שהחדר עומד */}
-    {placing && !present && (
-      <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-stone-900/90 px-3 py-1 text-[11px] font-medium text-white">
-        גוררים למקום, ואז מניחים
+    {/*
+      על מי הארגז נוחת.
+      זה גובר על ההנחיה הכללית: ברגע שיש יעד, הוא מה שצריך לדעת.
+    */}
+    {landing && !present ? (
+      <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-teal-700 px-3 py-1 text-[11px] font-medium text-white">
+        נוחת על {landing}
       </span>
+    ) : (
+      /* בזמן שארגז ביד, נאמר במפורש שהחדר עומד */
+      placing && !present && (
+        <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-stone-900/90 px-3 py-1 text-[11px] font-medium text-white">
+          גוררים למקום, ואז מניחים
+        </span>
+      )
     )}
 
     {/*

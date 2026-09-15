@@ -1,45 +1,70 @@
-import type { CatalogGroup, RoomKind } from '../db/types';
+import type { CatalogGroup, Room } from '../db/types';
+import { CUSTOM_ROOM } from '../db/types';
 
-export interface RoomDef {
-  kind: RoomKind;
-  label: string;
-  /** תיאור קצר שמופיע בבחירת החדר */
-  hint: string;
-  icon: string;
-  /** הכרטיסיות שמוצגות בספרייה עבור החדר הזה, לפי הסדר */
-  groups: CatalogGroup[];
-}
+/** חדר כפי שהוא מגיע עם האפליקציה, לפני שנזרע. */
+export type SeedRoom = Omit<Room, 'createdAt' | 'updatedAt'>;
 
-export const ROOMS: RoomDef[] = [
+/**
+ * החדרים שמגיעים עם האפליקציה.
+ *
+ * אלה נקודת פתיחה בלבד. החדרים הם נתונים בטבלת `rooms`, והנגר
+ * מוסיף לעצמו כל חדר שהוא עובד עליו — חדר שירות, משרד, ממ״ד —
+ * ומסדר לו את הכרטיסיות שהוא רוצה לראות.
+ */
+export const SEED_ROOMS: SeedRoom[] = [
   {
-    kind: 'kitchen',
+    id: 'kitchen',
     label: 'מטבח',
     hint: 'תחתונים, עליונים, עמודות ומכשירי חשמל',
     icon: 'kitchen',
     groups: ['base', 'upper', 'tall', 'panel'],
+    sortOrder: 10,
+    isBuiltin: true,
   },
   {
-    kind: 'living',
+    id: 'living',
     label: 'סלון',
     hint: 'מזנוני טלוויזיה, ספריות ומדפים',
     icon: 'living',
     groups: ['base', 'upper', 'storage', 'panel'],
+    sortOrder: 20,
+    isBuiltin: true,
   },
   {
-    kind: 'bedroom',
+    id: 'bedroom',
     label: 'חדר שינה',
     hint: 'ארונות בגדים, שידות ויחידות עליונות',
     icon: 'bedroom',
     groups: ['storage', 'base', 'upper', 'panel'],
+    sortOrder: 30,
+    isBuiltin: true,
   },
   {
-    kind: 'custom',
-    label: 'שם חדש',
-    hint: 'חדר בהגדרה שלך — כל הספרייה זמינה',
-    icon: 'custom',
+    id: 'utility',
+    label: 'חדר שירות',
+    hint: 'ארון מכונות, כביסה, מדפים ואחסון',
+    icon: 'utility',
     groups: ['base', 'upper', 'tall', 'storage', 'panel'],
+    sortOrder: 40,
+    isBuiltin: true,
   },
 ];
+
+/**
+ * החדר ללא סוג — הוא אינו בטבלה.
+ *
+ * זה אינו חדר אלא היעדר חדר: המשתמש נותן לו שם משלו, וכל הספרייה
+ * זמינה בו. הוא נשאר בקוד כדי שלא יימחק ולא ישוכפל.
+ */
+export const CUSTOM_ROOM_DEF: SeedRoom = {
+  id: CUSTOM_ROOM,
+  label: 'שם חדש',
+  hint: 'חדר בהגדרה שלך — כל הספרייה זמינה',
+  icon: 'custom',
+  groups: ['base', 'upper', 'tall', 'storage', 'panel'],
+  sortOrder: 999,
+  isBuiltin: true,
+};
 
 export const GROUP_LABELS: Record<CatalogGroup, string> = {
   base: 'תחתונים',
@@ -48,10 +73,6 @@ export const GROUP_LABELS: Record<CatalogGroup, string> = {
   storage: 'ארונות',
   panel: 'דפנות ולוחות',
 };
-
-export function roomDef(kind: RoomKind): RoomDef {
-  return ROOMS.find((r) => r.kind === kind) ?? ROOMS[ROOMS.length - 1];
-}
 
 /** סדר כרטיסיות ברירת מחדל, כשלחדר אין הגדרה משלו. */
 export const GLYPH_GROUPS_FALLBACK: CatalogGroup[] = [

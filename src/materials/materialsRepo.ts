@@ -1,4 +1,6 @@
 import { db } from '../db/db';
+import { SHIPPED_FINISHES, SHIPPED_MATERIALS } from '../catalog/shipped';
+
 import { KITCHEN } from '../catalog/standards';
 import { CORES } from '../db/types';
 import type {
@@ -36,7 +38,6 @@ const DEFAULT_SETTINGS: Settings = {
   vatPct: 18,
   edgeFactoryPerM: 0,
   edgeConsumerPerM: 0,
-  defaultBackKind: 'thin',
   /*
    * המידות שחוזרות בכל פרויקט. הערכים כאן הם התקן שרוב הנגריות
    * עובדות בו, והם נקודת פתיחה — כל אחד מהם ניתן לשינוי במסך אחד.
@@ -149,6 +150,23 @@ async function runSeed(): Promise<void> {
     await db.settings.put({ ...DEFAULT_SETTINGS, updatedAt: now });
   }
   if ((await db.materials.count()) === 0) {
+    /*
+     * ספרייה שנבנתה בנגרייה מגיעה עם הלוחות והגוונים שלה, ואז הם
+     * אלה שנזרעים — עם המזהים המקוריים שלהם, כי הארגזים מפנים אליהם.
+     * בלי זה כל ארגז שנבנה עם גוון מפורש היה מגיע למכשיר חדש עם
+     * הפניה לגוון שאינו קיים.
+     */
+    if (SHIPPED_MATERIALS.length) {
+      await db.materials.bulkPut(
+        SHIPPED_MATERIALS.map((m) => ({ ...m, createdAt: now, updatedAt: now })),
+      );
+      if ((await db.finishes.count()) === 0 && SHIPPED_FINISHES.length) {
+        await db.finishes.bulkPut(
+          SHIPPED_FINISHES.map((f) => ({ ...f, createdAt: now, updatedAt: now })),
+        );
+      }
+      return;
+    }
     const materials = SEED_MATERIALS.map((m) => ({
       ...m,
       id: crypto.randomUUID(),
@@ -231,6 +249,38 @@ export const materialsRepo = {
       updatedAt: now,
     });
     return id;
+  },
+
+  /**
+   * כמה ארגזים משתמשים בלוח הזה — בפרויקטים, בספרייה ובברירות המחדל.
+   *
+   * לוח שנמחק בזמן שהוא מוצמד לארגזים משאיר אחריו הפניות ריקות:
+   * החלקים שלו יוצאים מהתמחור בלי שאיש רואה, והצעת מחיר יוצאת
+   * נמוכה. לכן המחיקה נעצרת כאן ולא מתגלה בהצעה.
+   */
+  async usage(id: string): Promise<number> {
+    const hits = (r: {
+      carcassMaterialId?: string;
+      frontMaterialId?: string;
+      exposedMaterialId?: string;
+      backMaterialId?: string;
+    }) =>
+      r.carcassMaterialId === id ||
+      r.frontMaterialId === id ||
+      r.exposedMaterialId === id ||
+      r.backMaterialId === id;
+
+    const [units, catalog, projects] = await Promise.all([
+      db.units.toArray(),
+      db.catalog.toArray(),
+      db.projects.toArray(),
+    ]);
+    return (
+      units.filter(hits).length +
+      catalog.filter(hits).length +
+      projects.filter((p) => Object.values(p.defaults ?? {}).some((c) => c?.materialId === id))
+        .length
+    );
   },
 
   /**

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
 import { isDark, shade } from '../../ui/color';
@@ -8,6 +8,9 @@ import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
 import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
+import { stackSnap } from './stacking';
+import { DragGuide } from './dragGuide';
+import type { Guide } from './dragGuide';
 import { blocked } from './collision';
 import { unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
@@ -15,7 +18,9 @@ import { outOfSight } from './designView';
 import { RulerMeasure, RulerTargets, rulerSpan } from './wallRuler';
 import type { RulerAxis } from './wallRuler';
 import { RAIL_WIDTH_MM, alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
-import type { PlacedUnit, RailSides, Wall } from '../../db/types';
+import { partChoice } from '../../costing/boards';
+import type { PlacedUnit, Project, RailSides, Wall } from '../../db/types';
+
 
 
 export type MeasureAxis = 'w' | 'h' | 'd';
@@ -34,7 +39,13 @@ type Props = {
   plan: PlanWall[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onMove: (id: string, patch: Partial<PlacedUnit>) => void;
+  /**
+   * הזזת ארגז. חסר = תצוגה בלבד, והגרירה אינה מתחילה כלל.
+   *
+   * זו הדרך שבה מי שאין לו רשות עריכה אינו מזיז ארגז בטעות: לא
+   * מסתירים ממנו את הציור, פשוט אין לאן לשלוח את התנועה.
+   */
+  onMove?: (id: string, patch: Partial<PlacedUnit>) => void;
   /** הסתרת חזיתות — תצוגת פנים הארונות */
   inside: boolean;
   /** גוון לכל ארגז, לפי מזהה הגוון */
@@ -58,8 +69,17 @@ type Props = {
    * להזיז ארגז בטעות.
    */
   work?: boolean;
-  /** העליונים יורדים מהתמונה */
+  /** הפרויקט — ממנו נגזר הגוון של חלק שלא נבחר לו גוון משלו */
+  project?: Project;
+  /**
+   * ההצמדה פעילה.
+   *
+   * כבויה = הארגז נוחת במקום שהאצבע לקחה אותו, מעוגל לסנטימטר
+   * שלם. זה המילוט מהצמדה שמושכת למקום הלא נכון.
+   */
+  snap?: boolean;
 };
+
 
 /**
  * הדמיית חזית של קיר אחד.
@@ -82,7 +102,10 @@ export function WallElevation({
   rulerPair,
   rulerAxis = 'w',
   work,
+  project,
+  snap = true,
 }: Props) {
+
   /*
    * חיפוי קיר מצויר ראשון: הוא מכסה את הקיר, והארגזים עומדים לפניו.
    * בלי הסדר הזה לוח שנוסף אחרון היה מסתיר את מה שהוא אמור לגבות.
@@ -104,6 +127,12 @@ export function WallElevation({
   };
 
   const svgRef = useRef<SVGSVGElement>(null);
+  /*
+   * מה מוצג בזמן הגרירה: על מי הארגז עומד להינחת, ולמה הוא לא
+   * עולה. זה מצב של רגע ולא של הפרויקט, ולכן הוא חי כאן ומתאפס
+   * בשחרור.
+   */
+  const [guide, setGuide] = useState<Guide | null>(null);
 
   const drag = useRef<{
     id: string;
@@ -115,8 +144,18 @@ export function WallElevation({
     /* מצב הנעילה כפי שהיה בתחילת הגרירה. בלעדיו הצמדה שקורית
        באמצע הגרירה הייתה מקפיאה אותה במקום */
     locked: boolean;
-    /* המיקום האחרון, כדי להחליט על הצמדה בשחרור ולא תוך כדי */
+    /*
+     * אי: המקום שלו ברצפת החדר בתחילת הגרירה.
+     *
+     * אי אינו נמדד מקיר, ולכן `xMm` שלו רדום. גרירה בחזית עדכנה
+     * דווקא אותו — הצורה לא זזה על המסך, והמיקום השמור השתנה בלי
+     * שאיש ראה. מה שזז כאן הוא המקום ברצפה, לאורך הקיר שרואים.
+     */
+    free?: { xMm: number; zMm: number };
+    /* היעד שכבר נבחר להנחה — כדי שהוא לא יקפוץ בין שני שכנים */
+    onId?: string;
   } | null>(null);
+
 
   // כשקו הגובה מוצג צריך מקום לצידו, אחרת המידה נחתכת
   const padX = showHeight ? 420 : 120;
@@ -136,6 +175,8 @@ export function WallElevation({
     onSelect(unit.id);
     // במצב מדידה ההקשה רק בוחרת ארגז, בלי להזיז אותו בטעות
     if (measure) return;
+    /* תצוגה בלבד: אין למי לשלוח את התנועה, ולכן אין גרירה */
+    if (!onMove) return;
     /*
      * קנה המידה נגזר מהטרנספורם האמיתי של ה-SVG ולא מרוחב האלמנט:
      * כשהציור משתלב במסגרת נמוכה הוא מוקטן וממורכז, ואז רוחב
@@ -161,24 +202,70 @@ export function WallElevation({
       originY: unit.yMm,
       scale: 1 / ctm.a,
       locked: !!unit.floorLocked,
+      free: unit.free ? { xMm: unit.free.xMm, zMm: unit.free.zMm } : undefined,
     };
+
   }
 
   function moveDrag(e: React.PointerEvent) {
     const d = drag.current;
-    if (!d) return;
+    /* בלי `onMove` הגרירה לא התחילה, ולכן אין כאן תנועה לפתור */
+    if (!d || !onMove) return;
     const unit = units.find((u) => u.id === d.id);
     if (!unit) return;
 
-    const rawX = d.originX + (e.clientX - d.startX) * d.scale;
+    const alongMm = (e.clientX - d.startX) * d.scale;
+    const rawX = d.originX + alongMm;
     // מסך גדל כלפי מטה, הקיר נמדד כלפי מעלה — ולכן הסימן הפוך
     const rawY = d.originY - (e.clientY - d.startY) * d.scale;
 
-    // סף ההצמדה במ"מ, שקול למרחק קבוע על המסך בכל קנה מידה
-    const tol = Math.max(SNAP, SNAP_PX * d.scale);
-    const x = snapX(rawX, unit, units, wall.lengthMm, corners, tol);
+    /*
+     * אי זז ברצפת החדר לאורך הקיר שרואים, ולא במידות הקיר שאינן
+     * בשימוש אצלו. הכיוון נלקח מהקיר עצמו, ולכן זה עובד גם בקיר
+     * שאינו אופקי.
+     */
+    if (d.free && unit.free && here) {
+      const a = (here.headingDeg * Math.PI) / 180;
+      const next = {
+        ...unit.free,
+        xMm: Math.round(d.free.xMm + alongMm * Math.cos(a)),
+        zMm: Math.round(d.free.zMm + alongMm * Math.sin(a)),
+      };
+      const y = d.locked ? d.originY : Math.max(Math.round(rawY), 0);
+      const probe = { ...unit, free: next, yMm: y };
+      const box = unitBox(probe, plan);
+      if (box && !blocked(probe, box, allUnits, plan)) onMove(d.id, { free: next, yMm: y });
+      return;
+    }
+
+
+    /*
+     * סף ההצמדה במ"מ, שקול למרחק קבוע על המסך בכל קנה מידה.
+     * אפס = ההצמדה כבויה, והארגז נוחת בדיוק במקום שהאצבע לקחה
+     * אותו: יעד שמרחקו ממנה קטן מאפס אינו קיים.
+     */
+    const tol = snap ? Math.max(SNAP, SNAP_PX * d.scale) : 0;
+
+    /*
+     * הנחה על ארגז אחר קודמת להצמדה הרגילה.
+     *
+     * כשמניחים ארגז על ארגז מבקשים פינה, ולא שני יעדים נפרדים
+     * שבמקרה נפגשו: התחתית של העליון על הראש של התחתון, מיושרת
+     * לתחילתו או לסופו. לכן שני הצירים נפתרים כאן יחד, ורק מי
+     * שלא מצא פינה ממשיך להצמדה שפותרת כל ציר לבדו.
+     */
+    const stack = snap && !d.locked
+      ? stackSnap(unit, rawX, rawY, units, tol, d.onId)
+      : null;
+    d.onId = stack?.onId;
+
+    const x = stack ? stack.xMm : snapX(rawX, unit, units, wall.lengthMm, corners, tol);
     // הגובה נמדד ביחס למקום שאליו הארגז הולך, ולא למקום שממנו יצא
-    const y = d.locked ? d.originY : snapY(rawY, unit, units, wall.heightMm, tol, x);
+    const y = stack
+      ? stack.yMm
+      : d.locked
+        ? d.originY
+        : snapY(rawY, unit, units, wall.heightMm, tol, x);
     /*
      * שני ארגזים לא עומדים באותו מקום. כשהיעד תפוס מנסים קודם
      * להזיז רק בציר אחד — כך גרירה לאורך קיר מלא עדיין זזה במקום
@@ -187,14 +274,15 @@ export function WallElevation({
      * ארגז שכבר חופף במקום שהוא עומד בו הוא היוצא מן הכלל: חסימה
      * שם הייתה נועלת אותו שם לתמיד, ודווקא ממנו צריך לצאת.
      */
-    const here = unitBox(unit, plan);
-    const stuck = !!here && blocked(unit, here, allUnits, plan);
+    const hereBox = unitBox(unit, plan);
+    const stuck = !!hereBox && blocked(unit, hereBox, allUnits, plan);
     const at = (nx: number, ny: number) => {
       const probe = { ...unit, xMm: nx, yMm: ny };
       const b = unitBox(probe, plan);
       return !!b && (stuck || !blocked(probe, b, allUnits, plan));
     };
-    const [fx, fy] = at(x, y)
+    const landed = at(x, y);
+    const [fx, fy] = landed
       ? [x, y]
       : at(x, unit.yMm)
         ? [x, unit.yMm]
@@ -202,6 +290,31 @@ export function WallElevation({
           ? [unit.xMm, y]
           : [unit.xMm, unit.yMm];
     onMove(d.id, { xMm: fx, yMm: fy });
+
+    /*
+     * מה שמוצג בזמן הגרירה.
+     *
+     * נעילה לרצפה היא הדבר היחיד כאן שמסרב בשקט: מי שמושך ארגז
+     * נעול כלפי מעלה ראה אותו זז לצדדים בלבד, בלי שאיש אמר למה.
+     * עכשיו זה כתוב, יחד עם מה לעשות.
+     */
+    const lifting = !d.locked ? false : Math.abs(rawY - d.originY) > 60;
+    setGuide(
+      stack && landed
+        ? {
+            kind: 'stack',
+            onId: stack.onId,
+            name: units.find((u) => u.id === stack.onId)?.name ?? 'הארגז שמתחת',
+            edge: stack.edge,
+            onCounter: stack.onCounter,
+            xMm: stack.xMm,
+            yMm: stack.yMm,
+            widthMm: alongWallMm(unit),
+          }
+        : lifting
+          ? { kind: 'locked' }
+          : null,
+    );
   }
 
   function endDrag(e: React.PointerEvent) {
@@ -218,6 +331,7 @@ export function WallElevation({
       }
     }
     drag.current = null;
+    setGuide(null);
   }
 
   return (
@@ -360,8 +474,13 @@ export function WallElevation({
          * הגוף עצמו, ולכן הוא נצבע בגוון הגוף — וזה מה שהלקוח יראה
          * כשייפתח הארון.
          */
-        const frontFinish = u.frontFinishId ?? u.finishId;
-        const shownFinish = inside ? u.carcassFinishId : frontFinish;
+        /*
+         * הגוון נפתר כמו בתמחור: הארגז גובר על הפרויקט. קודם נקרא
+         * כאן רק השדה של הארגז, ולכן גוון שנבחר לפרויקט כולו לא הגיע
+         * לשרטוט — הלקוח ראה חזית לבנה בזמן שנבחרה לו אדומה.
+         */
+        const shownFinish = partChoice(u, inside ? 'carcass' : 'front', project).finishId;
+
         /*
          * במצב תהליך עבודה הצבע הוא הדוח: מי שנכנס למסך רואה מיד
          * מה נתקע ומה מוכן, ולכן הגוון שנבחר ללקוח נדחק הצידה.
@@ -399,8 +518,16 @@ export function WallElevation({
         const awayMm = shadow ? Math.max(shadow.awayMm, 0) : 0;
         // הגב יושב עמוק יותר ולכן נראה כהה מעט מהגוף; בלי גב רואים את הקיר
         const backKind = u.backKind ?? 'thin';
+        /* לגב יש גוון משלו כשנבחר לו אחד; אחרת הוא הצללה של מה שרואים */
+        const backHex = partChoice(u, 'back', project).finishId;
+        const backBase = (backHex && finishHex[backHex]) || hex;
         const backFill =
-          backKind === 'none' ? null : hex ? shade(hex, backKind === 'carcass' ? 0.9 : 0.82) : '#f0ede8';
+          backKind === 'none'
+            ? null
+            : backBase
+              ? shade(backBase, backKind === 'carcass' ? 0.9 : 0.82)
+              : '#f0ede8';
+
 
         return (
           <g
@@ -658,6 +785,11 @@ export function WallElevation({
       )}
       {span && (
         <RulerMeasure span={span} axis={rulerAxis} wall={wall} stroke={stroke} flip={flip} />
+      )}
+
+      {/* מה שמוצג בזמן הגרירה: על מי נוחתים, או למה לא עולים */}
+      {guide && (
+        <DragGuide guide={guide} wall={wall} stroke={stroke} flip={flip} />
       )}
     </svg>
   );

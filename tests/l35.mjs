@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { setup, addUnit } from './mk.mjs';
+import { setup, addNamed } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const fail = [];
 const ok = (c, m, x = '') => { console.log((c ? 'PASS ' : 'FAIL ') + m + (x ? ' — ' + x : '')); if (!c) fail.push(m); };
@@ -19,7 +19,7 @@ const table = (name) => page.evaluate(async (n) => {
 }, name);
 
 await setup(page, { name: 'מלאי אוטומטי' });
-await addUnit(page, 0);
+await addNamed(page, /^ארגז שתי דלתות/);
 await btn('סיום עריכה').click(); await page.waitForTimeout(400);
 await btn(/^חישוב/).click(); await page.waitForTimeout(1600);
 await dlg().getByRole('button', { name: /מכירה והתחלת עבודה/ }).click(); await page.waitForTimeout(900);

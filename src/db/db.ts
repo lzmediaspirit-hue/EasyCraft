@@ -1,4 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
+
+import { fillCodes, type CodeRow } from '../catalog/codes';
 import type {
   Attachment,
   CatalogItem,
@@ -6,6 +8,7 @@ import type {
   Customer,
   Finish,
   Material,
+  Room,
   PlacedUnit,
   Project,
   ProjectPrice,
@@ -36,6 +39,7 @@ export const db = new Dexie('easycraft') as Dexie & {
   stages: EntityTable<ProjectStage, 'id'>;
   attachments: EntityTable<Attachment, 'id'>;
   consumption: EntityTable<Consumption, 'id'>;
+  rooms: EntityTable<Room, 'id'>;
 };
 
 db.version(1).stores({
@@ -519,3 +523,94 @@ db.version(19)
         if (i.defaultHeightMm === 870 || i.defaultHeightMm === 820) i.defaultHeightMm = 880;
       }),
   );
+
+/*
+ * סוג הגב של ארגז חדש התאחד על שדה אחד.
+ *
+ * היו שניים בשמות דומים: `defaultBackKind` בשורש ההגדרות, שאליו
+ * כתב מסך ההגדרות, ו-`defaults.backKind`, שממנו נולד כל ארגז. לכן
+ * הבחירה במסך נשמרה ולא השפיעה. כאן עוברת הבחירה שכבר נעשתה אל
+ * השדה האמיתי, כדי שמי שביקש גב אחר יקבל אותו סוף סוף.
+ *
+ * רק כשהיא באמת בחירה: 'thin' הוא ערך ברירת המחדל של שני השדות,
+ * ואי אפשר להבחין בו בין מי שבחר לבין מי שלא נגע. לכן מועברת רק
+ * בחירה שאינה ברירת המחדל, ורק כשהצד השני עדיין עליה.
+ */
+db.version(20)
+  .stores(TABLES_V14)
+  .upgrade((tx) =>
+    tx
+      .table('settings')
+      .toCollection()
+      .modify((s: { defaultBackKind?: string; defaults?: { backKind?: string } }) => {
+        const chose = s.defaultBackKind && s.defaultBackKind !== 'thin';
+        if (chose && s.defaults && (s.defaults.backKind ?? 'thin') === 'thin') {
+          s.defaults.backKind = s.defaultBackKind;
+        }
+        delete s.defaultBackKind;
+      }),
+  );
+
+/*
+ * מק״ט לכל ארגז בספרייה.
+ *
+ * עד כאן לארגז היה מזהה פנימי בלבד, שאיש אינו רואה ואי אפשר לכתוב
+ * על מדבקה. המק״ט הוא מה שהנגר קורא לו בשמו — והוא גם מה שמונע
+ * כפילות: שמירה או ייבוא תחת מק״ט קיים מעדכנים את הארגז ההוא.
+ *
+ * הסדר כאן הוא סדר הספרייה, כדי שהמספור יהיה קריא ולא אקראי.
+ */
+db.version(21)
+  .stores(TABLES_V14)
+  .upgrade(async (tx) => {
+    /* מק״ט לכל ארגז שכבר בספרייה, לפי אותו כלל שבו נזרעת חדשה */
+    const rows = (await tx.table('catalog').toArray()) as CodeRow[];
+    for (const { id, code } of fillCodes(rows)) await tx.table('catalog').update(id, { code });
+  });
+
+/*
+ * החדרים הופכים לנתונים.
+ *
+ * עד כאן היו שלושה חדרים כתובים בקוד, ונגר שעובד גם על חדר
+ * שירות או על משרד נאלץ לבחור "חדר בהגדרה אישית" ולאבד את
+ * הסינון לפי חדר. הטבלה נזרעת בהפעלה הראשונה מ-`SEED_ROOMS`.
+ */
+const TABLES_V22 = { ...TABLES_V14, rooms: 'id, sortOrder' } as const;
+
+db.version(22).stores(TABLES_V22);
+
+/*
+ * מה שהוסר — הוסר.
+ *
+ * הסרה סימנה `hiddenAt` בלבד, והארגז נשאר במכשיר: הוא לא הופיע
+ * ברשימות אבל יצא בכל גיבוי, וחזר עם הספרייה למכשיר הבא. נגר
+ * שניקה את הספרייה שלו מצא את מה שמחק חוזר דרך הדלת האחורית.
+ *
+ * כאן הם נמחקים בפועל. פרויקטים אינם נפגעים — ארגז שהונח שומר את
+ * המידות שלו בעצמו ואינו נשען על הספרייה.
+ *
+ * ובאותה הזדמנות: שני ארגזים לא יכולים לשאת אותו מק״ט. מי שכבר
+ * הספיק לצבור כפילות — הראשון נשאר, והשאר נמחקים.
+ */
+db.version(23)
+  .stores(TABLES_V22)
+  .upgrade(async (tx) => {
+    const rows = (await tx.table('catalog').toArray()) as {
+      id: string;
+      code?: string;
+      hiddenAt?: number;
+      sortOrder: number;
+    }[];
+    const drop = rows.filter((r) => r.hiddenAt).map((r) => r.id);
+
+    const keep = new Map<string, string>();
+    for (const row of rows
+      .filter((r) => !r.hiddenAt)
+      .sort((a, b) => a.sortOrder - b.sortOrder)) {
+      const code = row.code?.toUpperCase();
+      if (!code) continue;
+      if (keep.has(code)) drop.push(row.id);
+      else keep.set(code, row.id);
+    }
+    if (drop.length) await tx.table('catalog').bulkDelete(drop);
+  });

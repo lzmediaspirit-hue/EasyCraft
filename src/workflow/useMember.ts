@@ -12,8 +12,18 @@ function useCurrentMemberId(): string | null {
 /**
  * המשתמש המחובר.
  * `undefined` עוד נטען; `null` אין אף אחד — ואז מוצג מסך הכניסה.
+ *
+ * חשבון שהושבת או נמחק אינו מחובר, וגם החיבור השמור שלו נמחק. בלי
+ * זה השבתה חוסמת רק כניסה חדשה: מי שכבר היה מחובר נשאר עם ההרשאות
+ * שלו עד שיצא ביוזמתו, וזה בדיוק מה שההשבתה באה למנוע.
  */
 export function useCurrentMember(): TeamMember | null | undefined {
   const id = useCurrentMemberId();
-  return useLiveQuery(async () => (id ? ((await teamRepo.get(id)) ?? null) : null), [id]);
+  return useLiveQuery(async () => {
+    if (!id) return null;
+    const member = await teamRepo.get(id);
+    if (member?.active) return member;
+    session.signOut();
+    return null;
+  }, [id]);
 }

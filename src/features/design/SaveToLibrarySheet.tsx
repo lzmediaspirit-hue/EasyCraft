@@ -5,7 +5,17 @@ import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { Pill } from '../../ui/Pill';
 import { cm } from '../../ui/units';
-import type { PlacedUnit } from '../../db/types';
+import { reusableSpec } from '../../db/types';
+import type { CatalogGroup, PlacedUnit, UnitLevel } from '../../db/types';
+
+/** קבוצה סבירה לארגז שהמקור שלו כבר לא בספרייה */
+const GROUP_BY_LEVEL: Record<UnitLevel, CatalogGroup> = {
+  floor: 'base',
+  wall: 'upper',
+  tall: 'tall',
+};
+
+
 
 /**
  * שמירת ארגז שנערך בחזרה לספרייה.
@@ -31,52 +41,44 @@ export function SaveToLibrarySheet({
   const target = canUpdate && mode === 'update' ? source : undefined;
 
   async function save() {
-    if (saving || !source) return;
+    if (saving) return;
     setSaving(true);
+
     await catalogRepo.saveCustom({
+      /*
+       * תיאור הבנייה נלקח מרשימה אחת משותפת. קודם הועתקו כאן שדות
+       * ביד, וכל מאפיין שנוסף לארגז אחר כך נשמט בשקט — "בלי תקרה"
+       * חזר מהספרייה עם תקרה.
+       */
+      ...reusableSpec(unit),
       id: target?.id,
-      rooms: source.rooms,
-      group: source.group,
+      /*
+       * כשפריט המקור נמחק מהספרייה, הארגז שעל הקיר עדיין מחזיק את
+       * כל המפרט שלו — ולכן אפשר לשמור אותו כארגז חדש. רק המידע
+       * הקטלוגי חסר, ורק הוא נגזר: קבוצה מהמפלס, וכל החדרים.
+       */
+      rooms: source?.rooms ?? ['kitchen', 'living', 'bedroom'],
+      group: source?.group ?? GROUP_BY_LEVEL[unit.level],
       name: name.trim() || unit.name,
       glyph: unit.glyph,
-      doors: unit.doors,
-      drawers: unit.drawers,
-      drawerCols: unit.drawerCols,
-      shelves: unit.shelves,
-      zones: unit.zones,
-      opening: unit.opening,
-      corner: unit.corner,
-      blindMm: unit.blindMm,
-      panelThicknessMm: unit.panelThicknessMm,
-      drawerStyle: unit.drawerStyle,
-      exposed: unit.exposed,
-      backKind: unit.backKind,
-      backHeightMm: unit.backHeightMm,
-      rails: unit.rails,
-      handles: unit.handles,
-      glassDoors: unit.glassDoors,
-      led: unit.led,
-      shelfGapsMm: unit.shelfGapsMm,
-      carcassFinishId: unit.carcassFinishId,
-      carcassMaterialId: unit.carcassMaterialId,
+
+      /* גוון חזית מגרסה ישנה נשמר בשדה אחר, והוא עדיין הגוון שנבחר */
       frontFinishId: unit.frontFinishId ?? unit.finishId,
-      frontMaterialId: unit.frontMaterialId,
-      exposedFinishId: unit.exposedFinishId,
-      exposedMaterialId: unit.exposedMaterialId,
-      backFinishId: unit.backFinishId,
-      backMaterialId: unit.backMaterialId,
       level: unit.level,
+
       defaultWidthMm: unit.widthMm,
       // הרוחב הנוכחי נכנס לרשימת מידות התקן, כדי שיהיה זמין בבחירה מהירה
-      widthOptionsMm: [...new Set([...(source.widthOptionsMm ?? []), unit.widthMm])].sort(
+      widthOptionsMm: [...new Set([...(source?.widthOptionsMm ?? []), unit.widthMm])].sort(
         (a, b) => a - b,
       ),
+
       defaultHeightMm: unit.heightMm,
       defaultDepthMm: unit.depthMm,
       defaultYMm: unit.yMm,
       socleMm: unit.socleMm,
       counterMm: unit.counterMm,
-      note: source.note,
+      note: source?.note,
+
     });
     onClose();
   }
@@ -86,7 +88,8 @@ export function SaveToLibrarySheet({
       title="שמירה לספרייה"
       onClose={onClose}
       footer={
-        <PrimaryButton disabled={!source || saving || !name.trim()} onClick={save}>
+        <PrimaryButton disabled={saving || !name.trim()} onClick={save}>
+
           {target ? 'עדכון הפריט' : 'שמירה כארגז חדש'}
         </PrimaryButton>
       }

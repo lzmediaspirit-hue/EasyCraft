@@ -1,10 +1,13 @@
 import type { Placement as PlanPlacement } from '../design/autoPlan';
+import { matchCatalog } from '../design/planMatch';
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { projectCosting, type ProjectCosting } from '../../costing/boards';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { releaseConsumption } from '../../materials/consumption';
+import { reusableSpec } from '../../db/types';
 import type {
+
   CatalogItem,
   PartChoice,
   PartRole,
@@ -104,7 +107,13 @@ export const projectsRepo = {
    * מה שלא מועתק הוא מה ששייך למכירה הקודמת ולא לתכנון: הפרויקט
    * החדש אינו מכור, אין לו תשלומים, אין לו קבצים ואין לו היסטוריית
    * ייצור. הוא הצעה חדשה שנראית כמו הקודמת.
+   *
+   * המחירים המיוחדים של הפרויקט כן עוברים. מחיר שנקבע ללוח מסוים הוא
+   * המחיר שהנגר משלם עליו בפועל, ודירה שנייה באותו בניין נבנית מאותם
+   * לוחות — בלעדיו ההצעה המשוכפלת חוזרת למחירון ומשתנה בעשרות אחוזים
+   * בלי שאיש ביקש.
    */
+
   async duplicate(id: string, name?: string): Promise<Project | undefined> {
     const source = await db.projects.get(id);
     if (!source) return undefined;
@@ -121,14 +130,16 @@ export const projectsRepo = {
       updatedAt: now,
     };
 
-    const [walls, units] = await Promise.all([
+    const [walls, units, prices] = await Promise.all([
       db.walls.where('projectId').equals(id).toArray(),
       db.units.where('projectId').equals(id).toArray(),
+      db.projectPrices.where('projectId').equals(id).toArray(),
     ]);
     /* מזהה חדש לכל קיר, והארגזים עוברים איתו */
     const wallId = new Map(walls.map((w) => [w.id, crypto.randomUUID()]));
 
-    await db.transaction('rw', db.projects, db.walls, db.units, async () => {
+    await db.transaction('rw', db.projects, db.walls, db.units, db.projectPrices, async () => {
+
       await db.projects.add(project);
       await db.walls.bulkAdd(
         walls.map((w) => ({
@@ -154,7 +165,18 @@ export const projectsRepo = {
           updatedAt: now,
         })),
       );
+      /* המחיר נקבע לשורה של גוון וחומר, והמפתח הזה זהה בכל פרויקט */
+      await db.projectPrices.bulkAdd(
+        prices.map((p) => ({
+          ...p,
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
     });
+
 
     await stagesRepo.ensure(project.id, false);
     return project;
@@ -297,7 +319,13 @@ export const unitsRepo = {
         name: part.unit.name ?? item.name,
         glyph: part.unit.glyph ?? item.glyph,
         xMm: xMm + part.dxMm,
-        yMm: part.dyMm,
+        /*
+         * גובה ההנחה הוא הבסיס ששמור בצירוף ועוד ההפרש של החלק.
+         * קודם נלקח ההפרש בלבד, ולכן קבוצה של ארונות תלויים שנשמרה
+         * בגובה 1,500 הונחה כולה על הרצפה.
+         */
+        yMm: item.defaultYMm + part.dyMm,
+
         createdAt: now + i,
         updatedAt: now + i,
       } as PlacedUnit);
@@ -316,42 +344,23 @@ export const unitsRepo = {
     const now = Date.now();
     const { defaults } = await settingsRepo.get();
     const unit: PlacedUnit = {
+      /*
+       * כל תיאור הבנייה שנשמר בפריט, מרשימה אחת משותפת עם השמירה
+       * לספרייה. ככה מאפיין שנוסף לארגז אינו נשמט באחד משני הכיוונים.
+       */
+      ...reusableSpec(item),
       id: crypto.randomUUID(),
       projectId,
       wallId,
       catalogItemId: item.id,
       name: item.name,
       glyph: item.glyph,
-      doors: item.doors,
-      drawers: item.drawers,
-      drawerCols: item.drawerCols,
-      shelves: item.shelves,
-      zones: item.zones,
-      opening: item.opening,
-      corner: item.corner,
-      blindMm: item.blindMm,
-      panelThicknessMm: item.panelThicknessMm,
-      // גימור שנשמר עם הפריט חוזר איתו, כדי שלא יידרש אותו כיוונון שוב
-      drawerStyle: item.drawerStyle,
+      // תיבת המגירה היא דרך העבודה של הנגרייה, ולא מאפיין של הפריט
       drawerBox: defaults.drawerBox,
-      exposed: item.exposed,
       // הגב שהפריט הגיע איתו, ואם אין — דרך העבודה של הנגרייה
       backKind: item.backKind ?? defaults.backKind,
-      backHeightMm: item.backHeightMm,
-      rails: item.rails,
-      handles: item.handles,
-      glassDoors: item.glassDoors,
-      led: item.led,
-      shelfGapsMm: item.shelfGapsMm,
-      carcassFinishId: item.carcassFinishId,
-      carcassMaterialId: item.carcassMaterialId,
-      frontFinishId: item.frontFinishId,
-      frontMaterialId: item.frontMaterialId,
-      exposedFinishId: item.exposedFinishId,
-      exposedMaterialId: item.exposedMaterialId,
-      backFinishId: item.backFinishId,
-      backMaterialId: item.backMaterialId,
       level: item.level,
+
       xMm,
       /*
        * ארגז שעומד על הרצפה מתחיל עליה, ולא בגובה שנשמר בספרייה.
@@ -389,13 +398,33 @@ export const unitsRepo = {
    * הארגזים הקיימים נמחקים תחילה: הצעה היא מטבח שלם, ולא שכבה
    * נוספת מעל מה שכבר עומד על הקיר. הביטול נשמר בהיסטוריה של
    * המסך, ולכן אין כאן גיבוי משלנו.
+   *
+   * לפני המחיקה נבדק שכל ההצעה ניתנת להנחה. ההצעה מפנה לארגזי התקן,
+   * ומי שהחליף את הספרייה בשלו אינו מחזיק אותם: קודם נמחק מה שעמד
+   * על הקיר ואחר כך דולגו הפריטים שלא נמצאו, והפרויקט נשאר ריק.
    */
-  async applyPlan(projectId: string, placements: PlanPlacement[]): Promise<void> {
-    const items = new Map((await db.catalog.toArray()).map((i) => [i.id, i]));
+  async applyPlan(
+    projectId: string,
+    placements: PlanPlacement[],
+  ): Promise<{ ok: true } | { ok: false; missing: number }> {
+    /*
+     * ההצעה מדברת בתפקידים, והספרייה היא של הנגרייה: כל תפקיד
+     * מתורגם לארגז שקיים כאן בפועל, ולא למפתח של ארגזי התקן.
+     */
+    const items = (await db.catalog.toArray()).filter((i) => !i.hiddenAt);
+    const chosen = new Map<string, CatalogItem>();
+    for (const p of placements) {
+      const item = matchCatalog(p.catalogKey, items, p.widthMm);
+      if (item) chosen.set(`${p.catalogKey}|${p.widthMm}`, item);
+    }
+    const missing = placements.filter(
+      (p) => !chosen.has(`${p.catalogKey}|${p.widthMm}`),
+    ).length;
+    if (missing) return { ok: false, missing };
+
     await db.units.where('projectId').equals(projectId).delete();
     for (const p of placements) {
-      const item = items.get(p.catalogKey);
-      if (!item) continue;
+      const item = chosen.get(`${p.catalogKey}|${p.widthMm}`)!;
       const unit = await this.add(projectId, p.wallId, item, p.xMm, p.widthMm);
       if (p.free || p.blindMm) {
         await this.update(unit.id, {
@@ -404,6 +433,7 @@ export const unitsRepo = {
         });
       }
     }
+    return { ok: true };
   },
 
   async update(id: string, patch: Partial<Omit<PlacedUnit, 'id'>>): Promise<void> {
@@ -418,13 +448,18 @@ export const unitsRepo = {
    * משכפל ארגז לאותו קיר.
    * הרוב המוחלט של קיר הוא אותו ארגז שוב ושוב במידה אחרת, ולבנות
    * כל אחד מחדש מהספרייה זו עבודה שכבר נעשתה.
+   *
+   * סימוני הייצור אינם מועתקים: הארגז החדש הוא עבודה שעוד לא נעשתה.
+   * בלי זה שכפול של ארגז שכבר הותקן ייצר ארגז שני שנראה מותקן, והוא
+   * יוצא מרשימת מה שנשאר לחתוך בלי שאיש חתך אותו.
    */
   async duplicate(id: string, xMm: number): Promise<PlacedUnit | undefined> {
     const source = await db.units.get(id);
     if (!source) return undefined;
     const now = Date.now();
+    const { work: _fresh, ...rest } = source;
     const copy: PlacedUnit = {
-      ...source,
+      ...rest,
       id: crypto.randomUUID(),
       xMm,
       createdAt: now,

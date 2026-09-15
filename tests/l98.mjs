@@ -11,7 +11,30 @@ page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
 
 const btn = (re) => page.getByRole('button', { name: re }).first();
 const dlg = () => page.getByRole('dialog').last();
-const box = () => dlg().locator('textarea');
+const picker = () => dlg().getByLabel('בחירת קובץ גיבוי');
+const TMP = '/tmp/l98-files';
+await import('node:fs').then((fs) => fs.mkdirSync(TMP, { recursive: true }));
+
+/** לוחצים על כפתור ייצוא, ומקבלים את מה שירד — כקובץ, לא כטקסט */
+async function download(name) {
+  const [dl] = await Promise.all([
+    page.waitForEvent('download'),
+    dlg().getByRole('button', { name, exact: true }).click(),
+  ]);
+  const path = `${TMP}/${dl.suggestedFilename()}`;
+  await dl.saveAs(path);
+  const fs = await import('node:fs');
+  return { path, name: dl.suggestedFilename(), json: JSON.parse(fs.readFileSync(path, 'utf8')) };
+}
+
+/** כותב גיבוי לקובץ ובוחר אותו בבורר — כמו שהמשתמש עושה */
+async function choose(obj, file = 'pick.json') {
+  const fs = await import('node:fs');
+  const path = `${TMP}/${file}`;
+  fs.writeFileSync(path, typeof obj === 'string' ? obj : JSON.stringify(obj));
+  await picker().setInputFiles(path);
+  await page.waitForTimeout(400);
+}
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
   (cond ? pass++ : fail++);
@@ -31,6 +54,7 @@ const counts = () =>
       units: await db.units.count(),
       walls: await db.walls.count(),
       names: catalog.map((i) => i.name),
+      codes: catalog.map((i) => i.code),
     };
   });
 
@@ -51,21 +75,18 @@ ok('יש מדור גיבוי בהגדרות', (await page.innerText('main')).inc
 await btn(/גיבוי והעברת נתונים/).click(); await page.waitForTimeout(700);
 await page.screenshot({ path: SP + 'L98-1-sheet.png' });
 
-/* ---- הוצאה ---- */
-await dlg().getByRole('button', { name: 'הספרייה' }).click();
-await page.waitForTimeout(700);
-const libText = await box().inputValue();
-let lib = null;
-try { lib = JSON.parse(libText); } catch { /* נבדק למטה */ }
-ok('ייצוא ספרייה מחזיר JSON תקין', !!lib && lib.app === 'easycraft' && lib.kind === 'library');
+/* ---- הוצאה לקובץ ---- */
+const libFile = await download('הספרייה');
+const lib = libFile.json;
+ok('ייצוא ספרייה יורד כקובץ JSON', lib.app === 'easycraft' && lib.kind === 'library', libFile.name);
+ok('שם הקובץ אומר מה יש בו', /^easycraft-library-\d{4}-\d{2}-\d{2}\.json$/.test(libFile.name), libFile.name);
 ok('הספרייה כוללת את כל הארגזים', lib?.tables?.catalog?.length === before.catalog, `${lib?.tables?.catalog?.length} מול ${before.catalog}`);
 ok('הספרייה אינה כוללת לקוחות', !lib?.tables?.customers);
-ok('נאמר כמה ארגזים יצאו', (await dlg().innerText()).includes(`${before.catalog} ארגזים בספרייה`));
+ok('נאמר כמה ארגזים ירדו', (await dlg().innerText()).includes(`${before.catalog} ארגזים ירדו`));
 
-await dlg().getByRole('button', { name: 'הכול' }).click();
-await page.waitForTimeout(800);
-const allText = await box().inputValue();
-const all = JSON.parse(allText);
+const allFile = await download('הכול');
+const all = allFile.json;
+ok('גיבוי מלא יורד כקובץ', /^easycraft-backup-\d{4}-\d{2}-\d{2}\.json$/.test(allFile.name), allFile.name);
 ok('ייצוא מלא: לקוחות, פרויקטים, קירות וארגזים', all.kind === 'all'
   && all.tables.customers.length === before.customers
   && all.tables.projects.length === before.projects
@@ -74,11 +95,9 @@ ok('ייצוא מלא: לקוחות, פרויקטים, קירות וארגזים
   JSON.stringify({ c: all.tables.customers.length, p: all.tables.projects.length, u: all.tables.units.length }));
 ok('גם הגדרות, לוחות וגוונים יצאו', all.tables.settings.length >= 1 && all.tables.materials.length >= 1 && all.tables.finishes.length >= 1);
 
-/* ---- קלט שאינו גיבוי ---- */
-await box().fill('שלום');
-await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).click();
-await page.waitForTimeout(500);
-ok('טקסט שאינו גיבוי נעצר בהודעה ברורה', (await dlg().innerText()).includes('אינו קובץ גיבוי'));
+/* ---- קובץ שאינו גיבוי ---- */
+await choose('שלום', 'junk.json');
+ok('קובץ שאינו גיבוי נעצר בהודעה ברורה', (await dlg().innerText()).includes('אינו קובץ גיבוי'));
 
 /* ---- החלפה: הספרייה שהנגר בנה מחליפה את זו שהגיעה עם האפליקציה ---- */
 const mine = {
@@ -87,7 +106,7 @@ const mine = {
 };
 await dlg().getByRole('button', { name: 'החלפה מלאה' }).click();
 await page.waitForTimeout(300);
-await box().fill(JSON.stringify(mine));
+await choose(mine, 'mine.json');
 await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).click();
 await page.waitForTimeout(1000);
 const afterReplace = await counts();
@@ -105,27 +124,36 @@ const more = {
 };
 await dlg().getByRole('button', { name: 'מיזוג' }).click();
 await page.waitForTimeout(300);
-await box().fill(JSON.stringify(more));
+await choose(more, 'more.json');
 await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).click();
 await page.waitForTimeout(900);
 const afterMerge = await counts();
 ok('מיזוג הוסיף ולא מחק', afterMerge.catalog === 2 && afterMerge.names.includes('הארגז של הנגרייה') && afterMerge.names.includes('ארגז נוסף'), JSON.stringify(afterMerge.names));
 
-/* ---- הדרך חזרה אל ארגזי התקן ---- */
-await dlg().getByRole('button', { name: /החזרת ארגזי התקן/ }).click();
+/* ---- הדרך חזרה אל הספרייה שמגיעה עם האפליקציה ---- */
+await dlg().getByRole('button', { name: /החזרת ארגזי הספרייה/ }).click();
 await page.waitForTimeout(1200);
 const afterReseed = await counts();
-ok('ארגזי התקן חזרו', afterReseed.catalog === before.catalog + 2, `${afterReseed.catalog} מול ${before.catalog + 2}`);
+/*
+ * שני הארגזים שיובאו נושאים מק״טים של ארגזי הספרייה, ולכן ההחזרה
+ * מזהה אותם ואינה מוסיפה עותק שני תחת אותו מק״ט. התוצאה היא
+ * הספרייה המלאה, לא יותר ממנה.
+ */
+ok('הספרייה חזרה במלואה', afterReseed.catalog === before.catalog, `${afterReseed.catalog} מול ${before.catalog}`);
+ok('ובלי כפילות מק״טים', new Set(afterReseed.codes).size === afterReseed.catalog,
+  `${new Set(afterReseed.codes).size}/${afterReseed.catalog}`);
 ok('ומה שהנגר בנה נשאר', afterReseed.names.includes('הארגז של הנגרייה'));
 ok('וכולם נראים ברשימה', afterReseed.shown === afterReseed.catalog, `${afterReseed.shown}/${afterReseed.catalog}`);
 
 /* ---- שחזור מלא ---- */
-await box().fill(libText);
+await picker().setInputFiles(libFile.path);
+await page.waitForTimeout(400);
 await dlg().getByRole('button', { name: 'שחזור מלא' }).click();
 await page.waitForTimeout(500);
 ok('גיבוי ספרייה נדחה משחזור מלא', (await dlg().innerText()).includes('גיבוי של הספרייה בלבד'));
 
-await box().fill(allText);
+await picker().setInputFiles(allFile.path);
+await page.waitForTimeout(400);
 await dlg().getByRole('button', { name: 'שחזור מלא' }).click();
 await page.waitForTimeout(1400);
 const restored = await counts();

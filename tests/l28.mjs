@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { setup, addUnit } from './mk.mjs';
+import { setup, addNamed } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const page = await b.newPage({ viewport: { width: 400, height: 840 }, deviceScaleFactor: 2 });
@@ -14,9 +14,9 @@ const clear = async () => { while (await page.getByRole('dialog').count()) { awa
 const fills = async () => (await page.locator('g[data-unit-id] rect').evaluateAll((e) => e.map((x) => x.getAttribute('fill')))).filter(Boolean);
 
 await setup(page, { name: 'מסלולים בע״מ' });
-await addUnit(page, 0);
+await addNamed(page, /^ארגז דלת אחת/);
 await page.getByRole('button', { name: 'סיום עריכה' }).first().click(); await page.waitForTimeout(300);
-await addUnit(page, 1);
+await addNamed(page, /^ארגז שתי דלתות/);
 await page.getByRole('button', { name: 'סיום עריכה' }).first().click(); await page.waitForTimeout(300);
 await btn(/^חישוב/).click(); await page.waitForTimeout(1600);
 await dlg().getByRole('button', { name: /מכירה והתחלת עבודה/ }).click(); await page.waitForTimeout(900);

@@ -17,7 +17,8 @@ await setup(page, { name: 'גוונים' });
 await page.evaluate(async () => {
   const db = await new Promise((res, rej) => { const r = indexedDB.open('easycraft'); r.onsuccess = () => res(r.result); r.onerror = rej; });
   const mats = await new Promise((res) => { const t = db.transaction('materials').objectStore('materials').getAll(); t.onsuccess = () => res(t.result); });
-  const mdf = mats.find((m) => m.name === 'MDF');
+  /* לפי הליבה ולא לפי השם: שם הלוח נגזר מהעובי ומהצבע, והוא משתנה */
+  const mdf = mats.find((m) => m.core === 'mdf');
   const now = Date.now();
   db.transaction('finishes', 'readwrite').objectStore('finishes').put({
     id: 'only-mdf', name: 'לכה כחולה', hex: '#2f4f8f', texture: 'מט',

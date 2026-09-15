@@ -1,6 +1,7 @@
 /* שכבה 24ב: טבעת הכפתורים בתלת־ממד — תזוזה, בחירה מרובה, עיפרון */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 let fail = 0;
 const ok = (n, c, g = '') => { if (c) console.log('PASS ', n); else { fail++; console.log('FAIL ', n, g); } };
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -11,7 +12,9 @@ const dlg = () => page.getByRole('dialog').last();
 async function add(name, tab) {
   while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
   await btn(/הוספת ארגז/).click(); await page.waitForTimeout(600);
-  await dlg().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(600);
+  /* הספרייה נפתחת ישר בחדר של הפרויקט, ולכן בוחר החדרים אינו תמיד שם */
+  const room = dlg().getByRole('button', { name: /^מטבח/ });
+  if (await room.count()) { await room.click(); await page.waitForTimeout(600); }
   if (tab) { await dlg().getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(500); }
   await dlg().getByRole('button', { name: new RegExp('^' + name) }).first().click();
   await page.waitForTimeout(800);
@@ -31,7 +34,7 @@ await setup(page);
 await add('ארגז דלת אחת');
 await add('ארגז שתי דלתות');
 await add('ארגז 3 מגירות');
-await btn(/שטוח/).click(); await page.waitForTimeout(1400);
+await btn(/^תלת־ממד/).click(); await page.waitForTimeout(1400);
 
 const svg = page.locator('svg').filter({ has: page.locator('[data-room-floor]') }).first();
 const box = await svg.boundingBox();
@@ -41,7 +44,7 @@ await page.locator('[data-unit]').first().click({ force: true }); await page.wai
 for (const n of ['תזוזה', 'בחירה מרובה', 'עריכה מהירה']) {
   ok(`ring has ${n}`, (await page.getByRole('button', { name: n }).count()) > 0);
 }
-await svg.screenshot({ path: 'L76-1-ring.png' });
+await svg.screenshot({ path: SP + 'L76-1-ring.png' });
 
 /* --- עיפרון פותח את העריכה המהירה --- */
 await page.getByRole('button', { name: 'עריכה מהירה' }).first().click(); await page.waitForTimeout(900);
@@ -87,7 +90,7 @@ await page.locator('[data-unit]').first().click({ force: true }); await page.wai
 await page.getByRole('button', { name: 'בחירה מרובה' }).first().click(); await page.waitForTimeout(500);
 const more = await page.locator('[data-unit]').all();
 if (more.length > 4) { await more[more.length - 1].click({ force: true }); await page.waitForTimeout(500); }
-await svg.screenshot({ path: 'L76-2-picked.png' });
+await svg.screenshot({ path: SP + 'L76-2-picked.png' });
 await page.getByRole('button', { name: 'שמירה כארגז' }).first().click(); await page.waitForTimeout(900);
 ok('the group sheet opens', (await page.getByText('שמירת הצירוף בספרייה').count()) > 0);
 await page.getByRole('dialog').last().getByRole('button', { name: 'שמירה', exact: true }).click({ force: true }); await page.waitForTimeout(1400);

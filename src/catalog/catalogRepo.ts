@@ -1,14 +1,16 @@
 import { db } from '../db/db';
-import type { CatalogItem, RoomKind } from '../db/types';
+import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind } from '../db/types';
+
+import { CODE_PREFIX, codeNumber, fillCodes } from './codes';
 import { SEED_CATALOG, type SeedItem } from './builtins';
 import { SHIPPED_LIBRARY, type ShippedItem } from './shipped';
 
 /**
  * הספרייה נזרעת לתוך בסיס הנתונים בהפעלה הראשונה, כך שכל פריט —
  * גם כזה שהגיע עם האפליקציה — ניתן לעריכה על ידי המשתמש.
- * זריעה חוזרת מוסיפה רק פריטים חדשים ולא דורסת עריכות קיימות.
  */
 let seeding: Promise<void> | null = null;
+
 
 export function seedCatalog(): Promise<void> {
   seeding ??= runSeed();
@@ -22,18 +24,30 @@ export function seedCatalog(): Promise<void> {
  * בנה לעצמו את הארגזים שהוא עובד איתם לא צריך לראות רשימה כללית
  * לצידם. כשאין כזו — ארגזי התקן הם נקודת הפתיחה.
  */
-export function shippedLibrary(): ShippedItem[] {
+function shippedLibrary(): ShippedItem[] {
   return SHIPPED_LIBRARY.length ? SHIPPED_LIBRARY : SEED_CATALOG.map(toShipped);
 }
 
+/**
+ * זריעה רק לספרייה ריקה — כלומר בהתקנה הראשונה בלבד.
+ *
+ * קודם נזרע בכל טעינה כל מה שחסר, ולכן נגר שמחק ארגזי תקן או החליף
+ * את הספרייה כולה בשלו מצא אותם שוב בפתיחה הבאה: ההסרה החזיקה עד
+ * הרענון ולא יותר. מה שהוסר נשאר מוסר, ומי שרוצה את ארגזי התקן
+ * בחזרה לוחץ על "החזרת ארגזי התקן" בגיבוי והעברה.
+ */
 async function runSeed(): Promise<void> {
-  const existing = new Set((await db.catalog.toArray()).map((i) => i.id));
+  if (await db.catalog.count()) return;
   const now = Date.now();
-  const missing = shippedLibrary()
-    .filter((s) => !existing.has(s.id))
-    .map((s) => ({ ...s, createdAt: now, updatedAt: now }));
+  const rows = shippedLibrary().map((s) => ({ ...s, createdAt: now, updatedAt: now }));
+  /*
+   * מק״ט כבר בזריעה, ולא רק בהגירה של ספרייה קיימת. התקנה
+   * חדשה אינה עוברת דרך ההגירה, ובלי זה היא מקבלת ספרייה שלמה
+   * בלי מק״טים — ואז שום דבר אינו מונע ממנה להשתכפל בייבוא הבא.
+   */
+  const fresh = new Map(fillCodes(rows).map((c) => [c.id, c.code]));
   // bulkPut ולא bulkAdd — כדי ששתי הפעלות במקביל לא ייפלו על כפילות
-  if (missing.length) await db.catalog.bulkPut(missing);
+  await db.catalog.bulkPut(rows.map((r) => ({ ...r, code: r.code ?? fresh.get(r.id) })));
 }
 
 function toShipped(s: SeedItem, order: number): ShippedItem {
@@ -66,10 +80,34 @@ function toShipped(s: SeedItem, order: number): ShippedItem {
 }
 
 export const catalogRepo = {
+  /**
+   * המק״ט הפנוי הבא בקטגוריה.
+   * ממשיך מהגבוה ביותר שקיים, כך שמק״ט שנמחק אינו חוזר ומתנגש
+   * בארגז ישן שעדיין מוזכר בהזמנה או על מדבקה.
+   */
+  async nextCode(group: CatalogGroup): Promise<string> {
+    const prefix = CODE_PREFIX[group];
+    const rows = await db.catalog.toArray();
+    const top = rows.reduce((n, i) => Math.max(n, codeNumber(i.code, prefix)), 100);
+    return `${prefix}-${top + 1}`;
+  },
+
+  /** הארגז שנושא את המק״ט הזה, אם יש כזה. */
+  async byCode(code: string): Promise<CatalogItem | undefined> {
+    const key = code.trim().toUpperCase();
+    if (!key) return undefined;
+    return (await db.catalog.toArray()).find((i) => i.code?.toUpperCase() === key);
+  },
+
+  /** סימון ארגז כמועדף, או הסרתו מהמועדפים. */
+  async setFavorite(id: string, favorite: boolean): Promise<void> {
+    await db.catalog.update(id, { favorite, updatedAt: Date.now() });
+  },
+
   /** פריטי הספרייה הרלוונטיים לחדר מסוים. חדר בהגדרה אישית מקבל הכול. */
   async forRoom(room: RoomKind): Promise<CatalogItem[]> {
     const all = await catalogRepo.all();
-    return room === 'custom' ? all : all.filter((i) => i.rooms.includes(room));
+    return room === CUSTOM_ROOM ? all : all.filter((i) => i.rooms.includes(room));
   },
 
   /** כל הפריטים שבספרייה, ממוינים לפי הסדר שלה. מה שהוסר אינו כאן. */
@@ -102,16 +140,31 @@ export const catalogRepo = {
     > & { id?: string },
   ): Promise<string> {
     const now = Date.now();
-    if (input.id) {
-      const { id, ...rest } = input;
+    const code = input.code?.trim().toUpperCase();
+    /*
+     * המק״ט הוא הזהות.
+     *
+     * שמירה תחת מק״ט שכבר קיים מעדכנת את הארגז ההוא ואינה יוצרת
+     * עותק שני שלו — אחרת אותו ארגז מופיע פעמיים ברשימה, ואי אפשר
+     * לדעת איזה מהם נכון. גם ייבוא של ספרייה שכבר יש ממנה חלק
+     * נשען על זה.
+     */
+    const twin = !input.id && code ? await catalogRepo.byCode(code) : undefined;
+    const id = input.id ?? twin?.id;
+
+    if (id) {
+      const { id: _drop, ...rest } = input;
       // שדות שלא נשלחו נשארים כמו שהם, כדי שעריכה לא תמחק מאפיין קיים
-      await db.catalog.update(id, { ...defined(rest), updatedAt: now });
+      const patch = defined({ ...rest, code });
+      await db.catalog.update(id, { ...patch, updatedAt: now });
       return id;
     }
-    const id = crypto.randomUUID();
+
+    const fresh = crypto.randomUUID();
     await db.catalog.add({
       ...input,
-      id,
+      id: fresh,
+      code: code || (await catalogRepo.nextCode(input.group)),
       // ארגז שהמשתמש בנה הוא ארגז שהוא מתכוון להשתמש בו — מקומו בספרייה הראשית
       common: true,
       isBuiltin: false,
@@ -119,8 +172,9 @@ export const catalogRepo = {
       createdAt: now,
       updatedAt: now,
     });
-    return id;
+    return fresh;
   },
+
 
   /**
    * הסרת פריט מהספרייה.
@@ -137,23 +191,31 @@ export const catalogRepo = {
   },
 
   /**
-   * החזרת ארגזי התקן שמגיעים עם האפליקציה.
+   * החזרת הספרייה שמגיעה עם האפליקציה.
    *
-   * `seedCatalog` רץ פעם אחת בהפעלה הראשונה, ולכן מי שמחק את ארגזי
-   * התקן או החליף את הספרייה כולה בשלו נשאר בלעדיהם לתמיד. כאן הם
-   * נזרעים מחדש: מה שחסר נוסף, ומה שהוסתר חוזר לרשימה.
+   * `seedCatalog` רץ פעם אחת בהפעלה הראשונה, ולכן מי שמחק ארגזים
+   * או החליף את הספרייה כולה בשלו נשאר בלעדיהם לתמיד. כאן היא
+   * חוזרת: מה שחסר נוסף, ומה שהוסתר חוזר לרשימה.
    *
-   * מה שקיים אינו נדרס — ארגז תקן שהמשתמש ערך נשאר כמו שערך אותו,
-   * כי תיקון של מידה הוא בדיוק מה שלא רוצים לאבד.
+   * ההתאמה היא לפי המזהה ולפי המק״ט גם יחד. ארגז שהגיע למכשיר הזה
+   * דרך ייבוא קיבל אולי מזהה אחר, ובלי המק״ט הוא היה חוזר לכאן
+   * פעם שנייה — אותו ארגז, שתי שורות.
+   *
+   * מה שקיים אינו נדרס — ארגז שהמשתמש ערך נשאר כמו שערך אותו, כי
+   * תיקון של מידה הוא בדיוק מה שלא רוצים לאבד.
    */
   async reseed(): Promise<number> {
     const now = Date.now();
     let back = 0;
     await db.transaction('rw', db.catalog, async () => {
-      const existing = new Map((await db.catalog.toArray()).map((i) => [i.id, i]));
+      const rows = await db.catalog.toArray();
+      const byId = new Map(rows.map((i) => [i.id, i]));
+      const byCode = new Map(
+        rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i]),
+      );
       const missing: CatalogItem[] = [];
       for (const s of shippedLibrary()) {
-        const have = existing.get(s.id);
+        const have = byId.get(s.id) ?? (s.code ? byCode.get(s.code.toUpperCase()) : undefined);
         if (!have) missing.push({ ...s, createdAt: now, updatedAt: now });
         else if (have.hiddenAt) missing.push({ ...have, hiddenAt: undefined, updatedAt: now });
       }

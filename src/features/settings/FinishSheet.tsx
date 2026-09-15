@@ -16,6 +16,16 @@ import { useMaterialsAndFinishes } from '../../materials/useMaterials';
  * שונה לגמרי. לכן אין כאן מחיר אחד אלא מחיר לכל חומר — וחומר בלי
  * מחיר פשוט לא מוצע לגוון הזה כשבונים ארגז.
  */
+/** שורת לוח בעורך הגוון: האם הוא מגיע, ובאיזה מחיר. */
+interface Row {
+  /** הגוון מגיע על הלוח הזה — הצהרה, ולא נגזרת של המחיר */
+  on: boolean;
+  factory: string;
+  consumer: string;
+}
+
+const EMPTY_ROW: Row = { on: false, factory: '', consumer: '' };
+
 export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClose: () => void }) {
   const { materials, finishes } = useMaterialsAndFinishes();
   const [name, setName] = useState(finish?.name ?? '');
@@ -27,10 +37,19 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
   const [copying, setCopying] = useState(false);
   const [hex, setHex] = useState(finish?.hex ?? '#d9b483');
   const [hasGrain, setHasGrain] = useState(finish?.hasGrain ?? false);
-  const [prices, setPrices] = useState<Record<string, { factory: string; consumer: string }>>(() => {
-    const out: Record<string, { factory: string; consumer: string }> = {};
+  /*
+   * זמינות ומחיר הם שתי שאלות ולא אחת.
+   *
+   * עד עכשיו שורת מחיר ריקה אמרה "הגוון לא מגיע על הלוח הזה", ולכן
+   * לוח אמיתי שרק לא תומחר נעלם מהבחירה — הנגר ראה שהוא לא מוצע
+   * ולא הבין למה. `on` הוא ההצהרה שהגוון קיים על הלוח; המחיר הוא
+   * שאלה מסחרית נפרדת, ומה שחסר בו מסומן כחסר ולא נחשב לחינם.
+   */
+  const [prices, setPrices] = useState<Record<string, Row>>(() => {
+    const out: Record<string, Row> = {};
     for (const [id, p] of Object.entries(finish?.prices ?? {})) {
       out[id] = {
+        on: true,
         factory: p.factoryPrice !== undefined ? String(p.factoryPrice) : '',
         consumer: p.consumerPrice !== undefined ? String(p.consumerPrice) : '',
       };
@@ -61,21 +80,25 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
 
   const set = (materialId: string, field: 'factory' | 'consumer', value: string) =>
     setPrices((p) => {
-      const row = p[materialId] ?? { factory: '', consumer: '' };
-      return { ...p, [materialId]: { ...row, [field]: value } };
+      const row = p[materialId] ?? EMPTY_ROW;
+      /* מחיר שהוקלד אומר מעצמו שהגוון מגיע על הלוח */
+      return { ...p, [materialId]: { ...row, on: row.on || !!value.trim(), [field]: value } };
     });
+
+  const setOn = (materialId: string, on: boolean) =>
+    setPrices((p) => ({ ...p, [materialId]: { ...(p[materialId] ?? EMPTY_ROW), on } }));
 
   async function save() {
     /*
-     * חומר נחשב "קיים לגוון" רק אם הוזן לו מחיר כלשהו. שורה ריקה
-     * לגמרי נמחקת, ולכן הדרך להוריד גוון מחומר היא פשוט לרוקן את
-     * המחיר שלו — בלי מתג נוסף שצריך להסביר.
+     * מפתח קיים = הגוון מגיע על הלוח הזה. הערכים שבתוכו הם המחיר,
+     * ושניהם יכולים להיות ריקים: "זמין, מחיר עוד לא הוקלד" הוא מצב
+     * אמיתי במחסן, ולא סיבה להעלים את הלוח מהבחירה.
      */
     const out: Record<string, MaterialPrice> = {};
     for (const [id, v] of Object.entries(prices)) {
       const factory = v.factory.trim() ? Number(v.factory) : undefined;
       const consumer = v.consumer.trim() ? Number(v.consumer) : undefined;
-      if (factory === undefined && consumer === undefined) continue;
+      if (!v.on && factory === undefined && consumer === undefined) continue;
       out[id] = { factoryPrice: factory, consumerPrice: consumer };
     }
     await finishesRepo.save({
@@ -274,9 +297,10 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
                   <li key={f.id}>
                     <button
                       onClick={() => {
-                        const next: Record<string, { factory: string; consumer: string }> = {};
+                        const next: Record<string, Row> = {};
                         for (const [id, v] of Object.entries(f.prices ?? {})) {
                           next[id] = {
+                            on: true,
                             factory: v.factoryPrice !== undefined ? String(v.factoryPrice) : '',
                             consumer: v.consumerPrice !== undefined ? String(v.consumerPrice) : '',
                           };
@@ -309,19 +333,43 @@ export function FinishSheet({ finish, onClose }: { finish: Finish | null; onClos
             </ul>
           )}
           <p className="-mt-1 mb-3 text-xs leading-snug text-stone-500">
-            אותו גוון עולה אחרת על כל ליבה. ליבה שנשארה ריקה לא תוצע לגוון
-            הזה כשבונים ארגז.
+            אותו גוון עולה אחרת על כל ליבה. סמן את הליבות שהגוון מגיע עליהן;
+            ליבה בלי מחיר עדיין תוצע, ותסומן כחסרת מחיר בחישוב.
           </p>
 
           <ul className="space-y-2">
             {(materials ?? []).map((m) => (
               <li key={m.id} className="rounded-xl border border-stone-200 bg-white p-3">
-                <span className="mb-2 flex items-baseline justify-between">
-                  <span className="text-sm font-medium text-stone-800">{m.name}</span>
-                  {m.thicknessMm !== undefined && (
-                    <span className="num text-[11px] text-stone-400">{m.thicknessMm} מ״מ</span>
-                  )}
+                <span className="mb-2 flex items-center justify-between gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-stone-800">
+                    {m.name}
+                    {m.thicknessMm !== undefined && (
+                      <span className="num ms-1.5 text-[11px] font-normal text-stone-400">
+                        {m.thicknessMm} מ״מ
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    role="switch"
+                    aria-checked={!!prices[m.id]?.on}
+                    aria-label={`${m.name} — מגיע בגוון הזה`}
+                    onClick={() => setOn(m.id, !prices[m.id]?.on)}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      prices[m.id]?.on
+                        ? 'bg-oak-600 text-white'
+                        : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                    }`}
+                  >
+                    {prices[m.id]?.on ? 'מגיע' : 'לא מגיע'}
+                  </button>
                 </span>
+                {prices[m.id]?.on &&
+                  !prices[m.id]?.factory.trim() &&
+                  !prices[m.id]?.consumer.trim() && (
+                    <p className="mb-2 text-[11px] leading-snug text-amber-700">
+                      זמין בלי מחיר — הצעת מחיר שכוללת אותו תסומן כלא שלמה.
+                    </p>
+                  )}
                 <div className="grid grid-cols-2 gap-2">
                   <PriceBox
                     label="מפעל"

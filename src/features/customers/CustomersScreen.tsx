@@ -92,8 +92,8 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
             {!archived && role === 'manager' && (
               <button
                 onClick={() => setLibraryOpen(true)}
-                aria-label="ספריית המוצרים"
-                title="ספריית המוצרים"
+                aria-label="ספריית הארגזים"
+                title="ספריית הארגזים"
                 className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-stone-700"
               >
                 <BoxesIcon />

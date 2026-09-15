@@ -52,20 +52,26 @@ export function analyzeWall(
   const warnings: WallWarning[] = [];
   /** מי חורג בפועל מקצה הקיר — אליו מצביעה ההתראה */
   const past = (group: PlacedUnit[]) =>
-    group.filter((u) => u.xMm + alongWallMm(u) > wall.lengthMm + 1).map((u) => u.id);
+    group.filter((u) => u.xMm + alongWallMm(u) > wall.lengthMm + 1);
 
-  if (floorUsedMm > wall.lengthMm) {
+  /*
+   * החריגה נמדדת לפי המקום של הארגז ולא לפי סכום הרוחבים.
+   *
+   * ארגז שעומד בקצה קיר שקוצר יוצא ממנו החוצה גם כשסכום הרוחבים
+   * עדיין נכנס, ואז לא הייתה שום התראה — הקיר נראה תקין על המסך
+   * והבעיה התגלתה בהתקנה. מה שמעניין הוא איפה נגמר הארגז האחרון.
+   */
+  const overflow = (group: PlacedUnit[], label: string) => {
+    const over = past(group);
+    if (!over.length) return;
+    const end = Math.max(...over.map((u) => u.xMm + alongWallMm(u)));
     warnings.push({
-      text: `התחתונים חורגים מהקיר ב-${cm(floorUsedMm - wall.lengthMm)} ס"מ`,
-      unitIds: past(floor),
+      text: `${label} חורגים מהקיר ב-${cm(end - wall.lengthMm)} ס"מ`,
+      unitIds: over.map((u) => u.id),
     });
-  }
-  if (wallUsedMm > wall.lengthMm) {
-    warnings.push({
-      text: `העליונים חורגים מהקיר ב-${cm(wallUsedMm - wall.lengthMm)} ס"מ`,
-      unitIds: past(upper),
-    });
-  }
+  };
+  overflow(floor, 'התחתונים');
+  overflow(upper, 'העליונים');
 
   for (const f of wall.features) {
     const label = featureDef(f.kind).label;

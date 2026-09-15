@@ -3,7 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { cmToMm, mmToCm } from '../../ui/units';
-import { ROOMS, roomDef } from '../../catalog/rooms';
+import { CUSTOM_ROOM_DEF } from '../../catalog/rooms';
+import { roomDef, roomsRepo } from '../../catalog/roomsRepo';
 import { ASK_COUNT, WALL_COUNTS, WALL_LAYOUTS, wallName } from './wallLayouts';
 import { WallFeaturesDesigner } from './WallFeaturesDesigner';
 import { RoomShapeEditor, shapeWalls, type ShapePoint } from './RoomShapeEditor';
@@ -11,13 +12,8 @@ import { projectsRepo, type NewWallInput } from './projectsRepo';
 import { settingsRepo } from '../../materials/materialsRepo';
 import { DEFAULT_WALL_HEIGHT, DEFAULT_WALL_LENGTH } from '../../catalog/standards';
 import { DEFAULT_TURN_DEG } from '../design/plan';
-import {
-  BedroomIcon,
-  CustomRoomIcon,
-  KitchenIcon,
-  LivingIcon,
-} from '../../ui/icons';
-import type { RoomKind, WallFeature } from '../../db/types';
+import { roomIcon } from '../../ui/icons';
+import { CUSTOM_ROOM, type RoomKind, type WallFeature } from '../../db/types';
 
 type Step =
   | 'room'
@@ -36,13 +32,6 @@ const norm = (deg: number): number => {
   return Math.round(d);
 };
 
-const ROOM_ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
-  kitchen: KitchenIcon,
-  living: LivingIcon,
-  bedroom: BedroomIcon,
-  custom: CustomRoomIcon,
-};
-
 /**
  * יצירת פרויקט — שאלה אחת בכל מסך.
  * חדר ← פריסת קירות ← מה יש על הקיר ← מידות.
@@ -57,6 +46,12 @@ export function NewProjectWizard({
   onCreated: (projectId: string) => void;
 }) {
   const [step, setStep] = useState<Step>('room');
+  /*
+   * החדרים מגיעים מהטבלה, ואחריהם תמיד "שם חדש" — כך שנגר שהוסיף
+   * לעצמו חדר שירות או משרד רואה אותו כאן בלי לגעת בקוד.
+   */
+  const savedRooms = useLiveQuery(() => roomsRepo.all(), [], []);
+  const roomChoices = [...savedRooms, CUSTOM_ROOM_DEF];
   const [roomKind, setRoomKind] = useState<RoomKind>('kitchen');
   const [name, setName] = useState('');
   const [wallCount, setWallCount] = useState(1);
@@ -115,8 +110,8 @@ export function NewProjectWizard({
 
   function pickRoom(kind: RoomKind) {
     setRoomKind(kind);
-    setName(kind === 'custom' ? '' : roomDef(kind).label);
-    setStep(kind === 'custom' ? 'name' : 'layout');
+    setName(kind === CUSTOM_ROOM ? '' : roomDef(kind).label);
+    setStep(kind === CUSTOM_ROOM ? 'name' : 'layout');
   }
 
   function pickLayout(walls: number) {
@@ -154,7 +149,7 @@ export function NewProjectWizard({
       case 'name':
         return () => setStep('room');
       case 'layout':
-        return () => setStep(roomKind === 'custom' ? 'name' : 'room');
+        return () => setStep(roomKind === CUSTOM_ROOM ? 'name' : 'room');
       case 'shape':
         return () => setStep('layout');
       case 'order':
@@ -272,12 +267,12 @@ export function NewProjectWizard({
     <Sheet title={titles[step]} onClose={onClose} onBack={backFrom(step)} footer={footer}>
       {step === 'room' && (
         <div className="grid grid-cols-2 gap-3">
-          {ROOMS.map((room) => {
-            const Icon = ROOM_ICONS[room.icon];
+          {roomChoices.map((room) => {
+            const Icon = roomIcon(room.icon);
             return (
               <button
-                key={room.kind}
-                onClick={() => pickRoom(room.kind)}
+                key={room.id}
+                onClick={() => pickRoom(room.id)}
                 className="flex flex-col items-start gap-2 rounded-2xl border border-stone-200 bg-white p-4 text-start transition-colors hover:border-oak-400 hover:bg-oak-50"
               >
                 <span className="text-oak-600">

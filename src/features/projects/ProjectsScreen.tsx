@@ -4,7 +4,8 @@ import { db } from '../../db/db';
 import { projectsRepo } from './projectsRepo';
 import { NewProjectWizard } from './NewProjectWizard';
 import { SaleSheet } from './SaleSheet';
-import { roomDef } from '../../catalog/rooms';
+import { roomDef } from '../../catalog/roomsRepo';
+import { CUSTOM_ROOM } from '../../db/types';
 import { nav } from '../../nav/navigation';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { BoxesIcon, ChevronIcon, CopyIcon, PlusIcon, TagIcon, TrashIcon } from '../../ui/icons';
@@ -124,7 +125,8 @@ function ProjectCard({
   const [confirm, setConfirm] = useState(false);
   const room = roomDef(project.roomKind);
   const quote = projectQuote(project, units, boards);
-  const pay = paymentStatus(project);
+  const pay = paymentStatus(project, quote.amount);
+
   const sold = !!project.soldAt;
 
   return (
@@ -139,7 +141,7 @@ function ProjectCard({
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold text-stone-900">{project.name}</span>
           <span className="block truncate text-sm text-stone-500">
-            {project.roomKind === 'custom' ? 'חדר בהגדרה אישית' : room.label}
+            {project.roomKind === CUSTOM_ROOM ? 'חדר בהגדרה אישית' : room.label}
           </span>
         </span>
         {/*
