@@ -266,6 +266,31 @@ function unitSolids(
    * נשאר במקום שהוגדר לו.
    */
   const def = glyphDef(u.glyph);
+
+  /*
+   * מכשיר חשמלי הוא מוצר שקונים, ולא ארגז שבונים.
+   *
+   * תנור, מקרר ומדיח נכנסים למטבח מוכנים: אין להם דפנות שנחתכות,
+   * אין מדפים ואין גב, והחזית שלהם היא המכשיר עצמו. עד עכשיו הם
+   * צוירו כארון מלא — צדדים, תחתית, תקרה וגב — ועליו הודבקה חזית
+   * של מכשיר, ולכן "מקרר" נראה בדיוק כמו ארון עם דלת אפורה.
+   *
+   * מי שבונה סביבם עמודה מוסיף אותה כארגז נפרד, וזה הארגז שנספר.
+   */
+  if (def.standalone) {
+    const body = shade(carcassTone, 0.92);
+    /* הגוף עצמו */
+    add(slab(frame, 0, u.yMm, 0, u.widthMm, u.heightMm, d, body, `${u.id}-appliance`));
+    /* והחזית שלו, מעט בולטת — זה מה שמזהים בתמונה */
+    add(
+      slab(
+        frame, 6, u.yMm + 6, d, u.widthMm - 12, Math.max(u.heightMm - 12, 0),
+        MATERIAL.frontMm, '#d6d3d1', `${u.id}-app`,
+      ),
+    );
+    return out;
+  }
+
   if (def.noCarcass) {
     const th = u.panelThicknessMm ?? MATERIAL.frontMm;
     if (def.noCarcass === 'horizontal') {

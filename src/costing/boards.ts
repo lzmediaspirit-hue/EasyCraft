@@ -755,6 +755,14 @@ export function projectCosting(
       const k = front.finishId ?? '';
       edgeByFinish.set(k, (edgeByFinish.get(k) ?? 0) + um);
     }
+    /*
+     * מכשיר חשמלי נקנה שלם: אין בו מגירה שמזמינים, ידית שמרכיבים
+     * או פס לד שמותקן. החלקים שלו כבר לא נספרים בפלטות, ובלי
+     * השורה הזאת האביזרים שלו המשיכו להיספר — מגירות של תנור
+     * שאיש לא בנה.
+     */
+    if (glyphDef(u.glyph).standalone) continue;
+
     drawers += countDrawers(u);
     doors += effectiveDoors(u);
     lifts += liftCount(u);

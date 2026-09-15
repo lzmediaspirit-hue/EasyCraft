@@ -673,12 +673,29 @@ export function UnitEditor({
       )}
 
       {/*
+        מכשיר חשמלי נקנה שלם, ולכן אין בו מה לבנות.
+
+        פס לד, גב, קושרות, ביטול דופן וזכוכית הם שאלות על ארגז
+        שנחתך מפלטות. תנור נכנס למטבח מוכן, והשאלות היחידות עליו
+        הן המידה שלו ואיפה הוא עומד. עד עכשיו כל האפשרויות האלה
+        היו פתוחות גם לו, והתשובות עליהן לא הגיעו לשום מקום.
+      */}
+      {caps.standalone && (
+        <p className="mt-4 rounded-xl bg-stone-50 px-3 py-2.5 text-xs leading-snug text-stone-500">
+          {glyphDef(unit.glyph).label} הוא מכשיר שנקנה שלם — הוא אינו נחתך
+          מפלטות ואין לו גב, מדפים או קושרות. מה שנקבע לו הוא המידה
+          והמקום.
+        </p>
+      )}
+
+      {/*
         עריכה מתקדמת: מה שנגר עושה פעם בעשרה ארגזים.
 
         הדברים האלה אמיתיים ונחוצים — ארגז שנשען על שכנו, ארגז
         שיורד מהקיר — אבל הם לא הדבר שפותחים בשבילו את הלוח. מגירה
         סגורה משאירה את העורך קצר, ומי שצריך אותם יודע לחפש.
       */}
+      {!caps.standalone && (
       <button
         onClick={() => setAdvanced((v) => !v)}
         aria-expanded={advanced}
@@ -687,8 +704,9 @@ export function UnitEditor({
         עריכה מתקדמת
         <ChevronIcon className={`size-4 transition-transform ${advanced ? '-rotate-90' : ''}`} />
       </button>
+      )}
 
-      {advanced && (
+      {advanced && !caps.standalone && (
         <>
           <Row label="פס לד">
             {LED_SPOTS.map((s) => (
