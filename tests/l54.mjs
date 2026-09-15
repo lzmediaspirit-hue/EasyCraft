@@ -113,7 +113,7 @@ ok(
 );
 
 await toDesign();
-await btn(/שטוח/).click();
+await btn(/^תלת־ממד/).click();
 await page.waitForTimeout(900);
 await page.screenshot({ path: SP + 'L54-4-iso-turned.png' });
 ok('the 3D still draws the turned cabinet', (await page.locator('[data-unit]').count()) > 0);

@@ -115,7 +115,7 @@ await page.waitForTimeout(1600);
 await btn(/גאומטריה/).click(); await page.waitForTimeout(800);
 await btn(/מטבח/).first().click(); await page.waitForTimeout(1400);
 /* ודאות שאנחנו בחזית ולא בתלת־ממד */
-await btn(/^שטוח$/).click().catch(() => {});
+await btn(/^דו־ממד/).click().catch(() => {});
 await page.waitForTimeout(700);
 const before = await page.evaluate(async () => {
   const { db } = await import('/src/db/db.ts?v=' + Date.now());

@@ -257,7 +257,12 @@ export function DesignToolbar({
               key={m.key}
               onClick={() => setMode(m.key)}
               aria-pressed={mode === m.key}
-              aria-label={m.label}
+              /*
+               * התווית הנראית היא חלק מהשם הנגיש, כמו בשאר הכלים:
+               * מי שמפעיל את האפליקציה בקול אומר "תלת־ממד" ומקבל
+               * את הכפתור, ומי שמחפש "מבט תלת־ממדי" מקבל אותו גם.
+               */
+              aria-label={`${m.label} — ${m.title}`}
               title={m.title}
               className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors ${
                 mode === m.key
@@ -428,7 +433,7 @@ const MODES: { key: ViewMode; label: string; title: string; icon: (p: { classNam
    * את הדלתות — ושני כפתורים באותו שם באותו מסך הם כפתור אחד
    * שבור.
    */
-  { key: 'flat', label: 'דו־ממד', title: 'ציור חזית שטוח של הקיר', icon: ElevationIcon },
+  { key: 'flat', label: 'דו־ממד', title: 'ציור החזית של הקיר', icon: ElevationIcon },
   { key: 'iso', label: 'תלת־ממד', title: 'מבט תלת־ממדי על החדר', icon: CubeIcon },
   { key: 'plan', label: 'מבט על', title: 'החדר מלמעלה — ומשם גם מוסיפים קיר', icon: PlanIcon },
 ];

@@ -24,8 +24,8 @@ await btn(/סיום עריכה/).click().catch(() => {});
 await page.waitForTimeout(400);
 
 /* מעבר לתלת־ממד. חדר עם שלושה קירות כבר נפתח שם */
-if (await page.getByRole('button', { name: /^שטוח — / }).count()) {
-  await btn(/^שטוח — /).click();
+if (await page.getByRole('button', { name: /^תלת־ממד/ }).count()) {
+  await btn(/^תלת־ממד/).click();
   await page.waitForTimeout(1200);
 }
 

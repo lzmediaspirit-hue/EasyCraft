@@ -26,11 +26,28 @@ const out = await page.evaluate(async () => {
   });
 
   /* --- 7. לוח שנמחק: החלקים שלו נספרים כלא מתומחרים --- */
-  const good = B.projectCosting([unit({ carcassMaterialId: 'm1', frontMaterialId: 'm1', backMaterialId: 'm1' })], [mat], settings);
-  const gone = B.projectCosting([unit({ carcassMaterialId: 'x', frontMaterialId: 'x', backMaterialId: 'x' })], [mat], settings);
+  /*
+   * הצירוף המלא הוא גוון על לוח, ורק לו יש מחיר. ארגז עם לוח בלי
+   * גוון הוא מפרט חלקי, ומאז שזמינות הופרדה ממחיר גם הוא נספר
+   * כלא מתומחר — ולכן הבקרה החיובית כאן נושאת גוון מתומחר.
+   */
+  const fin = { id: 'f1', name: 'לבן', hex: '#fff', prices: { m1: { consumerPrice: 120 } }, sortOrder: 0, createdAt: 0, updatedAt: 0 };
+  const priced = { carcassMaterialId: 'm1', frontMaterialId: 'm1', backMaterialId: 'm1',
+                   carcassFinishId: 'f1', frontFinishId: 'f1', backFinishId: 'f1' };
+  const good = B.projectCosting([unit(priced)], [mat], settings, [], [fin]);
+  const gone = B.projectCosting([unit({ ...priced, carcassMaterialId: 'x', frontMaterialId: 'x', backMaterialId: 'x' })], [mat], settings, [], [fin]);
   ok('לוח קיים מתומחר', good.totalSheets > 0, `${good.totalSheets}`);
   ok('לוח שנמחק נספר כחלקים בלי לוח', gone.unpricedParts > 0, `unpriced=${gone.unpricedParts}`);
   ok('ולא נעלם בשקט', gone.totalSheets === 0 && good.unpricedParts === 0, `${gone.totalSheets}/${good.unpricedParts}`);
+
+  /* --- 7ב. לוח זמין בלי מחיר אינו נכנס להצעה כאילו הוא בחינם --- */
+  const noPrice = { ...fin, id: 'f2', prices: { m1: {} } };
+  const vague = B.projectCosting(
+    [unit({ ...priced, carcassFinishId: 'f2', frontFinishId: 'f2', backFinishId: 'f2' })],
+    [mat], settings, [], [noPrice],
+  );
+  ok('לוח בלי מחיר נספר כלא מתומחר', vague.unpricedParts > 0, `unpriced=${vague.unpricedParts}`);
+  ok('והוא עדיין נחתך', vague.totalSheets > 0, `${vague.totalSheets}`);
 
   /* --- 11. ארגז עם גב דק שהותקן — ירוק ולא כתום --- */
   const done = unit({ backKind: 'thin', work: { tracks: { carcass: 'installed', fronts: 'installed', back: 'cut' } } });

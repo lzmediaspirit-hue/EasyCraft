@@ -31,9 +31,9 @@ async function toDesign() {
   await page.waitForTimeout(900);
   await page.getByRole('button', { name: /מטבח/ }).first().click();
   await page.waitForTimeout(1400);
-  /* חדר מורכב נפתח כבר בתלת־ממד; חדר פשוט צריך לחיצה */
-  if (await page.getByRole('button', { name: /שטוח/ }).count()) {
-    await btn(/שטוח/).click();
+  /* בורר המצב מכריז על היעד, ולכן הלחיצה זהה בשני המקרים */
+  if (await page.getByRole('button', { name: /^תלת־ממד/ }).count()) {
+    await btn(/^תלת־ממד/).click();
     await page.waitForTimeout(1100);
   }
 }

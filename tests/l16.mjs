@@ -65,7 +65,7 @@ await page.getByRole('button', { name: 'סיום עריכה' }).first().click().
 await page.waitForTimeout(400);
 
 /* ---- תלת־ממד: גרירה מסובבת ---- */
-await btn(/שטוח/).click(); await page.waitForTimeout(1000);
+await btn(/^תלת־ממד/).click(); await page.waitForTimeout(1000);
 const svg = page.locator('svg').filter({ has: page.locator('polygon') }).first();
 const bb = await svg.boundingBox();
 await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);

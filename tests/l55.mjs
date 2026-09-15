@@ -62,7 +62,7 @@ async function toDesign() {
 await toDesign();
 
 /* --- החצים חיים בתלת־ממד, ורק כשארגז נבחר --- */
-await btn(/שטוח/).click();
+await btn(/^תלת־ממד/).click();
 await page.waitForTimeout(1100);
 ok('no arrows before a cabinet is picked', (await page.getByRole('button', { name: /^סיבוב/ }).count()) === 0);
 await page.locator('[data-unit]').last().click({ force: true });
@@ -89,7 +89,7 @@ ok('four clicks come back around', (await rotation()) === 0, String(await rotati
 /* --- בחזית ארגז מסובב מצויר כלוח, ברוחב שהוא תופס על הקיר --- */
 await page.getByRole('button', { name: 'סיבוב ימינה' }).click();
 await page.waitForTimeout(800);
-await btn(/^תלת/).click();
+await btn(/^דו־ממד/).click();
 await page.waitForTimeout(1100);
 const html = await page.locator('[data-unit-id]').first().innerHTML();
 ok('the turned cabinet is a panel on the wall', /מסובב/.test(html), html.slice(0, 90));
@@ -102,13 +102,13 @@ ok('no doors are drawn side-on', !/CabinetGlyph|rx="8"/.test(html));
 await page.screenshot({ path: SP + 'L55-3-elevation.png' });
 
 /* --- חצי סיבוב: רואים את הגב, ברוחב המלא --- */
-await btn(/שטוח/).click();
+await btn(/^תלת־ממד/).click();
 await page.waitForTimeout(1000);
 await page.locator('[data-unit]').last().click({ force: true });
 await page.waitForTimeout(700);
 await page.getByRole('button', { name: 'סיבוב ימינה' }).click();
 await page.waitForTimeout(800);
-await btn(/^תלת/).click();
+await btn(/^דו־ממד/).click();
 await page.waitForTimeout(1100);
 const back = await page.locator('[data-unit-id]').first().innerHTML();
 ok('half a turn shows the back', /גב לחדר/.test(back) && /<rect width="900"/.test(back));

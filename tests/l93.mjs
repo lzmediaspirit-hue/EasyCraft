@@ -111,7 +111,7 @@ await page.waitForTimeout(600);
 await esc();
 await btn(/סיום עריכה/).click().catch(() => {});
 await page.waitForTimeout(400);
-await btn(/^שטוח — /).click();
+await btn(/^תלת־ממד/).click();
 await page.waitForTimeout(1200);
 await page.screenshot({ path: SP + 'L93-3-iso.png' });
 ok('התלת־ממד מצייר', (await page.locator('svg polygon').count()) > 0, String(await page.locator('svg polygon').count()));

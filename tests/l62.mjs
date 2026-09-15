@@ -75,7 +75,7 @@ await page.screenshot({ path: SP + 'L62-1-island.png' });
 /* --- גרירה בתלת־ממד מזיזה אותו על הרצפה, בשני הצירים --- */
 await page.keyboard.press('Escape');
 await page.waitForTimeout(500);
-await btn(/שטוח/).click();
+await btn(/^תלת־ממד/).click();
 await page.waitForTimeout(1100);
 await btn(/נעילת סיבוב החדר|שחרור סיבוב החדר/).click();
 await page.waitForTimeout(400);
@@ -104,7 +104,7 @@ ok(
 await page.screenshot({ path: SP + 'L62-3-turned.png' });
 
 /* --- בחזית הוא מסומן כאי ולא מתחזה לארגז על הקיר --- */
-await btn(/^תלת/).click();
+await btn(/^דו־ממד/).click();
 await page.waitForTimeout(1100);
 const flat = await page.locator('svg:has([data-unit-id])').first().innerHTML();
 ok('the elevation marks it as an island', /אי ·/.test(flat), (flat.match(/>[^<]*אי[^<]*</) ?? [''])[0]);

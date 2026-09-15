@@ -34,7 +34,7 @@ await setup(page);
 await add('ארגז דלת אחת');
 await add('ארגז שתי דלתות');
 await add('ארגז 3 מגירות');
-await btn(/שטוח/).click(); await page.waitForTimeout(1400);
+await btn(/^תלת־ממד/).click(); await page.waitForTimeout(1400);
 
 const svg = page.locator('svg').filter({ has: page.locator('[data-room-floor]') }).first();
 const box = await svg.boundingBox();

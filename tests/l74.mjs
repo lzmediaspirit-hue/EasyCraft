@@ -46,7 +46,7 @@ await page.getByRole('button', { name: 'סיום עריכה' }).first().click().
 await page.waitForTimeout(500);
 
 /* --- תלת־ממד: נעילת החדר --- */
-await btn(/שטוח/).click(); await page.waitForTimeout(1300);
+await btn(/^תלת־ממד/).click(); await page.waitForTimeout(1300);
 const lock = () => page.getByRole('button', { name: /נעילת סיבוב החדר|שחרור סיבוב החדר/ });
 ok('lock button exists', (await lock().count()) > 0);
 

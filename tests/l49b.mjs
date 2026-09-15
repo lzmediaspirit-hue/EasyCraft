@@ -72,7 +72,7 @@ await orbit(280, 0, '5-iso-yaw-right');
 await orbit(-140, -110, '6-iso-rise-up');
 await orbit(0, 220, '7-iso-rise-down');
 
-await btn(/חזרה לציור חזית/).click(); await page.waitForTimeout(700);
+await btn(/^דו־ממד/).click(); await page.waitForTimeout(700);
 
 /* --- מבט על --- */
 await btn(/מבט על/).click(); await page.waitForTimeout(900);

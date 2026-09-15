@@ -63,10 +63,11 @@ await page.waitForTimeout(1800);
 await pickFinishes(page);
 
 /* --- חדר של ארבעה קירות נפתח בתלת־ממד --- */
+/* בורר המצב מסמן את הפעיל, ולכן זו השאלה: האם התלת־ממד לחוץ */
 ok(
   'a complex room opens in 3D',
-  (await page.getByRole('button', { name: 'תלת־ממד — חזרה לציור חזית' }).count()) === 1,
-  (await page.getByRole('button').allInnerTexts()).filter((t) => /שטוח|תלת/.test(t)).join(','),
+  (await page.getByRole('button', { name: /^תלת־ממד/ }).getAttribute('aria-pressed')) === 'true',
+  (await page.getByRole('button').allInnerTexts()).filter((t) => /ממד|מבט על/.test(t)).join(','),
 );
 ok('and the room floor is there', (await page.locator('[data-room-floor]').count()) === 1);
 await page.screenshot({ path: SP + 'L60-3-opens-in-3d.png' });

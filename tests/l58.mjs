@@ -66,7 +66,7 @@ ok('and the step depth as it was typed', /מדרגת קיר 12 ס״מ/.test(flat
 await page.screenshot({ path: SP + 'L58-2-elevation.png' });
 
 /* --- בתלת־ממד עמוד ומדרגה עומדים בחדר, לא על הקיר --- */
-await btn(/שטוח/).click();
+await btn(/^תלת־ממד/).click();
 await page.waitForTimeout(1200);
 const iso = await page.locator('svg:has([data-room-floor])').first().innerHTML();
 ok('a jutting feature is not painted flat on the wall', !/data-wall-feature="pillar"/.test(iso));
@@ -79,7 +79,7 @@ ok('so is the step', (await page.locator('[data-wall-solid="step"]').count()) ==
 await page.screenshot({ path: SP + 'L58-3-iso.png' });
 
 /* --- נישה נשארת על הקיר, כי היא נכנסת לתוכו --- */
-await btn(/^תלת/).click();
+await btn(/^דו־ממד/).click();
 await page.waitForTimeout(900);
 await btn(/הגדרות הקיר/).click();
 await page.waitForTimeout(900);
@@ -88,7 +88,7 @@ await page.waitForTimeout(700);
 ok('a niche asks for its depth too', (await dlg().getByLabel('נישה — עומק').count()) === 1);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(700);
-await btn(/שטוח/).click();
+await btn(/^תלת־ממד/).click();
 await page.waitForTimeout(1200);
 ok(
   'and it is drawn recessed into the wall',

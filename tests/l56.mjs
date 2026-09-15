@@ -52,7 +52,7 @@ await btn(/בדיקה/).click();
 await page.waitForTimeout(900);
 await page.getByRole('button', { name: /מטבח/ }).first().click();
 await page.waitForTimeout(1400);
-await btn(/שטוח/).click();
+await btn(/^תלת־ממד/).click();
 await page.waitForTimeout(1100);
 
 /* --- המנעול קיים, והחדר מתחיל חופשי (שכבה 23) --- */
