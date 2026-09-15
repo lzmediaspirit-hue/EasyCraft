@@ -2,7 +2,7 @@
 
 **Repository:** `lzmediaspirit-hue/EasyCraft`
 **Branch:** `claude/carpenter-app-brainstorm-ym2doc`
-**Result commits:** `44ca060`, `dad8360`, `4eb783b`
+**Result commits:** `44ca060`, `dad8360`, `4eb783b`, `a7086dd`, `edd3e83`, `2a8cc7c`
 **Reviewed baseline:** `71b205afea1602468a34a52fdd42567c32b2d9fb`
 **Responds to:** `EasyCraft-review.md` (R1–R15), `EasyCraft-product-architecture-review.md`
 (N1–N11), `EasyCraft-planner-review.md` (V1–V7),
@@ -252,6 +252,43 @@ written: file name, entry count, finish and material counts, and revision date.
 Import behaviour is unchanged from the C4 fix: transactional, matched by part
 number, dependencies first, unresolved references reported.
 
+### D5 — An appliance is a bought product, not a built box
+
+Raised by the owner while reviewing the duplicate cabinet names this document
+flagged. Their rule: an oven — and equally a fridge and a dishwasher — is a
+picture with width, height and depth, nothing else, and it is not counted in
+cutting. A cabinet built *around* an oven, with a drawer under it, is an ordinary
+cabinet and is counted.
+
+**Before.** The model already had the right flag: `standalone` on the oven,
+fridge, dishwasher, hood and oven-microwave glyphs. Exactly one consumer honoured
+it — `unitParts` returned `[]`, so no boards. Everywhere else they behaved as
+cabinets:
+
+- `isoScene` drew a full carcass (two sides, bottom, top, back) and pasted an
+  appliance face on it, so a fridge rendered as a wardrobe with a grey door.
+- The editors offered doors, shelves, socle, countertop, back, rails, LED and
+  glass.
+- The accessory loop counted their drawers, handles, lifts and LED metres. Nothing
+  was cut, but a quote could still charge for drawer runners on an oven.
+- In the library they were named "ארגז תנור", "ארגז מדיח", "עמודת מקרר" — each
+  the word for *cabinet*.
+
+**Change.** `standalone` now means one thing in every consumer: bought, not built.
+The scene draws the body and its face only; `BoxForm` and `UnitEditor` offer name,
+width, height, depth and position, with a line saying why the rest is gone; the
+accessory loop skips these units. The library entries are now **תנור**, **מדיח**
+and **מקרר**, and the owner's own cabinet became **ארגז תנור ומגירה** — which also
+resolves the duplicate name this document reported.
+
+Height-above-floor stays editable for an appliance: that is where it stands, not
+what it is made of, and a built-in oven cannot be placed without it.
+
+**Test.** `tests/l113.mjs`, 14 checks, including a positive control — the same
+unit with a cabinet glyph and the same drawer/handle/LED settings *is* cut and
+*is* counted, while the appliance version reports zero sheets, zero drawers, zero
+handles and zero LED.
+
 ---
 
 ## 4. Code pass
@@ -274,10 +311,11 @@ combine with a behavioural batch. It is a known debt, not an oversight.
 - **Typecheck:** `npx tsc --noEmit` — clean.
 - **Production build:** `npm run build` — clean.
 - **Standalone build:** `npm run build:single` — 868 KB, ASCII only.
-- **Browser suites:** `npm test` — **84 of 84 passing, exit 0**, on commit
-  `4eb783b`. The runner checks exit status before output text, per R15.
-- **New coverage:** `tests/l112.mjs` (14 checks) for D1, and two added checks in
-  `l99` for the price-less board rule in D3.
+- **Browser suites:** `npm test` — **85 of 85 passing, exit 0**, on commit
+  `2a8cc7c`. The runner checks exit status before output text, per R15.
+- **New coverage:** `tests/l112.mjs` (14 checks) for D1, `tests/l113.mjs`
+  (14 checks) for the appliance rule below, and two added checks in `l99` for the
+  price-less board rule in D3.
 
 ### What the first full run caught
 
@@ -342,7 +380,12 @@ These are stated rather than implied.
    offered wherever a price exists. A board that was offered and unpriced before
    this change did not exist as a state, so there is nothing to migrate — but a
    reviewer checking old data should know the rule.
-9. **The security posture is unchanged and deliberate.** The app seeds
+9. **Two library duplicates remain, by the owner's choice.** "עמודת תנור" and
+   "עמודת תנור ומיקרוגל" are the same appliances at column height, which the
+   height field can now express; and two different entries are both named
+   "ארגז פתוח". Both were reported to the owner and neither was removed without
+   their word — deleting library entries is theirs to decide.
+10. **The security posture is unchanged and deliberate.** The app seeds
    `admin` / `admin2026`, both the login and team screens warn until the password
    is changed, and the data sits unencrypted in IndexedDB. This is a starting
    point, not protection, and it is documented as such in `README.md` and
