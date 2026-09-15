@@ -8,7 +8,7 @@ import { CustomItemSheet } from './CustomItemSheet';
 import { RoomSheet } from './RoomSheet';
 import { Sheet } from '../../ui/Sheet';
 import { cm } from '../../ui/units';
-import { PencilIcon, PlusIcon, StarIcon, TrashIcon, roomIcon } from '../../ui/icons';
+import { CloseIcon, PencilIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon, roomIcon } from '../../ui/icons';
 
 import {
   CUSTOM_ROOM,
@@ -73,16 +73,34 @@ export function LibrarySheet({
     !manage && roomKind && roomKind !== CUSTOM_ROOM ? { kind: 'room', id: roomKind } : MENU,
   );
   const [group, setGroup] = useState<CatalogGroup | null>(null);
+  /*
+   * חיפוש לפי שם.
+   *
+   * ספרייה של שישים ארגזים מחולקת לחדרים ולקטגוריות, ולכן מי שיודע
+   * בדיוק מה הוא מחפש — "ארגז תנור ומגירה" — צריך לנחש באיזה חדר
+   * הוא שמור ולפתוח שתי רמות. החיפוש חוצה את הכול: הוא מסתכל על
+   * הספרייה כולה, בלי קשר לחדר, לקטגוריה ולמסך שפתוח.
+   */
+  const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
   const [editRoom, setEditRoom] = useState<Room | 'new' | null>(null);
 
+  /** מה שהוקלד, מנורמל — רווחים כפולים וגרשיים לא אמורים להכשיל חיפוש */
+  const needle = normalize(query);
+
   const pool = useMemo(() => {
-    if (!items || view.kind === 'menu') return [];
+    if (!items) return [];
+    /*
+     * חיפוש גובר על המסך שפתוח: מי שמקליד שם מחפש אותו בספרייה
+     * כולה, ולא בחדר שהוא במקרה נמצא בו.
+     */
+    if (needle) return items.filter((i) => normalize(i.name).includes(needle));
+    if (view.kind === 'menu') return [];
     /* ארגזים מועדפים — מה שסומן בכוכב, בלי קשר לחדר ולקטגוריה */
     if (view.kind === 'favorites') return items.filter((i) => i.favorite);
     if (view.kind === 'panel') return items.filter((i) => i.group === 'panel');
     return items.filter((i) => i.group !== 'panel' && i.rooms.includes(view.id));
-  }, [items, view]);
+  }, [items, view, needle]);
 
   /* מה שנכנס לספרייה של חדר — אותו חשבון שמייצר את הרשימה עצמה */
   const inRoom = (kind: RoomKind) =>
@@ -98,10 +116,16 @@ export function LibrarySheet({
   }, [pool, view]);
 
   const activeGroup = group && groups.includes(group) ? group : groups[0];
-  const visible = groups.length > 1 ? pool.filter((i) => i.group === activeGroup) : pool;
+  /*
+   * בחיפוש אין לשוניות קטגוריה: התוצאה היא כל מה שנקרא כך, ולחתוך
+   * אותה לפי קטגוריה היה מסתיר בדיוק את מה שחיפשו.
+   */
+  const visible = !needle && groups.length > 1 ? pool.filter((i) => i.group === activeGroup) : pool;
 
   const title =
-    view.kind === 'favorites'
+    needle
+      ? 'חיפוש בספרייה'
+      : view.kind === 'favorites'
       ? 'ארגזים מועדפים'
       : view.kind === 'menu'
         ? 'ספרייה'
@@ -122,7 +146,41 @@ export function LibrarySheet({
         onBack={view.kind === 'menu' ? undefined : () => goTo(MENU)}
         tall
       >
-        {groups.length > 1 && (
+        {/*
+          שדה החיפוש קודם לכול, גם בתפריט: מי שיודע את שם הארגז לא
+          צריך לבחור חדר ואז קטגוריה כדי להגיע אליו.
+        */}
+        <div className="relative mb-4">
+          <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-stone-400">
+            <SearchIcon className="size-4" />
+          </span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="חיפוש ארגז לפי שם"
+            placeholder="חיפוש ארגז לפי שם"
+            className="w-full rounded-xl border border-stone-200 bg-white py-2.5 ps-9 pe-9 text-sm text-stone-800 placeholder:text-stone-400 focus:border-oak-400 focus:outline-none"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              aria-label="ניקוי החיפוש"
+              className="absolute inset-y-0 end-2 flex items-center rounded-lg px-1 text-stone-400 transition-colors hover:text-oak-700"
+            >
+              <CloseIcon className="size-4" />
+            </button>
+          )}
+        </div>
+
+        {needle && (
+          <p className="mb-3 text-xs text-stone-500">
+            {visible.length === 0
+              ? 'אין ארגז בשם הזה'
+              : `${visible.length === 1 ? 'ארגז אחד' : `${visible.length} ארגזים`} בכל הספרייה`}
+          </p>
+        )}
+
+        {!needle && groups.length > 1 && (
           <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
             {groups.map((g) => (
               <button
@@ -140,7 +198,7 @@ export function LibrarySheet({
           </div>
         )}
 
-        {view.kind !== 'menu' && (
+        {(needle || view.kind !== 'menu') && (
         <div className="grid grid-cols-3 gap-2.5">
           {visible.map((item) => (
             <div key={item.id} className="relative">
@@ -389,4 +447,20 @@ export function LibrarySheet({
       )}
     </>
   );
+}
+
+/**
+ * השוואת שמות סלחנית.
+ *
+ * "ארגז  תנור" ו"ארגז תנור" הם אותו ארגז, וכך גם מי שהקליד גרש
+ * ישר במקום גרשיים עבריים. חיפוש שנכשל על רווח כפול הוא חיפוש
+ * שהנגר מפסיק להשתמש בו.
+ */
+function normalize(value: string): string {
+  return value
+    .trim()
+    .replace(/["\u05f4\u201c\u201d]/g, '"')
+    .replace(/['\u05f3\u2018\u2019]/g, "'")
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
 }
