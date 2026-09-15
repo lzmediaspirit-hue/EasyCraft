@@ -39,7 +39,13 @@ type Props = {
   plan: PlanWall[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onMove: (id: string, patch: Partial<PlacedUnit>) => void;
+  /**
+   * הזזת ארגז. חסר = תצוגה בלבד, והגרירה אינה מתחילה כלל.
+   *
+   * זו הדרך שבה מי שאין לו רשות עריכה אינו מזיז ארגז בטעות: לא
+   * מסתירים ממנו את הציור, פשוט אין לאן לשלוח את התנועה.
+   */
+  onMove?: (id: string, patch: Partial<PlacedUnit>) => void;
   /** הסתרת חזיתות — תצוגת פנים הארונות */
   inside: boolean;
   /** גוון לכל ארגז, לפי מזהה הגוון */
@@ -169,6 +175,8 @@ export function WallElevation({
     onSelect(unit.id);
     // במצב מדידה ההקשה רק בוחרת ארגז, בלי להזיז אותו בטעות
     if (measure) return;
+    /* תצוגה בלבד: אין למי לשלוח את התנועה, ולכן אין גרירה */
+    if (!onMove) return;
     /*
      * קנה המידה נגזר מהטרנספורם האמיתי של ה-SVG ולא מרוחב האלמנט:
      * כשהציור משתלב במסגרת נמוכה הוא מוקטן וממורכז, ואז רוחב
@@ -201,7 +209,8 @@ export function WallElevation({
 
   function moveDrag(e: React.PointerEvent) {
     const d = drag.current;
-    if (!d) return;
+    /* בלי `onMove` הגרירה לא התחילה, ולכן אין כאן תנועה לפתור */
+    if (!d || !onMove) return;
     const unit = units.find((u) => u.id === d.id);
     if (!unit) return;
 

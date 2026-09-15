@@ -178,8 +178,19 @@ export function DesignScreen({
   const selected = units.find((u) => u.id === selectedId) ?? null;
   const workUnit = (allUnits ?? NO_UNITS).find((u) => u.id === workUnitId) ?? null;
   const me = useCurrentMember();
+  /*
+   * שני תפקידים, ובכוונה.
+   *
+   * `role` הוא מה שהמסך **נראה** לפיו — מנהל שבוחר לראות כנגר רואה
+   * את מסך הנגר. `actor` הוא מי שבאמת נכנס, וממנו נגזר מה **מותר**.
+   *
+   * ההפרדה הזאת היא התיקון: התפקידים סודרו כסולם יורד, אבל היכולות
+   * שלהם אינן מוכלות זו בזו. תכנת שבחר לראות כנגר קיבל בדיוק את מה
+   * שאין לו — לסמן "נחתך" — כי נגר נמצא מתחתיו בסולם.
+   */
   const role = useEffectiveRole(me?.role);
-  const mayEdit = can.design(role, project);
+  const actor = me?.role;
+  const mayEdit = can.design(actor, project);
   /*
    * מי שאינו מנהל רואה את מסך התהליך ולא את מסך התכנון. זה לא
    * מסך אחר — אלה אותם ארגזים באותם מקומות — אבל זו השאלה שהוא
@@ -410,7 +421,20 @@ export function DesignScreen({
     await unitsRepo.centerOnWall(wall.id, wall.lengthMm);
   }
 
+  /**
+   * שינוי ארגז — השער היחיד שדרכו זה קורה.
+   *
+   * הבדיקה כאן ולא רק על הכפתורים: מחווה שנשכח להתנות בה היא דלת
+   * פתוחה, וכך בדיוק נשארה הגרירה בציור החזית פתוחה למי שאסור לו.
+   * מי שאין לו רשות עריכה אינו משנה ארגז — לא בכפתור, לא בגרירה
+   * ולא בשדה מספרי.
+   *
+   * סימון עבודה אינו עריכה: הוא עובר דרך `canAdvance`, ולכן הוא
+   * מותר לנגר דווקא כשההדמיה נעולה בפניו.
+   */
   async function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
+    const workOnly = Object.keys(patch).every((k) => k === 'work');
+    if (!editable && !workOnly) return;
     await history.capture(projectId, tag);
     await unitsRepo.update(id, patch);
   }
@@ -515,7 +539,13 @@ export function DesignScreen({
             corners={corners}
             finishHex={finishHex ?? NO_HEX}
             snap={design.view.snap}
-            onMove={(id, patch) => patchUnit(id, patch)}
+            /*
+             * גרירה היא עריכה, ולכן היא עוברת באותו שער כמו
+             * הכפתורים. בתלת־ממד היא כבר הייתה מותנית ב-`editable`
+             * וכאן לא — ולכן נגר ותכנת בלי אישור יכלו להזיז ארגז
+             * בציור החזית, בלי שאף כפתור עריכה הוצג להם.
+             */
+            onMove={editable ? (id, patch) => patchUnit(id, patch) : undefined}
           />
           )}
 
@@ -810,7 +840,7 @@ export function DesignScreen({
             ) : (
               <EditGate
                 project={project}
-                role={role}
+                role={actor}
                 workMode={workMode}
                 onRequest={(note) =>
                   projectsRepo.update(projectId, {
@@ -873,7 +903,8 @@ export function DesignScreen({
       {workUnit && (
         <UnitWorkSheet
           unit={workUnit}
-          role={role}
+          role={actor}
+          shown={role}
           project={project}
           onChange={async (work) => {
             await patchUnit(workUnit.id, { work }, `work:${workUnit.id}`);
@@ -895,7 +926,8 @@ export function DesignScreen({
       {sheet === 'bulk' && (
         <BulkWorkSheet
           units={units}
-          role={role}
+          role={actor}
+          shown={role}
           project={project}
           onApply={async (changes) => {
             await history.capture(projectId, `bulk:${Date.now()}`);

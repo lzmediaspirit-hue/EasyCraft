@@ -117,12 +117,25 @@ export function canAdvance(
   u: PlacedUnit,
   track: TrackDef,
   to: Exclude<TrackStage, 'none'>,
+  /** מי שנכנס באמת — ממנו נגזרת הסמכות */
   role: UserRole | undefined,
   /** הפרויקט שהארגז שייך לו — ממנו נקרא אם העבודה בכלל נפתחה */
   project?: { soldAt?: number },
+  /**
+   * התפקיד שנבחר לצפייה, כשהוא אינו התפקיד האמיתי.
+   *
+   * מה שמותר הוא החיתוך של השניים, ולא הנמוך מביניהם: היכולות אינן
+   * מוכלות זו בזו — תכנת מכין קבצים לחיתוך ונגר מסמן שנחתך — ולכן
+   * "צפייה כנגר" נתנה לתכנת בדיוק את מה שאין לו. מנהל שצופה כנגר
+   * מצומצם ליכולות הנגר, וזו בדיוק מטרת הצפייה.
+   */
+  shown?: UserRole,
 ): { ok: boolean; why?: string } {
   const def = STAGE_CHAIN.find((s) => s.key === to)!;
   if (!role || !def.roles.includes(role)) return { ok: false, why: 'לא בתפקיד שלך' };
+  if (shown && shown !== role && !def.roles.includes(shown)) {
+    return { ok: false, why: `לא בתפקיד ${shown === 'installer' ? 'המתקין' : shown === 'carpenter' ? 'הנגר' : shown === 'planner' ? 'התכנת' : 'המנהל'} שנבחר לצפייה` };
+  }
   /*
    * ייצור מתחיל אחרי המכירה.
    *
