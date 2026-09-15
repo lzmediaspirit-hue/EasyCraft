@@ -2,6 +2,7 @@
 
 **Repository:** `lzmediaspirit-hue/EasyCraft`
 **Branch:** `claude/carpenter-app-brainstorm-ym2doc`
+**Result commits:** `44ca060`, `dad8360`, `4eb783b`
 **Reviewed baseline:** `71b205afea1602468a34a52fdd42567c32b2d9fb`
 **Responds to:** `EasyCraft-review.md` (R1–R15), `EasyCraft-product-architecture-review.md`
 (N1–N11), `EasyCraft-planner-review.md` (V1–V7),
@@ -189,8 +190,13 @@ toolbar; no numeric horizontal placement; icon stroke weights ranged 1.6–2.4 a
 - The two ruler tools no longer share a glyph. **סרגל** (distance between two
   things) keeps the ruler; **מדידה** (dimension overlay on every cabinet) gets the
   new dimension line. The two eyes were also separated: restoring hidden cabinets
-  uses the struck-through eye, and the customer preview carries a visible
-  **ללקוח** label rather than an eye alone.
+  uses the struck-through eye.
+- The review also asks for the customer preview to be a labelled action rather
+  than an eye alone. **Not done, deliberately.** An earlier layer removed that
+  labelled button from the toolbar at the owner's explicit request; it is an icon
+  in the header corner and `l44` guards that. Its accessible name and tooltip both
+  read "הדמיה ללקוח", so it is reachable by name and by voice — what distinguishes
+  it from the other eye on the screen is its position, not its shape.
 - The flat mode is labelled **דו־ממד**, not "חזית". A first pass used "חזית" and
   produced two different controls with the same accessible name in one toolbar —
   the fronts/interior toggle is already called that. A probe over every button's
@@ -266,13 +272,45 @@ combine with a behavioural batch. It is a known debt, not an oversight.
 ## 5. Validation
 
 - **Typecheck:** `npx tsc --noEmit` — clean.
-- **Browser suites:** `npm test` — see the run summary handed over with this
-  document. The runner checks exit status first, per R15.
-- **New coverage:** `tests/l112.mjs` (14 checks) for D1.
-- **Neighbouring suites re-run individually during the work:** `l37` (drag into a
-  gap, the closest existing behaviour to stacking), `l98` (backup and library
-  round-trip, 23 checks), `l99c` (import failure handling, 6 checks), `l17`, `l43`,
-  `l46` (materials and finishes) — all passing.
+- **Production build:** `npm run build` — clean.
+- **Standalone build:** `npm run build:single` — 868 KB, ASCII only.
+- **Browser suites:** `npm test` — **84 of 84 passing, exit 0**, on commit
+  `4eb783b`. The runner checks exit status before output text, per R15.
+- **New coverage:** `tests/l112.mjs` (14 checks) for D1, and two added checks in
+  `l99` for the price-less board rule in D3.
+
+### What the first full run caught
+
+The first complete run after this batch failed 20 of 84 suites. All twenty were
+this batch's doing, and they are reported here rather than quietly fixed:
+
+- **19 suites keyed on the old button text.** The mode control used to be labelled
+  with the current state ("שטוח"), so fifteen suites clicked "שטוח" to *enter* 3D
+  and four clicked "תלת־ממד" to *leave* it. Under the new selector each button
+  names its destination, so both sets were updated. `l60` no longer asserts that a
+  button with a particular name exists; it asserts that the right mode is
+  `aria-pressed`, which is the question it was actually asking.
+- **`l99` encoded the old pricing rule.** Its positive control costed a cabinet
+  with a board but no finish and required zero unpriced parts. Under D3 that is
+  now counted as unpriced, which is correct — a board cannot be priced without
+  knowing its finish. The control was given a priced finish, and two checks were
+  added for the new state itself: an available-but-unpriced board is still cut,
+  and is still counted as unpriced.
+- **`l44` caught a real mistake.** This document's D2 section originally described
+  giving the customer-preview action a visible label, as the design review asks.
+  An earlier layer had deliberately removed that button from the toolbar at the
+  owner's explicit request, and `l44` guards it. The owner's instruction takes
+  precedence over the review's suggestion: the action is an icon in the header
+  corner, and what distinguishes it is its position, not its shape. Reverted, with
+  the reason recorded next to the code.
+- **`l105` needs the standalone file on disk.** It reads `dist/easycraft.html` —
+  that *is* the N11 check — and a plain `npm run build` removes it. Not a defect;
+  the dependency is now written down in `tests/README.md`.
+
+- **Neighbouring suites also re-run individually during the work:** `l37` (drag
+  into a gap, the closest existing behaviour to stacking), `l98` (backup and
+  library round-trip, 23 checks), `l99c` (import failure handling), `l17`, `l43`,
+  `l46` (materials and finishes).
 
 ---
 
