@@ -115,6 +115,11 @@ export function DesignToolbar({
           {/*
             ההדמיה ללקוח היא הדבר היחיד כאן שמיועד למישהו אחר,
             ולכן היא אייקון בפינה ולא כפתור בסרגל הכלים.
+
+            המבקר ביקש שתהיה לה תווית נראית ולא עין בלבד. הבעלים
+            ביקש במפורש להוריד את כפתור "ללקוח" מהסרגל, וזו בקשה
+            שגוברת: מה שמבדיל את האייקון הזה משאר העיניים במסך הוא
+            המקום — הפינה, לא סרגל הכלים — ולא צורת הכפתור.
           */}
           {role === 'manager' && (
             <button
@@ -122,10 +127,9 @@ export function DesignToolbar({
               disabled={units.length === 0}
               aria-label="הדמיה ללקוח"
               title="הדמיה להצגה ללקוח"
-              className="flex items-center gap-1 rounded-full px-2 py-2 text-xs font-medium text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-oak-700 disabled:opacity-40"
+              className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-oak-700 disabled:opacity-40"
             >
-              <EyeIcon className="size-5" />
-              ללקוח
+              <EyeIcon />
             </button>
           )}
           {/* סרגלי הכלים — שלוש שורות שאפשר לקפל כשלא עובדים */}
