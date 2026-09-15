@@ -28,7 +28,7 @@ await setup(page, { name: 'תצוגה בע״מ' });
 await add('ארגז כיור');
 await add('ארגז 3 מגירות');
 await add('ארגז דלת ומגירה');
-await add('עמודת מקרר', 'עמודות');
+await add('מקרר', 'עמודות');
 await add('עליון שתי דלתות', 'עליונים');
 await add('עליון ויטרינה', 'עליונים');
 await shot('1-front');
