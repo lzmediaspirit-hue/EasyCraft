@@ -102,10 +102,14 @@ const lib = await page.evaluate(async () => {
   const dup = names.filter((n, i) => names.indexOf(n) !== i);
   return { names, dup: [...new Set(dup)] };
 });
-for (const n of ['תנור', 'מקרר', 'מדיח', 'ארגז תנור ומגירה']) {
+for (const n of ['תנור', 'מקרר', 'מדיח', 'ארגז תנור ומגירה', 'ארגז פתוח עם רגליים']) {
   ok(`"${n}" קיים בספרייה`, lib.names.includes(n));
 }
-ok('אין שני ארגזי תנור באותו שם', !lib.dup.includes('ארגז תנור'), JSON.stringify(lib.dup));
+/*
+ * שני ארגזים באותו שם הם ארגז אחד שאי אפשר לבחור בו: ברשימה הם
+ * נראים זהים, וההבדל — רגליים, מפלס, מידה — מתגלה רק אחרי ההנחה.
+ */
+ok('אין שני פריטים באותו שם', lib.dup.length === 0, JSON.stringify(lib.dup));
 
 await browser.close();
 for (const e of errs) out.push(e);
