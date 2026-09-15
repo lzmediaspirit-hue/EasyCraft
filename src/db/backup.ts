@@ -17,11 +17,34 @@ import type { CatalogItem, Finish, Material } from './types';
 /**
  * גרסת הפורמט. מי שקורא קובץ ישן צריך לדעת מה הוא מקבל.
  *
+ * 3 — לגיבוי ספרייה יש מניפסט: כמה ארגזים, על אילו לוחות וגוונים
+ *     הם נשענים, ומתי נוצר. מי שמקבל קובץ צריך לדעת מה בתוכו לפני
+ *     שהוא מייבא אותו, ולא אחרי.
  * 2 — גיבוי ספרייה נושא איתו גם את הלוחות והגוונים שהארגזים מפנים
  *     אליהם. ב-1 הוא נשא רק את הארגזים, והמקבל קיבל הפניות למזהים
  *     שאין אצלו: הגוון שנבחר לחזית פשוט לא היה קיים.
  */
-export const BACKUP_FORMAT = 2;
+export const BACKUP_FORMAT = 3;
+
+/**
+ * מה יש בחבילת ספרייה, בלי לפתוח את הטבלאות.
+ *
+ * זו הצהרה שאפשר לקרוא לפני ייבוא: כמה ארגזים, אילו מק״טים, ועל
+ * כמה לוחות וגוונים הם נשענים. בלי זה "ייבוא ספרייה" היה קפיצה
+ * לתוך קובץ — והתוצאה התגלתה רק אחרי שהיא כבר נכתבה.
+ *
+ * `revision` הוא חותם הזמן של הפריט העדכני ביותר בחבילה. שתי חבילות
+ * מאותה נגרייה נבדלות בו, ולכן אפשר לדעת מי מהן חדשה יותר בלי
+ * להשוות שורה־שורה.
+ */
+export interface LibraryManifest {
+  items: number;
+  materials: number;
+  finishes: number;
+  /** המק״טים שבחבילה, ממוינים — הזהות שעוברת בין מכשירים */
+  codes: string[];
+  revision: number;
+}
 
 
 /** הטבלאות שנכנסות לגיבוי מלא, בסדר שבו הן נכתבות בחזרה. */
@@ -68,6 +91,8 @@ export interface Backup {
   /** מה יש בו: הכול, או הספרייה בלבד */
   kind: 'all' | 'library';
   tables: Partial<Record<TableName, unknown[]>>;
+  /** מה יש בחבילה — בגיבוי ספרייה בלבד, ומגרסה 3 ואילך */
+  manifest?: LibraryManifest;
 }
 
 /**
@@ -98,7 +123,16 @@ export async function exportAll(): Promise<Backup> {
  * עם הפניות לשום דבר — הצבע לא הופיע והמחיר לא חושב.
  */
 export async function exportLibrary(): Promise<Backup> {
-  const catalog = (await db.table('catalog').toArray()) as CatalogItem[];
+  /*
+   * מה שהוסר מהספרייה אינו יוצא בגיבוי.
+   *
+   * ארגז שהוסר נשאר במכשיר כדי שאפשר יהיה להחזיר אותו, אבל הוא אינו
+   * חלק מהספרייה — וכשהוא נסע עם הגיבוי הוא חזר למכשיר הבא, שם
+   * איש לא ידע שהוא הוסר פעם.
+   */
+  const catalog = ((await db.table('catalog').toArray()) as CatalogItem[]).filter(
+    (i) => !i.hiddenAt,
+  );
   const [allMaterials, allFinishes] = await Promise.all([
     db.materials.toArray(),
     db.finishes.toArray(),
@@ -110,12 +144,45 @@ export async function exportLibrary(): Promise<Backup> {
   for (const f of finishes) for (const id of Object.keys(f.prices ?? {})) need.materials.add(id);
   const materials = allMaterials.filter((m) => need.materials.has(m.id));
 
+  const at = Date.now();
   return {
     app: 'easycraft',
     format: BACKUP_FORMAT,
-    at: Date.now(),
+    at,
     kind: 'library',
     tables: { catalog, materials, finishes },
+    manifest: {
+      items: catalog.length,
+      materials: materials.length,
+      finishes: finishes.length,
+      codes: catalog
+        .map((i) => i.code)
+        .filter((c): c is string => !!c)
+        .sort(),
+      /* המהדורה היא הפריט העדכני ביותר, ולא רגע הייצוא */
+      revision: catalog.reduce((n, i) => Math.max(n, i.updatedAt ?? 0), 0) || at,
+    },
+  };
+}
+
+/**
+ * מה יש בקובץ, בלי לייבא אותו.
+ *
+ * חבילה מגרסה 3 נושאת מניפסט; ישנה יותר נספרת מהטבלאות עצמן, כדי
+ * שגם קובץ שנוצר לפני כן ייקרא לפני שמייבאים אותו.
+ */
+export function libraryManifest(backup: Backup): LibraryManifest {
+  if (backup.manifest) return backup.manifest;
+  const catalog = (backup.tables.catalog ?? []) as CatalogItem[];
+  return {
+    items: catalog.length,
+    materials: (backup.tables.materials ?? []).length,
+    finishes: (backup.tables.finishes ?? []).length,
+    codes: catalog
+      .map((i) => i.code)
+      .filter((c): c is string => !!c)
+      .sort(),
+    revision: backup.at ?? 0,
   };
 }
 
@@ -229,24 +296,48 @@ export async function importLibrary(
     if (newFinishes.length) await db.finishes.bulkAdd(newFinishes);
     out.deps = newMaterials.length + newFinishes.length;
 
-    const existing = new Map((await db.catalog.toArray()).map((i) => [i.id, i]));
+    const rows = await db.catalog.toArray();
+    const existing = new Map(rows.map((i) => [i.id, i]));
+    /*
+     * המק״ט הוא הזהות שבין המכשירים.
+     *
+     * אותו ארגז שנבנה כאן וייובא לשם קיבל מזהה פנימי אחר, ולכן
+     * ייבוא חוזר יצר אותו פעמיים. ארגז שמגיע עם מק״ט שכבר קיים
+     * נכתב על הארגז ההוא, במזהה שלו — ומה שהונח בפרויקטים ממשיך
+     * להצביע על מה שהוא הצביע עליו.
+     *
+     * במיזוג בלבד. בהחלפה מלאה אין למה להיצמד: כל מה שאינו
+     * בייבוא נמחק ממילא, ולקיחת המזהה של ארגז שנמחק רק גוזלת
+     * ממנו את זהותו — ואז "החזרת ארגזי התקן" אינה מחזירה אותו.
+     */
+    const byCode =
+      mode === 'merge'
+        ? new Map(rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i.id]))
+        : new Map<string, string>();
+    const landed = items.map((i) => {
+      const twin = i.code ? byCode.get(i.code.toUpperCase()) : undefined;
+      return twin && twin !== i.id ? { ...i, id: twin } : i;
+    });
+
     if (mode === 'replace') {
-      const keep = new Set(items.map((i) => i.id));
+      const keep = new Set(landed.map((i) => i.id));
       const drop = [...existing.keys()].filter((id) => !keep.has(id));
       out.removed = drop.length;
       await db.catalog.bulkDelete(drop);
     }
-    for (const item of items) {
+    for (const item of landed) {
       if (existing.has(item.id)) out.replaced++;
       else out.added++;
     }
-    await db.catalog.bulkPut(items.map((i) => ({ ...i, updatedAt: now })));
+    await db.catalog.bulkPut(landed.map((i) => ({ ...i, updatedAt: now })));
+
 
     /* מה שנשאר בלי כיסוי — נאמר במספר ולא מתגלה אחר כך בהדמיה */
     const finishIds = new Set((await db.finishes.toArray()).map((f) => f.id));
 
     const materialIds = new Set((await db.materials.toArray()).map((m) => m.id));
-    out.unresolved = items.filter((i) => {
+    out.unresolved = landed.filter((i) => {
+
       const f = [i.carcassFinishId, i.frontFinishId, i.exposedFinishId, i.backFinishId];
       const m = [i.carcassMaterialId, i.frontMaterialId, i.exposedMaterialId, i.backMaterialId];
       return (

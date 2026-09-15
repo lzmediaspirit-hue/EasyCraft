@@ -71,6 +71,14 @@ interface BoardLine {
   consumerTotal: number;
   /** האם המחיר נקבע במיוחד לפרויקט הזה */
   overridden: boolean;
+  /**
+   * הצירוף קיים אצל הספק אבל לא הוקלד לו מחיר.
+   *
+   * השורה נספרת בפלטות ולא בכסף, והחלקים שלה נכנסים ל`unpricedParts`
+   * — אחרת לוח שלא תומחר נכנס להצעה כאילו הוא בחינם, וההצעה נראית
+   * שלמה בזמן שהיא חסרה.
+   */
+  unpriced: boolean;
 }
 
 /** שורת אביזר בתמחור. */
@@ -716,6 +724,8 @@ export function projectCosting(
   const edgeByFinish = new Map<string, number>();
   /** חלקים שלא נמצא להם לוח — נספרים כדי שאפשר יהיה להתריע עליהם */
   let unpriced = 0;
+  /* חלקים שהלוח שלהם קיים אבל בלי מחיר — נספרים אחרי בניית השורות */
+  let unpricedRows = 0;
   const glassMap = new Map<string, GlassDoorLine>();
 
   for (const u of units) {
@@ -792,6 +802,17 @@ export function projectCosting(
     const factoryPrice = override?.factoryPrice ?? listed?.factoryPrice ?? 0;
     const consumerPrice = override?.consumerPrice ?? listed?.consumerPrice ?? 0;
     /*
+     * "אין מחיר" אינו "מחיר אפס". צירוף שהוצהר כזמין ולא תומחר
+     * נספר בפלטות, ובחלקים שאין להם מחיר — כך שהצעת מחיר שכוללת
+     * אותו אינה מציגה את עצמה כשלמה.
+     */
+    const noPrice =
+      !override?.factoryPrice &&
+      !override?.consumerPrice &&
+      listed?.factoryPrice === undefined &&
+      listed?.consumerPrice === undefined;
+    if (noPrice) unpricedRows += row.parts.reduce((n, p) => n + p.qty, 0);
+    /*
      * כמה פלטות באמת צריך — לפי פריסה על הלוח.
      * גוון עם טקסטורה מחייב כיוון סיבים קבוע בחזיתות ובצדדים, ולכן
      * הוא כמעט תמיד יבזבז יותר מגוון חלק. זה הבדל שהנגר משלם עליו,
@@ -816,6 +837,7 @@ export function projectCosting(
       factoryTotal: sheets * factoryPrice,
       consumerTotal: sheets * consumerPrice,
       overridden: !!override,
+      unpriced: noPrice,
     });
     groups.push({ key, material, finish, parts: row.parts, nest });
   }
@@ -904,7 +926,7 @@ export function projectCosting(
     lifts,
     handles,
     totalSheets: lines.reduce((n, l) => n + l.sheets, 0),
-    unpricedParts: unpriced,
+    unpricedParts: unpriced + unpricedRows,
     boardsFactoryTotal,
     boardsConsumerTotal,
     factoryTotal: boardsFactoryTotal + accFactory + glassFactory,

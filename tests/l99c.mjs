@@ -21,9 +21,19 @@ await btn(/גיבוי והעברת נתונים/).scrollIntoViewIfNeeded();
 await btn(/גיבוי והעברת נתונים/).click();
 await page.waitForTimeout(700);
 
-const box = dlg().locator('textarea');
+/* הגיבוי נכנס כקובץ, ולכן גם הקובץ הפגום נבחר מהבורר */
+const fs = await import('node:fs');
+const TMP = '/tmp/l99c-files';
+fs.mkdirSync(TMP, { recursive: true });
+const asFile = async (name, body) => {
+  const path = `${TMP}/${name}`;
+  fs.writeFileSync(path, body);
+  await dlg().getByLabel('בחירת קובץ גיבוי').setInputFiles(path);
+  await page.waitForTimeout(500);
+};
+
 const bad = '{"app":"easycraft","format":1,"kind":"library","tables":{"catalog":[{"name":"invalid missing id"}]}}';
-await box.fill(bad);
+await asFile('bad.json', bad);
 await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).click();
 await page.waitForTimeout(900);
 const body = await dlg().innerText();
@@ -32,7 +42,7 @@ ok('וכפתור הייבוא נשאר פעיל', await dlg().getByRole('button'
 ok('וגם השחזור המלא', await dlg().getByRole('button', { name: 'שחזור מלא' }).isEnabled());
 
 /* ואותו טקסט כגיבוי מלא חלקי — נדחה לפני שנגעו בנתונים */
-await box.fill('{"app":"easycraft","format":1,"kind":"all","tables":{"settings":[]}}');
+await asFile('partial.json', '{"app":"easycraft","format":1,"kind":"all","tables":{"settings":[]}}');
 await dlg().getByRole('button', { name: 'שחזור מלא' }).click();
 await page.waitForTimeout(900);
 const body2 = await dlg().innerText();

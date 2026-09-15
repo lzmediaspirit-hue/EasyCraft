@@ -37,7 +37,7 @@ await page.getByRole('button', { name: 'תכנת', exact: true }).click(); await
 await full('3-planner-home');
 ok('planner has no settings', await page.getByRole('button', { name: 'הגדרות' }).count() === 0);
 ok('planner has stock', await page.getByRole('button', { name: 'מלאי לוחות' }).count() === 1);
-ok('planner has no library', await page.getByRole('button', { name: 'ספריית המוצרים' }).count() === 0);
+ok('planner has no library', await page.getByRole('button', { name: 'ספריית הארגזים' }).count() === 0);
 
 await btn(/תפקידים בע״מ/).click(); await page.waitForTimeout(700);
 await btn(/מטבח/).first().click(); await page.waitForTimeout(1200);

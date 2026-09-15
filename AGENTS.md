@@ -13,7 +13,7 @@ npm install         # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 אם אין צורך ב
 npm run dev         # שרת פיתוח על 5173
 npm run typecheck   # חייב לעבור לפני כל קומיט
 npm run build:single  # קובץ HTML יחיד, ASCII בלבד
-npm test            # 81 חבילות Playwright — דורש שרת פיתוח פעיל
+npm test            # 84 חבילות Playwright — דורש שרת פיתוח פעיל
 ```
 
 `npm test` דורש דפדפן Chromium ושרת על 5173. בסביבה בלי דפדפן הוא
@@ -57,6 +57,9 @@ npm test            # 81 חבילות Playwright — דורש שרת פיתוח 
 |---|---|
 | `features/design/placement.ts` | איפה הארגז עומד בחדר |
 | `features/design/collision.ts` | האם מותר להניח אותו שם |
+| `features/design/snapping.ts` | לאן הוא קופץ בכל ציר בנפרד |
+| `features/design/stacking.ts` | לאיזו פינה הוא נוחת כשמניחים אותו על ארגז |
+| `materials/boardSpec.ts` | מה זה הלוח שנבחר, ומה מצבו המסחרי |
 | `features/design/isoMath.ts` | מה נראה, ומה מצויר לפני מה |
 | `catalog/standards.ts` | מידות התקן בנגרות, עם נימוק לכל מספר |
 | `db/types.ts` | המודל כולו, וגם הפונקציות שנגזרות ממנו |

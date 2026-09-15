@@ -18,9 +18,11 @@ await btn('כניסה').click(); await page.waitForTimeout(1200);
 ok('admin signed in', await page.getByRole('heading', { name: 'לקוחות' }).count() > 0);
 
 /* ---- ספרייה ממסך הבית ---- */
-await btn('ספריית המוצרים').click(); await page.waitForTimeout(700);
-ok('library opens from home', (await dlg().getAttribute('aria-label')) === 'ספריית המוצרים');
+await btn('ספריית הארגזים').click(); await page.waitForTimeout(700);
+ok('library opens from home', (await dlg().getAttribute('aria-label')) === 'ספרייה');
 await full('1-library-home');
+/* התפריט אינו רשימה: נכנסים לספרייה של חדר, ומשם לוחצים על ארגז */
+await dlg().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(700);
 const first = dlg().locator('div.relative > button').first();
 await first.click(); await page.waitForTimeout(600);
 ok('tap edits in manage mode', (await page.textContent('body')).includes('שמירה'));

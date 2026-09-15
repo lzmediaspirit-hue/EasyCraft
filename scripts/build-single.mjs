@@ -31,15 +31,22 @@ if (hasNonAscii(safeJs)) throw new Error('JS still contains non-ASCII characters
  * פיקסלים: הקובץ הבודד נפתח בטלפון מוקטן פי שניים וחצי, בזמן
  * שהאפליקציה הרגילה נפתחת ברוחב המסך. הכיוון והשפה נקבעים כאן
  * מאותה סיבה — RTL אינו החלטה של ה-CSS אלא של המסמך.
+ *
+ * `--fragment` מוותר על המעטפת הזו, למארח שכותב את ה-head בעצמו.
+ * שם הכיוון והשפה נקבעים בזמן ריצה מ-`main.tsx`, ולכן דבר לא אובד.
  */
-const out = `<!doctype html>
+const DOC = `<!doctype html>
 <html lang="he" dir="rtl">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1c1917">
 <title>EasyCraft</title>
-<style>
+`;
 
+const args = process.argv.slice(2);
+const head = args.includes('--fragment') ? '<title>EasyCraft</title>\n' : DOC;
+
+const out = `${head}<style>
 ${css}
 </style>
 <div id="root"></div>
@@ -48,6 +55,6 @@ ${safeJs}
 </script>
 `;
 
-const target = process.argv[2] ?? 'dist/easycraft.html';
+const target = args.find((a) => !a.startsWith('--')) ?? 'dist/easycraft.html';
 writeFileSync(target, out);
 console.log(`${target} — ${(out.length / 1024).toFixed(0)}KB, ASCII בלבד: ${!hasNonAscii(out)}`);

@@ -172,22 +172,40 @@ export function NumField({
  *
  * מונחים כמו "שקע הגב בחריץ" ברורים לנגר ותיק ולא לכל אחד, וההסבר
  * שייך לצד השדה — לא במדריך נפרד שאף אחד לא פותח.
+ *
+ * למה span ולא button: הסימן יושב בתוך ה-<label> של השדה, וכפתור
+ * הוא איבר שתווית יודעת לסמן. כשהוא הראשון בתוך התווית — וכך
+ * הוא מסודר על המסך — התווית נצמדת אליו במקום אל שדה הקלט,
+ * והשדה נשאר בלי שם. span אינו איבר שמסמנים, ולכן התווית
+ * מדלגת עליו ומגיעה לקלט. התפקיד והמקלדת מושלמים כאן ביד.
  */
 function HelpDot({ label, text }: { label: string; text: string }) {
   const [open, setOpen] = useState(false);
+  const toggle = () => setOpen((v) => !v);
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          /* בלי זה הלחיצה ממשיכה לתווית וקופצת לשדה הקלט */
+          e.preventDefault();
+          toggle();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+          }
+        }}
         aria-expanded={open}
         aria-label={`מה זה ${label}`}
-        className={`grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold transition-colors ${
+        className={`grid size-4 shrink-0 cursor-pointer place-items-center rounded-full text-[10px] font-bold transition-colors ${
           open ? 'bg-oak-600 text-white' : 'bg-stone-200 text-stone-500 hover:bg-stone-300'
         }`}
       >
         ?
-      </button>
+      </span>
       {open && (
         <span className="mt-1 block w-full basis-full rounded-lg bg-stone-100 px-2.5 py-2 text-[11px] leading-snug font-normal text-stone-600">
           {text}

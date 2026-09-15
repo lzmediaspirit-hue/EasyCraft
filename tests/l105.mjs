@@ -20,7 +20,7 @@ await btn('כניסה').click();
 await page.waitForTimeout(1600);
 
 /* --- C5: מיקוד נכנס למגירה ונשאר בה --- */
-await btn(/ספריית המוצרים/).click();
+await btn(/ספריית הארגזים/).click();
 await page.waitForTimeout(800);
 const inside = () =>
   page.evaluate(() => {
@@ -47,14 +47,14 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(600);
 const one = await page.locator('[role="dialog"]').count();
 ok('Escape סוגר רק את העליונה', one === 1, String(one));
-ok('והספרייה שמתחתיה נשארה', /ספריית המוצרים|ספרייה קלאסית/.test(await page.innerText('body')));
+ok('והספרייה שמתחתיה נשארה', /ספריית הארגזים|ארגזים מועדפים/.test(await page.innerText('body')));
 await page.screenshot({ path: SP + 'L105-1-nested.png' });
 await page.keyboard.press('Escape');
 await page.waitForTimeout(600);
 ok('והקשה נוספת סוגרת גם אותה', (await page.locator('[role="dialog"]').count()) === 0);
 ok(
   'והמיקוד חזר לכפתור שפתח',
-  await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'ספריית המוצרים'),
+  await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'ספריית הארגזים'),
   await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? ''),
 );
 

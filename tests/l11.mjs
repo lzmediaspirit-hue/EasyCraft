@@ -54,7 +54,7 @@ await btn(/^ארגז שתי דלתות/).click(); await page.waitForTimeout(800)
 await btn('סיום עריכה').click(); await page.waitForTimeout(400);
 // ארגז נוסף
 await btn('הוספת ארגז').click(); await page.waitForTimeout(450);
-await btn(/^ארגז מגירות/).click(); await page.waitForTimeout(800);
+await btn(/^ארגז 3 מגירות/).click(); await page.waitForTimeout(800);
 await btn('סיום עריכה').click(); await page.waitForTimeout(400);
 /* הגוונים נבחרים לפרויקט כולו, בסוף — "גוון לכולם" */
 await pickFinishes(page);

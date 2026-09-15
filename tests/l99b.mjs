@@ -107,7 +107,7 @@ const after = await page.evaluate(async () => {
   ok('הספרייה שהוחלפה שורדת רענון', all.length === 1, `${all.length} פריטים`);
   /* ואפשר להחזיר את ארגזי התקן במפורש */
   const backCount = await catalogRepo.reseed();
-  ok('"החזרת ארגזי התקן" מחזירה אותם', backCount > 50 && (await catalogRepo.all()).length > 50, `${backCount} חזרו`);
+  ok('"החזרת ארגזי הספרייה" מחזירה אותם', backCount > 50 && (await catalogRepo.all()).length > 50, `${backCount} חזרו`);
   await db.catalog.clear();
   return out;
 });

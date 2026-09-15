@@ -57,3 +57,18 @@ export async function addUnit(page, n = 0) {
   await btn(/הוספת ארגז/).click(); await page.waitForTimeout(700);
   await dlg().locator('div.relative > button').filter({ hasText: /\S/ }).nth(n).click(); await page.waitForTimeout(900);
 }
+
+/**
+ * מוסיף ארגז לפי שם ולא לפי מקום ברשימה.
+ *
+ * הספרייה היא של הנגרייה ולא רשימה קבועה, ולכן "הארגז השני" אינו
+ * אותו ארגז בכל ספרייה. בדיקה שצריכה ארגז דלתות מבקשת ארגז דלתות.
+ */
+export async function addNamed(page, re) {
+  const dlg = () => page.getByRole('dialog').last();
+  while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(250); }
+  await page.getByRole('button', { name: /הוספת ארגז/ }).first().click();
+  await page.waitForTimeout(700);
+  await dlg().getByRole('button', { name: re }).first().click();
+  await page.waitForTimeout(900);
+}

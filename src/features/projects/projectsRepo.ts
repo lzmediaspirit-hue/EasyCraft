@@ -1,4 +1,5 @@
 import type { Placement as PlanPlacement } from '../design/autoPlan';
+import { matchCatalog } from '../design/planMatch';
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { projectCosting, type ProjectCosting } from '../../costing/boards';
@@ -406,13 +407,24 @@ export const unitsRepo = {
     projectId: string,
     placements: PlanPlacement[],
   ): Promise<{ ok: true } | { ok: false; missing: number }> {
-    const items = new Map((await db.catalog.toArray()).map((i) => [i.id, i]));
-    const missing = placements.filter((p) => !items.has(p.catalogKey)).length;
+    /*
+     * ההצעה מדברת בתפקידים, והספרייה היא של הנגרייה: כל תפקיד
+     * מתורגם לארגז שקיים כאן בפועל, ולא למפתח של ארגזי התקן.
+     */
+    const items = (await db.catalog.toArray()).filter((i) => !i.hiddenAt);
+    const chosen = new Map<string, CatalogItem>();
+    for (const p of placements) {
+      const item = matchCatalog(p.catalogKey, items, p.widthMm);
+      if (item) chosen.set(`${p.catalogKey}|${p.widthMm}`, item);
+    }
+    const missing = placements.filter(
+      (p) => !chosen.has(`${p.catalogKey}|${p.widthMm}`),
+    ).length;
     if (missing) return { ok: false, missing };
 
     await db.units.where('projectId').equals(projectId).delete();
     for (const p of placements) {
-      const item = items.get(p.catalogKey)!;
+      const item = chosen.get(`${p.catalogKey}|${p.widthMm}`)!;
       const unit = await this.add(projectId, p.wallId, item, p.xMm, p.widthMm);
       if (p.free || p.blindMm) {
         await this.update(unit.id, {

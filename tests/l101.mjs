@@ -19,8 +19,25 @@ await page.getByLabel('סיסמה').fill('admin2026');
 await btn('כניסה').click();
 await page.waitForTimeout(1600);
 
+/**
+ * פותח ארגז לעריכה: מהתפריט אל הספרייה של המטבח, ומשם אל הארגז.
+ * הספרייה נפתחת בתפריט ולא ברשימה שטוחה, ולכן זו הדרך פנימה.
+ */
+async function openBox(re) {
+  if (!(await page.getByRole('dialog').count())) {
+    await btn(/ספריית הארגזים/).click();
+    await page.waitForTimeout(800);
+  }
+  if (await dlg().getByRole('button', { name: /^מטבח/ }).count()) {
+    await dlg().getByRole('button', { name: /^מטבח/ }).click();
+    await page.waitForTimeout(700);
+  }
+  await dlg().getByRole('button', { name: re }).first().click();
+  await page.waitForTimeout(800);
+}
+
 /* --- C1 + C2: בונים ארגז עם מגירה פנימית, סוקל ומשטח --- */
-await btn(/ספריית המוצרים/).click(); await page.waitForTimeout(900);
+await btn(/ספריית הארגזים/).click(); await page.waitForTimeout(900);
 await btn(/ארגז משלי/).click(); await page.waitForTimeout(700);
 const sheet = dlg();
 await sheet.getByLabel('שם הארגז').fill('QA ספרייה אישית');
@@ -46,7 +63,8 @@ ok('המשטח נשמר', saved?.counterMm === 40, String(saved?.counterMm));
 await page.screenshot({ path: SP + 'L101-1-custom.png' });
 
 /* נפתח שוב — המגירה עדיין פנימית */
-await btn(/QA ספרייה אישית/).click(); await page.waitForTimeout(800);
+/* התפריט אינו רשימה: הארגז נמצא דרך הספרייה של החדר */
+await openBox(/QA ספרייה אישית/);
 const reopened = dlg();
 const innerPressed = await reopened
   .getByRole('button', { name: /פנימית מאחורי דלתות/ })
@@ -68,11 +86,15 @@ ok('איפוס הסוקל נשמר', zeroed.socleMm === 0, String(zeroed.socleMm
 ok('ואיפוס המשטח', zeroed.counterMm === 0, String(zeroed.counterMm));
 
 /* --- C6: חדר אחד בלבד --- */
-await btn(/QA ספרייה אישית/).click(); await page.waitForTimeout(800);
+/* התפריט אינו רשימה: הארגז נמצא דרך הספרייה של החדר */
+await openBox(/QA ספרייה אישית/);
 const rooms = dlg();
-await rooms.getByRole('button', { name: 'מטבח' }).click(); await page.waitForTimeout(250);
-await rooms.getByRole('button', { name: 'סלון' }).click().catch(() => {});
-await page.waitForTimeout(250);
+/* מכבים כל חדר שדלוק, יהיו אשר יהיו — החדרים הם נתונים ולא רשימה קבועה */
+for (const room of ['מטבח', 'סלון', 'חדר שירות']) {
+  const chip = rooms.getByRole('button', { name: room, exact: true });
+  if ((await chip.count()) && (await chip.getAttribute('aria-pressed')) === 'true') await chip.click();
+  await page.waitForTimeout(200);
+}
 const bedroom = rooms.getByRole('button', { name: 'חדר שינה' });
 if ((await bedroom.getAttribute('aria-pressed')) !== 'true') await bedroom.click();
 await page.waitForTimeout(300);

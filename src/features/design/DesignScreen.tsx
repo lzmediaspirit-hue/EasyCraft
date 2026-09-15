@@ -94,6 +94,11 @@ export function DesignScreen({
   });
   const dragPanel = useRef<{ startY: number; startRatio: number } | null>(null);
   const [wallIndex, setWallIndex] = useState(0);
+  /*
+   * בקשה להתאמת התצוגה. המצלמה עצמה נשארת בתוך התלת־ממד — היא
+   * שייכת לרגע ההסתכלות ולא לפרויקט — ומכאן עוברת הבקשה בלבד.
+   */
+  const [fitAt, setFitAt] = useState<number | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /* קבוצת ארגזים שממתינה לשמירה בספרייה כפריט אחד */
   const [groupToSave, setGroupToSave] = useState<PlacedUnit[] | null>(null);
@@ -431,6 +436,7 @@ export function DesignScreen({
         canRedo={canRedo}
         projectId={projectId}
         onCenter={centerWall}
+        onFit={() => setFitAt(Date.now())}
         onClearSelection={() => setSelectedId(null)}
         onShowHidden={showHidden}
       />
@@ -481,6 +487,8 @@ export function DesignScreen({
               finishHex={finishHex ?? NO_HEX}
               project={project}
               parts={parts ?? undefined}
+              snap={design.view.snap}
+              fitAt={fitAt}
             />
           ) : (
 
@@ -506,6 +514,7 @@ export function DesignScreen({
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? NO_HEX}
+            snap={design.view.snap}
             onMove={(id, patch) => patchUnit(id, patch)}
           />
           )}
@@ -954,7 +963,7 @@ export function DesignScreen({
       )}
 
       {sheet === 'edit' && selected && (
-        <UnitEditSheet unit={selected} onClose={closeSheet} />
+        <UnitEditSheet unit={selected} wallLengthMm={wall.lengthMm} onClose={closeSheet} />
       )}
 
       {/* שמירת אוסף שנבחר בתלת־ממד כפריט אחד */}

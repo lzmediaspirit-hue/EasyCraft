@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { PencilIcon, PlusIcon } from '../../ui/icons';
+import { BoardCard } from '../../ui/BoardCard';
+import { isPriced } from '../../materials/boardSpec';
 import { finishesForRole, materialForRole } from '../../db/types';
 import type { Finish, Material, PartChoice, PartRole } from '../../db/types';
 
@@ -47,7 +49,11 @@ export function PartChoiceRow({
    */
   const offered = finishesForRole(role, finishes, materials);
   const material = materials.find((m) => m.id === effective.materialId);
-  // חומר זמין לגוון רק אם נקבע לו מחיר עליו
+  /*
+   * חומר זמין לגוון אם הוצהר שהגוון מגיע עליו — מפתח קיים ברשומת
+   * המחירים. מחיר שלא הוקלד אינו מוריד אותו מהרשימה; הוא מסומן
+   * כחסר מחיר, וזו שאלה אחרת.
+   */
   const available = finish ? materials.filter((m) => finish.prices?.[m.id] !== undefined) : materials;
   const inherited = value.finishId === undefined && effective.finishId !== undefined;
 
@@ -143,13 +149,25 @@ export function PartChoiceRow({
                   <button
                     key={m.id}
                     onClick={() => onChange({ ...effective, materialId: m.id })}
-                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                       effective.materialId === m.id
                         ? 'bg-stone-900 text-white'
                         : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                     }`}
                   >
                     {m.name}
+                    {/* לוח זמין שעוד לא תומחר — נאמר כאן, ולא מתגלה בהצעה */}
+                    {!isPriced(finish?.prices?.[m.id]) && (
+                      <span
+                        className={`rounded-full px-1.5 text-[10px] font-medium ${
+                          effective.materialId === m.id
+                            ? 'bg-white/20 text-white'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        בלי מחיר
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -158,10 +176,17 @@ export function PartChoiceRow({
 
           {finish && available.length === 0 && (
             <p className="mt-2 text-[11px] leading-snug text-amber-700">
-              לגוון הזה עוד לא נקבע מחיר על אף חומר, ולכן אי אפשר לתמחר
-              אותו. אפשר לקבוע מחיר בהגדרות.
+              הגוון הזה לא סומן על אף לוח, ולכן אין ממה לחתוך אותו. אפשר
+              לסמן לוחות בהגדרות הגוון.
             </p>
           )}
+
+          {/*
+            מפרט הלוח שנבחר — הגוון, הליבה, העובי, מידת הפלטה, כיוון
+            הסיבים והמחיר. עד עכשיו כל אלה ישבו במסכי ההגדרות, ומי
+            שבחר חזית ראה שם וריבוע צבע בלבד.
+          */}
+          <BoardCard finish={finish} material={material} role={role} />
 
           <button
             onClick={() => {

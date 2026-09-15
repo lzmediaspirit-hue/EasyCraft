@@ -1,22 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+import { useLiveQuery } from 'dexie-react-hooks';
+
 import { catalogRepo } from '../../catalog/catalogRepo';
+import { roomsRepo } from '../../catalog/roomsRepo';
 import { glyphDef } from '../../catalog/glyphList';
 import { autoShelves } from '../../catalog/CabinetGlyph';
 import { GROUP_LABELS } from '../../catalog/rooms';
 import { KITCHEN } from '../../catalog/standards';
 import { Sheet } from '../../ui/Sheet';
 import { Chip, Field, PrimaryButton } from '../../ui/Field';
+
 import { BoxForm, type BoxSpec } from '../../ui/BoxForm';
 import { TrashIcon } from '../../ui/icons';
-import type { CatalogGroup, CatalogItem, RoomKind, UnitLevel } from '../../db/types';
+import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind, type UnitLevel } from '../../db/types';
 
 const GROUPS: CatalogGroup[] = ['base', 'upper', 'tall', 'storage', 'panel'];
-const ROOM_CHIPS: { kind: RoomKind; label: string }[] = [
-  { kind: 'kitchen', label: 'מטבח' },
-  { kind: 'living', label: 'סלון' },
-  { kind: 'bedroom', label: 'חדר שינה' },
-];
-
 /** המפלס נגזר מהקבוצה — פחות החלטות למשתמש. */
 const LEVEL_BY_GROUP: Record<CatalogGroup, UnitLevel> = {
   base: 'floor',
@@ -48,9 +47,38 @@ export function CustomItemSheet({
   onClose: () => void;
 }) {
   const [group, setGroup] = useState<CatalogGroup>(item?.group ?? defaultGroup);
+  /*
+   * המק״ט — מזהה פנימי, לא שדה במסך.
+   *
+   * הוא מה שמונע כפילות: שמירה או ייבוא תחת מק״ט קיים מעדכנים את
+   * הארגז שנושא אותו. לנגר אין מה לעשות איתו, ולכן הוא נוצר לבד
+   * לפי הקטגוריה ואינו מוצג. ארגז קיים שומר את שלו.
+   */
+  const [code, setCode] = useState(item?.code ?? '');
+  const [favorite, setFavorite] = useState(!!item?.favorite);
+
+  useEffect(() => {
+    if (item?.code) return;
+    let live = true;
+    void catalogRepo.nextCode(group).then((next) => live && setCode(next));
+    return () => {
+      live = false;
+    };
+  }, [group, item?.code]);
+
+  /* החדרים שאפשר לסמן — מהטבלה, כדי שחדר שנוסף יופיע כאן מיד */
+  const roomChoices = useLiveQuery(() => roomsRepo.all(), [], []);
   const [rooms, setRooms] = useState<RoomKind[]>(
-    item?.rooms ?? (roomKind === 'custom' ? ['kitchen', 'living', 'bedroom'] : [roomKind]),
+    item?.rooms ?? (roomKind === CUSTOM_ROOM ? [] : [roomKind]),
   );
+  /*
+   * ארגז חדש בחדר ללא סוג מסומן לכל החדרים הקיימים: הוא נבנה בלי
+   * חדר מסוים בראש, ורשימה ריקה הייתה מסתירה אותו מכל ספרייה.
+   */
+  useEffect(() => {
+    if (item || roomKind !== CUSTOM_ROOM || !roomChoices.length) return;
+    setRooms((prev) => (prev.length ? prev : roomChoices.map((r) => r.id)));
+  }, [item, roomKind, roomChoices]);
   const [spec, setSpec] = useState<BoxSpec>({
     name: item?.name ?? '',
     glyph: item?.glyph ?? 'doors',
@@ -103,7 +131,8 @@ export function CustomItemSheet({
        */
       socleMm: spec.socleMm,
       counterMm: spec.counterMm,
-
+      code: code.trim() || undefined,
+      favorite,
       note: item?.note,
     });
     onClose();
@@ -152,7 +181,23 @@ export function CustomItemSheet({
         />
 
         <div className="space-y-5 border-t border-stone-100 pt-5">
+          {/*
+            מועדף: מה שבאמת מרכיבים בנגרייה, מתוך כל מה שקיים.
+            זו רשימה נפרדת מהחדר ומהקטגוריה ואינה מחליפה אותם.
+          */}
+          <Field group label="ארגזים מועדפים">
+            <div className="flex flex-wrap gap-1.5">
+              <Chip active={favorite} onClick={() => setFavorite(true)}>
+                מועדף
+              </Chip>
+              <Chip active={!favorite} onClick={() => setFavorite(false)}>
+                לא מועדף
+              </Chip>
+            </div>
+          </Field>
+
           <Field group label="קבוצה בספרייה">
+
             <div className="flex flex-wrap gap-1.5">
               {GROUPS.map((g) => (
                 <Chip key={g} active={g === group} onClick={() => changeGroup(g)}>
@@ -164,13 +209,13 @@ export function CustomItemSheet({
 
           <Field group label="באילו חדרים יופיע">
             <div className="flex flex-wrap gap-1.5">
-              {ROOM_CHIPS.map((r) => (
+              {roomChoices.map((r) => (
                 <Chip
-                  key={r.kind}
-                  active={rooms.includes(r.kind)}
+                  key={r.id}
+                  active={rooms.includes(r.id)}
                   onClick={() =>
                     setRooms((prev) =>
-                      prev.includes(r.kind) ? prev.filter((k) => k !== r.kind) : [...prev, r.kind],
+                      prev.includes(r.id) ? prev.filter((k) => k !== r.id) : [...prev, r.id],
                     )
                   }
                 >

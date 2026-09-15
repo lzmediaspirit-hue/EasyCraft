@@ -23,6 +23,15 @@ export interface DesignView {
   rulerPair: string[] | null;
   /** הציר שהסרגל מודד בו */
   rulerAxis: RulerAxis;
+  /**
+   * ההצמדה פעילה.
+   *
+   * כבויה = הארגז נוחת בדיוק במקום שהאצבע לקחה אותו, מעוגל
+   * לסנטימטר שלם. זה המילוט: כשההצמדה מושכת למקום שאינו הנכון —
+   * מרווח מכוון בין שני ארגזים, ארגז שצריך לעמוד קצת בחוץ — אין
+   * במגע שום מקש שאפשר להחזיק, ולכן זה מתג ולא צירוף מקשים.
+   */
+  snap: boolean;
   /** מחווני הקיר מתחת להדמיה */
   statsOpen: boolean;
   /** שורת לשוניות הקירות */
@@ -52,6 +61,7 @@ const INITIAL: DesignView = {
   measure: null,
   rulerPair: null,
   rulerAxis: 'w',
+  snap: true,
   /* הנתונים מתחילים סגורים: מי שפותח הדמיה בא לראות את הקיר */
   statsOpen: false,
   wallsOpen: true,
@@ -87,6 +97,7 @@ export function useDesignView() {
       key:
         | 'iso'
         | 'inside'
+        | 'snap'
         | 'statsOpen'
         | 'wallsOpen'
         | 'toolsOpen'

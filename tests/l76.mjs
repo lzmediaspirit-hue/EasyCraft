@@ -12,7 +12,9 @@ const dlg = () => page.getByRole('dialog').last();
 async function add(name, tab) {
   while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
   await btn(/הוספת ארגז/).click(); await page.waitForTimeout(600);
-  await dlg().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(600);
+  /* הספרייה נפתחת ישר בחדר של הפרויקט, ולכן בוחר החדרים אינו תמיד שם */
+  const room = dlg().getByRole('button', { name: /^מטבח/ });
+  if (await room.count()) { await room.click(); await page.waitForTimeout(600); }
   if (tab) { await dlg().getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(500); }
   await dlg().getByRole('button', { name: new RegExp('^' + name) }).first().click();
   await page.waitForTimeout(800);

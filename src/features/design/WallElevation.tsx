@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
 import { isDark, shade } from '../../ui/color';
@@ -8,6 +8,9 @@ import { MATERIAL } from '../../catalog/standards';
 import { cm } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
 import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
+import { stackSnap } from './stacking';
+import { DragGuide } from './dragGuide';
+import type { Guide } from './dragGuide';
 import { blocked } from './collision';
 import { unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
@@ -62,6 +65,13 @@ type Props = {
   work?: boolean;
   /** הפרויקט — ממנו נגזר הגוון של חלק שלא נבחר לו גוון משלו */
   project?: Project;
+  /**
+   * ההצמדה פעילה.
+   *
+   * כבויה = הארגז נוחת במקום שהאצבע לקחה אותו, מעוגל לסנטימטר
+   * שלם. זה המילוט מהצמדה שמושכת למקום הלא נכון.
+   */
+  snap?: boolean;
 };
 
 
@@ -87,6 +97,7 @@ export function WallElevation({
   rulerAxis = 'w',
   work,
   project,
+  snap = true,
 }: Props) {
 
   /*
@@ -110,6 +121,12 @@ export function WallElevation({
   };
 
   const svgRef = useRef<SVGSVGElement>(null);
+  /*
+   * מה מוצג בזמן הגרירה: על מי הארגז עומד להינחת, ולמה הוא לא
+   * עולה. זה מצב של רגע ולא של הפרויקט, ולכן הוא חי כאן ומתאפס
+   * בשחרור.
+   */
+  const [guide, setGuide] = useState<Guide | null>(null);
 
   const drag = useRef<{
     id: string;
@@ -129,7 +146,8 @@ export function WallElevation({
      * שאיש ראה. מה שזז כאן הוא המקום ברצפה, לאורך הקיר שרואים.
      */
     free?: { xMm: number; zMm: number };
-    /* המיקום האחרון, כדי להחליט על הצמדה בשחרור ולא תוך כדי */
+    /* היעד שכבר נבחר להנחה — כדי שהוא לא יקפוץ בין שני שכנים */
+    onId?: string;
   } | null>(null);
 
 
@@ -212,11 +230,33 @@ export function WallElevation({
     }
 
 
-    // סף ההצמדה במ"מ, שקול למרחק קבוע על המסך בכל קנה מידה
-    const tol = Math.max(SNAP, SNAP_PX * d.scale);
-    const x = snapX(rawX, unit, units, wall.lengthMm, corners, tol);
+    /*
+     * סף ההצמדה במ"מ, שקול למרחק קבוע על המסך בכל קנה מידה.
+     * אפס = ההצמדה כבויה, והארגז נוחת בדיוק במקום שהאצבע לקחה
+     * אותו: יעד שמרחקו ממנה קטן מאפס אינו קיים.
+     */
+    const tol = snap ? Math.max(SNAP, SNAP_PX * d.scale) : 0;
+
+    /*
+     * הנחה על ארגז אחר קודמת להצמדה הרגילה.
+     *
+     * כשמניחים ארגז על ארגז מבקשים פינה, ולא שני יעדים נפרדים
+     * שבמקרה נפגשו: התחתית של העליון על הראש של התחתון, מיושרת
+     * לתחילתו או לסופו. לכן שני הצירים נפתרים כאן יחד, ורק מי
+     * שלא מצא פינה ממשיך להצמדה שפותרת כל ציר לבדו.
+     */
+    const stack = snap && !d.locked
+      ? stackSnap(unit, rawX, rawY, units, tol, d.onId)
+      : null;
+    d.onId = stack?.onId;
+
+    const x = stack ? stack.xMm : snapX(rawX, unit, units, wall.lengthMm, corners, tol);
     // הגובה נמדד ביחס למקום שאליו הארגז הולך, ולא למקום שממנו יצא
-    const y = d.locked ? d.originY : snapY(rawY, unit, units, wall.heightMm, tol, x);
+    const y = stack
+      ? stack.yMm
+      : d.locked
+        ? d.originY
+        : snapY(rawY, unit, units, wall.heightMm, tol, x);
     /*
      * שני ארגזים לא עומדים באותו מקום. כשהיעד תפוס מנסים קודם
      * להזיז רק בציר אחד — כך גרירה לאורך קיר מלא עדיין זזה במקום
@@ -232,7 +272,8 @@ export function WallElevation({
       const b = unitBox(probe, plan);
       return !!b && (stuck || !blocked(probe, b, allUnits, plan));
     };
-    const [fx, fy] = at(x, y)
+    const landed = at(x, y);
+    const [fx, fy] = landed
       ? [x, y]
       : at(x, unit.yMm)
         ? [x, unit.yMm]
@@ -240,6 +281,31 @@ export function WallElevation({
           ? [unit.xMm, y]
           : [unit.xMm, unit.yMm];
     onMove(d.id, { xMm: fx, yMm: fy });
+
+    /*
+     * מה שמוצג בזמן הגרירה.
+     *
+     * נעילה לרצפה היא הדבר היחיד כאן שמסרב בשקט: מי שמושך ארגז
+     * נעול כלפי מעלה ראה אותו זז לצדדים בלבד, בלי שאיש אמר למה.
+     * עכשיו זה כתוב, יחד עם מה לעשות.
+     */
+    const lifting = !d.locked ? false : Math.abs(rawY - d.originY) > 60;
+    setGuide(
+      stack && landed
+        ? {
+            kind: 'stack',
+            onId: stack.onId,
+            name: units.find((u) => u.id === stack.onId)?.name ?? 'הארגז שמתחת',
+            edge: stack.edge,
+            onCounter: stack.onCounter,
+            xMm: stack.xMm,
+            yMm: stack.yMm,
+            widthMm: alongWallMm(unit),
+          }
+        : lifting
+          ? { kind: 'locked' }
+          : null,
+    );
   }
 
   function endDrag(e: React.PointerEvent) {
@@ -256,6 +322,7 @@ export function WallElevation({
       }
     }
     drag.current = null;
+    setGuide(null);
   }
 
   return (
@@ -709,6 +776,11 @@ export function WallElevation({
       )}
       {span && (
         <RulerMeasure span={span} axis={rulerAxis} wall={wall} stroke={stroke} flip={flip} />
+      )}
+
+      {/* מה שמוצג בזמן הגרירה: על מי נוחתים, או למה לא עולים */}
+      {guide && (
+        <DragGuide guide={guide} wall={wall} stroke={stroke} flip={flip} />
       )}
     </svg>
   );
