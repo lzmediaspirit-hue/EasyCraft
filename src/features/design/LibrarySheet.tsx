@@ -8,8 +8,9 @@ import { glyphDef } from '../../catalog/glyphList';
 import { CustomItemSheet } from './CustomItemSheet';
 import { RoomSheet } from './RoomSheet';
 import { Sheet } from '../../ui/Sheet';
+import { ConfirmSheet } from '../../ui/ConfirmSheet';
 import { cm } from '../../ui/units';
-import { CloseIcon, PencilIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon, roomIcon } from '../../ui/icons';
+import { CloseIcon, PencilIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon, groupIcon, roomIcon } from '../../ui/icons';
 
 import {
   CUSTOM_ROOM,
@@ -60,7 +61,6 @@ export function LibrarySheet({
   onClose: () => void;
 }) {
   const items = useLiveQuery(() => catalogRepo.all(), []);
-  const removed = useLiveQuery(() => catalogRepo.removed(), []);
   const savedRooms = useLiveQuery(() => roomsRepo.all(), [], []);
   const hiddenRooms = useLiveQuery(() => roomsRepo.hidden(), [], []);
   /*
@@ -84,6 +84,8 @@ export function LibrarySheet({
    */
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<CatalogItem | 'new' | null>(null);
+  /* הפריט שעומד להימחק, עד שהשאלה נענית */
+  const [deleting, setDeleting] = useState<CatalogItem | null>(null);
   const [editRoom, setEditRoom] = useState<Room | 'new' | null>(null);
 
   /** מה שהוקלד, מנורמל — רווחים כפולים וגרשיים לא אמורים להכשיל חיפוש */
@@ -181,21 +183,31 @@ export function LibrarySheet({
           </p>
         )}
 
+        {/*
+          הקטגוריות. אייקון ותווית יחד: אייקון לבדו הוא חידה, ותווית
+          לבדה נקראת לאט. `aria-pressed` הוא מה שאומר לקורא המסך מה
+          נבחר — צבע לבדו אינו אומר דבר למי שאינו רואה אותו.
+        */}
         {!needle && groups.length > 1 && (
-          <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
-            {groups.map((g) => (
-              <button
-                key={g}
-                onClick={() => setGroup(g)}
-                className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                  g === activeGroup
-                    ? 'bg-oak-600 text-white'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                }`}
-              >
-                {GROUP_LABELS[g]}
-              </button>
-            ))}
+          <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="קטגוריות">
+            {groups.map((g) => {
+              const Icon = groupIcon(g);
+              return (
+                <button
+                  key={g}
+                  onClick={() => setGroup(g)}
+                  aria-pressed={g === activeGroup}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium transition-colors ${
+                    g === activeGroup
+                      ? 'bg-oak-600 text-white'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  <Icon className="size-4" />
+                  {GROUP_LABELS[g]}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -260,18 +272,46 @@ export function LibrarySheet({
               )}
 
               {/*
-                הסרה מהספרייה. נגר לא בונה את כל מה שמגיע עם
+                מחיקה מהספרייה. נגר לא בונה את כל מה שמגיע עם
                 האפליקציה, ורשימה שחצייה לא רלוונטי היא רשימה שקשה
-                למצוא בה. מה שהוסר נשמר וניתן להחזרה, וארגזים
-                שכבר הונחו בפרויקטים אינם נוגעים בזה.
+                למצוא בה.
+
+                היא נשאלת לפני שהיא קורית: מחיקה היא מחיקה, ואין
+                יותר "ארגזים שהוסרו" להחזיר מהם. ארגזים שכבר הונחו
+                בפרויקטים אינם נוגעים בזה.
               */}
               <button
-                onClick={() => catalogRepo.remove(item.id)}
-                aria-label={`הסרת ${item.name} מהספרייה`}
+                onClick={() => setDeleting(item)}
+                aria-label={`מחיקת ${item.name} מהספרייה`}
                 className="absolute top-1 end-1 rounded-lg p-1 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600"
               >
                 <TrashIcon className="size-3.5" />
               </button>
+
+              {/*
+                סדר ידני, בשני כפתורים.
+                גרירה של ריבוע בתוך רשת עובדת באצבע בלבד; כפתור
+                מעלה וכפתור מטה עובדים גם בעכבר, גם במקלדת וגם
+                בקורא מסך — וזו החלופה הנגישה, לא תוספת לצדה.
+              */}
+              {manage && !needle && (
+                <span className="absolute bottom-1 start-1 flex gap-0.5">
+                  <button
+                    onClick={() => void catalogRepo.move(item.id, -1)}
+                    aria-label={`הקדמת ${item.name} בסדר הספרייה`}
+                    className="rounded-md bg-white/90 px-1 text-stone-400 ring-1 ring-stone-200 transition-colors hover:text-oak-700"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    onClick={() => void catalogRepo.move(item.id, 1)}
+                    aria-label={`איחור ${item.name} בסדר הספרייה`}
+                    className="rounded-md bg-white/90 px-1 text-stone-400 ring-1 ring-stone-200 transition-colors hover:text-oak-700"
+                  >
+                    ▼
+                  </button>
+                </span>
+              )}
             </div>
           ))}
 
@@ -403,24 +443,6 @@ export function LibrarySheet({
           </div>
         )}
 
-        {/*
-          מה שהוסר. השורה מופיעה רק כשיש מה להחזיר — הסרה שאי אפשר
-          לבטל היא דלת בכיוון אחד, וזה לא מה שנגר מצפה מכפתור פח.
-        */}
-        {!!removed?.length && (
-          <div className="mt-5 flex items-center gap-2 rounded-2xl bg-stone-100 px-4 py-2.5">
-            <span className="min-w-0 flex-1 text-xs text-stone-600">
-              <span className="num">{removed.length}</span> ארגזים הוסרו מהספרייה
-            </span>
-            <button
-              onClick={() => catalogRepo.restoreAll()}
-              className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50"
-            >
-              החזרה
-            </button>
-          </div>
-        )}
-
         {visible.some((i) => i.note) && (
           <ul className="mt-5 space-y-1.5 border-t border-stone-100 pt-4">
             {visible
@@ -437,6 +459,16 @@ export function LibrarySheet({
 
       {editRoom && (
         <RoomSheet room={editRoom === 'new' ? null : editRoom} onClose={() => setEditRoom(null)} />
+      )}
+
+      {deleting && (
+        <ConfirmSheet
+          title="מחיקת ארגז מהספרייה"
+          what={deleting.code ? `${deleting.name} · ${deleting.code}` : deleting.name}
+          impact="הארגז יורד מהספרייה ולא יהיה אפשר להחזיר אותו. ארגזים שכבר הונחו בפרויקטים אינם נמחקים — כל אחד מהם שמר את המידות שלו בעצמו."
+          onConfirm={() => void catalogRepo.remove(deleting.id)}
+          onClose={() => setDeleting(null)}
+        />
       )}
 
       {editing && (

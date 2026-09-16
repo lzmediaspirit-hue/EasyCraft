@@ -30,7 +30,8 @@ import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatG
 import { DesignToolbar } from './DesignToolbar';
 import type { SheetName } from './sheets';
 import { readPref, writePref } from '../../ui/prefs';
-import { clamp } from '../../ui/units';
+import { clamp, cm } from '../../ui/units';
+import { ConfirmSheet } from '../../ui/ConfirmSheet';
 import { history, useHistory } from './history';
 import { preview, usePreview, withPreview } from './preview';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
@@ -103,6 +104,8 @@ export function DesignScreen({
   const [fitAt, setFitAt] = useState<number | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /* קבוצת ארגזים שממתינה לשמירה בספרייה כפריט אחד */
+  /* הארגזים שעומדים להימחק, עד שהשאלה נענית */
+  const [deleting, setDeleting] = useState<PlacedUnit[] | null>(null);
   const [groupToSave, setGroupToSave] = useState<PlacedUnit[] | null>(null);
   /*
    * מגירה אחת פתוחה בכל רגע. אחד־עשר דגלים נפרדים תיארו מצב אחד —
@@ -306,12 +309,9 @@ export function DesignScreen({
     const chosen = (allUnits ?? NO_UNITS).filter((u) => ids.includes(u.id));
     if (!chosen.length) return;
     if (action === 'library') return setGroupToSave(chosen);
+    /* מחיקה נשאלת לפני שהיא קורית — גם כשהיא של חמישה ארגזים */
+    if (action === 'delete') return setDeleting(chosen);
     await history.capture(projectId, `bulk:${action}:${Date.now()}`);
-    if (action === 'delete') {
-      await Promise.all(ids.map((id) => unitsRepo.remove(id)));
-      if (ids.includes(selectedId ?? '')) setSelectedId(null);
-      return;
-    }
     /* הסתרה היא מתג: אם כולם מוסתרים הפעולה מחזירה אותם */
     const hide = !chosen.every((u) => u.hidden);
     await Promise.all(chosen.map((u) => unitsRepo.update(u.id, { hidden: hide })));
@@ -420,11 +420,19 @@ export function DesignScreen({
     for (const u of back) await unitsRepo.update(u.id, { hidden: false });
   }
 
-  async function removeUnit(id: string) {
-    await history.capture(projectId, `del:${id}`);
-    await unitsRepo.remove(id);
-    setSelectedId(null);
+  /**
+   * מחיקה בפועל, אחרי שנשאלה.
+   *
+   * צעד אחד בהיסטוריה גם לחמישה ארגזים: מי שמחק קבוצה בטעות רוצה
+   * להחזיר אותה בביטול אחד.
+   */
+  async function removeUnits(ids: string[]) {
+    if (!ids.length) return;
+    await history.capture(projectId, `del:${ids.join(',')}`);
+    await Promise.all(ids.map((id) => unitsRepo.remove(id)));
+    if (ids.includes(selectedId ?? '')) setSelectedId(null);
   }
+
 
   async function centerWall() {
     if (!wall) return;
@@ -672,8 +680,8 @@ export function DesignScreen({
             <CopyIcon className="size-4" />
           </button>
           <button
-            onClick={() => removeUnit(selected.id)}
-            aria-label="הסרת הארגז"
+            onClick={() => setDeleting([selected])}
+            aria-label="מחיקת הארגז"
             title="מחיקת הארגז"
             className="grid size-9 place-items-center rounded-full bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition-colors hover:bg-red-50"
           >
@@ -1050,6 +1058,25 @@ export function DesignScreen({
 
       {sheet === 'edit' && selected && (
         <UnitEditSheet unit={selected} wallLengthMm={wall.lengthMm} onClose={closeSheet} />
+      )}
+
+      {/*
+        מחיקה נשאלת לפני שהיא קורית.
+        ארגז שיורד מהקיר יורד גם מהחומרים, מהניסור ומהמחיר — וזה
+        מה שהשאלה אומרת, במקום "האם אתה בטוח".
+      */}
+      {deleting?.length && (
+        <ConfirmSheet
+          title={deleting.length > 1 ? 'מחיקת ארגזים' : 'מחיקת הארגז'}
+          what={
+            deleting.length > 1
+              ? `${deleting.length} ארגזים`
+              : `${deleting[0].name} · ${cm(deleting[0].widthMm)} ס״מ`
+          }
+          impact={'הארגזים יורדים מהקיר, ואיתם מהחומרים, מהניסור ומהמחיר. אפשר להחזיר ב"בטל" מיד אחרי המחיקה.'}
+          onConfirm={() => void removeUnits(deleting.map((u) => u.id))}
+          onClose={() => setDeleting(null)}
+        />
       )}
 
       {/* שמירת אוסף שנבחר בתלת־ממד כפריט אחד */}

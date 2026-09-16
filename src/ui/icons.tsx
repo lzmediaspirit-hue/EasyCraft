@@ -165,6 +165,64 @@ export function roomIcon(key: string) {
   return ROOM_ICONS[key] ?? CustomRoomIcon;
 }
 
+/* ---- קטגוריות בספרייה ---- */
+
+/**
+ * אייקון לכל קטגוריה, באותה שפה: מלבן אחד שאומר איפה הדבר עומד.
+ *
+ * תחתון יושב על הרצפה, עליון תלוי, עמודה נוגעת בשתיהן, ארון הוא
+ * גוף עם מדפים, אי עומד לבדו באמצע, מדף הוא קו אחד, ולוח הוא
+ * רצועה. ציור קטן של הארגז עצמו אינו מספיק — הוא מזהה מוצר, לא
+ * קטגוריה.
+ */
+const GROUP_ICONS: Record<string, (p: P) => React.ReactElement> = {
+  base: icon(
+    <>
+      <rect x="4" y="12" width="16" height="8" rx="1" />
+      <path d="M4 20h16" strokeWidth={2.2} />
+    </>,
+  ),
+  upper: icon(
+    <>
+      <rect x="4" y="4" width="16" height="8" rx="1" />
+      <path d="M4 4h16" strokeWidth={2.2} />
+    </>,
+  ),
+  tall: icon(
+    <>
+      <rect x="6" y="3" width="12" height="18" rx="1" />
+      <path d="M6 12h12" />
+    </>,
+  ),
+  storage: icon(
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="1" />
+      <path d="M4 10h16M4 15h16" />
+    </>,
+  ),
+  island: icon(
+    <>
+      <rect x="6" y="10" width="12" height="7" rx="1" />
+      <path d="M3 8h18" strokeWidth={2.2} />
+    </>,
+  ),
+  shelf: icon(
+    <>
+      <path d="M4 11h16" strokeWidth={2.6} />
+      <path d="M7 11v3M17 11v3" />
+    </>,
+  ),
+  panel: icon(
+    <>
+      <rect x="9" y="3" width="6" height="18" rx="1" />
+    </>,
+  ),
+};
+
+export function groupIcon(key: string) {
+  return GROUP_ICONS[key] ?? GROUP_ICONS.base;
+}
+
 /* ---- מצבי תצוגה בהדמיה ---- */
 
 /** חזית שטוחה — ציור אחד של הקיר. */

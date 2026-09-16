@@ -1,4 +1,5 @@
 import { db } from '../db/db';
+import { settingsRepo } from '../materials/materialsRepo';
 import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind } from '../db/types';
 
 import { CODE_PREFIX, codeNumber, fillCodes } from './codes';
@@ -36,15 +37,17 @@ function shippedLibrary(): ShippedItem[] {
 }
 
 /**
- * זריעה רק לספרייה ריקה — כלומר בהתקנה הראשונה בלבד.
+ * זריעה פעם אחת, בהתקנה הראשונה בלבד.
  *
- * קודם נזרע בכל טעינה כל מה שחסר, ולכן נגר שמחק ארגזי תקן או החליף
- * את הספרייה כולה בשלו מצא אותם שוב בפתיחה הבאה: ההסרה החזיקה עד
- * הרענון ולא יותר. מה שהוסר נשאר מוסר, ומי שרוצה את ארגזי התקן
- * בחזרה לוחץ על "החזרת ארגזי התקן" בגיבוי והעברה.
+ * התנאי הוא סימון מפורש ולא "הטבלה ריקה". נגר שמחק את הפריט
+ * האחרון שלו קיבל בפתיחה הבאה את ספריית ההדגמה כולה בחזרה —
+ * טבלה ריקה נראית בדיוק כמו התקנה חדשה, והקוד לא ידע להבדיל.
+ * מה שנמחק נשאר מחוק; "החזרת ארגזי הספרייה" היא הדרך המפורשת
+ * חזרה, והיא נלחצת ביד.
  */
 async function runSeed(): Promise<void> {
-  if (await db.catalog.count()) return;
+  const settings = await settingsRepo.get();
+  if (settings.catalogSeededAt) return;
   const now = Date.now();
   const rows = shippedLibrary().map((s) => ({ ...s, createdAt: now, updatedAt: now }));
   /*
@@ -55,6 +58,7 @@ async function runSeed(): Promise<void> {
   const fresh = new Map(fillCodes(rows).map((c) => [c.id, c.code]));
   // bulkPut ולא bulkAdd — כדי ששתי הפעלות במקביל לא ייפלו על כפילות
   await db.catalog.bulkPut(rows.map((r) => ({ ...r, code: r.code ?? fresh.get(r.id) })));
+  await settingsRepo.save({ catalogSeededAt: now });
 }
 
 function toShipped(s: SeedItem, order: number): ShippedItem {
@@ -122,12 +126,6 @@ export const catalogRepo = {
     return rows.filter((i) => !i.hiddenAt).sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
-  /** מה שהוסר מהספרייה — כדי שאפשר יהיה להחזיר. */
-  async removed(): Promise<CatalogItem[]> {
-    const rows = await db.catalog.toArray();
-    return rows.filter((i) => i.hiddenAt).sort((a, b) => a.sortOrder - b.sortOrder);
-  },
-
   async get(id: string): Promise<CatalogItem | undefined> {
     return db.catalog.get(id);
   },
@@ -183,17 +181,45 @@ export const catalogRepo = {
 
 
   /**
-   * הסרת פריט מהספרייה.
+   * הזזת פריט מקום אחד בתוך הקטגוריה שלו.
    *
-   * מה שהמשתמש בנה נמחק; מה שהגיע עם האפליקציה רק מסומן כמוסר,
-   * כי מחיקה אמיתית שלו הייתה חוזרת בעדכון הבא. בשני המקרים הוא
-   * יורד מהרשימות — וזו הבקשה.
+   * הסדר הוא של הנגרייה: מה שמרכיבים כל יום צריך להיות ראשון,
+   * ולא במקום שבו הוא נכתב בקוד. ההחלפה היא בין שני שכנים —
+   * ולכן שתי שורות בלבד נכתבות, והסדר של השאר אינו זז.
+   *
+   * זו אינה גרירה. כפתור מעלה וכפתור מטה עובדים באצבע, בעכבר
+   * ובמקלדת באותה מידה, ומי שעובד עם קורא מסך שומע לאן הפריט זז.
+   */
+  async move(id: string, dir: -1 | 1): Promise<void> {
+    const rows = await catalogRepo.all();
+    const item = rows.find((i) => i.id === id);
+    if (!item) return;
+    /* השכנים הם של אותה קטגוריה בלבד: סדר הוא בתוך רשימה אחת */
+    const peers = rows.filter((i) => i.group === item.group);
+    const at = peers.findIndex((i) => i.id === id);
+    const swap = peers[at + dir];
+    if (!swap) return;
+    const now = Date.now();
+    await db.transaction('rw', db.catalog, async () => {
+      await db.catalog.update(item.id, { sortOrder: swap.sortOrder, updatedAt: now });
+      await db.catalog.update(swap.id, { sortOrder: item.sortOrder, updatedAt: now });
+    });
+  },
+
+  /**
+   * מחיקת פריט מהספרייה.
+   *
+   * מחיקה היא מחיקה. עד כאן פריט שהגיע עם האפליקציה רק סומן
+   * כמוסר ונשאר במכשיר, ומי שניקה את הספרייה שלו מצא אותו חוזר
+   * דרך "החזרת ארגזים שהוסרו" או דרך גיבוי — שחזור שסותר את מה
+   * שהמשתמש ביקש.
+   *
+   * ארגזים שכבר הונחו בפרויקטים אינם נוגעים בזה: ארגז שהונח על
+   * קיר שמר את המפרט שלו בעצמו ברגע ההנחה, והוא אינו קורא
+   * מהספרייה. "החזרת ארגזי הספרייה" נשארת הדרך המפורשת חזרה.
    */
   async remove(id: string): Promise<void> {
-    const item = await db.catalog.get(id);
-    if (!item) return;
-    if (item.isBuiltin) await db.catalog.update(id, { hiddenAt: Date.now() });
-    else await db.catalog.delete(id);
+    await db.catalog.delete(id);
   },
 
   /**
@@ -223,7 +249,6 @@ export const catalogRepo = {
       for (const s of shippedLibrary()) {
         const have = byId.get(s.id) ?? (s.code ? byCode.get(s.code.toUpperCase()) : undefined);
         if (!have) missing.push({ ...s, createdAt: now, updatedAt: now });
-        else if (have.hiddenAt) missing.push({ ...have, hiddenAt: undefined, updatedAt: now });
       }
       back = missing.length;
       if (missing.length) await db.catalog.bulkPut(missing);
@@ -231,14 +256,6 @@ export const catalogRepo = {
     return back;
   },
 
-  /** מחזיר לספרייה את כל מה שהוסר ממנה. */
-  async restoreAll(): Promise<void> {
-    await db.catalog
-      .toCollection()
-      .modify((i) => {
-        if (i.hiddenAt) delete i.hiddenAt;
-      });
-  },
 };
 
 /** משמיט מפתחות ללא ערך, כדי ש-update לא ידרוס אותם ב-undefined. */

@@ -190,8 +190,7 @@ export function CabinetsSheet({ onClose }: { onClose: () => void }) {
             שמירת הארגזים לקובץ
           </button>
           <p className="mt-1.5 text-[11px] leading-snug text-stone-400">
-            הארגזים בלבד, עם הלוחות והגוונים שהם נשענים עליהם. ארגזים שהוסרו
-            אינם יוצאים איתם.
+            הארגזים בלבד, עם הלוחות והגוונים שהם נשענים עליהם.
           </p>
         </section>
 

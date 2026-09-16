@@ -674,3 +674,19 @@ db.version(25)
       await tx.table('rooms').update(room.id, { groups });
     }
   });
+
+/*
+ * "הספרייה כבר נזרעה" הופך לסימון ולא להשערה.
+ *
+ * הזריעה נמנעה כל עוד היו שורות בטבלה, ולכן נגר שמחק את הפריט
+ * האחרון שלו קיבל בפתיחה הבאה את ספריית ההדגמה בחזרה. מי שכבר
+ * יש לו ספרייה מסומן כאן כמי שנזרע, כדי שהמעבר לא יזרע עליו.
+ */
+db.version(26)
+  .stores(TABLES_V22)
+  .upgrade(async (tx) => {
+    if (!(await tx.table('catalog').count())) return;
+    const now = Date.now();
+    const settings = await tx.table('settings').get('app');
+    if (settings) await tx.table('settings').update('app', { catalogSeededAt: now });
+  });
