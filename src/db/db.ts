@@ -1,4 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
+
+import { fillCodes, type CodeRow } from '../catalog/codes';
+import { glyphDef } from '../catalog/glyphList';
 import type {
   Attachment,
   CatalogItem,
@@ -6,6 +9,7 @@ import type {
   Customer,
   Finish,
   Material,
+  Room,
   PlacedUnit,
   Project,
   ProjectPrice,
@@ -13,8 +17,11 @@ import type {
   ProjectStage,
   Settings,
   TeamMember,
+  Tombstone,
   Wall,
+  Workshop,
 } from './types';
+import { LOCAL_WORKSHOP } from './workshop';
 
 /**
  * בסיס הנתונים המקומי (IndexedDB).
@@ -36,6 +43,9 @@ export const db = new Dexie('easycraft') as Dexie & {
   stages: EntityTable<ProjectStage, 'id'>;
   attachments: EntityTable<Attachment, 'id'>;
   consumption: EntityTable<Consumption, 'id'>;
+  rooms: EntityTable<Room, 'id'>;
+  workshops: EntityTable<Workshop, 'id'>;
+  tombstones: EntityTable<Tombstone, 'id'>;
 };
 
 db.version(1).stores({
@@ -519,3 +529,230 @@ db.version(19)
         if (i.defaultHeightMm === 870 || i.defaultHeightMm === 820) i.defaultHeightMm = 880;
       }),
   );
+
+/*
+ * סוג הגב של ארגז חדש התאחד על שדה אחד.
+ *
+ * היו שניים בשמות דומים: `defaultBackKind` בשורש ההגדרות, שאליו
+ * כתב מסך ההגדרות, ו-`defaults.backKind`, שממנו נולד כל ארגז. לכן
+ * הבחירה במסך נשמרה ולא השפיעה. כאן עוברת הבחירה שכבר נעשתה אל
+ * השדה האמיתי, כדי שמי שביקש גב אחר יקבל אותו סוף סוף.
+ *
+ * רק כשהיא באמת בחירה: 'thin' הוא ערך ברירת המחדל של שני השדות,
+ * ואי אפשר להבחין בו בין מי שבחר לבין מי שלא נגע. לכן מועברת רק
+ * בחירה שאינה ברירת המחדל, ורק כשהצד השני עדיין עליה.
+ */
+db.version(20)
+  .stores(TABLES_V14)
+  .upgrade((tx) =>
+    tx
+      .table('settings')
+      .toCollection()
+      .modify((s: { defaultBackKind?: string; defaults?: { backKind?: string } }) => {
+        const chose = s.defaultBackKind && s.defaultBackKind !== 'thin';
+        if (chose && s.defaults && (s.defaults.backKind ?? 'thin') === 'thin') {
+          s.defaults.backKind = s.defaultBackKind;
+        }
+        delete s.defaultBackKind;
+      }),
+  );
+
+/*
+ * מק״ט לכל ארגז בספרייה.
+ *
+ * עד כאן לארגז היה מזהה פנימי בלבד, שאיש אינו רואה ואי אפשר לכתוב
+ * על מדבקה. המק״ט הוא מה שהנגר קורא לו בשמו — והוא גם מה שמונע
+ * כפילות: שמירה או ייבוא תחת מק״ט קיים מעדכנים את הארגז ההוא.
+ *
+ * הסדר כאן הוא סדר הספרייה, כדי שהמספור יהיה קריא ולא אקראי.
+ */
+db.version(21)
+  .stores(TABLES_V14)
+  .upgrade(async (tx) => {
+    /* מק״ט לכל ארגז שכבר בספרייה, לפי אותו כלל שבו נזרעת חדשה */
+    const rows = (await tx.table('catalog').toArray()) as CodeRow[];
+    for (const { id, code } of fillCodes(rows)) await tx.table('catalog').update(id, { code });
+  });
+
+/*
+ * החדרים הופכים לנתונים.
+ *
+ * עד כאן היו שלושה חדרים כתובים בקוד, ונגר שעובד גם על חדר
+ * שירות או על משרד נאלץ לבחור "חדר בהגדרה אישית" ולאבד את
+ * הסינון לפי חדר. הטבלה נזרעת בהפעלה הראשונה מ-`SEED_ROOMS`.
+ */
+const TABLES_V22 = { ...TABLES_V14, rooms: 'id, sortOrder' } as const;
+
+db.version(22).stores(TABLES_V22);
+
+/*
+ * מה שהוסר — הוסר.
+ *
+ * הסרה סימנה `hiddenAt` בלבד, והארגז נשאר במכשיר: הוא לא הופיע
+ * ברשימות אבל יצא בכל גיבוי, וחזר עם הספרייה למכשיר הבא. נגר
+ * שניקה את הספרייה שלו מצא את מה שמחק חוזר דרך הדלת האחורית.
+ *
+ * כאן הם נמחקים בפועל. פרויקטים אינם נפגעים — ארגז שהונח שומר את
+ * המידות שלו בעצמו ואינו נשען על הספרייה.
+ *
+ * ובאותה הזדמנות: שני ארגזים לא יכולים לשאת אותו מק״ט. מי שכבר
+ * הספיק לצבור כפילות — הראשון נשאר, והשאר נמחקים.
+ */
+db.version(23)
+  .stores(TABLES_V22)
+  .upgrade(async (tx) => {
+    const rows = (await tx.table('catalog').toArray()) as {
+      id: string;
+      code?: string;
+      hiddenAt?: number;
+      sortOrder: number;
+    }[];
+    const drop = rows.filter((r) => r.hiddenAt).map((r) => r.id);
+
+    const keep = new Map<string, string>();
+    for (const row of rows
+      .filter((r) => !r.hiddenAt)
+      .sort((a, b) => a.sortOrder - b.sortOrder)) {
+      const code = row.code?.toUpperCase();
+      if (!code) continue;
+      if (keep.has(code)) drop.push(row.id);
+      else keep.set(code, row.id);
+    }
+    if (drop.length) await tx.table('catalog').bulkDelete(drop);
+  });
+
+/*
+ * עובי הלוח הוא מידה ולא שדה.
+ *
+ * ללוח בודד היה `panelThicknessMm` לצד הגובה והעומק, ושני
+ * המספרים יכלו לסתור זה את זה: הציור לקח את השדה, והחיתוך ובדיקת
+ * ההתנגשות לקחו את המידה. כאן השדה נכנס אל המידה שהוא תיאר — לוח
+ * מונח אל גובהו, לוח עומד אל עומקו — ויורד.
+ */
+db.version(24)
+  .stores(TABLES_V22)
+  .upgrade(async (tx) => {
+    for (const table of ['catalog', 'units']) {
+      const rows = (await tx.table(table).toArray()) as {
+        id: string;
+        glyph: string;
+        panelThicknessMm?: number;
+      }[];
+      for (const row of rows) {
+        const th = row.panelThicknessMm;
+        if (th === undefined) continue;
+        const flat = glyphDef(row.glyph).noCarcass;
+        const size =
+          flat === 'horizontal'
+            ? { [table === 'catalog' ? 'defaultHeightMm' : 'heightMm']: th }
+            : flat === 'vertical'
+              ? { [table === 'catalog' ? 'defaultDepthMm' : 'depthMm']: th }
+              : {};
+        await tx.table(table).update(row.id, { ...size, panelThicknessMm: undefined });
+      }
+    }
+  });
+
+/*
+ * קטגוריות חדשות בחדרים שכבר נזרעו.
+ *
+ * "איים" ו"מדפים" הם מוצרים בפני עצמם, ולא שורה בתוך "תחתונים".
+ * החדרים נזרעים פעם אחת בהתקנה, ולכן מי שכבר התקין היה מקבל
+ * ספרייה שהפריטים החדשים אינם מופיעים בה בכלל.
+ */
+db.version(25)
+  .stores(TABLES_V22)
+  .upgrade(async (tx) => {
+    const rows = (await tx.table('rooms').toArray()) as {
+      id: string;
+      isBuiltin?: boolean;
+      groups: string[];
+    }[];
+    for (const room of rows) {
+      if (!room.isBuiltin) continue;
+      const add = ['island', 'shelf'].filter((g) => !room.groups.includes(g));
+      if (!add.length) continue;
+      /* לפני "דפנות ולוחות", שהוא תמיד האחרון */
+      const at = room.groups.indexOf('panel');
+      const groups = [...room.groups];
+      groups.splice(at < 0 ? groups.length : at, 0, ...add);
+      await tx.table('rooms').update(room.id, { groups });
+    }
+  });
+
+/*
+ * "הספרייה כבר נזרעה" הופך לסימון ולא להשערה.
+ *
+ * הזריעה נמנעה כל עוד היו שורות בטבלה, ולכן נגר שמחק את הפריט
+ * האחרון שלו קיבל בפתיחה הבאה את ספריית ההדגמה בחזרה. מי שכבר
+ * יש לו ספרייה מסומן כאן כמי שנזרע, כדי שהמעבר לא יזרע עליו.
+ */
+db.version(26)
+  .stores(TABLES_V22)
+  .upgrade(async (tx) => {
+    if (!(await tx.table('catalog').count())) return;
+    const now = Date.now();
+    const settings = await tx.table('settings').get('app');
+    if (settings) await tx.table('settings').update('app', { catalogSeededAt: now });
+  });
+
+
+/*
+ * בעלות על כל שורה, גרסה לכל שורה, וסימוני מחיקה.
+ *
+ * עד כאן כל הטבלאות היו גלובליות — "כל הלקוחות" היו כל הלקוחות
+ * שבמכשיר — ולא היה שדה שאפשר לשאול לפיו "של מי זה". זה עובד בדיוק
+ * כל עוד יש נגרייה אחת ומכשיר אחד, ונשבר ברגע שיש שרת.
+ *
+ * המעבר עצמו זול: יש נגרייה אחת, ולכן כל מה שקיים שייך לה. הוא
+ * נעשה עכשיו דווקא כי הוא זול עכשיו — אחרי שיהיו נתונים אצל נגרים
+ * אמיתיים, אותו מעבר הוא כבר סיכון.
+ *
+ * `rev` מתחיל ב-1 ולא ב-0: שורה קיימת היא שורה שנכתבה פעם אחת.
+ */
+const TABLES_V27 = {
+  ...TABLES_V22,
+  customers: 'id, workshopId, name, city, createdAt',
+  projects: 'id, workshopId, customerId, createdAt',
+  walls: 'id, workshopId, projectId, index',
+  units: 'id, workshopId, projectId, wallId',
+  catalog: 'id, workshopId, group, sortOrder',
+  materials: 'id, workshopId, sortOrder',
+  finishes: 'id, workshopId, sortOrder',
+  projectPrices: 'id, workshopId, projectId, lineKey',
+  stock: 'id, workshopId, finishId, materialId',
+  team: 'id, workshopId, role, active, username',
+  stages: 'id, workshopId, projectId, key, status, assigneeId, scheduledAt',
+  attachments: 'id, workshopId, projectId, kind',
+  consumption: 'id, workshopId, projectId, lineKey',
+  rooms: 'id, workshopId, sortOrder',
+  settings: 'id, workshopId',
+  workshops: 'id',
+  tombstones: 'id, [workshopId+table], deletedAt',
+} as const;
+
+db.version(27)
+  .stores(TABLES_V27)
+  .upgrade(async (tx) => {
+    const now = Date.now();
+    await tx.table('workshops').put({
+      id: LOCAL_WORKSHOP,
+      name: 'הנגרייה שלי',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const owned = [
+      'customers', 'projects', 'walls', 'units', 'catalog', 'materials', 'stock',
+      'finishes', 'projectPrices', 'settings', 'team', 'stages', 'attachments',
+      'consumption', 'rooms',
+    ];
+    for (const name of owned) {
+      await tx
+        .table(name)
+        .toCollection()
+        .modify((row: { workshopId?: string; rev?: number }) => {
+          row.workshopId ??= LOCAL_WORKSHOP;
+          row.rev ??= 1;
+        });
+    }
+  });

@@ -2,6 +2,7 @@ import { AISLE, BLIND_CORNER, ISLAND, KITCHEN, LANDING, PREP, SAFETY, TRIANGLE }
 import type { FreePlacement, PlacedUnit, UnitLevel, Wall, WallFeature } from '../../db/types';
 import { SEED_CATALOG } from '../../catalog/builtins';
 import type { PlanWall } from './plan';
+import { owned } from '../../db/rows';
 
 /**
  * תכנון מטבח אוטומטי.
@@ -922,7 +923,7 @@ export function whyNothing(plan: PlanWall[]): string {
 }
 
 /** המרווח שבין שתי שורות ארונות, כדי לומר אם הוא מספיק. */
-export function aisleAdvice(widthMm: number): string | null {
+function aisleAdvice(widthMm: number): string | null {
   if (!Number.isFinite(widthMm) || widthMm >= AISLE.twoCooksMm) return null;
   if (widthMm >= AISLE.workMm) return `מעבר ${Math.round(widthMm)} מ"מ — מספיק לטבח אחד; לשניים צריך ${AISLE.twoCooksMm}`;
   return `המעבר ${Math.round(widthMm)} מ"מ — מעבר עבודה מתחיל ב-${AISLE.workMm} מ"מ`;
@@ -968,6 +969,7 @@ export function previewUnits(proposal: Proposal): PlacedUnit[] {
         corner: item.corner,
         blindMm: p.blindMm ?? item.blind,
         free: p.free,
+        ...owned(),
         createdAt: now,
         updatedAt: now,
       } satisfies PlacedUnit,

@@ -164,8 +164,17 @@ export function MaterialsSheet({
                       {Number.isInteger(a.qty) ? a.qty : a.qty.toFixed(1)}
                     </span>
                     <span className="text-[11px] text-stone-400">{a.unit}</span>
-                    <span className="num w-16 text-end text-sm text-stone-600">
-                      {a.consumerTotal > 0 ? shekels(a.consumerTotal) : '—'}
+                    {/*
+                      מחיר חסר אינו אפס. פרזול שמגיע בחינם מהספק הוא
+                      אפס אמיתי; פרזול שאיש לא תמחר צריך להיאמר, כדי
+                      שלא ייצא בהצעה כאילו הוא לא עולה כלום.
+                    */}
+                    <span
+                      className={`num w-16 text-end text-sm ${
+                        a.noPrice ? 'text-amber-700' : 'text-stone-600'
+                      }`}
+                    >
+                      {a.noPrice ? 'מחיר חסר' : a.consumerTotal > 0 ? shekels(a.consumerTotal) : '—'}
                     </span>
                   </li>
                 ))}

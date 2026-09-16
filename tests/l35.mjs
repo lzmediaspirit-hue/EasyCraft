@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { setup, addUnit } from './mk.mjs';
+import { setup, addNamed } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const fail = [];
 const ok = (c, m, x = '') => { console.log((c ? 'PASS ' : 'FAIL ') + m + (x ? ' — ' + x : '')); if (!c) fail.push(m); };
@@ -19,7 +19,7 @@ const table = (name) => page.evaluate(async (n) => {
 }, name);
 
 await setup(page, { name: 'מלאי אוטומטי' });
-await addUnit(page, 0);
+await addNamed(page, /^ארגז שתי דלתות/);
 await btn('סיום עריכה').click(); await page.waitForTimeout(400);
 await btn(/^חישוב/).click(); await page.waitForTimeout(1600);
 await dlg().getByRole('button', { name: /מכירה והתחלת עבודה/ }).click(); await page.waitForTimeout(900);
@@ -33,8 +33,13 @@ await page.evaluate(async () => {
   const mats = await new Promise((res) => { const t = db.transaction('materials').objectStore('materials').getAll(); t.onsuccess = () => res(t.result); });
   const now = Date.now();
   const st = db.transaction('stock', 'readwrite').objectStore('stock');
+  /* שורה חדשה שייכת לאותה נגרייה כמו מה שכבר יש, אחרת המאגר לא רואה אותה */
+  const workshopId = fins[0].workshopId;
   for (const f of fins) for (const m of mats)
-    st.put({ id: `${f.id}-${m.id}`, finishId: f.id, materialId: m.id, sheets: 20, ordered: 0, createdAt: now, updatedAt: now });
+    st.put({
+      id: `${f.id}-${m.id}`, finishId: f.id, materialId: m.id, sheets: 20, ordered: 0,
+      workshopId, rev: 1, createdAt: now, updatedAt: now,
+    });
 });
 const before = (await table('stock')).map((s) => s.sheets);
 console.log('stock before:', JSON.stringify(before));

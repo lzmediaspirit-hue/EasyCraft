@@ -111,8 +111,16 @@ function QuickCalcSheet({ onClose }: { onClose: () => void }) {
  */
 function evaluate(input: string): number | null {
   const src = input.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
-  const tokens = src.match(/\d+\.?\d*|[+\-*/()]/g);
-  if (!tokens) return null;
+  /*
+   * גם מספר שמתחיל בנקודה. "‎.5" הוא מה שיוצא מהקשה על נקודה ואז 5,
+   * והביטוי הקודם דרש ספרה לפניה — הנקודה נבלעה ו-‎.5 נקרא כ-5.
+   */
+  const tokens = src.match(/\d+(?:\.\d*)?|\.\d+|[+\-*/()]/g);
+  /*
+   * מה שלא זוהה אינו נזרק בשקט: תו זר בתוך התרגיל משנה את התוצאה,
+   * ומספר שגוי על המסך גרוע מ"אין תוצאה".
+   */
+  if (!tokens || tokens.join('') !== src.replace(/\s+/g, '')) return null;
 
   let i = 0;
   const peek = () => tokens[i];

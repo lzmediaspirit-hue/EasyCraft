@@ -52,18 +52,57 @@ export function analyzeWall(
   const warnings: WallWarning[] = [];
   /** מי חורג בפועל מקצה הקיר — אליו מצביעה ההתראה */
   const past = (group: PlacedUnit[]) =>
-    group.filter((u) => u.xMm + alongWallMm(u) > wall.lengthMm + 1).map((u) => u.id);
+    group.filter((u) => u.xMm + alongWallMm(u) > wall.lengthMm + 1);
 
-  if (floorUsedMm > wall.lengthMm) {
+  /*
+   * החריגה נמדדת לפי המקום של הארגז ולא לפי סכום הרוחבים.
+   *
+   * ארגז שעומד בקצה קיר שקוצר יוצא ממנו החוצה גם כשסכום הרוחבים
+   * עדיין נכנס, ואז לא הייתה שום התראה — הקיר נראה תקין על המסך
+   * והבעיה התגלתה בהתקנה. מה שמעניין הוא איפה נגמר הארגז האחרון.
+   */
+  const overflow = (group: PlacedUnit[], label: string) => {
+    const over = past(group);
+    if (!over.length) return;
+    const end = Math.max(...over.map((u) => u.xMm + alongWallMm(u)));
     warnings.push({
-      text: `התחתונים חורגים מהקיר ב-${cm(floorUsedMm - wall.lengthMm)} ס"מ`,
-      unitIds: past(floor),
+      text: `${label} חורגים מהקיר ב-${cm(end - wall.lengthMm)} ס"מ`,
+      unitIds: over.map((u) => u.id),
+    });
+  };
+  overflow(floor, 'התחתונים');
+  overflow(upper, 'העליונים');
+
+  /*
+   * הקצה השני של אותה שאלה.
+   *
+   * חריגה נבדקה רק בסוף הקיר, ולכן ארגז שהתחיל ב-מינוס 50 לא
+   * הוציא מילה: הוא יצא מהחדר בצד שאיש לא הסתכל בו. וגבול
+   * הגובה לא נבדק כלל — ארגז שראשו מעל התקרה עבר בשקט.
+   */
+  const before = onWall.filter((u) => u.xMm < -1);
+  if (before.length) {
+    const out = Math.max(...before.map((u) => -u.xMm));
+    warnings.push({
+      text: `יוצאים מתחילת הקיר ב-${cm(out)} ס"מ`,
+      unitIds: before.map((u) => u.id),
     });
   }
-  if (wallUsedMm > wall.lengthMm) {
+
+  const tall = onWall.filter((u) => u.yMm + u.heightMm > wall.heightMm + 1);
+  if (tall.length) {
+    const over = Math.max(...tall.map((u) => u.yMm + u.heightMm - wall.heightMm));
     warnings.push({
-      text: `העליונים חורגים מהקיר ב-${cm(wallUsedMm - wall.lengthMm)} ס"מ`,
-      unitIds: past(upper),
+      text: `עוברים את גובה הקיר ב-${cm(over)} ס"מ`,
+      unitIds: tall.map((u) => u.id),
+    });
+  }
+
+  const sunk = onWall.filter((u) => u.yMm < -1);
+  if (sunk.length) {
+    warnings.push({
+      text: `יורדים מתחת לרצפה ב-${cm(Math.max(...sunk.map((u) => -u.yMm)))} ס"מ`,
+      unitIds: sunk.map((u) => u.id),
     });
   }
 

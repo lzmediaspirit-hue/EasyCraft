@@ -111,7 +111,7 @@ ok('3D view draws boards', polys > 10, `${polys} faces`);
 await shot('8-iso');
 await btn(/הצגת חזיתות/).click(); await page.waitForTimeout(700);
 await shot('9-iso-fronts');
-await btn(/חזרה לציור חזית/).click(); await page.waitForTimeout(600);
+await btn(/^דו־ממד/).click(); await page.waitForTimeout(600);
 
 /* ---- ניסור ---- */
 await btn(/ניסור/).click(); await page.waitForTimeout(1200);

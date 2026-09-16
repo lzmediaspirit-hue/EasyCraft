@@ -37,6 +37,7 @@ export function SaleSheet({
   const [perMeter, setPerMeter] = useState(String(project.perMeterRate ?? ''));
   const [plan, setPlan] = useState<PaymentPlan>(project.paymentPlan ?? 'single');
   const [payments, setPayments] = useState<Payment[]>(project.payments ?? []);
+  const [inclVat, setInclVat] = useState(project.priceIncludesVat ?? true);
   const [busy, setBusy] = useState(false);
 
   const draft: Project = {
@@ -45,10 +46,13 @@ export function SaleSheet({
     manualPrice: Number(manual) || 0,
     perUnitRate: Number(perUnit) || 0,
     perMeterRate: Number(perMeter) || 0,
+    priceIncludesVat: inclVat,
   };
   const quote = projectQuote(draft, units, costing);
-  const status = paymentStatus({ ...draft, payments });
+  const status = paymentStatus({ ...draft, payments }, quote.amount);
   const sold = !!project.soldAt;
+  /* שיטה שבה נגר מקליד מספר — שם השאלה "כולל מע״מ?" רלוונטית */
+  const typedPrice = mode !== 'materials';
 
   async function save(alsoSell: boolean) {
     if (busy) return;
@@ -58,6 +62,7 @@ export function SaleSheet({
       manualPrice: Number(manual) || undefined,
       perUnitRate: Number(perUnit) || undefined,
       perMeterRate: Number(perMeter) || undefined,
+      priceIncludesVat: inclVat,
       paymentPlan: plan,
       payments,
     });
@@ -65,19 +70,37 @@ export function SaleSheet({
     onClose();
   }
 
-  /** תשלום אחד = כל הסכום; בתשלומים = מקדמה ויתרה, כברירת מחדל. */
+  /**
+   * תשלום אחד = כל הסכום; בתשלומים = מקדמה ויתרה, כברירת מחדל.
+   *
+   * תשלום שכבר התקבל אינו נבנה מחדש: לחיצה על התוכנית שכבר פעילה
+   * החליפה כסף שנכנס בהבטחה חדשה שלא שולמה, והנתון הזה אבד בשמירה.
+   * מה ששולם נשאר, והפריסה נבנית על מה שנשאר לגבות.
+   */
   function applyPlan(next: PaymentPlan) {
+    /* התוכנית שכבר פעילה ויש לה שורות — אין מה לבנות מחדש */
+    if (next === plan && payments.length) return;
     setPlan(next);
-    if (next === 'single') {
-      setPayments([{ id: crypto.randomUUID(), amount: quote.amount, label: 'תשלום מלא' }]);
-    } else {
-      const half = Math.round(quote.amount / 2);
-      setPayments([
-        { id: crypto.randomUUID(), amount: half, label: 'מקדמה' },
-        { id: crypto.randomUUID(), amount: quote.amount - half, label: 'בסיום' },
-      ]);
+
+    const kept = payments.filter((p) => p.paidAt);
+    const left = Math.max(quote.amount - kept.reduce((n, p) => n + p.amount, 0), 0);
+    if (!left) {
+      setPayments(kept);
+      return;
     }
+    const first = kept.length ? 'יתרה' : 'תשלום מלא';
+    if (next === 'single') {
+      setPayments([...kept, { id: crypto.randomUUID(), amount: left, label: first }]);
+      return;
+    }
+    const half = Math.round(left / 2);
+    setPayments([
+      ...kept,
+      { id: crypto.randomUUID(), amount: half, label: kept.length ? 'תשלום ביניים' : 'מקדמה' },
+      { id: crypto.randomUUID(), amount: left - half, label: 'בסיום' },
+    ]);
   }
+
 
   return (
     <Sheet
@@ -108,15 +131,26 @@ export function SaleSheet({
       <div className="space-y-5">
         {/* המחיר, גדול — זה מה שאומרים ללקוח */}
         <div className="rounded-2xl bg-stone-900 px-4 py-3 text-white">
-          <span className="text-xs text-white/60">מחיר ללקוח</span>
+          <span className="text-xs text-white/60">מחיר ללקוח, כולל מע״מ</span>
           <span className="num block text-3xl font-bold">{shekels(quote.amount)}</span>
           <span className="block text-xs text-white/50">{quote.basis}</span>
+          {/*
+            הפירוק גלוי, כי זה מה שנגר צריך להוציא חשבונית: כמה לפני
+            מע״מ וכמה המע״מ. המספר הגדול הוא מה שהלקוח משלם, והוא
+            אותו מספר שמופיע במסך החומרים וממנו נבנים התשלומים.
+          */}
+          {quote.vatPct > 0 && quote.amount > 0 && (
+            <span className="num mt-1 block text-[11px] text-white/50">
+              {shekels(quote.beforeVat)} + מע״מ {quote.vatPct}% ({shekels(quote.vatAmount)})
+            </span>
+          )}
           {quote.mode !== 'materials' && quote.materialsAmount > 0 && (
             <span className="num mt-1 block text-[11px] text-white/40">
               חישוב חומרים: {shekels(quote.materialsAmount)}
             </span>
           )}
         </div>
+
 
         <Field group label="שיטת תמחור" hint={isManager ? undefined : 'רק מנהל משנה'}>
           <div className="flex flex-wrap gap-1.5">
@@ -170,8 +204,26 @@ export function SaleSheet({
           </Field>
         )}
 
+        {/*
+          מספר שנגר מקליד הוא מה שהוא אמר ללקוח, ואצל רוב הנגרים זה
+          כבר המחיר הסופי. כאן זה נקבע במפורש במקום להיות ניחוש.
+        */}
+        {typedPrice && (
+          <Field group label="המחיר שהזנתי" hint="כדי שהמע״מ לא ייספר פעמיים ולא ייעלם">
+            <div className="flex flex-wrap gap-1.5">
+              <Chip active={inclVat} onClick={() => isManager && setInclVat(true)}>
+                כולל מע״מ
+              </Chip>
+              <Chip active={!inclVat} onClick={() => isManager && setInclVat(false)}>
+                לפני מע״מ
+              </Chip>
+            </div>
+          </Field>
+        )}
+
         <div className="border-t border-stone-100 pt-5">
           <Field group label="תשלום">
+
             <div className="flex flex-wrap gap-1.5">
               <Chip active={plan === 'single'} onClick={() => applyPlan('single')}>
                 תשלום אחד
@@ -261,9 +313,13 @@ export function SaleSheet({
             תשלום נוסף
           </button>
 
-          {payments.length > 0 && (
+          {/*
+            "נותר" נמדד מול מחיר המכירה ולא מול מה שנפרס: פרויקט מכור
+            בלי פריסת תשלומים הראה "נותר 0", כאילו הלקוח אינו חייב.
+          */}
+          {(payments.length > 0 || sold) && (
             <div className="mt-3 grid grid-cols-3 gap-2">
-              <Stat variant="flat" size="sm" label="סך התשלומים" value={shekels(status.total)} />
+              <Stat variant="flat" size="sm" label="נפרס" value={shekels(status.scheduled)} />
               <Stat variant="flat" size="sm" label="שולם" value={shekels(status.paid)} tone="ok" />
               <Stat
                 variant="flat"
@@ -275,12 +331,23 @@ export function SaleSheet({
             </div>
           )}
 
-          {payments.length > 0 && Math.abs(status.total - quote.amount) > 1 && (
+          {(payments.length > 0 || sold) && Math.abs(status.scheduled - quote.amount) > 1 && (
             <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
-              סך התשלומים אינו שווה למחיר הפרויקט — הפרש של{' '}
-              <span className="num">{shekels(Math.abs(status.total - quote.amount))}</span>.
+              {status.scheduled < quote.amount ? (
+                <>
+                  עוד לא נפרסו{' '}
+                  <span className="num">{shekels(quote.amount - status.scheduled)}</span> ממחיר
+                  הפרויקט. מה שנותר לגבות נמדד מול המחיר, לא מול הפריסה.
+                </>
+              ) : (
+                <>
+                  סך התשלומים גדול ממחיר הפרויקט ב־
+                  <span className="num">{shekels(status.scheduled - quote.amount)}</span>.
+                </>
+              )}
             </p>
           )}
+
         </div>
 
         {sold && (

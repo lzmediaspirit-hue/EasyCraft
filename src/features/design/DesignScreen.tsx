@@ -3,7 +3,10 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { WallElevation } from './WallElevation';
 import { blocked } from './collision';
-import { unitBox, wallShadow } from './placement';
+import { nudge } from './dragSolve';
+import { axisLabel } from './axisLock';
+import type { Axis } from './axisLock';
+import { unitBox } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
@@ -30,13 +33,15 @@ import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatG
 import { DesignToolbar } from './DesignToolbar';
 import type { SheetName } from './sheets';
 import { readPref, writePref } from '../../ui/prefs';
-import { clamp } from '../../ui/units';
+import { clamp, cm } from '../../ui/units';
+import { ConfirmSheet } from '../../ui/ConfirmSheet';
 import { history, useHistory } from './history';
+import { preview, usePreview, withPreview } from './preview';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
-import { syncConsumption } from '../../materials/consumption';
+import { syncConsumption } from '../../materials/consumptionRepo';
 import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,
@@ -50,7 +55,8 @@ import {
   WandIcon,
 } from '../../ui/icons';
 import { turned } from '../../db/types';
-import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
+import { AISLE } from '../../catalog/kitchenRules';
+import type { CatalogItem, FreePlacement, PlacedUnit, Project, UserRole } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 
@@ -94,8 +100,17 @@ export function DesignScreen({
   });
   const dragPanel = useRef<{ startY: number; startRatio: number } | null>(null);
   const [wallIndex, setWallIndex] = useState(0);
+  /*
+   * בקשה להתאמת התצוגה. המצלמה עצמה נשארת בתוך התלת־ממד — היא
+   * שייכת לרגע ההסתכלות ולא לפרויקט — ומכאן עוברת הבקשה בלבד.
+   */
+  const [fitAt, setFitAt] = useState<number | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** מה שהמקלדת הזיזה כרגע — נאמר ונעלם, כמו מחוון הגרירה */
+  const [keyAxis, setKeyAxis] = useState<string | null>(null);
   /* קבוצת ארגזים שממתינה לשמירה בספרייה כפריט אחד */
+  /* הארגזים שעומדים להימחק, עד שהשאלה נענית */
+  const [deleting, setDeleting] = useState<PlacedUnit[] | null>(null);
   const [groupToSave, setGroupToSave] = useState<PlacedUnit[] | null>(null);
   /*
    * מגירה אחת פתוחה בכל רגע. אחד־עשר דגלים נפרדים תיארו מצב אחד —
@@ -109,7 +124,12 @@ export function DesignScreen({
    * שנעשה בהם — ובלי כלי עריכה. מי שעומד ליד המסור לא אמור להזיז
    * ארגז בטעות.
    */
-  const [workToggle, setWorkToggle] = useState(!!startInWork);
+  /*
+   * `null` = עוד לא נבחר, ואז ברירת המחדל היא לפי התפקיד: מנהל
+   * נכנס לתכנון, וכל השאר לתהליך. משנבחר, הבחירה של המשתמש גוברת.
+   */
+  const [workToggle, setWorkToggle] = useState<boolean | null>(startInWork ? true : null);
+
   const [workUnitId, setWorkUnitId] = useState<string | null>(null);
   /* מחווני הקיר מתקפלים, וההדמיה תופסת את מה שהתפנה */
   /*
@@ -131,7 +151,17 @@ export function DesignScreen({
     opened.current = true;
     if (isComplexRoom(walls)) design.set('iso', true);
   }, [walls, design]);
-  const allUnits = useLiveQuery(() => unitsRepo.listForProject(projectId), [projectId]);
+  const stored = useLiveQuery(() => unitsRepo.listForProject(projectId), [projectId]);
+  /*
+   * המסך קורא את הארגזים דרך התצוגה המקדימה: בזמן גרירה המקום
+   * החדש חי בזיכרון, ונכתב פעם אחת בסוף התנועה.
+   */
+  const previewAt = usePreview();
+  const allUnits = useMemo(
+    () => (stored ? withPreview(stored) : stored),
+    /* `previewAt` הוא המונה שמכריח חישוב מחדש — הוא אינו נקרא כאן */
+    [stored, previewAt],
+  );
   const customer = useLiveQuery(
     () => customersRepo.get(project?.customerId ?? ''),
     [project?.customerId],
@@ -143,7 +173,24 @@ export function DesignScreen({
     return Object.fromEntries(all.map((f) => [f.id, f.hex]));
   }, []);
 
+  /*
+   * העוביים שלפיהם נחתך, לפי הלוח שנבחר בפועל. השרטוט והניסור
+   * חייבים לעבוד על אותו מספר, אחרת דופן זרה מגדילה את הארגז על
+   * המסך ולא בפלטה.
+   */
+  const parts = useMemo(
+    () =>
+      settings && {
+        ...settings,
+        thicknessById: Object.fromEntries(
+          (allMaterials ?? []).filter((m) => m.thicknessMm).map((m) => [m.id, m.thicknessMm!]),
+        ),
+      },
+    [settings, allMaterials],
+  );
+
   const wall = walls?.[Math.min(wallIndex, (walls?.length ?? 1) - 1)];
+
   const units = useMemo(
     () => (wall ? (allUnits ?? NO_UNITS).filter((u) => u.wallId === wall.id) : []),
     [allUnits, wall],
@@ -151,14 +198,41 @@ export function DesignScreen({
   const selected = units.find((u) => u.id === selectedId) ?? null;
   const workUnit = (allUnits ?? NO_UNITS).find((u) => u.id === workUnitId) ?? null;
   const me = useCurrentMember();
+  /*
+   * שני תפקידים, ובכוונה.
+   *
+   * `role` הוא מה שהמסך **נראה** לפיו — מנהל שבוחר לראות כנגר רואה
+   * את מסך הנגר. `actor` הוא מי שבאמת נכנס, וממנו נגזר מה **מותר**.
+   *
+   * ההפרדה הזאת היא התיקון: התפקידים סודרו כסולם יורד, אבל היכולות
+   * שלהם אינן מוכלות זו בזו. תכנת שבחר לראות כנגר קיבל בדיוק את מה
+   * שאין לו — לסמן "נחתך" — כי נגר נמצא מתחתיו בסולם.
+   */
   const role = useEffectiveRole(me?.role);
-  const mayEdit = can.design(role, project);
+  const actor = me?.role;
+  const mayEdit = can.design(actor, project);
   /*
    * מי שאינו מנהל רואה את מסך התהליך ולא את מסך התכנון. זה לא
    * מסך אחר — אלה אותם ארגזים באותם מקומות — אבל זו השאלה שהוא
    * בא לענות עליה: מה נשאר לעשות, ולא איך לסדר מחדש.
    */
-  const workMode = role !== 'manager' || workToggle;
+  /*
+   * מי שמתכנן — מנהל, או תכנת שההדמיה נפתחה לו — עובר בין תכנון
+   * לתהליך במתג. כל השאר רואים תהליך בלבד.
+   *
+   * קודם נכתב כאן `role !== 'manager'`, ולכן תכנת היה תמיד במצב
+   * תהליך: האישור שקיבל לא פתח לו דבר, וגם כפתור "בקשת אישור
+   * לעריכה" לא הוצג לו — הוא יושב במסך התכנון.
+   */
+  const plans = role === 'manager' || role === 'planner';
+  /*
+   * תהליך עבודה קיים רק אחרי המכירה — לפני כן אין מה לחתוך, ולכן
+   * גם אין למה להיכנס. אחריה: מי שמתכנן בוחר, וכל השאר בתהליך.
+   */
+  const workMode = !project?.soldAt ? false : plans ? (workToggle ?? role !== 'manager') : true;
+
+
+
   /** כלי עריכה מוצגים רק למי שמותר לו, ורק כשלא במצב תהליך עבודה */
   const editable = mayEdit && !workMode;
   const costing = useLiveQuery(() => projectsRepo.costing(projectId), [projectId]);
@@ -176,7 +250,6 @@ export function DesignScreen({
       const picked = (allUnits ?? NO_UNITS).find((u) => u.id === id);
       return picked && picked.wallId === wallId ? id : null;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallIndex]);
 
   const corners = useMemo(
@@ -185,6 +258,55 @@ export function DesignScreen({
   );
   /* גיאומטריית החדר, פעם אחת — ממנה נגזרים המבטים וההתנגשות */
   const plan = useMemo(() => buildPlan(walls ?? [], allUnits ?? NO_UNITS), [walls, allUnits]);
+  /*
+   * המקלדת: אותה תנועה בציר אחד, בלי לגרור.
+   *
+   * לחיצה ארוכה נועלת ציר באצבע, וזו הדרך השנייה אל אותו דבר — מי
+   * שעובד בעכבר ומקלדת, מי שידו אינה יציבה, ומי שפשוט יודע את
+   * המספר. חץ אחד = סנטימטר, עם Shift = עשרה. הצירים קבועים:
+   * ימינה־שמאלה לאורך הקיר (באי: ציר X), מעלה־מטה לגובה (ציר Y),
+   * ועם Alt באי גם ציר Z אל תוך החדר.
+   *
+   * רצף לחיצות באותו ציר הוא צעד אחד לביטול — התג נושא את הציר,
+   * ולכן מעבר לציר אחר פותח צעד חדש.
+   */
+  useEffect(() => {
+    if (!editable || !selected || !walls) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      /* הקלדה בשדה היא הקלדה, לא הזזה */
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      const flat: Axis = selected.free ? (e.altKey ? 'z' : 'x') : 'along';
+      const map: Record<string, [Axis, number]> = {
+        ArrowRight: [flat, 1],
+        ArrowLeft: [flat, -1],
+        ArrowUp: ['y', 1],
+        ArrowDown: ['y', -1],
+      };
+      const move = map[e.key];
+      if (!move) return;
+      const [axis, dir] = move;
+      e.preventDefault();
+      const patch = nudge(selected, axis, dir * (e.shiftKey ? 100 : 10), {
+        plan,
+        walls,
+        units: allUnits ?? NO_UNITS,
+      });
+      if (!patch) return setKeyAxis(`${axisLabel(axis)} — אין לאן לזוז`);
+      setKeyAxis(axisLabel(axis));
+      void patchUnit(selected.id, patch, `nudge:${selected.id}:${axis}`);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editable, selected, walls, plan, allUnits]);
+
+  /* המחוון נעלם מעצמו: הוא אומר מה קרה עכשיו, לא מה קרה פעם */
+  useEffect(() => {
+    if (!keyAxis) return;
+    const t = setTimeout(() => setKeyAxis(null), 1400);
+    return () => clearTimeout(t);
+  }, [keyAxis]);
+
   /*
    * ההתנגשות נמדדת על התיבות במרחב החדר ולא על סימון אזור הפינה:
    * הפינה פתוחה לכל ארגז, והשאלה היחידה היא אם שני ארונות באמת
@@ -241,12 +363,9 @@ export function DesignScreen({
     const chosen = (allUnits ?? NO_UNITS).filter((u) => ids.includes(u.id));
     if (!chosen.length) return;
     if (action === 'library') return setGroupToSave(chosen);
+    /* מחיקה נשאלת לפני שהיא קורית — גם כשהיא של חמישה ארגזים */
+    if (action === 'delete') return setDeleting(chosen);
     await history.capture(projectId, `bulk:${action}:${Date.now()}`);
-    if (action === 'delete') {
-      await Promise.all(ids.map((id) => unitsRepo.remove(id)));
-      if (ids.includes(selectedId ?? '')) setSelectedId(null);
-      return;
-    }
     /* הסתרה היא מתג: אם כולם מוסתרים הפעולה מחזירה אותם */
     const hide = !chosen.every((u) => u.hidden);
     await Promise.all(chosen.map((u) => unitsRepo.update(u.id, { hidden: hide })));
@@ -267,9 +386,32 @@ export function DesignScreen({
     /* פריט מורכב מניח כמה ארגזים; הראשון הוא זה שנבחר אחריו */
     const made = item.parts?.length
       ? await unitsRepo.addGroup(projectId, wall.id, item, at)
-      : [await unitsRepo.add(projectId, wall.id, item, at)];
+      : [await unitsRepo.add(projectId, wall.id, item, at, undefined, islandSpot(item))];
     closeSheet();
     if (made[0]) setSelectedId(made[0].id);
+  }
+
+  /**
+   * איפה אי נוחת.
+   *
+   * לא על הקיר אלא מולו: במרכז הקיר שעובדים עליו, ומעבר עבודה
+   * שלם ממנו והלאה — המרחק שבו אי עומד באמת. משם גוררים אותו.
+   * ריק = הפריט אינו תבנית אי, והוא נוחת על הקיר כרגיל.
+   */
+  function islandSpot(item: CatalogItem): FreePlacement | undefined {
+    if (!item.island || !wall) return undefined;
+    const p = plan.find((q) => q.wall.id === wall.id);
+    if (!p) return undefined;
+    const a = (p.headingDeg * Math.PI) / 180;
+    const dir = { x: Math.cos(a), z: Math.sin(a) };
+    const normal = { x: -Math.sin(a), z: Math.cos(a) };
+    const along = wall.lengthMm / 2;
+    const into = AISLE.workMm + item.defaultDepthMm / 2;
+    return {
+      xMm: Math.round(p.start.x + dir.x * along + normal.x * into),
+      zMm: Math.round(p.start.y + dir.z * along + normal.z * into),
+      headingDeg: Math.round(p.headingDeg + 90),
+    };
   }
 
   /**
@@ -324,29 +466,6 @@ export function DesignScreen({
    * במקום שבו הצל שלו נפל על הקיר, ולא ב-xMm הישן שכבר לא אומר
    * כלום.
    */
-  async function setFree(id: string, free: boolean) {
-    const u = (allUnits ?? NO_UNITS).find((x) => x.id === id);
-    const b = u && unitBox(u, plan);
-    if (!u || !b) return;
-    await history.capture(projectId, `free:${id}`);
-    if (free) {
-      await unitsRepo.update(id, {
-        free: {
-          xMm: Math.round(b.cx),
-          zMm: Math.round(b.cz),
-          headingDeg: Math.round((b.facing * 180) / Math.PI),
-        },
-      });
-      return;
-    }
-    const p = plan.find((q) => q.wall.id === u.wallId);
-    const shadow = p ? wallShadow(b, p) : null;
-    await unitsRepo.update(id, {
-      free: undefined,
-      xMm: shadow ? Math.max(Math.round(shadow.xMm), 0) : u.xMm,
-    });
-  }
-
   /** מחזיר לתצוגה את כל מה שהוסתר — צעד אחד, ולא ארגז אחרי ארגז. */
   async function showHidden() {
     const back = (allUnits ?? NO_UNITS).filter((u) => u.hidden);
@@ -355,11 +474,19 @@ export function DesignScreen({
     for (const u of back) await unitsRepo.update(u.id, { hidden: false });
   }
 
-  async function removeUnit(id: string) {
-    await history.capture(projectId, `del:${id}`);
-    await unitsRepo.remove(id);
-    setSelectedId(null);
+  /**
+   * מחיקה בפועל, אחרי שנשאלה.
+   *
+   * צעד אחד בהיסטוריה גם לחמישה ארגזים: מי שמחק קבוצה בטעות רוצה
+   * להחזיר אותה בביטול אחד.
+   */
+  async function removeUnits(ids: string[]) {
+    if (!ids.length) return;
+    await history.capture(projectId, `del:${ids.join(',')}`);
+    await Promise.all(ids.map((id) => unitsRepo.remove(id)));
+    if (ids.includes(selectedId ?? '')) setSelectedId(null);
   }
+
 
   async function centerWall() {
     if (!wall) return;
@@ -367,8 +494,47 @@ export function DesignScreen({
     await unitsRepo.centerOnWall(wall.id, wall.lengthMm);
   }
 
+  /**
+   * שינוי ארגז — השער היחיד שדרכו זה קורה.
+   *
+   * הבדיקה כאן ולא רק על הכפתורים: מחווה שנשכח להתנות בה היא דלת
+   * פתוחה, וכך בדיוק נשארה הגרירה בציור החזית פתוחה למי שאסור לו.
+   * מי שאין לו רשות עריכה אינו משנה ארגז — לא בכפתור, לא בגרירה
+   * ולא בשדה מספרי.
+   *
+   * סימון עבודה אינו עריכה: הוא עובר דרך `canAdvance`, ולכן הוא
+   * מותר לנגר דווקא כשההדמיה נעולה בפניו.
+   */
+  /**
+   * תחילת גרירה וסופה.
+   *
+   * תנועה אחת של היד היא צעד אחד לביטול — גם כשהיא מזיזה חמישה
+   * ארגזים, וגם כשהיא נמשכת שתי שניות. הגבול מוכרז כאן ואינו
+   * נגזר מקצב האירועים.
+   */
+  function gesture(open: boolean) {
+    if (!editable) return;
+    if (open) return void history.begin(projectId, `drag:${Date.now()}`);
+    /*
+     * סוף התנועה: מה שהצטבר נכתב פעם אחת, ורק אז התצוגה המקדימה
+     * מתרוקנת — סדר הפוך היה מחזיר את הארגז למקומו הישן לרגע.
+     */
+    void (async () => {
+      const moves = preview.drain();
+      for (const [id, patch] of moves) await unitsRepo.update(id, patch);
+      history.end(projectId);
+    })();
+  }
+
   async function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
+    const workOnly = Object.keys(patch).every((k) => k === 'work');
+    if (!editable && !workOnly) return;
     await history.capture(projectId, tag);
+    /*
+     * בזמן תנועה השינוי נשאר בזיכרון. הכתיבה היא בסוף, בבת אחת,
+     * ולא בכל תזוזה של המצביע.
+     */
+    if (history.inGesture(projectId)) return preview.set(id, patch);
     await unitsRepo.update(id, patch);
   }
 
@@ -393,6 +559,7 @@ export function DesignScreen({
         canRedo={canRedo}
         projectId={projectId}
         onCenter={centerWall}
+        onFit={() => setFitAt(Date.now())}
         onClearSelection={() => setSelectedId(null)}
         onShowHidden={showHidden}
       />
@@ -404,6 +571,12 @@ export function DesignScreen({
       */}
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
         <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
+          {/* מה שהמקלדת הזיזה עכשיו, ובאיזה ציר */}
+          {keyAxis && (
+            <span className="pointer-events-none absolute inset-x-0 top-1 z-10 mx-auto w-fit rounded-full bg-violet-700 px-3 py-1 text-[11px] font-medium text-white">
+              {keyAxis}
+            </span>
+          )}
           {iso ? (
             /* התלת־ממד מראה את החדר כולו, ולא רק את הקיר שעובדים עליו */
             <WallIso
@@ -418,6 +591,13 @@ export function DesignScreen({
                   const i = walls.findIndex((w) => w.id === picked.wallId);
                   if (i >= 0) setWallIndex(i);
                 }
+                /*
+                 * במצב ייצור נגיעה בארגז פותחת את לוח העבודה שלו,
+                 * בדיוק כמו בחזית. בתלת־ממד היא רק סימנה אותו —
+                 * ומכיוון שבמצב ייצור אין לוח עריכה, שום דבר לא קרה:
+                 * ההוראה על המסך הבטיחה מה שלא התרחש.
+                 */
+                if (workMode) return setWorkUnitId(id);
                 setSelectedId(id);
               }}
               /*
@@ -441,16 +621,25 @@ export function DesignScreen({
               onBulk={editable ? runBulk : undefined}
               inside={inside}
               finishHex={finishHex ?? NO_HEX}
+              project={project}
+              parts={parts ?? undefined}
+              onGesture={gesture}
+              work={workMode}
+              snap={design.view.snap}
+              fitAt={fitAt}
             />
           ) : (
+
           <WallElevation
             wall={wall}
             units={units}
             allUnits={allUnits ?? NO_UNITS}
             plan={plan}
             selectedId={selectedId}
+            project={project}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
+
             rulerAxis={rulerAxis}
             work={workMode}
             onSelect={(id) => {
@@ -463,7 +652,16 @@ export function DesignScreen({
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? NO_HEX}
-            onMove={(id, patch) => patchUnit(id, patch)}
+            parts={parts ?? undefined}
+            onGesture={gesture}
+            snap={design.view.snap}
+            /*
+             * גרירה היא עריכה, ולכן היא עוברת באותו שער כמו
+             * הכפתורים. בתלת־ממד היא כבר הייתה מותנית ב-`editable`
+             * וכאן לא — ולכן נגר ותכנת בלי אישור יכלו להזיז ארגז
+             * בציור החזית, בלי שאף כפתור עריכה הוצג להם.
+             */
+            onMove={editable ? (id, patch) => patchUnit(id, patch) : undefined}
           />
           )}
 
@@ -542,8 +740,8 @@ export function DesignScreen({
             <CopyIcon className="size-4" />
           </button>
           <button
-            onClick={() => removeUnit(selected.id)}
-            aria-label="הסרת הארגז"
+            onClick={() => setDeleting([selected])}
+            aria-label="מחיקת הארגז"
             title="מחיקת הארגז"
             className="grid size-9 place-items-center rounded-full bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition-colors hover:bg-red-50"
           >
@@ -568,12 +766,13 @@ export function DesignScreen({
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
           project={project}
+          parts={parts ?? undefined}
+          canPrice={can.sell(me?.role)}
           /* ארגז מסובב תופס על הקיר את עומקו, ולכן ההשלמה לרוחב
              לא תמלא את הרווח שנמדד — עדיף בלי הצעה מאשר הצעה שקרית */
           fillWidth={turned(selected) ? undefined : fillSpan(selected, units, wall, 'w')}
           fillHeight={fillSpan(selected, units, wall, 'h')}
           defaultSocleMm={settings?.defaults.socleMm ?? 0}
-          onFree={(v) => setFree(selected.id, v)}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
@@ -698,7 +897,13 @@ export function DesignScreen({
               נבחר, מסומן על הקיר ונפתח לעריכה — במקום לחפש לפי השם
               מי מבין הארגזים הוא זה.
             */}
-            {analysis && role === 'manager' && view.warnings && analysis.warnings.length > 0 && (
+            {/*
+              התראה היא עובדה על התכנון, ולא מידע של המנהל.
+              היא הייתה מוצגת למנהל בלבד, וכך תכנת שעבד על הקיר
+              ונגר שבנה לפיו לא ראו שארגז חורג מהחדר — מי שלא
+              רשאי לשנות עדיין צריך לדעת.
+            */}
+            {analysis && view.warnings && analysis.warnings.length > 0 && (
               <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
                 {/* המפתח כולל את הארגזים: שני ארגזים באותו שם מייצרים
                     בדיוק את אותו משפט, ובלעדיהם השני נעלם */}
@@ -758,7 +963,7 @@ export function DesignScreen({
             ) : (
               <EditGate
                 project={project}
-                role={role}
+                role={actor}
                 workMode={workMode}
                 onRequest={(note) =>
                   projectsRepo.update(projectId, {
@@ -779,12 +984,14 @@ export function DesignScreen({
               חישוב ומחיר הם עניין של המנהל. התכנת והנגר צריכים את
               הארגזים ואת מה שנשאר לעשות בהם, לא את מה שזה עולה.
             */}
-            {role === 'manager' &&
+            {/* חישוב ומחיר הם של המנהל; המתג הוא של כל מי שמתכנן */}
+            {(plans || project.soldAt) &&
               (project.soldAt ? (
                 <button
                   onClick={() => {
-                    setWorkToggle((v) => !v);
+                    setWorkToggle(!workMode);
                     setSelectedId(null);
+
                     design.clearTools();
                   }}
                   aria-pressed={workMode}
@@ -797,7 +1004,7 @@ export function DesignScreen({
                   <FlowIcon className="size-5" />
                   {workMode ? 'תהליך עבודה' : 'תכנון'}
                 </button>
-              ) : (
+              ) : role === 'manager' ? (
                 <button
                   onClick={() => setSheet('materials')}
                   className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-stone-900 bg-white py-3.5 text-base font-semibold text-stone-900 transition-colors hover:bg-stone-100"
@@ -805,7 +1012,8 @@ export function DesignScreen({
                   <CalcIcon />
                   חישוב פרויקט
                 </button>
-              ))}
+              ) : null)}
+
           </div>
         </>
       )}
@@ -818,7 +1026,9 @@ export function DesignScreen({
       {workUnit && (
         <UnitWorkSheet
           unit={workUnit}
-          role={role}
+          role={actor}
+          shown={role}
+          project={project}
           onChange={async (work) => {
             await patchUnit(workUnit.id, { work }, `work:${workUnit.id}`);
             /* סימון חיתוך הוא מה שמוריד פלטות מהמלאי — בלי הזנה נוספת */
@@ -839,7 +1049,9 @@ export function DesignScreen({
       {sheet === 'bulk' && (
         <BulkWorkSheet
           units={units}
-          role={role}
+          role={actor}
+          shown={role}
+          project={project}
           onApply={async (changes) => {
             await history.capture(projectId, `bulk:${Date.now()}`);
             for (const c of changes) await unitsRepo.update(c.id, { work: c.work });
@@ -906,7 +1118,26 @@ export function DesignScreen({
       )}
 
       {sheet === 'edit' && selected && (
-        <UnitEditSheet unit={selected} onClose={closeSheet} />
+        <UnitEditSheet unit={selected} wallLengthMm={wall.lengthMm} onClose={closeSheet} />
+      )}
+
+      {/*
+        מחיקה נשאלת לפני שהיא קורית.
+        ארגז שיורד מהקיר יורד גם מהחומרים, מהניסור ומהמחיר — וזה
+        מה שהשאלה אומרת, במקום "האם אתה בטוח".
+      */}
+      {deleting?.length && (
+        <ConfirmSheet
+          title={deleting.length > 1 ? 'מחיקת ארגזים' : 'מחיקת הארגז'}
+          what={
+            deleting.length > 1
+              ? `${deleting.length} ארגזים`
+              : `${deleting[0].name} · ${cm(deleting[0].widthMm)} ס״מ`
+          }
+          impact={'הארגזים יורדים מהקיר, ואיתם מהחומרים, מהניסור ומהמחיר. אפשר להחזיר ב"בטל" מיד אחרי המחיקה.'}
+          onConfirm={() => void removeUnits(deleting.map((u) => u.id))}
+          onClose={() => setDeleting(null)}
+        />
       )}
 
       {/* שמירת אוסף שנבחר בתלת־ממד כפריט אחד */}

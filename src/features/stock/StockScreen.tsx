@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo } from '../projects/projectsRepo';
 import { customersRepo } from '../customers/customersRepo';
-import { consumptionRepo } from '../../materials/consumption';
+import { consumptionRepo } from '../../materials/consumptionRepo';
 import { receiveOrder, stockRepo } from '../../materials/materialsRepo';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { selectOnFocus } from '../../ui/Field';

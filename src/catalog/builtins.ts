@@ -24,7 +24,6 @@ export interface SeedItem {
   counter?: number;
   corner?: 'blindStart' | 'blindEnd' | 'lShape';
   blind?: number;
-  panelThickness?: number;
   /** פריט נפוץ — מופיע בספרייה הראשית */
   common?: boolean;
   note?: string;
@@ -126,9 +125,9 @@ const panel = (
   w,
   widths,
   h,
+  /* לוח עומד: עומקו הוא עוביו, וזו גם המידה שלפיה הוא נחתך */
   d: thickness,
   y: 0,
-  panelThickness: thickness,
 });
 
 export const SEED_CATALOG: SeedItem[] = [

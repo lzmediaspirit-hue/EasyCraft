@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { settingsRepo } from '../../materials/materialsRepo';
 import { MaterialSheet } from './MaterialSheet';
 import { FinishSheet } from './FinishSheet';
-import { BackupSheet } from './BackupSheet';
+import { CabinetsSheet } from './CabinetsSheet';
 import { ExtrasSection } from './ExtrasSection';
 import { ScreenHeader } from '../../ui/ScreenHeader';
 import { nav } from '../../nav/navigation';
@@ -30,7 +30,7 @@ const BACK_KINDS: { key: BackKind; label: string }[] = [
 export function SettingsScreen() {
   const [editingMaterial, setEditingMaterial] = useState<Material | 'new' | null>(null);
   const [editingFinish, setEditingFinish] = useState<Finish | 'new' | null>(null);
-  const [backup, setBackup] = useState(false);
+  const [cabinets, setCabinets] = useState(false);
   const settings = useLiveQuery(() => settingsRepo.get(), []);
   const { materials, finishes } = useMaterialsAndFinishes();
 
@@ -266,9 +266,11 @@ export function SettingsScreen() {
             <NumField
               label="עובי גוף לחישוב"
               inMm
+              help="משמש רק ללוח שלא נקבע לו עובי משלו. ללוח שיש לו עובי — העובי שלו הוא שקובע את החיתוך, כי הוא זה שיושב במסור."
               value={settings.carcassThicknessMm}
               onChange={(v) => settingsRepo.save({ carcassThicknessMm: v })}
             />
+
             <NumField
               label="שקע הגב בחריץ"
               inMm
@@ -288,6 +290,10 @@ export function SettingsScreen() {
           {/*
             סוג הגב הוא דרך עבודה של הנגרייה ולא החלטה לכל ארגז,
             ולכן הוא נקבע פעם אחת. ארגז שצריך אחרת משנה אצלו.
+
+            נכתב אל `defaults.backKind` — אותו שדה שממנו נולד כל ארגז
+            חדש. קודם נכתב לשדה נפרד בשם דומה, ולכן הבחירה כאן נשמרה
+            ולא השפיעה: הארגזים המשיכו לקבל גב דק.
           */}
           <div className="mt-3 rounded-2xl border border-stone-200 bg-white p-4">
             <span className="mb-2 block text-sm font-medium text-stone-700">
@@ -297,10 +303,12 @@ export function SettingsScreen() {
               {BACK_KINDS.map((b) => (
                 <button
                   key={b.key}
-                  onClick={() => settingsRepo.save({ defaultBackKind: b.key })}
-                  aria-pressed={settings.defaultBackKind === b.key}
+                  onClick={() =>
+                    settingsRepo.save({ defaults: { ...settings.defaults, backKind: b.key } })
+                  }
+                  aria-pressed={settings.defaults.backKind === b.key}
                   className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                    settings.defaultBackKind === b.key
+                    settings.defaults.backKind === b.key
                       ? 'bg-oak-600 text-white'
                       : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                   }`}
@@ -390,23 +398,22 @@ export function SettingsScreen() {
         </section>
 
         {/*
-          הנתונים יושבים במכשיר הזה בלבד, וזה מה שמאפשר לעבוד בלי
-          אינטרנט. כאן הדלת החוצה: גיבוי, מעבר למכשיר חדש, והעברת
-          הספרייה של הנגרייה למישהו אחר.
+          ארגז שנבנה בנגרייה הזאת הוא נכס שלה, והוא צריך דלת החוצה:
+          למכשיר שני, לנגר אחר, או בחזרה אחרי שהוחלף משהו.
         */}
         <section>
-          <SectionTitle>גיבוי והעברה</SectionTitle>
+          <SectionTitle>ארגזים</SectionTitle>
           <button
-            onClick={() => setBackup(true)}
+            onClick={() => setCabinets(true)}
             className="flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3.5 text-start transition-colors hover:border-oak-400"
           >
             <span className="grid size-9 shrink-0 place-items-center rounded-full bg-oak-100 text-oak-700">
               <ArchiveIcon className="size-5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block font-semibold text-stone-900">גיבוי והעברת נתונים</span>
+              <span className="block font-semibold text-stone-900">שמירה והעברה של ארגזים</span>
               <span className="block text-xs leading-snug text-stone-500">
-                להוציא הכול כטקסט, ולהחזיר במכשיר אחר
+                להוציא את הארגזים לקובץ, ולהכניס ארגזים שקיבלת
               </span>
             </span>
             <ChevronIcon className="size-4 shrink-0 rotate-180 text-stone-300" />
@@ -429,7 +436,7 @@ export function SettingsScreen() {
         />
       )}
 
-      {backup && <BackupSheet onClose={() => setBackup(false)} />}
+      {cabinets && <CabinetsSheet onClose={() => setCabinets(false)} />}
 
       {editingMaterial && (
         <MaterialSheet

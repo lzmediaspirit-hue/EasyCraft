@@ -34,12 +34,25 @@ export function BoxForm({
   value,
   onChange,
   namePlaceholder,
+  composed,
 }: {
   value: BoxSpec;
   onChange: (patch: Partial<BoxSpec>) => void;
   namePlaceholder?: string;
+  /**
+   * פנים הארון מתואר באזורים שאי אפשר לסכם במספר אחד — שני אזורי
+   * מגירות, או קושרת שמחלקת אותם לעמודות. מספר יחיד כאן היה
+   * הבטחה שאינה מתקיימת: הוא נשמר, והארון נשאר כפי שהיה.
+   */
+  composed?: boolean;
 }) {
   const caps = glyphDef(value.glyph);
+  /*
+   * מכשיר חשמלי נקנה שלם, ולכן אין בו מה לבנות: סוקל, משטח, דלתות
+   * ומדפים הם שאלות על ארגז. מה שכן נשאל עליו הוא המידה שלו ואיפה
+   * הוא עומד — וזה בדיוק מה שהנגר מודד בקטלוג של היצרן.
+   */
+  const bought = !!caps.standalone;
 
   return (
     <div className="space-y-5">
@@ -114,7 +127,7 @@ export function BoxForm({
         </div>
       </Field>
 
-      {caps.doors && (
+      {!bought && caps.doors && (
         <Field group label="דלתות" hint="0 = בלי חזית">
           <div className="flex flex-wrap gap-1.5">
             {COUNTS.map((n) => (
@@ -126,7 +139,15 @@ export function BoxForm({
         </Field>
       )}
 
-      {caps.drawers && (
+      {!bought && caps.drawers && composed && (
+        <Field group label="שורות מגירות">
+          <p className="text-[11px] leading-snug text-stone-500">
+            פנים הארון מתואר באזורים — שנה אותו בעריכה המתקדמת, בהדמיה.
+          </p>
+        </Field>
+      )}
+
+      {!bought && caps.drawers && !composed && (
         <>
           <Field group label="שורות מגירות">
             <div className="flex flex-wrap gap-1.5">
@@ -179,7 +200,7 @@ export function BoxForm({
         </>
       )}
 
-      {caps.shelves && (
+      {!bought && caps.shelves && (
         <Field group label="מדפים" hint="נראים בתצוגת פנים הארון">
           <div className="flex flex-wrap gap-1.5">
             {SHELF_COUNTS.map((n) => (
@@ -203,12 +224,17 @@ export function BoxForm({
           value={value.yMm}
           onChange={(v) => onChange({ yMm: v })}
         />
-        <NumField label="סוקל" value={value.socleMm} onChange={(v) => onChange({ socleMm: v })} />
-        <NumField
-          label="משטח עבודה"
-          value={value.counterMm}
-          onChange={(v) => onChange({ counterMm: v })}
-        />
+        {/* סוקל ומשטח הם חלקים שנחתכים, ולמכשיר קנוי אין כאלה */}
+        {!bought && (
+          <>
+            <NumField label="סוקל" value={value.socleMm} onChange={(v) => onChange({ socleMm: v })} />
+            <NumField
+              label="משטח עבודה"
+              value={value.counterMm}
+              onChange={(v) => onChange({ counterMm: v })}
+            />
+          </>
+        )}
       </div>
     </div>
   );

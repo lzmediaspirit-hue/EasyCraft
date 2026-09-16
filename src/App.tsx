@@ -10,8 +10,10 @@ import { TasksScreen } from './features/workflow/TasksScreen';
 import { TeamScreen } from './features/team/TeamScreen';
 import { StockScreen } from './features/stock/StockScreen';
 import { seedCatalog } from './catalog/catalogRepo';
+import { seedRooms } from './catalog/roomsRepo';
 import { seedMaterials } from './materials/materialsRepo';
 import { seedAdmin } from './workflow/auth';
+import { ensureWorkshop } from './db/rows';
 import { useRoute } from './nav/navigation';
 import { useDisplayUnit } from './ui/useDisplayUnit';
 import { LoginScreen } from './features/team/LoginScreen';
@@ -24,9 +26,15 @@ export default function App() {
   const me = useCurrentMember();
   const [ready, setReady] = useState(false);
 
-  // הספרייה, החומרים וחשבון המנהל נזרעים פעם אחת, לפני שמסך מבקש אותם
+  /*
+   * הספרייה, החדרים, החומרים וחשבון המנהל נזרעים פעם אחת, לפני
+   * שמסך מבקש אותם. הנגרייה קודמת לכולם: כל שורה שנזרעת נרשמת
+   * עליה, ולכן היא צריכה להיות קיימת לפני הזריעה ולא אחריה.
+   */
   useEffect(() => {
-    Promise.all([seedCatalog(), seedMaterials(), seedAdmin()]).finally(() => setReady(true));
+    ensureWorkshop()
+      .then(() => Promise.all([seedCatalog(), seedRooms(), seedMaterials(), seedAdmin()]))
+      .finally(() => setReady(true));
   }, []);
 
   if (!ready || me === undefined) return null;

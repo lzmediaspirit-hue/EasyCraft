@@ -80,11 +80,50 @@ function hitsFeature(unit: PlacedUnit, at: UnitBox, plan: PlanWall[]): boolean {
         if (featureOverlaps(unit, f)) return true;
         continue;
       }
-      const bite = featureBiteMm(f);
-      if (bite > 0 && clash(at, featureBox(f, p, bite))) return true;
+      /*
+       * הסימון נבדק כגוף בחלל, בלי היתר ההכלה.
+       *
+       * עמוד שנכנס כולו לתוך ארגז חופשי נחשב עד כאן "מוכל", כמו
+       * תנור בתוך עמודה — ולכן הוא לא חסם. בטון אינו מכשיר: ארגז
+       * שבלע עמוד אינו ניתן לבנייה דווקא משום שהוא בלע אותו.
+       *
+       * ופתח אינו בולט לחדר, ולכן לא היה לו גוף כלל: אי שעמד
+       * מול חלון לא נחסם. הפתח מקבל נפח גישה דק מפני הקיר
+       * פנימה — מי שעומד בו חוסם אותו, בין אם הוא תלוי על הקיר
+       * ובין אם הוא עומד ברצפה מולו.
+       */
+      const depth = featureBlockMm(f);
+      if (depth > 0 && overlaps(at, featureBox(f, p, depth))) return true;
     }
   }
   return false;
+}
+
+/**
+ * כמה עומק יש לסימון כשבודקים אותו מול ארגז שאינו על הקיר שלו.
+ *
+ * עמוד ומדרגה בולטים, ולכן העומק הוא שלהם. פתח — חלון או דלת —
+ * אינו בולט, אבל גם אינו מקום שאפשר להעמיד בו: הרצועה הדקה
+ * שלפניו היא מה שחייב להישאר פנוי. זו אינה בדיקת מרחב פתיחת
+ * דלת; זו רק "לא לעמוד בפתח".
+ */
+const OPENING_CLEAR_MM = 100;
+
+function featureBlockMm(f: Parameters<typeof featureBiteMm>[0]): number {
+  const bite = featureBiteMm(f);
+  return bite > 0 ? bite : bite < 0 ? 0 : OPENING_CLEAR_MM;
+}
+
+/**
+ * חפיפה בפועל, בלי היתר ההכלה.
+ *
+ * `clash` מתיר לתיבה אחת לשבת כולה בתוך השנייה — מכשיר בתוך
+ * עמודה. מול סימון על הקיר ההיתר הזה אינו נכון, ולכן כאן נשאלת
+ * השאלה הפיזית בלבד: האם שני הגופים נפגשים.
+ */
+function overlaps(a: UnitBox, b: UnitBox): boolean {
+  if (a.y + a.h <= b.y + TOUCH || b.y + b.h <= a.y + TOUCH) return false;
+  return floorsMeet(a, b);
 }
 
 /** האם שתי תיבות חודרות זו לזו בפועל. */

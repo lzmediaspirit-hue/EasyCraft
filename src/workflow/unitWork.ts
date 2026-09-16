@@ -117,10 +117,36 @@ export function canAdvance(
   u: PlacedUnit,
   track: TrackDef,
   to: Exclude<TrackStage, 'none'>,
+  /** מי שנכנס באמת — ממנו נגזרת הסמכות */
   role: UserRole | undefined,
+  /** הפרויקט שהארגז שייך לו — ממנו נקרא אם העבודה בכלל נפתחה */
+  project?: { soldAt?: number },
+  /**
+   * התפקיד שנבחר לצפייה, כשהוא אינו התפקיד האמיתי.
+   *
+   * מה שמותר הוא החיתוך של השניים, ולא הנמוך מביניהם: היכולות אינן
+   * מוכלות זו בזו — תכנת מכין קבצים לחיתוך ונגר מסמן שנחתך — ולכן
+   * "צפייה כנגר" נתנה לתכנת בדיוק את מה שאין לו. מנהל שצופה כנגר
+   * מצומצם ליכולות הנגר, וזו בדיוק מטרת הצפייה.
+   */
+  shown?: UserRole,
 ): { ok: boolean; why?: string } {
   const def = STAGE_CHAIN.find((s) => s.key === to)!;
   if (!role || !def.roles.includes(role)) return { ok: false, why: 'לא בתפקיד שלך' };
+  if (shown && shown !== role && !def.roles.includes(shown)) {
+    return { ok: false, why: `לא בתפקיד ${shown === 'installer' ? 'המתקין' : shown === 'carpenter' ? 'הנגר' : shown === 'planner' ? 'התכנת' : 'המנהל'} שנבחר לצפייה` };
+  }
+  /*
+   * ייצור מתחיל אחרי המכירה.
+   *
+   * ארגז שסומן "מוכן לחיתוך" ואז "נחתך" בפרויקט שעוד לא נמכר הוא
+   * לוח שנצרך מהמלאי על חשבון עבודה שאיש לא הזמין. המסך כבר אומר
+   * "תהליך העבודה נפתח אחרי המכירה", וכאן זה גם נאכף.
+   */
+  if (project && !project.soldAt && stageIndex(to) >= 0) {
+    return { ok: false, why: 'הפרויקט עוד לא נמכר' };
+  }
+
   if (stageIndex(to) > stageIndex(track.last)) return { ok: false, why: 'לא שייך למסלול הזה' };
 
   const current = stageIndex(stageOf(u, track.key));
@@ -156,15 +182,21 @@ export function workTone(u: PlacedUnit): WorkTone {
   const tracks = tracksOf(u);
   if (!tracks.length) return 'idle';
   const stages = tracks.map((t) => stageIndex(stageOf(u, t.key)));
-  const min = Math.min(...stages);
   const max = Math.max(...stages);
-  if (min < 0 && max < 0) return 'idle';
+  if (max < 0) return 'idle';
   /*
    * ירוק רק כשכל מסלול הגיע להרכבה או להתקנה. ארגז שעומד בשטח בלי
    * חזיתות אינו מורכב — הוא רק מותקן, וזה מה שהווי מספר.
+   *
+   * הסף נמדד מול סוף המסלול ולא מול שלב קבוע: הגב נגמר בחיתוך, ולכן
+   * דרישה ל"הורכב" ממנו השאירה ארגז גמור לגמרי בצבע של הרכבה — 100%
+   * בהתקדמות, וכתום על הקיר.
    */
-  if (min >= stageIndex('assembled')) return 'done';
+  const ripe = (t: TrackDef) =>
+    stageIndex(stageOf(u, t.key)) >= Math.min(stageIndex('assembled'), stageIndex(t.last));
+  if (tracks.every(ripe)) return 'done';
   if (max >= stageIndex('edged')) return 'assembly';
+
   if (max >= stageIndex('ready')) return 'cutting';
   return 'idle';
 }

@@ -7,17 +7,21 @@ import { glyphDef } from '../../catalog/glyphList';
 import { MAX_BODY_MM, doorCells, isContainer, unitCells } from '../../catalog/zones';
 import { MATERIAL, drawerDepth } from '../../catalog/standards';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
-import { partChoice } from '../../costing/boards';
+import { partChoice, partThicknessMm } from '../../costing/boards';
+import { unitProblem } from '../../catalog/feasible';
+import type { PartSettings } from '../../costing/boards';
 import { InteriorEditor } from './InteriorEditor';
 import { PartChoiceRow } from './PartChoiceRow';
 import { FinishSheet } from '../settings/FinishSheet';
+import { HardwareRows } from './HardwareRows';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { BookmarkIcon, CloseIcon, PencilIcon } from '../../ui/icons';
-import { BACK_KINDS, DRAWER_BOXES, RAIL_WIDTH_MM, bodyHeightMm } from '../../db/types';
+import { BACK_KINDS, DRAWER_BOXES, RAIL_WIDTH_MM, bodyHeightMm, slabThicknessMm } from '../../db/types';
 import type {
   ExposedSides,
+  HardwareSpec,
   LedSpot,
   OpeningMech,
   PartChoice,
@@ -75,10 +79,11 @@ export function UnitEditor({
   unit,
   inside,
   project,
+  parts,
+  canPrice = false,
   fillWidth,
   fillHeight,
   defaultSocleMm = 0,
-  onFree,
   onChange,
   onApplyChoiceAll,
   onEdit,
@@ -89,6 +94,10 @@ export function UnitEditor({
   inside: boolean;
   /** הפרויקט, לברירות המחדל של הגוון והחומר */
   project?: Project;
+  /** ההגדרות שמהן נגזר עובי הלוח של החזית, ורשימת הפרזול של העסק */
+  parts?: PartSettings & { hardware?: HardwareSpec[] };
+  /** מי שרואה כסף רואה גם את מחירי הפרזול ועורך אותם */
+  canPrice?: boolean;
   /**
    * הרווח שהארגז יושב בתוכו — איפה הוא מתחיל וכמה הוא גדול.
    * גם הוא נמדד בהדמיה, מאותה סיבה.
@@ -98,7 +107,6 @@ export function UnitEditor({
   /** גובה הרגליים שהעסק עובד בו — לארגז שחוזר לרצפה */
   defaultSocleMm?: number;
   /** הופך את הארגז לאי בחדר, או מחזיר אותו אל הקיר */
-  onFree?: (free: boolean) => void;
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
@@ -111,6 +119,8 @@ export function UnitEditor({
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
   const [addingFinish, setAddingFinish] = useState(false);
+  /* מידה שנדחתה, והסיבה — כדי שהמסך יגיד למה ולא רק יתעלם */
+  const [blocked, setBlocked] = useState<string | null>(null);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   /* מגירת העריכה המתקדמת נפתחת לבד לארגז שכבר משתמש במה שיש בה */
   const [advanced, setAdvanced] = useState(() => !!unit.free || !!unit.omit);
@@ -131,7 +141,28 @@ export function UnitEditor({
   /** מה שבאמת חל על חלק — הארגז, ואם לא נקבע בו, הפרויקט */
   const choiceOf = (role: PartRole) => partChoice(unit, role, project);
 
+  /* עובי הגוף שלפיו הארגז נחתך — ולפיו גם נמדד מה אפשר לבנות */
+  const carcassMm = parts
+    ? partThicknessMm(unit, 'carcass', parts, project)
+    : MATERIAL.carcassMm;
+
+  /**
+   * שינוי מידה עובר דרך שער אחד.
+   *
+   * גובה 50 עם רגליים 100 נשמר עד כאן בשקט, ורשימת החיתוך שיצאה
+   * ממנו הכילה דפנות באורך שלילי. מה שאי אפשר לבנות אינו נשמר,
+   * והמסך אומר מהו המינימום — לא "שגיאה".
+   */
+  function resize(patch: Partial<PlacedUnit>) {
+    const why = unitProblem({ ...unit, ...patch }, carcassMm);
+    if (why) return setBlocked(why);
+    setBlocked(null);
+    onChange(patch);
+  }
+
   const caps = glyphDef(unit.glyph);
+  /* לוח בודד: מונח או עומד. ריק = ארגז אמיתי עם גוף */
+  const flat = caps.noCarcass;
   const locked = unit.floorLocked ?? false;
   const exposed = unit.exposed ?? {};
   const glassSides = unit.glassSides ?? {};
@@ -169,7 +200,12 @@ export function UnitEditor({
    * החזית; בתצוגת פנים זה עומק הגוף בלבד. מה שנשמר הוא תמיד עומק
    * הגוף, כי זו המידה שממנה נחתכים הצדדים.
    */
-  const depthShift = !inside && hasFronts ? MATERIAL.frontMm : 0;
+  const depthShift =
+    !inside && hasFronts
+      ? parts
+        ? partThicknessMm(unit, 'front', parts, project)
+        : MATERIAL.frontMm
+      : 0;
   const currentValue =
     axis === 'w' ? unit.widthMm : axis === 'h' ? unit.heightMm : unit.depthMm + depthShift;
   /*
@@ -202,7 +238,7 @@ export function UnitEditor({
   const axisLabel = axis === 'w' ? 'רוחב' : axis === 'h' ? 'גובה' : 'עומק';
 
   const applyStandard = (mm: number) =>
-    onChange(
+    resize(
       axis === 'w'
         ? { widthMm: mm }
         : axis === 'h'
@@ -263,12 +299,19 @@ export function UnitEditor({
           label="רוחב"
           value={unit.widthMm}
         />
-        <AxisTab
-          active={axis === 'h'}
-          onSelect={() => setAxis('h')}
-          label="גובה"
-          value={unit.heightMm}
-        />
+        {/*
+          ללוח מונח אין "גובה" אלא עובי, והוא נערך בשדה משלו למטה.
+          כרטיסיית גובה כאן הייתה מציעה לו מידות של ארון — ומידת
+          התקן הקטנה ביותר שם היא 50 מ״מ, בזמן שמדף הוא 18 או 30.
+        */}
+        {flat !== 'horizontal' && (
+          <AxisTab
+            active={axis === 'h'}
+            onSelect={() => setAxis('h')}
+            label="גובה"
+            value={unit.heightMm}
+          />
+        )}
         <AxisTab
           active={axis === 'd'}
           onSelect={() => setAxis('d')}
@@ -344,6 +387,13 @@ export function UnitEditor({
         </button>
       </div>
 
+      {/* מה שנדחה, ולמה — מתחת לשורת המידות, במקום שבו נגעו */}
+      {blocked && (
+        <p className="mt-1.5 rounded-xl bg-red-50 px-3 py-2 text-[11px] leading-snug text-red-900">
+          {blocked}
+        </p>
+      )}
+
       {typing && (
         <label className="mt-1.5 flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-2">
           <span className="text-[11px] text-stone-500">{axisLabel}</span>
@@ -359,13 +409,21 @@ export function UnitEditor({
         </label>
       )}
 
-      {unit.panelThicknessMm !== undefined && (
+      {/*
+        עובי הלוח הוא אחת ממידותיו: לוח מונח עוביו הוא גובהו, ולוח
+        עומד עוביו הוא עומקו. השדה כאן כותב לאותה מידה בדיוק ולא
+        למספר שני לצדה — שני מספרים לאותו דבר נפרדו זה מזה, והלוח
+        צויר בעובי אחד ונבדק להתנגשות בעובי אחר.
+      */}
+      {flat && (
         <div className="mt-2">
           <NumBox
             label="עובי הלוח"
-            value={unit.panelThicknessMm}
+            value={slabThicknessMm(unit, flat)}
             inMm
-            onChange={(mm) => onChange({ panelThicknessMm: mm })}
+            onChange={(mm) =>
+              resize(flat === 'horizontal' ? { heightMm: mm } : { depthMm: mm })
+            }
           />
         </div>
       )}
@@ -673,12 +731,29 @@ export function UnitEditor({
       )}
 
       {/*
+        מכשיר חשמלי נקנה שלם, ולכן אין בו מה לבנות.
+
+        פס לד, גב, קושרות, ביטול דופן וזכוכית הם שאלות על ארגז
+        שנחתך מפלטות. תנור נכנס למטבח מוכן, והשאלות היחידות עליו
+        הן המידה שלו ואיפה הוא עומד. עד עכשיו כל האפשרויות האלה
+        היו פתוחות גם לו, והתשובות עליהן לא הגיעו לשום מקום.
+      */}
+      {caps.standalone && (
+        <p className="mt-4 rounded-xl bg-stone-50 px-3 py-2.5 text-xs leading-snug text-stone-500">
+          {glyphDef(unit.glyph).label} הוא מכשיר שנקנה שלם — הוא אינו נחתך
+          מפלטות ואין לו גב, מדפים או קושרות. מה שנקבע לו הוא המידה
+          והמקום.
+        </p>
+      )}
+
+      {/*
         עריכה מתקדמת: מה שנגר עושה פעם בעשרה ארגזים.
 
         הדברים האלה אמיתיים ונחוצים — ארגז שנשען על שכנו, ארגז
         שיורד מהקיר — אבל הם לא הדבר שפותחים בשבילו את הלוח. מגירה
         סגורה משאירה את העורך קצר, ומי שצריך אותם יודע לחפש.
       */}
+      {!caps.standalone && (
       <button
         onClick={() => setAdvanced((v) => !v)}
         aria-expanded={advanced}
@@ -687,8 +762,9 @@ export function UnitEditor({
         עריכה מתקדמת
         <ChevronIcon className={`size-4 transition-transform ${advanced ? '-rotate-90' : ''}`} />
       </button>
+      )}
 
-      {advanced && (
+      {advanced && !caps.standalone && (
         <>
           <Row label="פס לד">
             {LED_SPOTS.map((s) => (
@@ -811,19 +887,20 @@ export function UnitEditor({
           </Row>
 
           {/*
-            אי: הארגז יורד מהקיר ועומד בחדר. אחרי ההפיכה גוררים אותו
-            בתלת־ממד אל המקום שלו; הכפתור רק מוריד אותו מהקיר.
+            הפרזול של הארגז. זו רשימת הזמנה: כל שורה נושאת את
+            המחיר שהיה כשנבחרה, ולכן עדכון מחיר ברשימת העסק אינו
+            משנה הצעה שכבר יצאה.
           */}
-          {onFree && (
-            <Row label="אי" hint="ארגז שעומד בחדר ולא על קיר">
-              <Pill active={!unit.free} ariaLabel="על הקיר" onClick={() => onFree(false)}>
-                על הקיר
-              </Pill>
-              <Pill active={!!unit.free} ariaLabel="אי בחדר" onClick={() => onFree(true)}>
-                אי בחדר
-              </Pill>
-            </Row>
-          )}
+          <div className="mt-3">
+            <span className="text-xs font-medium text-stone-600">פרזול</span>
+            <HardwareRows
+              rows={unit.hardware ?? []}
+              settings={parts}
+              canPrice={canPrice}
+              onChange={(hardware) => onChange({ hardware })}
+            />
+          </div>
+
         </>
       )}
 
@@ -870,9 +947,10 @@ export function UnitEditor({
               value={unit.socleMm ?? 0}
               /* הרגליים מרימות את גוף הארון, ולכן הגובה הכולל גדל איתן */
               onChange={(mm) =>
-                onChange({
+                resize({
                   socleMm: mm || undefined,
-                  heightMm: Math.max(unit.heightMm + mm - (unit.socleMm ?? 0), 50),
+                  /* הרגליים מרימות את הגוף, ולכן הגובה הכולל גדל איתן */
+                  heightMm: unit.heightMm + mm - (unit.socleMm ?? 0),
                   yMm: 0,
                 })
               }

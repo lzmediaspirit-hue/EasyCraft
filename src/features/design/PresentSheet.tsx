@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { WallIso } from './WallIso';
 import { Sheet } from '../../ui/Sheet';
-import { roomDef } from '../../catalog/rooms';
+import { roomDef } from '../../catalog/roomsRepo';
 import { partChoice } from '../../costing/boards';
 import { PART_ROLES } from '../../db/types';
 import type { Customer, Finish, Material, PlacedUnit, Project, Wall } from '../../db/types';

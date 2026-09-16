@@ -32,12 +32,9 @@ ok(u[0].h === 2400, 'הארגז הראשון בגובה 240', String(u[0].h));
 /* ארגז עליון מעליו — עליונים אינם נעולים לרצפה */
 while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(250); }
 await btn(/הוספת ארגז/).click(); await page.waitForTimeout(700);
-await page.getByRole('dialog').last().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(600);
-/* בוחר החדרים מוצג רק כשהספרייה נפתחת בפעם הראשונה */
-if (await page.getByRole('dialog').last().getByRole('button', { name: /^מטבח/ }).count()) {
-  await page.getByRole('dialog').last().getByRole('button', { name: /^מטבח/ }).click();
-  await page.waitForTimeout(500);
-}
+/* הספרייה נפתחת ישר בחדר של הפרויקט — בוחר החדרים אינו תמיד שם */
+const roomBtn = () => page.getByRole('dialog').last().getByRole('button', { name: /^מטבח/ });
+if (await roomBtn().count()) { await roomBtn().click(); await page.waitForTimeout(600); }
 await page.getByRole('dialog').last().getByRole('button', { name: 'עליונים', exact: true }).click();
 await page.waitForTimeout(500);
 await page.getByRole('dialog').last().locator('div.relative > button').filter({ hasText: /\S/ }).nth(0).click();

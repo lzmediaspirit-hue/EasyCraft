@@ -1,3 +1,4 @@
+import { allMine, eraseIds, eraseRows, mine, onlyMine, owned, patchRow } from '../db/rows';
 import { db } from '../db/db';
 import { STAGES, stageDef } from './stages';
 import type {
@@ -15,12 +16,13 @@ import type {
 
 export const teamRepo = {
   async list(): Promise<TeamMember[]> {
-    const rows = await db.team.toArray();
+    const rows = await allMine(db.team);
     return rows.sort((a, b) => Number(b.active) - Number(a.active) || a.createdAt - b.createdAt);
   },
 
   async get(id: string): Promise<TeamMember | undefined> {
-    return db.team.get(id);
+    const row = await db.team.get(id);
+    return row && mine(row) ? row : undefined;
   },
 
   async forRole(role: UserRole): Promise<TeamMember[]> {
@@ -31,16 +33,26 @@ export const teamRepo = {
     const now = Date.now();
     if (input.id) {
       const { id, ...rest } = input;
-      await db.team.update(id, { ...rest, updatedAt: now });
+      await patchRow(db.team, id, rest);
       return id;
     }
     const id = crypto.randomUUID();
-    await db.team.add({ active: true, ...input, id, createdAt: now, updatedAt: now });
+    await db.team.add({ active: true, ...input, ...owned(), id, createdAt: now, updatedAt: now });
     return id;
   },
 
+  /**
+   * קובע את הגיבוב והמלח של הסיסמה.
+   *
+   * דרך משלו ולא `save`, כי `save` דורש שם ותפקיד — החלפת סיסמה
+   * אינה עריכה של איש הצוות, והיא לא אמורה לדרוש את שאר הטופס.
+   */
+  async setSecret(id: string, passwordSalt: string, passwordHash: string): Promise<void> {
+    await patchRow(db.team, id, { passwordSalt, passwordHash });
+  },
+
   async remove(id: string): Promise<void> {
-    await db.team.delete(id);
+    await eraseIds(db.team, [id]);
   },
 };
 
@@ -50,13 +62,13 @@ export const teamRepo = {
 
 export const stagesRepo = {
   async listForProject(projectId: string): Promise<ProjectStage[]> {
-    const rows = await db.stages.where('projectId').equals(projectId).toArray();
+    const rows = onlyMine(await db.stages.where('projectId').equals(projectId).toArray());
     const order = new Map(STAGES.map((s, i) => [s.key, i]));
     return rows.sort((a, b) => (order.get(a.key) ?? 0) - (order.get(b.key) ?? 0));
   },
 
   async all(): Promise<ProjectStage[]> {
-    return db.stages.toArray();
+    return allMine(db.stages);
   },
 
   /**
@@ -65,21 +77,53 @@ export const stagesRepo = {
    * שהתהליך היה קיים מקבל אותו — בלי לגעת בשלבים שכבר התקדמו.
    */
   async ensure(projectId: string, open = true): Promise<ProjectStage[]> {
-    const existing = await stagesRepo.listForProject(projectId);
-    const have = new Set(existing.map((s) => s.key));
-    const now = Date.now();
-    const missing = STAGES.filter((s) => !have.has(s.key)).map((s, i) => ({
-      id: crypto.randomUUID(),
-      projectId,
-      key: s.key,
-      // התהליך נפתח במכירה; עד אז כל השלבים ממתינים
-      status: (open && !have.size && i === 0 ? 'active' : 'waiting') as ProjectStage['status'],
-      createdAt: now,
-      updatedAt: now,
-    }));
-    if (missing.length) await db.stages.bulkAdd(missing);
+    /*
+     * הקריאה והכתיבה באותה עסקה.
+     *
+     * שתי קריאות במקביל — מסך שנפתח ופרויקט שנוצר באותו רגע — קראו
+     * שתיהן "אין שלבים" וכתבו כל אחת שמונה: שש-עשרה שורות, ובסיום
+     * התכנון אחת סומנה כגמורה ואחות תאומה שלה נשארה פעילה.
+     */
+    await db.transaction('rw', db.stages, db.tombstones, async () => {
+      const rows = onlyMine(await db.stages.where('projectId').equals(projectId).toArray());
+      /* תיקון נתונים שכבר נוצרו כפולים: נשמרת השורה שהתקדמה הכי רחוק */
+      const best = new Map<string, ProjectStage>();
+      const drop: string[] = [];
+      const rank: Record<ProjectStage['status'], number> = {
+        waiting: 0,
+        skipped: 1,
+        active: 2,
+        done: 3,
+      };
+
+      for (const row of rows) {
+        const kept = best.get(row.key);
+        if (!kept) {
+          best.set(row.key, row);
+          continue;
+        }
+        const loser = rank[row.status] > rank[kept.status] ? kept : row;
+        if (loser !== kept) best.set(row.key, row);
+        drop.push(loser.id);
+      }
+      if (drop.length) await eraseIds(db.stages, drop);
+
+      const now = Date.now();
+      const missing = STAGES.filter((s) => !best.has(s.key)).map((s, i) => ({
+        id: crypto.randomUUID(),
+        projectId,
+        key: s.key,
+        // התהליך נפתח במכירה; עד אז כל השלבים ממתינים
+        status: (open && !best.size && i === 0 ? 'active' : 'waiting') as ProjectStage['status'],
+        ...owned(),
+        createdAt: now,
+        updatedAt: now,
+      }));
+      if (missing.length) await db.stages.bulkAdd(missing);
+    });
     return stagesRepo.listForProject(projectId);
   },
+
 
   /** פותח את התהליך: השלב הראשון שעדיין ממתין הופך לפעיל. */
   async start(projectId: string): Promise<void> {
@@ -105,7 +149,7 @@ export const stagesRepo = {
   },
 
   async update(id: string, patch: Partial<Omit<ProjectStage, 'id'>>): Promise<void> {
-    await db.stages.update(id, { ...patch, updatedAt: Date.now() });
+    await patchRow(db.stages, id, patch);
   },
 
   /**
@@ -169,7 +213,7 @@ export function stageProgress(stages: ProjectStage[]): { done: number; total: nu
 
 export const attachmentsRepo = {
   async listForProject(projectId: string): Promise<Attachment[]> {
-    const rows = await db.attachments.where('projectId').equals(projectId).toArray();
+    const rows = onlyMine(await db.attachments.where('projectId').equals(projectId).toArray());
     return rows.sort((a, b) => a.createdAt - b.createdAt);
   },
 
@@ -184,6 +228,7 @@ export const attachmentsRepo = {
       mime: file.type,
       sizeBytes: file.size,
       blob: file,
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     });
@@ -191,10 +236,13 @@ export const attachmentsRepo = {
   },
 
   async remove(id: string): Promise<void> {
-    await db.attachments.delete(id);
+    await eraseIds(db.attachments, [id]);
   },
 
   async removeForProject(projectId: string): Promise<void> {
-    await db.attachments.where('projectId').equals(projectId).delete();
+    await eraseRows(
+      db.attachments,
+      await db.attachments.where('projectId').equals(projectId).toArray(),
+    );
   },
 };

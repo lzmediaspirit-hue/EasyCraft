@@ -1,6 +1,7 @@
 /* שכבה 23: נעילת החדר, ביטול גרירת הלוח, צד זכוכית לוויטרינה, אייקון הסיבוב */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 
 let fail = 0;
 const ok = (name, cond, got = '') => {
@@ -18,7 +19,9 @@ const dlg = () => page.getByRole('dialog').last();
 async function add(name, tab) {
   while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
   await btn(/הוספת ארגז/).click(); await page.waitForTimeout(600);
-  await dlg().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(600);
+  /* הספרייה נפתחת ישר בחדר של הפרויקט, ולכן בוחר החדרים אינו תמיד שם */
+  const room = dlg().getByRole('button', { name: /^מטבח/ });
+  if (await room.count()) { await room.click(); await page.waitForTimeout(600); }
   if (tab) { await dlg().getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(500); }
   await dlg().getByRole('button', { name: new RegExp('^' + name) }).first().click();
   await page.waitForTimeout(800);
@@ -43,7 +46,7 @@ await page.getByRole('button', { name: 'סיום עריכה' }).first().click().
 await page.waitForTimeout(500);
 
 /* --- תלת־ממד: נעילת החדר --- */
-await btn(/שטוח/).click(); await page.waitForTimeout(1300);
+await btn(/^תלת־ממד/).click(); await page.waitForTimeout(1300);
 const lock = () => page.getByRole('button', { name: /נעילת סיבוב החדר|שחרור סיבוב החדר/ });
 ok('lock button exists', (await lock().count()) > 0);
 
@@ -87,7 +90,7 @@ if (await spin.count()) {
   ok('rotate head is a filled triangle', head === 1, String(head));
 }
 await page.locator('svg').filter({ has: page.locator('[data-room-floor]') }).first()
-  .screenshot({ path: 'L74-1-iso.png' });
+  .screenshot({ path: SP + 'L74-1-iso.png' });
 
 await browser.close();
 console.log(fail ? `${fail} FAILED` : 'ALL PASS');

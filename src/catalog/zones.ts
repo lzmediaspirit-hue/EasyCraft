@@ -331,6 +331,44 @@ export function zoneBands(
   return out;
 }
 
+/**
+ * שורות המגירות החיצוניות, כפי שהן בפועל.
+ *
+ * העריכה המהירה קראה עד כאן את `u.drawers` — השדה הישן — בזמן
+ * שאזורים מפורשים גוברים עליו. ארגז ספרייה ששלוש מגירותיו מתוארות
+ * באזור הראה בטופס אפס, וכתיבה של שש שינתה את השדה ולא את הארון.
+ */
+export function drawerRows(u: FlatSource): number {
+  return unitZones(u)
+    .filter((z) => z.kind === 'drawers')
+    .reduce((n, z) => n + (z.drawers ?? 0), 0);
+}
+
+/**
+ * האם אפשר לתאר את מספר המגירות במספר אחד.
+ *
+ * ארון עם שני אזורי מגירות, או עם קושרת שמחלקת אותם לעמודות, אינו
+ * "כמה מגירות" — הוא הרכב. מספר יחיד עליו הוא הבטחה שאי אפשר
+ * לקיים, ולכן הטופס אינו מציע אותו ושולח לעריכה המתקדמת.
+ */
+export function drawersAreSimple(u: FlatSource): boolean {
+  if (!u.zones?.length) return true;
+  const rows = u.zones.filter((z) => z.kind === 'drawers');
+  if (rows.length > 1) return false;
+  if (rows.length === 1 && zoneColumns(rows[0]).length > 1) return false;
+  /* אזורים מפורשים בלי אזור מגירות: הוספה שלהן היא שינוי מבנה */
+  return rows.length === 1;
+}
+
+/**
+ * אזורים מעודכנים למספר שורות מגירות חדש.
+ * `undefined` = אין אזורים מפורשים, והשדה הישן הוא שמתאר את הארון.
+ */
+export function zonesWithDrawerRows(u: FlatSource, rows: number): Zone[] | undefined {
+  if (!u.zones?.length) return undefined;
+  return u.zones.map((z) => (z.kind === 'drawers' ? { ...z, drawers: rows } : z));
+}
+
 /** סך המגירות בארון, מכל התאים. */
 export function countDrawers(u: FlatSource): number {
   return unitCells(u).reduce(

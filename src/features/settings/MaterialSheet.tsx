@@ -3,7 +3,15 @@ import { boardName, materialsRepo } from '../../materials/materialsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { SheetFooter } from '../../ui/SheetFooter';
 import { Chip, Field, inputClass, selectOnFocus } from '../../ui/Field';
-import { CORES, PART_ROLES, SHEET_HEIGHTS_MM, SHEET_WIDTH_MM, coreOf } from '../../db/types';
+import { MeasureInput } from '../../ui/MeasureInput';
+import {
+  CORES,
+  PART_ROLES,
+  SHEET_HEIGHTS_MM,
+  SHEET_WIDTHS_MM,
+  SHEET_WIDTH_MM,
+  coreOf,
+} from '../../db/types';
 import { cm, unitLabel } from '../../ui/units';
 import type { CoreKind, Material, PartRole } from '../../db/types';
 
@@ -32,6 +40,13 @@ export function MaterialSheet({
   const [thickness, setThickness] = useState<number | undefined>(material?.thicknessMm);
   const [sheetHeight, setSheetHeight] = useState(material?.sheetHeightMm ?? SHEET_HEIGHTS_MM[0]);
   /*
+   * הרוחב נשמר ולא נקבע מחדש.
+   *
+   * עד עכשיו הוא נכתב תמיד כ-1220, ולכן לוח שהגיע בייבוא ברוחב אחר
+   * איבד אותו ברגע שנגעו בו — גם כשמה ששונה היה השם בלבד.
+   */
+  const [sheetWidth, setSheetWidth] = useState(material?.sheetWidthMm ?? SHEET_WIDTH_MM);
+  /*
    * שם משלו, כשהנגר רוצה כזה. ריק = השם נגזר מהליבה, מהצבע ומהעובי,
    * כדי ששני אנשים שיוסיפו את אותו לוח יקראו לו אותו דבר.
    */
@@ -41,6 +56,8 @@ export function MaterialSheet({
    * לגוף ואילו לחזיתות — ולכן היא נקבעת כאן, פעם אחת, ולא בכל ארגז.
    */
   const [roles, setRoles] = useState<PartRole[]>(material?.roles ?? []);
+  /** מה מונע את המחיקה, כשמשהו מונע אותה */
+  const [problem, setProblem] = useState<string | null>(null);
 
   const spec = coreOf(core);
   const auto = boardName({ core, coreColor, thicknessMm: thickness });
@@ -62,7 +79,7 @@ export function MaterialSheet({
       core,
       coreColor: spec?.colors ? coreColor : undefined,
       thicknessMm: thickness,
-      sheetWidthMm: SHEET_WIDTH_MM,
+      sheetWidthMm: sheetWidth,
       sheetHeightMm: sheetHeight,
       roles: roles.length ? roles : undefined,
     });
@@ -82,6 +99,18 @@ export function MaterialSheet({
           onRemove={
             material
               ? async () => {
+                  /*
+                   * לוח שמוצמד לארגזים אינו נמחק. מחיקה שלו הייתה
+                   * משאירה בארגזים הפניה לשום דבר, והחלקים שלו היו
+                   * יוצאים מהתמחור בשקט — הצעת מחיר נמוכה בלי אזהרה.
+                   */
+                  const used = await materialsRepo.usage(material.id);
+                  if (used) {
+                    setProblem(
+                      `הלוח הזה מוצמד ל-${used} ארגזים. החלף אותם ללוח אחר, ואז אפשר יהיה למחוק אותו.`,
+                    );
+                    return;
+                  }
                   await materialsRepo.remove(material.id);
                   onClose();
                 }
@@ -91,6 +120,11 @@ export function MaterialSheet({
       }
     >
       <div className="space-y-5">
+        {problem && (
+          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-snug text-amber-900">
+            {problem}
+          </p>
+        )}
         {/*
           הליבה קודמת לכול: היא שקובעת אילו עוביים קיימים, אם יש
           צבע ליבה בכלל, ואם הלוח יכול להגיע מודבק משני הצדדים.
@@ -172,20 +206,43 @@ export function MaterialSheet({
         </Field>
 
         {/*
-          מידת הפלטה היא מאפיין של הלוח אצל הספק ולא של החישוב.
-          הרוחב תמיד 122 ס"מ; הגובה משתנה בין ספקים, ולכן הוא נבחר
-          מהגבהים שקיימים בשוק.
+          מידת הפלטה היא מאפיין של הלוח אצל הספק ולא של החישוב, ולכן
+          שני הצירים נבחרים — והמידה שהגיעה בייבוא נשמרת גם כשהיא
+          אינה באף רשימה.
         */}
-        <Field group label="מידת הפלטה" hint={`רוחב ${cm(SHEET_WIDTH_MM)} ${unitLabel()} תמיד`}>
+        <Field group label="רוחב הפלטה" hint={unitLabel()}>
           <div className="flex flex-wrap gap-1.5">
-            {SHEET_HEIGHTS_MM.map((h) => (
-              <Chip key={h} active={h === sheetHeight} onClick={() => setSheetHeight(h)}>
-                <span className="num">
-                  {cm(SHEET_WIDTH_MM)}×{cm(h)}
-                </span>
-              </Chip>
-            ))}
+            {[...new Set([...SHEET_WIDTHS_MM, sheetWidth])]
+              .sort((a, b) => a - b)
+              .map((w) => (
+                <Chip key={w} active={w === sheetWidth} onClick={() => setSheetWidth(w)}>
+                  <span className="num">{cm(w)}</span>
+                </Chip>
+              ))}
           </div>
+          <MeasureInput
+            value={sheetWidth}
+            onChange={setSheetWidth}
+            minMm={300}
+            ariaLabel="רוחב פלטה אחר"
+            className={`${inputClass} num mt-1.5 text-end`}
+          />
+        </Field>
+
+        <Field group label="אורך הפלטה" hint={unitLabel()}>
+          <div className="flex flex-wrap gap-1.5">
+            {[...new Set([...SHEET_HEIGHTS_MM, sheetHeight])]
+              .sort((a, b) => a - b)
+              .map((h) => (
+                <Chip key={h} active={h === sheetHeight} onClick={() => setSheetHeight(h)}>
+                  <span className="num">{cm(h)}</span>
+                </Chip>
+              ))}
+          </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-stone-400">
+            הפלטה שנבחרה: <span className="num">{cm(sheetWidth)}×{cm(sheetHeight)}</span>{' '}
+            {unitLabel()}
+          </p>
         </Field>
 
         <p className="text-xs leading-snug text-stone-500">

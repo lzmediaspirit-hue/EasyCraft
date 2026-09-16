@@ -41,10 +41,8 @@ await clear();
 
 /* ---- תלת־ממד: כל הקירות יחד + סימון כיוון ---- */
 await full('0-before-iso');
-/* חדר של שלושה קירות כבר נפתח בתלת־ממד; אם לא — נכנסים אליו */
-if (await page.getByRole('button', { name: /שטוח/ }).count()) {
-  await btn(/שטוח/).click(); await page.waitForTimeout(1200);
-}
+/* בורר המצב מכריז על היעד: לחיצה על "תלת־ממד" נכנסת אליו */
+await btn(/^תלת־ממד/).click(); await page.waitForTimeout(1200);
 await full('1-iso-room');
 const iso = page.locator('main svg, div svg').first();
 const txt = await page.innerText('body');
@@ -69,7 +67,8 @@ ok('wall removed', after === 4, String(after));
 await clear();
 
 /* ---- פאנל חיפוי קיר מאחורי הארגזים ---- */
-await btn(/תלת־ממד/).click().catch(() => {});
+/* חזרה לציור החזית */
+await btn(/^דו־ממד/).click().catch(() => {});
 await page.waitForTimeout(600);
 await full('4-after');
 

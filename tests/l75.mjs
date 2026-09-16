@@ -11,7 +11,9 @@ const dlg = () => page.getByRole('dialog').last();
 async function add(name, tab) {
   while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
   await btn(/הוספת ארגז/).click(); await page.waitForTimeout(600);
-  await dlg().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(600);
+  /* הספרייה נפתחת ישר בחדר של הפרויקט, ולכן בוחר החדרים אינו תמיד שם */
+  const room = dlg().getByRole('button', { name: /^מטבח/ });
+  if (await room.count()) { await room.click(); await page.waitForTimeout(600); }
   if (tab) { await dlg().getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(500); }
   await dlg().getByRole('button', { name: new RegExp('^' + name) }).first().click();
   await page.waitForTimeout(800);
@@ -37,7 +39,8 @@ const adv = page.getByRole('button', { name: 'עריכה מתקדמת' });
 ok('advanced edit is there', (await adv.count()) === 1);
 await adv.click(); await page.waitForTimeout(500);
 ok('it holds the omit row', (await page.getByText('בלי דופן', { exact: true }).count()) > 0);
-ok('it holds the island row', (await page.getByText('אי', { exact: true }).count()) > 0);
+/* האי אינו מתג בעריכה אלא תבנית בספרייה — ראו שכבה 22 */
+ok('the island row is gone', (await page.getByText('אי', { exact: true }).count()) === 0);
 /* צד שלא נבנה יורד מהניסור — נבדק ישירות על פירוק הלוחות */
 const parts = await page.evaluate(async () => {
   const b = await import('/src/costing/boards.ts?v=' + Date.now());

@@ -14,7 +14,9 @@ const dlg = () => page.getByRole('dialog').last();
 async function add(name, tab) {
   while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
   await btn(/הוספת ארגז/).click(); await page.waitForTimeout(600);
-  await dlg().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(600);
+  /* הספרייה נפתחת ישר בחדר של הפרויקט, ולכן בוחר החדרים אינו תמיד שם */
+  const room = dlg().getByRole('button', { name: /^מטבח/ });
+  if (await room.count()) { await room.click(); await page.waitForTimeout(600); }
   if (tab) { await dlg().getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(500); }
   await dlg().getByRole('button', { name: new RegExp('^' + name) }).first().click();
   await page.waitForTimeout(800);
@@ -26,7 +28,7 @@ await setup(page, { name: 'תצוגה בע״מ' });
 await add('ארגז כיור');
 await add('ארגז 3 מגירות');
 await add('ארגז דלת ומגירה');
-await add('עמודת מקרר', 'עמודות');
+await add('מקרר', 'עמודות');
 await add('עליון שתי דלתות', 'עליונים');
 await add('עליון ויטרינה', 'עליונים');
 await shot('1-front');
@@ -70,7 +72,7 @@ await orbit(280, 0, '5-iso-yaw-right');
 await orbit(-140, -110, '6-iso-rise-up');
 await orbit(0, 220, '7-iso-rise-down');
 
-await btn(/חזרה לציור חזית/).click(); await page.waitForTimeout(700);
+await btn(/^דו־ממד/).click(); await page.waitForTimeout(700);
 
 /* --- מבט על --- */
 await btn(/מבט על/).click(); await page.waitForTimeout(900);

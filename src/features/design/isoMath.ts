@@ -179,7 +179,13 @@ export type Face = {
 type View = ReturnType<typeof projector>;
 
 /** נקודה מקומית אל העולם. */
+/** נקודה מקומית בתוך מסגרת, בקואורדינטות החדר. */
+export function framePoint(f: Frame, x: number, y: number, z: number): Vec3 {
+  return at(f, x, y, z);
+}
+
 function at(f: Frame, x: number, y: number, z: number): Vec3 {
+
   return {
     x: f.origin.x + f.ax.x * x + f.az.x * z,
     y: f.origin.y + y,
@@ -277,7 +283,20 @@ function hullsMeet(a: [number, number][], b: [number, number][]): boolean {
   return true;
 }
 
+/** התחום של אוסף נקודות על ציר נתון. */
+function spanOn(points: Vec3[], n: Vec3): [number, number] {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const q of points) {
+    const t = q.x * n.x + q.y * n.y + q.z * n.z;
+    if (t < lo) lo = t;
+    if (t > hi) hi = t;
+  }
+  return [lo, hi];
+}
+
 /** מה שצריך לדעת על לוח כדי לסדר אותו מול האחרים. */
+
 interface Placed {
   s: Solid;
   /** תחום בעולם, לצורך הפרדה בין מסגרות שונות */
@@ -288,9 +307,18 @@ interface Placed {
   sHi: [number, number];
   /** צללית הלוח על המסך — משושה קמור, לפסילה מדויקת */
   hull: [number, number][];
+  /**
+   * שמונה הפינות בעולם.
+   *
+   * דרושות להפרדה על צירי מסגרת אחרת: שני ארונות מסובבים בזוויות
+   * שונות יכולים להיות חופפים בתחומי צירי החדר גם כשהם נפרדים
+   * לגמרי, ואז בדיקת צירי העולם לבדה אינה מכריעה.
+   */
+  corners: Vec3[];
   /** המרחק בפינה הקרובה — סדר ההתחלה, וגם המוצא כששום ציר אינו מפריד */
   near: number;
 }
+
 
 /**
  * סדר הציור בין הלוחות.
@@ -326,12 +354,16 @@ export function orderSolids(solids: Solid[], v: View): Solid[] {
     const sLo: [number, number] = [Infinity, Infinity];
     const sHi: [number, number] = [-Infinity, -Infinity];
     const screen: [number, number][] = [];
+    const corners: Vec3[] = [];
     let near = -Infinity;
+
     for (const x of [s.lo[0], s.hi[0]]) {
       for (const y of [s.lo[1], s.hi[1]]) {
         for (const z of [s.lo[2], s.hi[2]]) {
           const q = at(s.frame, x, y, z);
+          corners.push(q);
           if (q.x < wLo[0]) wLo[0] = q.x;
+
           if (q.x > wHi[0]) wHi[0] = q.x;
           if (q.y < wLo[1]) wLo[1] = q.y;
           if (q.y > wHi[1]) wHi[1] = q.y;
@@ -348,7 +380,8 @@ export function orderSolids(solids: Solid[], v: View): Solid[] {
         }
       }
     }
-    return { s, wLo, wHi, sLo, sHi, hull: convexHull(screen), near };
+    return { s, wLo, wHi, sLo, sHi, hull: convexHull(screen), corners, near };
+
   });
 
   /**
@@ -358,6 +391,8 @@ export function orderSolids(solids: Solid[], v: View): Solid[] {
   const ahead = (a: Placed, b: Placed): number => {
     const local = a.s.frame === b.s.frame;
     const d = local ? localOf(a.s.frame) : [dir.x, dir.y, dir.z];
+
+
     const aLo = local ? a.s.lo : a.wLo;
     const aHi = local ? a.s.hi : a.wHi;
     const bLo = local ? b.s.lo : b.wLo;
@@ -378,6 +413,21 @@ export function orderSolids(solids: Solid[], v: View): Solid[] {
       if (bLo[i] >= aHi[i] - TOUCH) return d[i] > 0 ? -1 : 1;
     }
     /*
+     * צירי החדר לא הפרידו — וזה לא אומר שהלוחות נחתכים.
+     *
+     * שני ארונות שעומדים בזוויות שונות יכולים להיות חופפים לגמרי
+     * בתחומי צירי החדר ובכל זאת נפרדים במרחב: התחום הישר סביב תיבה
+     * מסובבת גדול ממנה בהרבה. לכן נבדקים גם הצירים של כל אחת משתי
+     * המסגרות, ורק אם גם הם אינם מפרידים נופלים לפינה הקרובה.
+     */
+    if (!local) {
+      const byA = separated(a, b, a.s.frame, dir);
+      if (byA) return byA;
+      const byB = separated(a, b, b.s.frame, dir);
+      if (byB) return byB;
+    }
+
+    /*
      * שום ציר לא הפריד — הלוחות נחתכים זה בזה. לתמונה נכונה היה
      * צריך לחתוך אותם, וזה מחיר שלא שווה אותו: מה שנחתך הוא לוח
      * שהוזז לתוך לוח אחר, וגם בשטח הוא היה נגרר. הפינה הקרובה
@@ -385,6 +435,26 @@ export function orderSolids(solids: Solid[], v: View): Solid[] {
      */
     return a.near - b.near;
   };
+
+  /**
+   * הפרדה על הצירים של מסגרת אחת.
+   *
+   * מחזיר 1 כש-a לפני b, ‎-1 כשהוא מאחוריו, ו-0 כששום ציר של המסגרת
+   * הזו אינו מפריד ביניהם.
+   */
+  function separated(a: Placed, b: Placed, f: Frame, view: Vec3): number {
+    for (const n of [f.ax, f.ay, f.az]) {
+      const dn = view.x * n.x + view.y * n.y + view.z * n.z;
+      /* ציר ניצב לקו המבט אומר "זה לצד זה", לא "זה לפני זה" */
+      if (Math.abs(dn) < 1e-6) continue;
+      const [aLo, aHi] = spanOn(a.corners, n);
+      const [bLo, bHi] = spanOn(b.corners, n);
+      if (aLo >= bHi - TOUCH) return dn > 0 ? 1 : -1;
+      if (bLo >= aHi - TOUCH) return dn > 0 ? -1 : 1;
+    }
+    return 0;
+  }
+
 
   /*
    * רק זוגות שנפגשים על המסך צריכים סדר. סריקה לפי הקצה השמאלי

@@ -6,7 +6,13 @@ import { buildPlan } from './plan';
 import { outOfSight } from './designView';
 import { LockIcon, UnlockIcon } from '../../ui/icons';
 import { solveDrag } from './dragSolve';
-import type { PlacedUnit, Wall } from '../../db/types';
+import { axesFor, axisLabel, longPress, pickAxis } from './axisLock';
+import type { Axis } from './axisLock';
+import { alongWallMm } from '../../db/types';
+import type { PartSettings } from '../../costing/boards';
+
+import type { PlacedUnit, Project, Wall } from '../../db/types';
+
 
 /**
  * מבט תלת-ממדי על החדר.
@@ -31,14 +37,25 @@ export function WallIso({
   selectedId,
   onSelect,
   onMoveTo,
+  onGesture,
+  work,
   onRotate,
   onEdit,
   onBulk,
   inside,
   finishHex,
   present = false,
+  project,
+  parts,
+  snap = true,
+  fitAt,
 }: {
+  /** הפרויקט — ממנו נגזרים הגוונים של מי שלא נבחר לו גוון משלו */
+  project?: Project;
+  /** העוביים שלפיהם נחתך, כדי שהציור והניסור יסכימו */
+  parts?: PartSettings;
   walls: Wall[];
+
   /** כל הארגזים בפרויקט — המבט הזה מציג את החדר כולו */
   units: PlacedUnit[];
   /** הקיר שעובדים עליו כרגע, מסומן בציור */
@@ -53,6 +70,16 @@ export function WallIso({
    * בפינה ומתחיל מחדש.
    */
   onMoveTo?: (id: string, patch: Partial<PlacedUnit>) => void;
+  /**
+   * תחילת מחווה וסופה.
+   *
+   * גרירה אחת היא צעד אחד לביטול, גם כשהיא כותבת לכמה ארגזים.
+   * בלי הכרזה מפורשת הגבול נגזר מתגיות ומחלון זמן, וגרירת קבוצה
+   * התפרקה לעשרות צעדים שתלויים בקצב האירועים.
+   */
+  onGesture?: (open: boolean) => void;
+  /** מצב תהליך עבודה: הארגזים נצבעים לפי מה שנעשה בהם */
+  work?: boolean;
   /**
    * סיבוב הארגז הנבחר ברבע סיבוב.
    *
@@ -82,6 +109,16 @@ export function WallIso({
    * במצב הזה נשארים רק המשטחים, עם אור, צל וקרקע.
    */
   present?: boolean;
+  /** ההצמדה פעילה. כבויה = הארגז נוחת במקום שהאצבע לקחה אותו */
+  snap?: boolean;
+  /**
+   * התאמת התצוגה.
+   *
+   * המספר עצמו חסר משמעות; מה שקובע הוא שהוא השתנה. כך כפתור
+   * בסרגל הכלים מחזיר את המצלמה לזווית ההתחלתית בלי שהמצב שלה
+   * יצטרך לעלות למסך — היא שייכת לרגע ההסתכלות, לא לפרויקט.
+   */
+  fitAt?: number;
 }) {
   /*
    * זווית המבט נשמרת במצב ולא בהגדרות: היא שייכת לרגע ההסתכלות,
@@ -95,6 +132,8 @@ export function WallIso({
    * גם מה שמונע מהחדר להסתובב בכל פעם שמישהו נגע בארון.
    */
   const [locked, setLocked] = useState(false);
+  /** על מי הארגז עומד להינחת — מוצג בזמן הגרירה בלבד */
+  const [landing, setLanding] = useState<string | null>(null);
   /*
    * מצב הנחה: הארגז ביד עד שמניחים אותו או מבטלים.
    *
@@ -108,10 +147,35 @@ export function WallIso({
   const drag = useRef<{
     /** הארגז כפי שהיה בתחילת הגרירה — ממנו נמדד הכול, ולכן היא הפיכה */
     from: PlacedUnit;
+    /**
+     * שאר הקבוצה, כפי שהייתה בתחילת הגרירה.
+     *
+     * גם הם נמדדים מהמצב ההתחלתי ולא מהמצב הנוכחי: חישוב ההפרש
+     * מהמקור והוספתו למיקום שכבר עודכן צבר את אותה תנועה שוב ושוב,
+     * והמרווח בין שני ארגזים גדל מ-1,300 ל-3,320 בכמה אירועי מגע.
+     */
+    mates: PlacedUnit[];
+    /** היעד שכבר נבחר להנחה, כדי שהוא לא יקפוץ בין שני שכנים */
+    onId?: string;
     startX: number;
     startY: number;
     moved: boolean;
+    /* לחיצה ארוכה נדלקה: הגרירה הזו מוגבלת לציר אחד */
+    armed?: boolean;
+    /* הציר שנעול. ריק אחרי הנעילה ולפני שהכיוון התברר */
+    axis?: Axis | null;
   } | null>(null);
+
+  /*
+   * לחיצה ארוכה נועלת ציר.
+   *
+   * אותו סף ואותה סבילות של ציור החזית — הם יושבים ב-`axisLock`
+   * ולא כאן, כי מחווה שמרגישה שונה בשני המסכים היא שתי מחוות.
+   */
+  const press = useRef(longPress());
+  /** הציר שננעל, למחוון. `null` בשדה = ננעל ועוד לא נבחר כיוון */
+  const [lock, setLock] = useState<{ axis: Axis | null } | null>(null);
+
   const orbit = useRef<{
     x: number;
     y: number;
@@ -127,8 +191,13 @@ export function WallIso({
    * מגע בכפתור, רענון של שאילתה — בנה את החדר כולו מחדש.
    */
   const scene = useMemo(
-    () => buildScene({ walls, units, activeWallId, selectedId, inside, finishHex, present, view }),
-    [walls, units, activeWallId, selectedId, inside, finishHex, present, view],
+    () =>
+      buildScene({
+        walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts,
+        work,
+      }),
+    [walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts, work],
+
   );
   const { faces, backdrops, marks, floor, bounds, spin } = scene;
   /* הזווית שבאמת מצוירת — היא מוגבלת כדי לא לצאת אל מאחורי הקיר */
@@ -156,6 +225,18 @@ export function WallIso({
   useEffect(() => {
     setView((v) => ({ ...v, yawDeg: -headingRef.current }));
   }, [activeWallId]);
+
+  /*
+   * התאמת התצוגה מסרגל הכלים.
+   *
+   * המצלמה נשארת כאן — היא שייכת לרגע ההסתכלות ולא לפרויקט —
+   * ומה שעובר מבחוץ הוא בקשה ולא מצב. הבקשה הראשונה (`undefined`)
+   * אינה מאפסת דבר, כדי שפתיחת המסך לא תחטוף מבט שכבר נבחר.
+   */
+  useEffect(() => {
+    if (fitAt === undefined) return;
+    setView({ ...DEFAULT_VIEW, yawDeg: -headingRef.current });
+  }, [fitAt]);
 
   /* המסגרת שמכילה הכול. פרישה של אלפי נקודות לתוך Math.min יקרה, ומעל גבול מסוים גם נופלת */
   const pad = 300;
@@ -245,7 +326,14 @@ export function WallIso({
 
   const screenBox = (id: string) => unitScreenBox(faces, id);
 
-  /** כפתור עגול על הציור, במידות שנשארות אמיתיות בכל זום. */
+  /**
+   * כפתור עגול על הציור, במידות שנשארות אמיתיות בכל זום.
+   *
+   * `role="button"` ותווית לבדם אינם כפתור: הם אומרים לקורא המסך
+   * מה זה, ולא מאפשרים להגיע לזה. בלי `tabIndex` ובלי מקלדת
+   * הכפתורים האלה היו נגישים לאצבע בלבד — מי שעובד במקלדת לא
+   * יכול היה להזיז או לסובב ארגז בכלל.
+   */
   const ringButton = (
     label: string,
     d: string,
@@ -259,13 +347,30 @@ export function WallIso({
       key={label}
       role="button"
       aria-label={label}
-      className="cursor-pointer"
+      tabIndex={0}
+      className="group cursor-pointer focus:outline-none"
       onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => {
         e.stopPropagation();
         onTap();
       }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        onTap();
+      }}
     >
+      {/* טבעת המיקוד: מי שמגיע במקלדת רואה איפה הוא עומד */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r * 1.25}
+        fill="none"
+        stroke={tone}
+        strokeWidth={r * 0.12}
+        className="opacity-0 group-focus:opacity-100"
+      />
       <circle cx={cx} cy={cy} r={r} fill="#ffffff" stroke={tone} strokeWidth={r * 0.09} />
       <g
         transform={`translate(${cx} ${cy}) scale(${r / 11})`}
@@ -291,11 +396,58 @@ export function WallIso({
    * נשאר רק מה ששייך למגע — מאיפה התחילה התנועה, ומתי היא נחשבת
    * גרירה ולא נגיעה — ושליחת התוצאה החוצה.
    */
+  /**
+   * לחיצה ארוכה על ארגז — נעילת ציר.
+   *
+   * היא עובדת משלושה מצבים, וזו הנקודה: כשהחדר חופשי אצבע על ארון
+   * מסובבת את המבט, ומי שרצה להזיז ארון בדיוק אחד היה צריך קודם
+   * לנעול את החדר. אחרי חצי שנייה במקום הכוונה ברורה, והאצבע
+   * עוברת מהמבט אל הארון — בציר אחד בלבד.
+   */
+  function armAxis(clientX: number, clientY: number, held: PlacedUnit) {
+    if (!onMoveTo || present) return;
+    press.current.start(clientX, clientY, () => {
+      if (!drag.current) {
+        if (!orbit.current) return;
+        orbit.current = null;
+        onGesture?.(true);
+        drag.current = { from: held, mates: [], startX: clientX, startY: clientY, moved: true };
+        onSelect(held.id);
+      }
+      drag.current.armed = true;
+      drag.current.axis = null;
+      setLock({ axis: null });
+    });
+  }
+
   function moveDrag(e: React.PointerEvent) {
     const d = drag.current;
     if (!d || !onMoveTo) return;
+    /* אצבע שזזה ביטלה את הלחיצה הארוכה — זו גרירה רגילה */
+    press.current.move(e.clientX, e.clientY);
     if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < ORBIT_SLOP) return;
     d.moved = true;
+
+    /*
+     * הציר נבחר מהכיוון הראשון שגוררים בו אחרי הנעילה.
+     *
+     * ההשוואה היא מול הכיוון שבו כל ציר באמת נראה על המסך בזווית
+     * הזו, ולא מול "אופקי או אנכי": בתלת־ממד ציר X וציר Z שניהם
+     * נראים אלכסוניים, ובחצי מהזוויות הם מתחלפים.
+     */
+    if (d.armed && !d.axis) {
+      const heldWall = plan.find((q) => q.wall.id === d.from.wallId);
+      const pick = pickAxis(
+        e.clientX - d.startX,
+        e.clientY - d.startY,
+        axesFor(d.from, true),
+        shown,
+        heldWall?.headingDeg ?? 0,
+      );
+      if (!pick) return;
+      d.axis = pick;
+      setLock({ axis: pick });
+    }
 
     const next = solveDrag({
       from: d.from,
@@ -306,22 +458,58 @@ export function WallIso({
       walls,
       units,
       pxPerUnit,
+      snap,
+      onId: d.onId,
+      /* נעילה בגרירה קבוצתית תחול על כל הקבוצה, כי היא זזה כגוף אחד */
+      axis: d.axis ?? undefined,
     });
     if (!next) return;
-    onMoveTo(d.from.id, next);
+    d.onId = next.onId;
 
     /*
-     * קבוצה זזה יחד, באותו הפרש בדיוק. מה שנשמר הוא היחס בין
-     * הארגזים — פינה שנבנתה נכון נשארת נכונה גם אחרי שהוזזה.
+     * על מי הוא נוחת — כתוב, ולא נרמז בצבע.
+     * בציור החזית מצוירים גם קווי היישור עצמם; כאן יש שם היעד
+     * בלבד, כי קו על פאה מסובבת בתלת־ממד מטעה יותר משהוא עוזר.
      */
-    const dx = (next.xMm ?? d.from.xMm) - d.from.xMm;
-    const dy = (next.yMm ?? d.from.yMm) - d.from.yMm;
-    if (!placing || (!dx && !dy)) return;
-    for (const mate of placing.from) {
-      if (mate.id === d.from.id || mate.free) continue;
-      const now = units.find((u) => u.id === mate.id);
-      if (!now) continue;
-      onMoveTo(mate.id, { xMm: now.xMm + dx, yMm: now.yMm + dy });
+    setLanding(next.onId ? (units.find((u) => u.id === next.onId)?.name ?? null) : null);
+
+    const dx = (next.patch.xMm ?? d.from.xMm) - d.from.xMm;
+    const dy = (next.patch.yMm ?? d.from.yMm) - d.from.yMm;
+
+    /* ארגז בודד: כל מה שהפתרון מצא — מעבר קיר, הצמדה, הנחה על אחר */
+    if (!d.mates.length) return onMoveTo(d.from.id, next.patch);
+    if (!dx && !dy) return;
+
+    /*
+     * קבוצה זזה כגוף אחד.
+     *
+     * הגבול נבדק על כל חברי הקבוצה — כולל זה שהאצבע אוחזת בו.
+     * קודם הוא זז במלוא ההפרש והשאר קוצצו לגבול שלהם, ולכן קבוצה
+     * שנגררה אל קצה הקיר נדחסה: שני ארגזים שהמרחק ביניהם היה
+     * 1,700 מ״מ מצאו את עצמם ב-600.
+     */
+    const group = [d.from, ...d.mates];
+    let limX = dx;
+    let limY = dy;
+    for (const m of group) {
+      /* אי אינו נמדד על קיר, ולכן אין לו גבול לאורכו */
+      if (!m.free) {
+        const wall = walls.find((w) => w.id === m.wallId);
+        if (wall) {
+          const room = Math.max(wall.lengthMm - alongWallMm(m), 0);
+          limX = Math.min(Math.max(limX, -m.xMm), room - m.xMm);
+        }
+        limY = Math.max(limY, -m.yMm);
+      }
+    }
+    if (!limX && !limY) return;
+    for (const m of group) {
+      onMoveTo(
+        m.id,
+        m.free
+          ? { free: { ...m.free, xMm: m.free.xMm + limX } }
+          : { xMm: m.xMm + limX, yMm: m.yMm + limY },
+      );
     }
   }
 
@@ -348,9 +536,21 @@ export function WallIso({
         if (placing && onMoveTo) {
           const anchor = units.find((u) => u.id === placing.ids[0]);
           if (anchor) {
-            drag.current = { from: anchor, startX: e.clientX, startY: e.clientY, moved: false };
+            onGesture?.(true);
+            drag.current = {
+              from: anchor,
+              mates: placing.ids
+                .filter((id) => id !== anchor.id)
+                .map((id) => units.find((u) => u.id === id))
+                .filter((u): u is PlacedUnit => !!u && !u.free),
+              startX: e.clientX,
+              startY: e.clientY,
+              moved: false,
+            };
+            armAxis(e.clientX, e.clientY, anchor);
             return;
           }
+
         }
         /*
          * כשהחדר נעול האצבע שייכת לארונות בלבד: אצבע על ארון גוררת
@@ -359,7 +559,15 @@ export function WallIso({
          */
         if (locked && !present) {
           if (held && onMoveTo) {
-            drag.current = { from: held, startX: e.clientX, startY: e.clientY, moved: false };
+            onGesture?.(true);
+            drag.current = {
+              from: held,
+              mates: [],
+              startX: e.clientX,
+              startY: e.clientY,
+              moved: false,
+            };
+            armAxis(e.clientX, e.clientY, held);
           } else {
             orbit.current = { x: e.clientX, y: e.clientY, from: view, moved: false, hit };
           }
@@ -372,6 +580,8 @@ export function WallIso({
           moved: false,
           hit,
         };
+        /* חדר חופשי: אצבע שנשארת על ארון עוברת ממנו אל הארון עצמו */
+        if (held) armAxis(e.clientX, e.clientY, held);
       }}
       onPointerMove={(e) => {
         if (drag.current) return moveDrag(e);
@@ -399,8 +609,12 @@ export function WallIso({
       onPointerUp={(e) => {
         const o = orbit.current;
         const d = drag.current;
+        press.current.cancel();
         orbit.current = null;
         drag.current = null;
+        if (d) onGesture?.(false);
+        setLanding(null);
+        setLock(null);
         e.currentTarget.releasePointerCapture(e.pointerId);
         /*
          * גם גרירה מסתיימת בבחירה: ארון שהועבר לקיר אחר צריך שהמסך
@@ -416,8 +630,12 @@ export function WallIso({
         onSelect(o.hit);
       }}
       onPointerCancel={() => {
+        press.current.cancel();
         orbit.current = null;
+        if (drag.current) onGesture?.(false);
         drag.current = null;
+        setLanding(null);
+        setLock(null);
       }}
     >
       {/*
@@ -674,9 +892,16 @@ export function WallIso({
                 key={label}
                 role="button"
                 aria-label={label}
+                tabIndex={0}
                 className="cursor-pointer"
                 onPointerDown={(e) => e.stopPropagation()}
                 onPointerUp={(e) => {
+                  e.stopPropagation();
+                  onRotate(selectedUnit.id, next);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
                   e.stopPropagation();
                   onRotate(selectedUnit.id, next);
                 }}
@@ -790,11 +1015,32 @@ export function WallIso({
       </div>
     )}
 
-    {/* בזמן שארגז ביד, נאמר במפורש שהחדר עומד */}
-    {placing && !present && (
-      <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-stone-900/90 px-3 py-1 text-[11px] font-medium text-white">
-        גוררים למקום, ואז מניחים
+    {/*
+      על מי הארגז נוחת.
+      זה גובר על ההנחיה הכללית: ברגע שיש יעד, הוא מה שצריך לדעת.
+    */}
+    {lock && !present ? (
+      /*
+        נעילת ציר גוברת על הכול: כשהיא פעילה זה מה שקובע לאן הארגז
+        זז, ובלי שהיא כתובה מי שגרר וראה מידה אחת בלבד משתנה חשב
+        שהמסך נתקע.
+      */
+      <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-violet-700 px-3 py-1 text-[11px] font-medium text-white">
+        {lock.axis
+          ? `נעול ל${axisLabel(lock.axis, plan.find((q) => q.wall.id === drag.current?.from.wallId)?.headingDeg ?? 0)}`
+          : 'נעילת ציר — גררו לכיוון שבו להזיז'}
       </span>
+    ) : landing && !present ? (
+      <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-teal-700 px-3 py-1 text-[11px] font-medium text-white">
+        נוחת על {landing}
+      </span>
+    ) : (
+      /* בזמן שארגז ביד, נאמר במפורש שהחדר עומד */
+      placing && !present && (
+        <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-stone-900/90 px-3 py-1 text-[11px] font-medium text-white">
+          גוררים למקום, ואז מניחים
+        </span>
+      )
     )}
 
     {/*
