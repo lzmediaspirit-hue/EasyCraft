@@ -33,8 +33,13 @@ await page.evaluate(async () => {
   const mats = await new Promise((res) => { const t = db.transaction('materials').objectStore('materials').getAll(); t.onsuccess = () => res(t.result); });
   const now = Date.now();
   const st = db.transaction('stock', 'readwrite').objectStore('stock');
+  /* שורה חדשה שייכת לאותה נגרייה כמו מה שכבר יש, אחרת המאגר לא רואה אותה */
+  const workshopId = fins[0].workshopId;
   for (const f of fins) for (const m of mats)
-    st.put({ id: `${f.id}-${m.id}`, finishId: f.id, materialId: m.id, sheets: 20, ordered: 0, createdAt: now, updatedAt: now });
+    st.put({
+      id: `${f.id}-${m.id}`, finishId: f.id, materialId: m.id, sheets: 20, ordered: 0,
+      workshopId, rev: 1, createdAt: now, updatedAt: now,
+    });
 });
 const before = (await table('stock')).map((s) => s.sheets);
 console.log('stock before:', JSON.stringify(before));

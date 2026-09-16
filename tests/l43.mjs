@@ -20,9 +20,11 @@ await page.evaluate(async () => {
   /* לפי הליבה ולא לפי השם: שם הלוח נגזר מהעובי ומהצבע, והוא משתנה */
   const mdf = mats.find((m) => m.core === 'mdf');
   const now = Date.now();
+  /* גוון חדש שייך לנגרייה של הלוח שהוא מתומחר עליו */
   db.transaction('finishes', 'readwrite').objectStore('finishes').put({
     id: 'only-mdf', name: 'לכה כחולה', hex: '#2f4f8f', texture: 'מט',
-    prices: { [mdf.id]: { consumerPrice: 600 } }, createdAt: now, updatedAt: now,
+    prices: { [mdf.id]: { consumerPrice: 600 } },
+    workshopId: mdf.workshopId, rev: 1, createdAt: now, updatedAt: now,
   });
 });
 await page.reload({ waitUntil: 'networkidle' }); await page.waitForTimeout(1500);
