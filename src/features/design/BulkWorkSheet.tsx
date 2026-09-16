@@ -77,7 +77,7 @@ export function BulkWorkSheet({
                     onApply(
                       r.targets.map((u) => ({
                         id: u.id,
-                        work: withStage(u.work, r.track.key, r.stage.key),
+                        work: withStage(u.work, r.track, r.stage.key),
                       })),
                     );
                     onClose();

@@ -58,10 +58,16 @@ export function unitBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
   /* מה שהארגז תופס על הקיר, ומה שהוא נכנס לחדר — תלוי בסיבוב */
   const along = alongWallMm(u);
   const into = intoRoomMm(u);
+  /*
+   * המשיכה מהקיר נכנסת כאן ולא בכל מסך בנפרד: זה המקום היחיד
+   * שממנו נגזרת הרצפה של הארגז, ולכן התלת־ממד, מבט העל ובדיקת
+   * ההתנגשות מקבלים אותה יחד ואינם יכולים לסתור זה את זה.
+   */
+  const off = Math.max(u.offWallMm ?? 0, 0);
   return {
     ...common,
-    cx: p.start.x + dir.x * (u.xMm + along / 2) + normal.x * (into / 2),
-    cz: p.start.y + dir.z * (u.xMm + along / 2) + normal.z * (into / 2),
+    cx: p.start.x + dir.x * (u.xMm + along / 2) + normal.x * (into / 2 + off),
+    cz: p.start.y + dir.z * (u.xMm + along / 2) + normal.z * (into / 2 + off),
     facing: rad(wallFacingDeg(p.headingDeg, u.rotationDeg)),
   };
 }

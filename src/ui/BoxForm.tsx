@@ -1,4 +1,4 @@
-import { GLYPHS, glyphDef } from '../catalog/glyphList';
+import { GLYPH_FAMILIES, glyphDef, glyphsOf } from '../catalog/glyphList';
 import { limitsFor } from '../catalog/saveGate';
 import { GlyphPreview } from '../catalog/GlyphPreview';
 import { Field, Chip, NumField, inputClass, selectOnFocus } from './Field';
@@ -102,31 +102,49 @@ export function BoxForm({
         />
       </Field>
 
+      {/*
+        האיורים לפי משפחות.
+
+        שלושים ואחד ברשת אחת הם רשימה שמחפשים בה: מי שחיפש כיור
+        עבר בדרך על מראה, נעליים ותלייה כפולה. ארון, פינה, מכשיר
+        ולוח הם ארבע שאלות שונות, ולכן ארבע קבוצות.
+      */}
       <Field group label="איור">
-        <div className="grid grid-cols-5 gap-1.5">
-          {GLYPHS.map((g) => (
-            <button
-              key={g.key}
-              onClick={() => onChange({ glyph: g.key })}
-              title={g.label}
-              className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 transition-colors ${
-                g.key === value.glyph
-                  ? 'border-oak-500 bg-oak-50 text-oak-700'
-                  : 'border-stone-200 bg-white text-stone-400 hover:border-oak-300'
-              }`}
-            >
-              <GlyphPreview
-                glyph={g.key}
-                widthMm={600}
-                heightMm={720}
-                doors={2}
-                drawers={3}
-                shelves={2}
-                className="h-8 w-full"
-              />
-              <span className="w-full truncate text-[9px] leading-none">{g.label}</span>
-            </button>
-          ))}
+        <div className="space-y-2.5">
+          {GLYPH_FAMILIES.map((fam) => {
+            const list = glyphsOf(fam.key);
+            if (!list.length) return null;
+            return (
+              <div key={fam.key}>
+                <p className="mb-1 text-[10px] font-medium text-stone-400">{fam.label}</p>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {list.map((g) => (
+                    <button
+                      key={g.key}
+                      onClick={() => onChange({ glyph: g.key })}
+                      title={g.label}
+                      className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 transition-colors ${
+                        g.key === value.glyph
+                          ? 'border-oak-500 bg-oak-50 text-oak-700'
+                          : 'border-stone-200 bg-white text-stone-400 hover:border-oak-300'
+                      }`}
+                    >
+                      <GlyphPreview
+                        glyph={g.key}
+                        widthMm={600}
+                        heightMm={720}
+                        doors={2}
+                        drawers={3}
+                        shelves={2}
+                        className="h-8 w-full"
+                      />
+                      <span className="w-full truncate text-[9px] leading-none">{g.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Field>
 

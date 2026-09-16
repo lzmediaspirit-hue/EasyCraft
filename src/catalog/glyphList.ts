@@ -7,6 +7,14 @@
 export interface GlyphDef {
   key: string;
   label: string;
+  /**
+   * לאיזו משפחה הוא שייך, בבורר האיורים.
+   *
+   * שלושים ואחד איורים ברשת אחת הם רשימה שמחפשים בה, ולא בוחרים
+   * ממנה: מי שמחפש כיור עבר בדרך על מראה, נעליים ותלייה כפולה.
+   * ריק = ארון רגיל, שהוא הרוב.
+   */
+  family?: GlyphFamily;
   /** לארגז יש חזית דלתות שאפשר לקבוע את מספרן */
   doors?: boolean;
   /** לארגז יש מגירות — שורות, ואפשר גם עמודות זו לצד זו */
@@ -42,6 +50,21 @@ export interface GlyphDef {
   cladding?: boolean;
 }
 
+/** המשפחות בבורר האיורים, לפי הסדר שבו הן מוצגות. */
+export type GlyphFamily = 'cabinet' | 'corner' | 'appliance' | 'board';
+
+export const GLYPH_FAMILIES: { key: GlyphFamily; label: string }[] = [
+  { key: 'cabinet', label: 'ארונות' },
+  { key: 'corner', label: 'פינות' },
+  { key: 'appliance', label: 'מטבח ומכשירים' },
+  { key: 'board', label: 'לוחות ומשטחים' },
+];
+
+/** האיורים של משפחה אחת, לפי סדר הרשימה. */
+export function glyphsOf(family: GlyphFamily): GlyphDef[] {
+  return GLYPHS.filter((g) => (g.family ?? 'cabinet') === family);
+}
+
 export const GLYPHS: GlyphDef[] = [
   { key: 'doors', label: 'דלתות', doors: true, shelves: true },
   { key: 'drawers', label: 'מגירות', drawers: true },
@@ -51,15 +74,15 @@ export const GLYPHS: GlyphDef[] = [
   { key: 'glass', label: 'ויטרינה', doors: true, shelves: true, vitrine: true },
   { key: 'lift', label: 'קלאפה', shelves: true },
   { key: 'shutter', label: 'תריס', shelves: true },
-  { key: 'corner', label: 'פינתי', doors: true, shelves: true },
-  { key: 'carousel', label: 'סחרחרה', appliance: true },
-  { key: 'sink', label: 'כיור', appliance: true },
-  { key: 'hob', label: 'כיריים', drawers: true, appliance: true },
-  { key: 'oven', label: 'תנור', appliance: true, standalone: true },
-  { key: 'ovenMicro', label: 'תנור ומיקרוגל', appliance: true, standalone: true },
-  { key: 'fridge', label: 'מקרר', appliance: true, standalone: true },
-  { key: 'dishwasher', label: 'מדיח', appliance: true, standalone: true },
-  { key: 'hood', label: 'קולט אדים', appliance: true, standalone: true },
+  { key: 'corner', family: 'corner', label: 'פינתי', doors: true, shelves: true },
+  { key: 'carousel', family: 'appliance', label: 'סחרחרה', appliance: true },
+  { key: 'sink', family: 'appliance', label: 'כיור', appliance: true },
+  { key: 'hob', family: 'appliance', label: 'כיריים', drawers: true, appliance: true },
+  { key: 'oven', family: 'appliance', label: 'תנור', appliance: true, standalone: true },
+  { key: 'ovenMicro', family: 'appliance', label: 'תנור ומיקרוגל', appliance: true, standalone: true },
+  { key: 'fridge', family: 'appliance', label: 'מקרר', appliance: true, standalone: true },
+  { key: 'dishwasher', family: 'appliance', label: 'מדיח', appliance: true, standalone: true },
+  { key: 'hood', family: 'appliance', label: 'קולט אדים', appliance: true, standalone: true },
   { key: 'pantry', label: 'מזווה', shelves: true },
   { key: 'hang', label: 'תלייה' },
   { key: 'hangDouble', label: 'תלייה כפולה' },
@@ -68,15 +91,15 @@ export const GLYPHS: GlyphDef[] = [
   { key: 'innerDrawers', label: 'מגירות פנימיות', drawers: true },
   { key: 'mirror', label: 'מראה', shelves: true },
   { key: 'nightstand', label: 'שידה', drawers: true },
-  { key: 'blindStart', label: 'פינה מתה שמאל', doors: true, shelves: true },
-  { key: 'blindEnd', label: 'פינה מתה ימין', doors: true, shelves: true },
-  { key: 'lShape', label: 'פינתי במפגש', doors: true, shelves: true },
-  { noCarcass: 'vertical', key: 'plain', label: 'לוח בודד' },
-  { noCarcass: 'horizontal', key: 'desk', label: 'שולחן' },
+  { key: 'blindStart', family: 'corner', label: 'פינה מתה שמאל', doors: true, shelves: true },
+  { key: 'blindEnd', family: 'corner', label: 'פינה מתה ימין', doors: true, shelves: true },
+  { key: 'lShape', family: 'corner', label: 'פינתי במפגש', doors: true, shelves: true },
+  { noCarcass: 'vertical', key: 'plain', family: 'board', label: 'לוח בודד' },
+  { noCarcass: 'horizontal', key: 'desk', family: 'board', label: 'שולחן' },
   { key: 'tv', label: 'טלוויזיה', doors: true, drawers: true },
-  { noCarcass: 'vertical', key: 'panel', label: 'פאנל', cladding: true },
-  { noCarcass: 'horizontal', key: 'slab', label: 'מדף צף' },
-  { noCarcass: 'vertical', key: 'spacer', label: 'מרווח' },
+  { noCarcass: 'vertical', key: 'panel', family: 'board', label: 'פאנל', cladding: true },
+  { noCarcass: 'horizontal', key: 'slab', family: 'board', label: 'מדף צף' },
+  { noCarcass: 'vertical', key: 'spacer', family: 'board', label: 'מרווח' },
 ];
 
 export function glyphDef(key: string): GlyphDef {

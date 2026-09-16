@@ -1,4 +1,4 @@
-import type { Hardware, HardwareSpec, Settings } from '../db/types';
+import type { ExtraBasis, Hardware, HardwareSpec, HardwareUnit, Settings } from '../db/types';
 
 /**
  * הפרזול של הנגרייה.
@@ -75,3 +75,32 @@ export function hardwareTotal(rows: Hardware[] | undefined, who: 'factory' | 'co
     return n + (price ?? 0) * r.qty;
   }, 0);
 }
+
+/** יחידות ההזמנה, לבחירה במסך. */
+export const HARDWARE_UNITS: HardwareUnit[] = ['יח׳', 'זוג', 'מ׳', 'סט'];
+
+/**
+ * המטבעות שמזמינים בהם בפועל.
+ *
+ * ריק הוא שקל, וזו ברירת המחדל: רוב הפרזול נקנה כאן. ספק מחו"ל
+ * מתמחר במטבע שלו, והמרה שנעשית בראש בזמן ההזמנה היא בדיוק המקום
+ * שבו נופלות טעויות.
+ */
+export const HARDWARE_CURRENCIES: { key: string; label: string }[] = [
+  { key: '', label: '₪' },
+  { key: 'USD', label: '$' },
+  { key: 'EUR', label: '€' },
+];
+
+/**
+ * במקום איזו ספירה אוטומטית הפרזול הזה בא.
+ *
+ * שלוש בלבד, ולא כל סוגי הספירה: אלה הספירות שהחישוב באמת יודע
+ * להוריד. אפשרות שאינה מורידה דבר היא הבטחה ריקה — המשתמש בוחר
+ * בה, החיוב הכפול נשאר, והוא אינו יודע למה.
+ */
+export const HARDWARE_REPLACES: { key: ExtraBasis; label: string }[] = [
+  { key: 'drawer', label: 'מגירות' },
+  { key: 'lift', label: 'מנגנוני קלאפה' },
+  { key: 'handle', label: 'ידיות' },
+];

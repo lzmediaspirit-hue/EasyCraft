@@ -810,6 +810,26 @@ export function UnitEditor({
 
       {advanced && !caps.standalone && (
         <>
+          {/*
+            מרחק מהקיר — תנועה בניצב לו, בלי להפוך לאי.
+
+            ארגז צמוד קיר לא יכול היה לזוז בכיוון הזה כלל: הדרך
+            היחידה להרחיק אותו הייתה להפוך אותו לאי, וזה שינוי
+            אחר לגמרי — הוא מאבד את הקיר שהוא נמדד לפיו ואת מקומו
+            בשורה. כאן הוא נשאר על הקיר ורק עומד רחוק ממנו: צנרת,
+            טיח לא ישר, או פאנל שמאחוריו.
+          */}
+          {!unit.free && (
+            <Row label="מרחק מהקיר" hint="ריק = צמוד">
+              <MeasureInput
+                value={unit.offWallMm ?? 0}
+                onChange={(mm) => onChange({ offWallMm: mm > 0 ? mm : undefined })}
+                ariaLabel="מרחק הארגז מהקיר"
+                className="num w-24 rounded-lg bg-stone-100 px-2 py-1.5 text-center text-sm font-medium text-stone-900 focus:bg-white focus:ring-1 focus:ring-oak-400 focus:outline-none"
+              />
+            </Row>
+          )}
+
           <Row label="פס לד">
             {LED_SPOTS.map((s) => (
               <Pill key={s.key} active={led.includes(s.key)} onClick={() => toggleLed(s.key)}>
