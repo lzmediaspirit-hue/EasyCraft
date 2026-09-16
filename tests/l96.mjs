@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** משימה 96: ההדמיה מסתובבת אל הקיר שנבחר. */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

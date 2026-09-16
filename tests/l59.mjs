@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 21 — הסתרת ארגזים ומחווני החדר */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

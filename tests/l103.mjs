@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 103 — גאומטריה ואינטראקציה: קבוצה, אי בחזית, מסגור, גובה קבוצה, ותווית יחידות */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

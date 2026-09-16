@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 99 — ממצאי הביקורת בממשק: ייבוא שנכשל, והגב של ארגז חדש */
 import { chromium } from 'playwright';
 

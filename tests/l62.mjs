@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 22 — האי: תבנית בספרייה, ומיקום ברצפת החדר ולא לאורך קיר */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

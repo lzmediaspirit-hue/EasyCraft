@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** משימות 84–92: גובה תקן, עמוד עד התקרה, חסימת מפתחים, דלת מדומה, סרגל, ספרייה, שכפול. */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

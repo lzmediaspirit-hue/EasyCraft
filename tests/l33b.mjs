@@ -1,3 +1,4 @@
+import './_exit.mjs';
 import { chromium } from 'playwright';
 const SP = new URL('shots/', import.meta.url).pathname;
 const fail = [];

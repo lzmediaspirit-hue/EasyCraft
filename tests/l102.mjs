@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 102 — מודל אחד: עובי הלוח שנבחר, מעטפת הארגז, וגוונים בשרטוט */
 import { chromium } from 'playwright';
 

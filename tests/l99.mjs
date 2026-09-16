@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 99 — ממצאי הביקורת, החלק הטהור: תמחור, צבע, מחשבון, קיר, גיבוי */
 import { chromium } from 'playwright';
 

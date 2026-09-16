@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** משימה 95: שלוש הדמיות בכרטיסים, וניצול כל הקירות. */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';

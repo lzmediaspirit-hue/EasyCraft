@@ -1,3 +1,4 @@
+import './_exit.mjs';
 import { chromium } from 'playwright';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });

@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** בדיקת מנוע התכנון האוטומטי: כללי מטבח על מספרים, בלי ממשק. */
 import { chromium } from 'playwright';
 

@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 111 — הספרייה של הנגרייה, חדרים כנתונים, ואפס כפילויות */
 import { chromium } from 'playwright';
 const SP = new URL('shots/', import.meta.url).pathname;
