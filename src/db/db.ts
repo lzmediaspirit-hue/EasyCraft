@@ -1,7 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 
 import { fillCodes, type CodeRow } from '../catalog/codes';
-import { glyphDef } from '../catalog/glyphList';
 import type {
   Attachment,
   CatalogItem,
@@ -22,6 +21,7 @@ import type {
   Workshop,
 } from './types';
 import { LOCAL_WORKSHOP } from './workshop';
+import { panelSize } from './legacy';
 
 /**
  * בסיס הנתונים המקומי (IndexedDB).
@@ -641,13 +641,8 @@ db.version(24)
       for (const row of rows) {
         const th = row.panelThicknessMm;
         if (th === undefined) continue;
-        const flat = glyphDef(row.glyph).noCarcass;
-        const size =
-          flat === 'horizontal'
-            ? { [table === 'catalog' ? 'defaultHeightMm' : 'heightMm']: th }
-            : flat === 'vertical'
-              ? { [table === 'catalog' ? 'defaultDepthMm' : 'depthMm']: th }
-              : {};
+        /* אותה המרה שרצה על קובץ מיובא — ראה `db/legacy` */
+        const size = panelSize(row.glyph, th, table === 'catalog' ? 'item' : 'unit');
         await tx.table(table).update(row.id, { ...size, panelThicknessMm: undefined });
       }
     }

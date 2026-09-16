@@ -1,5 +1,6 @@
 import { db } from './db';
 import { allMine, eraseIds, owned } from './rows';
+import { normalizeTables } from './legacy';
 import { checkTable, packFingerprint } from './packSchema';
 import type { CatalogItem, Finish, Material } from './types';
 
@@ -228,6 +229,29 @@ export function readPack(text: string): { pack: CabinetPack } | { error: string 
   if (!Array.isArray(b.tables.catalog)) {
     return { error: `חסר בקובץ החלק של ${TABLE_LABEL.catalog}` };
   }
+
+  /*
+   * טבלה שקיימת בקובץ אבל אינה מערך אינה "טבלה שלא נשלחה".
+   *
+   * הדילוג עליה היה שקט: קובץ עם `materials: "oops"` נכנס, והלוחות
+   * שהארגזים מפנים אליהם פשוט לא היו שם. מה שנשלח — נבדק.
+   */
+  for (const name of TABLES) {
+    const rows = (b.tables as Record<string, unknown>)[name];
+    if (rows !== undefined && !Array.isArray(rows)) {
+      return { error: `החלק של ${TABLE_LABEL[name]} בקובץ אינו רשימה` };
+    }
+  }
+
+  /*
+   * המרת פורמט ישן קודמת לאימות.
+   *
+   * מדף שנארז בגרסה קודמת נשא גובה 300 ועובי נפרד 30. המעבר במסד
+   * ידע לתרגם אותו; הייבוא לא, ואותו מדף נכנס בעובי 300 ונראה
+   * כקיר. קודם מתרגמים לפורמט הנוכחי, ורק אז בודקים — אחרת קובץ
+   * ישן תקין נופל על שדה שלא ידע עליו.
+   */
+  b.tables = normalizeTables(b.tables as Record<string, unknown[]>) as CabinetPack['tables'];
 
   /* ההפניות נבדקות מול הקובץ עצמו: מה שאינו בו אינו קיים מבחינתו */
   const present: Record<string, Set<string>> = {};
