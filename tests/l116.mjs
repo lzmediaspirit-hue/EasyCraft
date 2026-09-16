@@ -1,8 +1,8 @@
 /*
- * שכבה 116 — מה שנכנס בגיבוי, ומה שכתוב על החבילה.
+ * שכבה 116 — מה שנכנס בחבילת ארגזים, ומה שכתוב עליה.
  *
  * B04: שורה פגומה בקובץ נעצרת לפני שנגעו בנתונים. הדוגמה של
- * המבקר היא `{"id":"broken-row"}` בטבלת הספרייה — היא התקבלה,
+ * המבקר היא `{"id":"broken-row"}` בטבלת הארגזים — היא התקבלה,
  * דרסה ספרייה תקינה, ומסך הספרייה נפל על `rooms` שאינו קיים.
  *
  * B11: המניפסט מזהה את התוכן. שינוי בצבע של גוון היה בלתי נראה
@@ -21,25 +21,24 @@ const out = [];
 const ok = (name, cond, extra = '') =>
   out.push(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ' | ' + extra : ''}`);
 
-await setup(page, { name: 'גיבוי בע״מ' });
+await setup(page, { name: 'ארגזים בע״מ' });
 await addNamed(page, /^ארגז/);
 await page.waitForTimeout(600);
 
 const r = await page.evaluate(async () => {
   const v = '?v=' + Date.now();
-  const B = await import('/src/db/backup.ts' + v);
+  const P = await import('/src/db/cabinetPack.ts' + v);
   const { db } = await import('/src/db/db.ts' + v);
 
-  const text = (b) => JSON.stringify(b);
-  const read = (b) => B.readBackup(text(b));
+  const read = (b) => P.readPack(JSON.stringify(b));
   const err = (b) => ('error' in read(b) ? read(b).error : null);
   /* עותק עמוק, כדי שהשחתה לבדיקה אחת לא תזלוג לבאה אחריה */
   const copy = (b) => JSON.parse(JSON.stringify(b));
 
   /*
-   * ארגז ספרייה שמפנה לגוון — זו הדוגמה של המבקר, והיא גם מה
-   * שגורם לגוון לנסוע בתוך החבילה. ספרייה שאיש לא בחר בה גוון
-   * יוצאת בלי גוונים כלל, ואז אין מה להשוות.
+   * ארגז שמפנה לגוון — זו הדוגמה של המבקר, והיא גם מה שגורם
+   * לגוון לנסוע בתוך החבילה. ספרייה שאיש לא בחר בה גוון יוצאת
+   * בלי גוונים כלל, ואז אין מה להשוות.
    */
   const first = (await db.catalog.toArray()).find((i) => !i.hiddenAt);
   const paint = (await db.finishes.toArray())[0];
@@ -49,122 +48,127 @@ const r = await page.evaluate(async () => {
     carcassMaterialId: board.id,
   });
 
-  const full = await B.exportAll();
-  const lib = await B.exportLibrary();
+  const pack = await P.exportCabinets();
   const before = await db.catalog.count();
 
   /* --- מה שהאפליקציה עצמה מוציאה חייב להתקבל בחזרה --- */
-  const fullOk = !('error' in read(full));
-  const libOk = !('error' in read(lib));
+  const packOk = !('error' in read(pack));
 
   /* --- B04: שורות פגומות --- */
-  const broken = copy(full);
+  const broken = copy(pack);
   broken.tables.catalog = [{ id: 'broken-row' }];
 
-  const badSize = copy(full);
+  const badSize = copy(pack);
   badSize.tables.catalog[0] = { ...badSize.tables.catalog[0], defaultWidthMm: -5 };
 
-  const badText = copy(full);
+  const badText = copy(pack);
   badText.tables.catalog[0] = { ...badText.tables.catalog[0], defaultHeightMm: '720' };
 
-  const badEnum = copy(full);
+  const badEnum = copy(pack);
   badEnum.tables.catalog[0] = { ...badEnum.tables.catalog[0], level: 'floating' };
 
-  const dup = copy(full);
-  dup.tables.customers = [...dup.tables.customers, { ...dup.tables.customers[0] }];
+  const noRooms = copy(pack);
+  delete noRooms.tables.catalog[0].rooms;
 
-  const badRef = copy(full);
-  badRef.tables.units[0] = { ...badRef.tables.units[0], wallId: 'no-such-wall' };
+  const dup = copy(pack);
+  dup.tables.catalog = [...dup.tables.catalog, { ...dup.tables.catalog[0] }];
 
-  const orphan = copy(full);
-  orphan.tables.projects[0] = { ...orphan.tables.projects[0], customerId: 'nobody' };
-
-  /* תלות פגומה בחבילת ספרייה: הגוון שנוסע עם הארגזים */
-  const badDep = copy(lib);
+  /* תלות פגומה: הגוון שנוסע עם הארגזים */
+  const badDep = copy(pack);
   badDep.tables.finishes = [{ id: 'f-broken' }];
 
-  const badPrices = copy(lib);
-  badPrices.tables.finishes[0] = { ...badPrices.tables.finishes[0], prices: { m1: { factoryPrice: 'שבע' } } };
+  const badPrices = copy(pack);
+  badPrices.tables.finishes[0] = {
+    ...badPrices.tables.finishes[0],
+    prices: { m1: { factoryPrice: 'שבע' } },
+  };
+
+  const badBoard = copy(pack);
+  badBoard.tables.materials[0] = { ...badBoard.tables.materials[0], sheetWidthMm: 0 };
+
+  /* גיבוי מלא ישן אינו נקרא כאן, והוא נאמר ולא נבלע */
+  const oldAll = copy(pack);
+  oldAll.kind = 'all';
+  delete oldAll.manifest;
 
   /* מה ששרד: אחרי כל אלה שום דבר לא נכתב */
   const after = await db.catalog.count();
 
   /* --- B11: טביעת אצבע --- */
-  const again = await B.exportLibrary();
-  const sameTwice = again.manifest.fingerprint === lib.manifest.fingerprint;
+  const again = await P.exportCabinets();
+  const sameTwice = again.manifest.fingerprint === pack.manifest.fingerprint;
 
-  const finish = paint;
-  await db.finishes.update(finish.id, { hex: '#123456' });
-  const afterHex = await B.exportLibrary();
+  await db.finishes.update(paint.id, { hex: '#123456' });
+  const afterHex = await P.exportCabinets();
 
-  await db.finishes.update(finish.id, { hex: finish.hex });
-  const backToStart = await B.exportLibrary();
+  await db.finishes.update(paint.id, { hex: paint.hex });
+  const backToStart = await P.exportCabinets();
 
   const item = (await db.catalog.toArray()).find((i) => !i.hiddenAt && i.id !== first.id);
   await db.catalog.delete(item.id);
-  const afterDrop = await B.exportLibrary();
+  const afterDrop = await P.exportCabinets();
   await db.catalog.put(item);
 
   /* מניפסט משקר: הספירה מחושבת מהתוכן, לא נלקחת ממה שכתוב */
-  const lying = copy(lib);
+  const lying = copy(pack);
   lying.manifest = { ...lying.manifest, items: 999, materials: 999, finishes: 999 };
-  const recomputed = B.libraryManifest(lying);
+  const recomputed = P.packManifest(lying);
 
   /* טביעת אצבע שאינה תואמת לתוכן — הקובץ נגוע */
-  const tampered = copy(lib);
+  const tampered = copy(pack);
   tampered.tables.catalog[0] = { ...tampered.tables.catalog[0], name: 'שם אחר' };
 
   /* קובץ ישן בלי מניפסט ממשיך להיקרא */
-  const old = copy(lib);
+  const old = copy(pack);
   delete old.manifest;
   old.format = 2;
 
   return {
-    fullOk,
-    libOk,
+    packOk,
     before,
     after,
     broken: err(broken),
     badSize: err(badSize),
     badText: err(badText),
     badEnum: err(badEnum),
+    noRooms: err(noRooms),
     dup: err(dup),
-    badRef: err(badRef),
-    orphan: err(orphan),
     badDep: err(badDep),
     badPrices: err(badPrices),
+    badBoard: err(badBoard),
+    oldAll: err(oldAll),
     tampered: err(tampered),
     oldOk: !('error' in read(old)),
-    oldManifest: B.libraryManifest(old),
-    print: lib.manifest.fingerprint,
+    oldManifest: P.packManifest(old),
+    print: pack.manifest.fingerprint,
     sameTwice,
-    hexChanged: afterHex.manifest.fingerprint !== lib.manifest.fingerprint,
-    hexRevisionWas: afterHex.manifest.revision !== lib.manifest.revision,
-    returns: backToStart.manifest.fingerprint === lib.manifest.fingerprint,
-    dropChanged: afterDrop.manifest.fingerprint !== lib.manifest.fingerprint,
+    hexChanged: afterHex.manifest.fingerprint !== pack.manifest.fingerprint,
+    revisionMoved: afterHex.manifest.revision !== pack.manifest.revision,
+    returns: backToStart.manifest.fingerprint === pack.manifest.fingerprint,
+    dropChanged: afterDrop.manifest.fingerprint !== pack.manifest.fingerprint,
     recomputed,
-    trueItems: lib.manifest.items,
+    trueItems: pack.manifest.items,
   };
 });
 
-ok('the app’s own full backup is accepted', r.fullOk);
-ok('the app’s own library package is accepted', r.libOk);
+ok('the app’s own cabinet pack is accepted', r.packOk);
 ok('a catalog row with only an id is rejected', !!r.broken, String(r.broken));
 ok('the message names the field that crashed the library screen', /rooms/.test(r.broken ?? ''), String(r.broken));
+ok('a cabinet with no rooms array is rejected', !!r.noRooms, String(r.noRooms));
 ok('a negative dimension is rejected', !!r.badSize, String(r.badSize));
 ok('a dimension written as text is rejected', !!r.badText, String(r.badText));
 ok('a level outside the list is rejected', !!r.badEnum, String(r.badEnum));
 ok('a duplicated id is rejected', !!r.dup, String(r.dup));
-ok('a cabinet pointing at no wall is rejected', !!r.badRef, String(r.badRef));
-ok('a project pointing at no customer is rejected', !!r.orphan, String(r.orphan));
 ok('a broken dependency row is rejected', !!r.badDep, String(r.badDep));
 ok('a price written as text is rejected', !!r.badPrices, String(r.badPrices));
+ok('a board with no sheet size is rejected', !!r.badBoard, String(r.badBoard));
+ok('an old full backup is refused by name', /גיבוי מלא/.test(r.oldAll ?? ''), String(r.oldAll));
 ok('nothing was written while rejecting', r.before === r.after, `${r.before} → ${r.after}`);
 
 ok('the package carries a fingerprint', typeof r.print === 'string' && r.print.length >= 16, String(r.print));
-ok('the same library exports the same fingerprint', r.sameTwice);
+ok('the same cabinets export the same fingerprint', r.sameTwice);
 ok('a finish-only change is visible', r.hexChanged);
-ok('and the revision moves with it', r.hexRevisionWas);
+ok('and the revision moves with it', r.revisionMoved);
 ok('returning the colour returns the fingerprint', r.returns);
 ok('removing a cabinet is visible', r.dropChanged);
 ok('counts are recomputed from the payload', r.recomputed.items === r.trueItems, `${r.recomputed.items} ≠ 999`);

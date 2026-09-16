@@ -19,7 +19,7 @@ const log = await page.evaluate(async () => {
   const { syncConsumption } = await import('/src/materials/consumption.ts' + v);
   const { history } = await import('/src/features/design/history.ts' + v);
   const { catalogRepo } = await import('/src/catalog/catalogRepo.ts' + v);
-  const { importLibrary, readBackup } = await import('/src/db/backup.ts' + v);
+  const { importCabinets, readPack } = await import('/src/db/cabinetPack.ts' + v);
 
   const out = [];
   const ok = (name, cond, extra = '') => out.push(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ' | ' + extra : ''}`);
@@ -87,9 +87,9 @@ const log = await page.evaluate(async () => {
 
   /* --- 9. החלפת ספרייה שורדת רענון --- */
   const mine = { ...(await catalogRepo.all())[0], id: 'my-only-box', name: 'ארגז הנגרייה', isBuiltin: false, sortOrder: 0 };
-  const parsed = readBackup(JSON.stringify({ app: 'easycraft', format: 1, kind: 'library', at: Date.now(), tables: { catalog: [mine] } }));
+  const parsed = readPack(JSON.stringify({ app: 'easycraft', format: 1, kind: 'library', at: Date.now(), tables: { catalog: [mine] } }));
   ok('קובץ ספרייה תקין מתקבל', !('error' in parsed), JSON.stringify(parsed).slice(0, 120));
-  await importLibrary(parsed.backup, 'replace');
+  await importCabinets(parsed.pack, 'replace');
   ok('אחרי החלפה נשאר ארגז אחד', (await catalogRepo.all()).length === 1, String((await catalogRepo.all()).length));
   return out;
 });

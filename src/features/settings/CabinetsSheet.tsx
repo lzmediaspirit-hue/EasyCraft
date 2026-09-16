@@ -3,35 +3,29 @@ import { Sheet } from '../../ui/Sheet';
 import { saveFile } from '../../ui/saveFile';
 import { Pill } from '../../ui/Pill';
 import { catalogRepo } from '../../catalog/catalogRepo';
-import {
-  exportAll,
-  exportLibrary,
-  importAll,
-  importLibrary,
-  libraryManifest,
-  readBackup,
-} from '../../db/backup';
-import type { Backup, ImportResult } from '../../db/backup';
+import { exportCabinets, importCabinets, packManifest, readPack } from '../../db/cabinetPack';
+import type { CabinetPack, ImportResult } from '../../db/cabinetPack';
 
 /**
- * להוציא את הנתונים מהמכשיר, ולהחזיר אותם אליו.
+ * להוציא ארגזים מהמכשיר, ולהכניס ארגזים אליו.
  *
- * הכול נשמר מקומית, ולכן הוא גם כלוא מקומית: הוא לא עובר למכשיר
- * שני, ואם הדפדפן ינוקה הוא ייעלם. כאן הוא יוצא כקובץ.
+ * הלקוחות, הפרויקטים והמלאי הם נתונים של העסק, והם יישבו בשרת.
+ * ארגז הוא דבר אחר: הוא נבנה פעם אחת ועובר הלאה — לנגר שני,
+ * למכשיר שני, או בחזרה לאפליקציה עצמה כברירת מחדל. לזה נשאר
+ * הקובץ.
  *
- * קובץ ולא טקסט: ספרייה שלמה היא מאות אלפי תווים, והעתקה שלה מתיבת
- * טקסט נקטעת באמצע בדיוק כשצריך אותה. קובץ נשמר, נשלח, ונכנס חזרה
- * כמו שהוא.
+ * קובץ ולא טקסט: ספרייה שלמה היא מאות אלפי תווים, והעתקה שלה
+ * מתיבת טקסט נקטעת באמצע בדיוק כשצריך אותה. קובץ נשמר, נשלח,
+ * ונכנס חזרה כמו שהוא.
  *
  * הטקסט נשאר כדלת אחורית אחת: יש סביבות שחוסמות הורדה שהדף מתחיל
  * בעצמו, ושם הקובץ פשוט לא יורד. במקרה כזה אפשר עדיין להעתיק.
  */
-export function BackupSheet({ onClose }: { onClose: () => void }) {
+export function CabinetsSheet({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState('');
   const [showText, setShowText] = useState(false);
-  const [what, setWhat] = useState<'library' | 'all' | null>(null);
   const [mode, setMode] = useState<'merge' | 'replace'>('merge');
-  const [picked, setPicked] = useState<{ name: string; backup: Backup } | null>(null);
+  const [picked, setPicked] = useState<{ name: string; pack: CabinetPack } | null>(null);
   /* קובץ שנבחר ונדחה — הסיבה נשמרת, כדי לחזור עליה בלחיצה על ייבוא */
   const [rejected, setRejected] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -41,37 +35,31 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
   const file = useRef<HTMLInputElement>(null);
 
   /** שם שאומר מה יש בקובץ ומתי הוא נוצר */
-  function fileName(kind: 'library' | 'all'): string {
+  function fileName(): string {
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
-    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    return `easycraft-${kind === 'library' ? 'library' : 'backup'}-${stamp}.json`;
+    return `easycraft-cabinets-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
   }
 
-  async function save(kind: 'library' | 'all') {
+  async function save() {
     setProblem(null);
     setNote(null);
     setShowText(false);
-    const backup = kind === 'library' ? await exportLibrary() : await exportAll();
-    const json = JSON.stringify(backup);
+    const pack = await exportCabinets();
+    const json = JSON.stringify(pack);
     setText(json);
-    setWhat(kind);
 
-    const n = backup.tables.catalog?.length ?? 0;
-    const name = fileName(kind);
+    const n = pack.tables.catalog?.length ?? 0;
+    const name = fileName();
     const done = await saveFile(name, json);
     if (done.how === 'saved') {
-      setNote(
-        kind === 'library'
-          ? `${n} ארגזים ירדו לקובץ ${name}. שמור אותו אצלך — זו הספרייה.`
-          : `הכול ירד לקובץ ${name}, חוץ מקבצים מצורפים.`,
-      );
+      setNote(`${n} ארגזים ירדו לקובץ ${name}. שמור אותו אצלך — אלה הארגזים שלך.`);
     } else if (done.how === 'declined') {
       setNote('השמירה בוטלה.');
     } else {
       /*
-       * אין שמירת קובץ בתצוגה הזו — קורה בטלפון. הגיבוי הוא מאות
-       * אלפי תווים, וסימון ידני שלהם אינו פתרון, ולכן הוא נכנס
+       * אין שמירת קובץ בתצוגה הזו — קורה בטלפון. החבילה היא מאות
+       * אלפי תווים, וסימון ידני שלהם אינו פתרון, ולכן היא נכנסת
        * ללוח בלחיצה אחת. ההודעה מובילה במה שכן אפשר לעשות, ולא
        * במה שנכשל: מה שנכשל הוא שורה קטנה מתחת.
        */
@@ -79,12 +67,12 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
       try {
         await navigator.clipboard.writeText(json);
         setNote(
-          `הגיבוי הועתק ללוח (${size(json)}) — הדבק אותו בהודעה לעצמך, בפתק או במייל, וזה הגיבוי. ` +
+          `הארגזים הועתקו ללוח (${size(json)}) — הדבק אותם בהודעה לעצמך, בפתק או במייל. ` +
             `הסיבה שאין כאן קובץ: ${done.why}. ממחשב זה יורד כקובץ רגיל.`,
         );
       } catch {
         setProblem(
-          `${done.why}, וגם ההעתקה ללוח נחסמה. הטקסט למטה הוא אותו גיבוי — סמן, העתק ושמור אצלך. ` +
+          `${done.why}, וגם ההעתקה ללוח נחסמה. הטקסט למטה הוא אותם ארגזים — סמן, העתק ושמור אצלך. ` +
             `ממחשב זה יורד כקובץ רגיל.`,
         );
       }
@@ -97,28 +85,27 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
     el.select();
     try {
       await navigator.clipboard.writeText(el.value);
-      setNote('הועתק. שלח את זה לעצמך, וזה הגיבוי.');
+      setNote('הועתק. שלח את זה למי שצריך לקבל את הארגזים.');
     } catch {
       /* דפדפן שחוסם גישה ללוח — הטקסט כבר מסומן, ואפשר להעתיק ביד */
       setNote('הטקסט מסומן — העתק אותו ידנית.');
     }
   }
 
-  /** קובץ שנבחר, אחרי בדיקה שהוא באמת קובץ גיבוי */
+  /** קובץ שנבחר, אחרי בדיקה שהוא באמת קובץ ארגזים */
   async function pick(f: File | undefined) {
     setProblem(null);
     setNote(null);
     setPicked(null);
     setRejected(null);
     if (!f) return;
-    const res = readBackup(await f.text());
+    const res = readPack(await f.text());
     if ('error' in res) {
       setProblem(res.error);
       setRejected(res.error);
       return;
     }
-    setPicked({ name: f.name, backup: res.backup });
-    if (res.backup.kind !== 'library') return setNote(`${f.name} — גיבוי מלא.`);
+    setPicked({ name: f.name, pack: res.pack });
 
     /*
      * מה יש בקובץ, לפני שמייבאים אותו.
@@ -127,27 +114,26 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
      * ההחלפה כבר אי אפשר לדעת מה היה שם. המניפסט נקרא כאן, והנגר
      * רואה כמה ארגזים, על כמה לוחות וגוונים הם נשענים, ומאיזו
      * מהדורה — ורק אז מחליט אם למזג או להחליף.
-     */
-    const m = libraryManifest(res.backup);
-    const when = new Date(m.revision || res.backup.at).toLocaleDateString('he-IL');
-    /*
-     * החתימה היא מה שמאפשר לומר "זו אותה ספרייה". שתי חבילות
+     *
+     * החתימה היא מה שמאפשר לומר "אלה אותם ארגזים". שתי חבילות
      * שיצאו בשני ימים ממכשיר אחד נבדלות בתאריך אבל לא בחתימה,
      * ולכן אפשר לדעת שאין מה לייבא — במקום לייבא ולראות "0 נוספו".
      */
+    const m = packManifest(res.pack);
+    const when = new Date(m.revision || res.pack.at).toLocaleDateString('he-IL');
     setNote(
       `${f.name} — ${m.items} ארגזים, ${m.finishes} גוונים ו-${m.materials} לוחות. ` +
         `מהדורה ${when}, חתימה ${m.fingerprint.slice(0, 8)}. ` +
-        `בחר מיזוג או החלפה, ולחץ "ייבוא ספרייה".`,
+        `בחר מיזוג או החלפה, ולחץ "ייבוא ארגזים".`,
     );
   }
 
   /**
-   * הגיבוי שעליו פועלים: הקובץ שנבחר, ואם אין כזה — מה שהודבק.
-   * הטקסט נשאר קביל, כדי שמי שקיבל גיבוי בהודעה לא ייתקע.
+   * החבילה שעליה פועלים: הקובץ שנבחר, ואם אין כזה — מה שהודבק.
+   * הטקסט נשאר קביל, כדי שמי שקיבל ארגזים בהודעה לא ייתקע.
    */
-  function chosen(): Backup | null {
-    if (picked) return picked.backup;
+  function chosen(): CabinetPack | null {
+    if (picked) return picked.pack;
     /* הקובץ שנבחר נדחה — הסיבה היא הסיבה, ולא "אין מה לייבא" */
     if (rejected) {
       setProblem(rejected);
@@ -155,28 +141,28 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
     }
     const raw = box.current?.value.trim();
     if (!raw) {
-      setProblem('אין מה לייבא — בחר קובץ גיבוי');
+      setProblem('אין מה לייבא — בחר קובץ ארגזים');
       return null;
     }
-    const res = readBackup(raw);
+    const res = readPack(raw);
     if ('error' in res) {
       setProblem(res.error);
       return null;
     }
-    return res.backup;
+    return res.pack;
   }
 
-  async function bringLibrary() {
+  async function bring() {
     setProblem(null);
-    const backup = chosen();
-    if (!backup) return;
-    if (!backup.tables.catalog?.length) {
+    const pack = chosen();
+    if (!pack) return;
+    if (!pack.tables.catalog?.length) {
       setProblem('אין ארגזים בקובץ הזה');
       return;
     }
     setBusy(true);
     try {
-      const r: ImportResult = await importLibrary(backup, mode);
+      const r: ImportResult = await importCabinets(pack, mode);
       setNote(summary(r));
       setProblem(unresolvedNote(r));
     } catch (e) {
@@ -187,46 +173,25 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
     }
   }
 
-  async function bringAll() {
-    setProblem(null);
-    const backup = chosen();
-    if (!backup) return;
-    if (backup.kind !== 'all') {
-      setProblem('זה גיבוי של הספרייה בלבד — השתמש בכפתור הספרייה');
-      return;
-    }
-    setBusy(true);
-    try {
-      await importAll(backup);
-      setNote('הכול שוחזר. הקבצים המצורפים נשארו במכשיר שממנו הגיע הגיבוי.');
-    } catch (e) {
-      setProblem(failure(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <Sheet title="גיבוי והעברה" onClose={onClose} tall>
+    <Sheet title="ארגזים: שמירה והעברה" onClose={onClose} tall>
       <div className="space-y-5">
         <p className="text-xs leading-snug text-stone-500">
-          הנתונים נשמרים במכשיר הזה בלבד. כאן מוציאים אותם לקובץ — לגיבוי, למעבר
-          למכשיר אחר, או כדי לשלוח את הספרייה למישהו.
+          ארגז שנבנה כאן יכול לצאת לקובץ ולעבור הלאה — למכשיר אחר, לנגר אחר, או
+          בחזרה אליך. לקוחות ופרויקטים אינם כאן.
         </p>
 
         <section>
           <h3 className="mb-2 text-sm font-semibold text-stone-700">להוציא לקובץ</h3>
-          <div className="flex flex-wrap gap-1.5">
-            <Pill wide active={what === 'library'} onClick={() => save('library')}>
-              הספרייה
-            </Pill>
-            <Pill wide active={what === 'all'} onClick={() => save('all')}>
-              הכול
-            </Pill>
-          </div>
+          <button
+            onClick={save}
+            className="rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-stone-800"
+          >
+            שמירת הארגזים לקובץ
+          </button>
           <p className="mt-1.5 text-[11px] leading-snug text-stone-400">
-            הספרייה היא הארגזים בלבד, בלי לקוחות ובלי פרויקטים. ארגזים שהוסרו
-            אינם יוצאים איתה.
+            הארגזים בלבד, עם הלוחות והגוונים שהם נשענים עליהם. ארגזים שהוסרו
+            אינם יוצאים איתם.
           </p>
         </section>
 
@@ -248,7 +213,7 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
             ref={file}
             type="file"
             accept="application/json,.json"
-            aria-label="בחירת קובץ גיבוי"
+            aria-label="בחירת קובץ ארגזים"
             onChange={(e) => {
               void pick(e.target.files?.[0]);
               /* אותו קובץ נבחר פעמיים ברצף חייב לירות שוב את השינוי */
@@ -276,30 +241,23 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
               : 'מוחק את הספרייה הקיימת ושם את זו שבקובץ במקומה.'}
           </p>
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3">
             <button
-              onClick={bringLibrary}
+              onClick={bring}
               disabled={busy}
               className="rounded-xl bg-oak-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-oak-700 disabled:opacity-50"
             >
-              ייבוא ספרייה
-            </button>
-            <button
-              onClick={bringAll}
-              disabled={busy}
-              className="rounded-xl border border-stone-200 px-4 py-2.5 text-sm font-medium text-stone-600 transition-colors hover:border-red-200 hover:text-red-700 disabled:opacity-50"
-            >
-              שחזור מלא
+              ייבוא ארגזים
             </button>
           </div>
           <p className="mt-2 text-[11px] leading-snug text-stone-400">
-            שחזור מלא מוחק את מה שיש במכשיר ושם את הגיבוי במקומו. פרויקטים קיימים
-            אינם נפגעים מייבוא ספרייה — ארגז שהונח על קיר שמר את המידות שלו בעצמו.
+            פרויקטים קיימים אינם נפגעים — ארגז שהונח על קיר שמר את המידות שלו
+            בעצמו, והוא אינו קורא מהספרייה.
           </p>
         </section>
 
         {/*
-          הדלת האחורית: סביבה שחוסמת הורדה, או גיבוי שהגיע בהודעה
+          הדלת האחורית: סביבה שחוסמת הורדה, או ארגזים שהגיעו בהודעה
           ולא כקובץ. לא הדרך הראשית, ולכן היא מתחת לקו ומקופלת.
         */}
         <section className="border-t border-stone-100 pt-4">
@@ -308,7 +266,7 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
             aria-expanded={showText}
             className="text-xs text-stone-500 underline underline-offset-2 hover:text-oak-700"
           >
-            {showText ? 'סגירת הטקסט' : 'ההורדה נחסמה? גיבוי כטקסט'}
+            {showText ? 'סגירת הטקסט' : 'ההורדה נחסמה? ארגזים כטקסט'}
           </button>
 
           {showText && (
@@ -319,7 +277,7 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setText(e.target.value)}
                 spellCheck={false}
                 dir="ltr"
-                placeholder="כאן יופיע הגיבוי. אפשר גם להדביק לכאן גיבוי קיים."
+                placeholder="כאן יופיעו הארגזים. אפשר גם להדביק לכאן ארגזים שקיבלת."
                 className="mt-3 h-40 w-full rounded-2xl border border-stone-200 bg-white p-3 font-mono text-[11px] break-all text-stone-700 focus:border-oak-500 focus:outline-none"
               />
               <div className="mt-2 flex flex-wrap gap-2">
@@ -333,7 +291,6 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={() => {
                     setText('');
-                    setWhat(null);
                     setNote(null);
                     setProblem(null);
                   }}
@@ -369,7 +326,7 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** גודל הגיבוי במילים של בני אדם. */
+/** גודל החבילה במילים של בני אדם. */
 function size(json: string): string {
   const kb = Math.round(json.length / 1024);
   return kb >= 1024 ? `${(kb / 1024).toFixed(1)} מ״ב` : `${kb} ק״ב`;
@@ -391,7 +348,7 @@ function summary(r: ImportResult): string {
  */
 function unresolvedNote(r: ImportResult): string | null {
   if (!r.unresolved) return null;
-  return `${r.unresolved} ארגזים מפנים לגוון או ללוח שאינם במכשיר הזה — הם ייראו ויתומחרו לפי ברירת המחדל של הפרויקט. בקש קובץ ספרייה מגרסה עדכנית, שנושא איתו גם את הלוחות והגוונים.`;
+  return `${r.unresolved} ארגזים מפנים לגוון או ללוח שאינם במכשיר הזה — הם ייראו ויתומחרו לפי ברירת המחדל של הפרויקט. בקש קובץ ארגזים מגרסה עדכנית, שנושא איתו גם את הלוחות והגוונים.`;
 }
 
 /** תקלה מבסיס הנתונים, כמשפט שאפשר לקרוא ולא כאובייקט שנזרק. */

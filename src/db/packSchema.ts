@@ -1,17 +1,17 @@
 import type { CatalogItem, Finish, Material } from './types';
 
 /**
- * מה נחשב שורה תקינה בקובץ גיבוי.
+ * מה נחשב שורה תקינה בחבילת ארגזים.
  *
- * שחזור מלא מוחק את מה שבמכשיר ושם במקומו את מה שבקובץ, ולכן
- * הבדיקה כאן היא התנאי לפעולה ולא נימוס. עד כאן נבדק רק שלשורה
- * יש מזהה — וכך שורה אחת פגומה, `{"id":"broken-row"}`, החליפה
- * ספרייה שלמה ושברה את מסך הספרייה: הקוד ביקש את `rooms` וקיבל
- * `undefined`.
+ * ייבוא בהחלפה מוחק את הספרייה הקיימת ושם במקומה את מה שבקובץ,
+ * ולכן הבדיקה כאן היא התנאי לפעולה ולא נימוס. עד כאן נבדק רק
+ * שלשורה יש מזהה — וכך שורה אחת פגומה, `{"id":"broken-row"}`,
+ * החליפה ספרייה שלמה ושברה את מסך הספרייה: הקוד ביקש את `rooms`
+ * וקיבל `undefined`.
  *
  * הבדיקות הן על מה שהקוד באמת קורא: שדות חובה, מידות שהן מספר
  * בטווח שאפשר לבנות, ערכים מתוך רשימה סגורה, מזהים כפולים
- * והפניות בין הטבלאות. מה שאינו נבדק כאן מסומן במפורש למטה.
+ * והפניות בין הטבלאות.
  */
 
 type Check = (v: unknown) => boolean;
@@ -34,8 +34,6 @@ const MAX_MM = 20_000;
 const mm: Check = (v) => num(v) && (v as number) >= 0 && (v as number) <= MAX_MM;
 /** מידה שאורך אפס בה אינו קיים: רוחב, גובה או עומק של גוף */
 const size: Check = (v) => num(v) && (v as number) > 0 && (v as number) <= MAX_MM;
-/** מיקום על הקיר יכול להיות שלילי — ארגז שגולש החוצה עדיין נשמר */
-const pos: Check = (v) => num(v) && Math.abs(v as number) <= MAX_MM;
 
 const oneOf =
   (...allowed: readonly unknown[]): Check =>
@@ -69,25 +67,11 @@ interface TableSpec {
 
 const LEVELS = ['floor', 'wall', 'tall'] as const;
 const PART_ROLES = ['carcass', 'front', 'exposed', 'back'] as const;
-const ROLES = ['manager', 'planner', 'carpenter', 'installer'] as const;
-const STAGE_STATUS = ['waiting', 'active', 'done', 'skipped'] as const;
 
 /** לכל שורה מזהה ותאריכי מעקב. טבלת ההגדרות היא היוצאת מן הכלל. */
 const ENTITY: Record<string, Check> = { id: str, createdAt: time, updatedAt: time };
 
 export const SCHEMA: Record<string, TableSpec> = {
-  settings: {
-    /* שורה אחת, במזהה קבוע, והמידות שכל חישוב הפלטות נשען עליהן */
-    need: {
-      id: oneOf('app'),
-      sheetWidthMm: size,
-      sheetHeightMm: size,
-      kerfMm: mm,
-      carcassThicknessMm: size,
-      vatPct: num,
-      updatedAt: time,
-    },
-  },
   materials: {
     need: { ...ENTITY, name: str, sheetWidthMm: size, sheetHeightMm: size, sortOrder: order },
     may: { core: str, coreColor: str, thicknessMm: size, roles: listOf(oneOf(...PART_ROLES)) },
@@ -107,10 +91,6 @@ export const SCHEMA: Record<string, TableSpec> = {
       edgeFactoryPerM: num,
       edgeConsumerPerM: num,
     },
-  },
-  rooms: {
-    need: { ...ENTITY, label: str, hint: str, icon: str, groups: listOf(str), sortOrder: order, isBuiltin: bool },
-    may: { hiddenAt: time },
   },
   catalog: {
     /*
@@ -150,84 +130,10 @@ export const SCHEMA: Record<string, TableSpec> = {
       exposedMaterialId: str,
       backMaterialId: str,
     },
-  },
-  team: {
-    need: { ...ENTITY, name: str, role: oneOf(...ROLES), active: bool },
-    may: { phone: str, username: str, passwordHash: str, passwordSalt: str },
-  },
-  customers: {
-    need: { ...ENTITY, name: str, city: str },
-    may: { phone: str, archivedAt: time },
-  },
-  projects: {
-    need: { ...ENTITY, customerId: str, name: str, roomKind: str },
-    may: {
-      pricingMode: oneOf('materials', 'perUnit', 'perMeter', 'manual'),
-      manualPrice: num,
-      perUnitRate: num,
-      perMeterRate: num,
-      priceIncludesVat: bool,
-      soldAt: time,
-      editGrantedAt: time,
-    },
-    refs: { customerId: 'customers' },
-  },
-  walls: {
-    need: { ...ENTITY, projectId: str, index: order, lengthMm: size, heightMm: size },
-    may: { name: str },
-    refs: { projectId: 'projects' },
-  },
-  units: {
-    need: {
-      ...ENTITY,
-      projectId: str,
-      wallId: str,
-      name: str,
-      glyph: str,
-      level: oneOf(...LEVELS),
-      xMm: pos,
-      yMm: pos,
-      widthMm: size,
-      heightMm: size,
-      depthMm: size,
-    },
-    may: {
-      catalogItemId: str,
-      doors: count,
-      drawers: count,
-      drawerCols: count,
-      shelves: count,
-      socleMm: mm,
-      counterMm: mm,
-      rotationDeg: oneOf(0, 90, 180, 270),
-      hidden: bool,
-      floorLocked: bool,
-    },
     /*
-     * הארגז מצביע על פרויקט ועל קיר, ואלה חייבים להיות בקובץ.
-     * הגוון והלוח אינם נבדקים כהפניה: חבילת ספרייה נוסעת בלעדיהם
-     * לפעמים, והייבוא סופר אותם כ"ללא כיסוי" ואומר את זה במספר.
+     * הגוון והלוח אינם נבדקים כהפניה: חבילה נוסעת לפעמים בלעדיהם,
+     * והייבוא סופר אותם כ"ללא כיסוי" ואומר את זה במספר.
      */
-    refs: { projectId: 'projects', wallId: 'walls' },
-  },
-  stages: {
-    need: { ...ENTITY, projectId: str, key: str, status: oneOf(...STAGE_STATUS) },
-    may: { assigneeId: str, scheduledAt: time, startedAt: time, doneAt: time, note: str },
-    refs: { projectId: 'projects' },
-  },
-  stock: {
-    need: { ...ENTITY, finishId: str, materialId: str, sheets: num, ordered: num },
-    may: { edgeInStock: bool, backFinishId: str },
-  },
-  consumption: {
-    need: { ...ENTITY, projectId: str, lineKey: str, materialId: str, sheets: num },
-    may: { finishId: str },
-    refs: { projectId: 'projects' },
-  },
-  projectPrices: {
-    need: { ...ENTITY, projectId: str, lineKey: str },
-    may: { factoryPrice: num, consumerPrice: num },
-    refs: { projectId: 'projects' },
   },
 };
 
@@ -340,14 +246,14 @@ function stable(value: unknown): string {
 }
 
 /**
- * טביעת האצבע של חבילת ספרייה.
+ * טביעת האצבע של חבילת ארגזים.
  *
  * מכסה את הארגזים, הלוחות והגוונים שנוסעים איתם, וגם את הסדר
  * ואת מה שהוסר: הרשימות ממוינות לפי מזהה, ולכן חבילה שממנה נמחק
  * ארגז נותנת מחרוזת אחרת. שינוי בצבע של גוון — שהיה בעבר בלתי
  * נראה במניפסט — משנה אותה גם הוא.
  */
-export function libraryFingerprint(pack: {
+export function packFingerprint(pack: {
   catalog: CatalogItem[];
   materials: Material[];
   finishes: Finish[];

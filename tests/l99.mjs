@@ -10,7 +10,7 @@ const out = await page.evaluate(async () => {
   const B = await import('/src/costing/boards.ts' + v);
   const W = await import('/src/workflow/unitWork.ts' + v);
   const A = await import('/src/features/design/analysis.ts' + v);
-  const BK = await import('/src/db/backup.ts' + v);
+  const BK = await import('/src/db/cabinetPack.ts' + v);
   const M = await import('/src/materials/materialsRepo.ts' + v);
 
   const log = [];
@@ -66,17 +66,15 @@ const out = await page.evaluate(async () => {
   const inside = A.analyzeWall(wall, [unit({ xMm: 0, widthMm: 600 })]);
   ok('ארגז שנכנס אינו מתריע', !inside.warnings.length, JSON.stringify(inside.warnings.map((w) => w.text)));
 
-  /* --- 3. גיבוי חלקי נדחה --- */
-  const partial = JSON.stringify({ app: 'easycraft', format: 1, kind: 'all', tables: { settings: [] } });
-  ok('גיבוי מלא בלי כל הטבלאות נדחה', 'error' in BK.readBackup(partial), JSON.stringify(BK.readBackup(partial)));
+  /* --- 3. חבילה פגומה נדחית --- */
+  const noCatalog = JSON.stringify({ app: 'easycraft', format: 3, kind: 'library', tables: { finishes: [] } });
+  ok('חבילה בלי ארגזים נדחית', 'error' in BK.readPack(noCatalog), JSON.stringify(BK.readPack(noCatalog)));
   const noKind = JSON.stringify({ app: 'easycraft', format: 1, tables: { catalog: [] } });
-  ok('קובץ בלי kind נדחה', 'error' in BK.readBackup(noKind));
+  ok('קובץ בלי kind נדחה', 'error' in BK.readPack(noKind));
   const badRow = JSON.stringify({ app: 'easycraft', format: 1, kind: 'library', tables: { catalog: [{ name: 'בלי מזהה' }] } });
-  ok('שורה בלי מזהה נדחית', 'error' in BK.readBackup(badRow), JSON.stringify(BK.readBackup(badRow)));
-  const full = await BK.exportAll();
-  ok('גיבוי אמיתי מתקבל', !('error' in BK.readBackup(JSON.stringify(full))), JSON.stringify(BK.readBackup(JSON.stringify(full))).slice(0, 120));
-  const lib = await BK.exportLibrary();
-  ok('ייצוא ספרייה מתקבל', !('error' in BK.readBackup(JSON.stringify(lib))));
+  ok('שורה בלי מזהה נדחית', 'error' in BK.readPack(badRow), JSON.stringify(BK.readPack(badRow)));
+  const lib = await BK.exportCabinets();
+  ok('ייצוא ארגזים מתקבל', !('error' in BK.readPack(JSON.stringify(lib))), JSON.stringify(BK.readPack(JSON.stringify(lib))).slice(0, 120));
 
   return log;
 });

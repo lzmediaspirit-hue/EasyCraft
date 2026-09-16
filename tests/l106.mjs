@@ -111,7 +111,7 @@ await page.waitForTimeout(500);
 const dedupe = await page.evaluate(async (code) => {
   const v = '?v=' + Date.now();
   const { catalogRepo } = await import('/src/catalog/catalogRepo.ts' + v);
-  const { exportLibrary, importLibrary } = await import('/src/db/backup.ts' + v);
+  const { exportCabinets, importCabinets } = await import('/src/db/cabinetPack.ts' + v);
   const res = [];
   const ok2 = (name, cond, extra = '') => res.push(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ' | ' + extra : ''}`);
   const before = (await catalogRepo.all()).length;
@@ -127,9 +127,9 @@ const dedupe = await page.evaluate(async (code) => {
   ok2('והיא מעדכנת את הארגז שנושא אותו', after.find((i) => i.id === again)?.name === 'QA אותו מק״ט');
 
   /* ייבוא חוזר של אותה ספרייה במזהים אחרים — גם הוא אינו משכפל */
-  const backup = await exportLibrary();
-  backup.tables.catalog = backup.tables.catalog.map((i) => ({ ...i, id: crypto.randomUUID() }));
-  const r = await importLibrary(backup, 'merge');
+  const pack = await exportCabinets();
+  pack.tables.catalog = pack.tables.catalog.map((i) => ({ ...i, id: crypto.randomUUID() }));
+  const r = await importCabinets(pack, 'merge');
   const total = (await catalogRepo.all()).length;
   ok2('ייבוא חוזר במזהים אחרים אינו משכפל', total === before, `${before} → ${total}`);
   ok2('והכול נספר כעדכון', r.added === 0, JSON.stringify(r));

@@ -17,39 +17,38 @@ await btn('כניסה').click();
 await page.waitForTimeout(1600);
 await btn(/הגדרות/).click();
 await page.waitForTimeout(900);
-await btn(/גיבוי והעברת נתונים/).scrollIntoViewIfNeeded();
-await btn(/גיבוי והעברת נתונים/).click();
+await btn(/שמירה והעברה של ארגזים/).scrollIntoViewIfNeeded();
+await btn(/שמירה והעברה של ארגזים/).click();
 await page.waitForTimeout(700);
 
-/* הגיבוי נכנס כקובץ, ולכן גם הקובץ הפגום נבחר מהבורר */
+/* החבילה נכנסת כקובץ, ולכן גם הקובץ הפגום נבחר מהבורר */
 const fs = await import('node:fs');
 const TMP = '/tmp/l99c-files';
 fs.mkdirSync(TMP, { recursive: true });
 const asFile = async (name, body) => {
   const path = `${TMP}/${name}`;
   fs.writeFileSync(path, body);
-  await dlg().getByLabel('בחירת קובץ גיבוי').setInputFiles(path);
+  await dlg().getByLabel('בחירת קובץ ארגזים').setInputFiles(path);
   await page.waitForTimeout(500);
 };
 
 const bad = '{"app":"easycraft","format":1,"kind":"library","tables":{"catalog":[{"name":"invalid missing id"}]}}';
 await asFile('bad.json', bad);
-await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).click();
+await dlg().getByRole('button', { name: 'ייבוא ארגזים' }).click();
 await page.waitForTimeout(900);
 const body = await dlg().innerText();
 /* ההודעה מצביעה על השורה ועל השדה, ולא רק על "משהו פגום" */
 ok('ייבוא פגום אומר מה קרה', /פגום|פגומים|נכשל/.test(body), JSON.stringify(body.slice(0, 200)));
-ok('ומצביע על החלק שנפל', /הספרייה/.test(body), JSON.stringify(body.slice(0, 200)));
-ok('וכפתור הייבוא נשאר פעיל', await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).isEnabled());
-ok('וגם השחזור המלא', await dlg().getByRole('button', { name: 'שחזור מלא' }).isEnabled());
+ok('ומצביע על החלק שנפל', /הארגזים/.test(body), JSON.stringify(body.slice(0, 200)));
+ok('וכפתור הייבוא נשאר פעיל', await dlg().getByRole('button', { name: 'ייבוא ארגזים' }).isEnabled());
 
-/* ואותו טקסט כגיבוי מלא חלקי — נדחה לפני שנגעו בנתונים */
-await asFile('partial.json', '{"app":"easycraft","format":1,"kind":"all","tables":{"settings":[]}}');
-await dlg().getByRole('button', { name: 'שחזור מלא' }).click();
+/* חבילה בלי ארגזים — נדחית לפני שנגעו בנתונים */
+await asFile('partial.json', '{"app":"easycraft","format":3,"kind":"library","tables":{"finishes":[]}}');
+await dlg().getByRole('button', { name: 'ייבוא ארגזים' }).click();
 await page.waitForTimeout(900);
 const body2 = await dlg().innerText();
-ok('שחזור מגיבוי חסר נדחה', /חסר בקובץ/.test(body2), JSON.stringify(body2.slice(0, 200)));
-ok('ולא מדווח שהכול שוחזר', !/הכול שוחזר/.test(body2));
+ok('חבילה בלי ארגזים נדחית', /חסר בקובץ/.test(body2), JSON.stringify(body2.slice(0, 200)));
+ok('ולא מדווח שמשהו נוסף', !/נוספו/.test(body2));
 
 /* --- 10. המתג בהגדרות באמת משנה את הגב --- */
 await page.keyboard.press('Escape');

@@ -127,7 +127,7 @@ const deep = await page.evaluate(async () => {
   const { customersRepo } = await import('/src/features/customers/customersRepo.ts' + v);
   const { finishesRepo, materialsRepo } = await import('/src/materials/materialsRepo.ts' + v);
   const { reusableSpec, REUSABLE_FIELDS } = await import('/src/db/types.ts' + v);
-  const { exportLibrary, importLibrary, readBackup } = await import('/src/db/backup.ts' + v);
+  const { exportCabinets, importCabinets, readPack } = await import('/src/db/cabinetPack.ts' + v);
   const res = [];
   const ok2 = (name, cond, extra = '') => res.push(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ' | ' + extra : ''}`);
 
@@ -182,23 +182,23 @@ const deep = await page.evaluate(async () => {
     prices: { [material.id]: { consumerPrice: 321 } },
   });
   await catalogRepo.saveCustom({ id: templateId, frontFinishId: finishId, frontMaterialId: material.id });
-  const backup = await exportLibrary();
-  ok2('הייצוא נושא את הגוון', (backup.tables.finishes ?? []).some((f) => f.id === finishId), String((backup.tables.finishes ?? []).length));
-  ok2('ואת הלוח', (backup.tables.materials ?? []).some((m) => m.id === material.id));
-  ok2('והוא נקרא בחזרה', !('error' in readBackup(JSON.stringify(backup))));
+  const pack = await exportCabinets();
+  ok2('הייצוא נושא את הגוון', (pack.tables.finishes ?? []).some((f) => f.id === finishId), String((pack.tables.finishes ?? []).length));
+  ok2('ואת הלוח', (pack.tables.materials ?? []).some((m) => m.id === material.id));
+  ok2('והוא נקרא בחזרה', !('error' in readPack(JSON.stringify(pack))));
 
   /* מכשיר נקי: מוחקים את הגוון והלוח, ומייבאים — הם חוזרים */
   await db.finishes.delete(finishId);
   await db.materials.delete(material.id);
-  const back = await importLibrary(backup, 'merge');
+  const back = await importCabinets(pack, 'merge');
   ok2('הייבוא מחזיר את התלויות', back.deps >= 2, JSON.stringify(back));
   ok2('ואין הפניות פתוחות', back.unresolved === 0, String(back.unresolved));
   ok2('הגוון קיים אחרי הייבוא', !!(await finishesRepo.get(finishId)));
 
   /* קובץ ישן, בלי תלויות — מדווח על ההפניות שנשארו פתוחות */
   await db.finishes.delete(finishId);
-  const oldStyle = { ...backup, format: 1, tables: { catalog: backup.tables.catalog } };
-  const legacy = await importLibrary(oldStyle, 'merge');
+  const oldStyle = { ...pack, format: 1, tables: { catalog: pack.tables.catalog } };
+  const legacy = await importCabinets(oldStyle, 'merge');
   ok2('קובץ ישן מדווח על הפניות חסרות', legacy.unresolved > 0, String(legacy.unresolved));
 
   /* N10 — שחזור ארגז שהמקור שלו נמחק */

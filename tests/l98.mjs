@@ -1,4 +1,4 @@
-/** משימה 98: גיבוי והעברה — הוצאת הנתונים מהמכשיר והחזרתם. */
+/** משימה 98: ארגזים — הוצאת ארגזים מהמכשיר, והכנסת ארגזים אליו. */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
 
@@ -11,7 +11,7 @@ page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
 
 const btn = (re) => page.getByRole('button', { name: re }).first();
 const dlg = () => page.getByRole('dialog').last();
-const picker = () => dlg().getByLabel('בחירת קובץ גיבוי');
+const picker = () => dlg().getByLabel('בחירת קובץ ארגזים');
 const TMP = '/tmp/l98-files';
 await import('node:fs').then((fs) => fs.mkdirSync(TMP, { recursive: true }));
 
@@ -27,7 +27,7 @@ async function download(name) {
   return { path, name: dl.suggestedFilename(), json: JSON.parse(fs.readFileSync(path, 'utf8')) };
 }
 
-/** כותב גיבוי לקובץ ובוחר אותו בבורר — כמו שהמשתמש עושה */
+/** כותב חבילה לקובץ ובוחר אותה בבורר — כמו שהמשתמש עושה */
 async function choose(obj, file = 'pick.json') {
   const fs = await import('node:fs');
   const path = `${TMP}/${file}`;
@@ -71,33 +71,27 @@ ok('נבנה פרויקט עם ארגז', before.units >= 1 && before.customers 
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(1500);
 await btn('הגדרות').click(); await page.waitForTimeout(900);
-ok('יש מדור גיבוי בהגדרות', (await page.innerText('main')).includes('גיבוי והעברה'));
-await btn(/גיבוי והעברת נתונים/).click(); await page.waitForTimeout(700);
+ok('יש מדור ארגזים בהגדרות', (await page.innerText('main')).includes('ארגזים'));
+await btn(/שמירה והעברה של ארגזים/).click(); await page.waitForTimeout(700);
 await page.screenshot({ path: SP + 'L98-1-sheet.png' });
 
 /* ---- הוצאה לקובץ ---- */
-const libFile = await download('הספרייה');
+const libFile = await download('שמירת הארגזים לקובץ');
 const lib = libFile.json;
-ok('ייצוא ספרייה יורד כקובץ JSON', lib.app === 'easycraft' && lib.kind === 'library', libFile.name);
-ok('שם הקובץ אומר מה יש בו', /^easycraft-library-\d{4}-\d{2}-\d{2}\.json$/.test(libFile.name), libFile.name);
-ok('הספרייה כוללת את כל הארגזים', lib?.tables?.catalog?.length === before.catalog, `${lib?.tables?.catalog?.length} מול ${before.catalog}`);
-ok('הספרייה אינה כוללת לקוחות', !lib?.tables?.customers);
+ok('ייצוא ארגזים יורד כקובץ JSON', lib.app === 'easycraft' && lib.kind === 'library', libFile.name);
+ok('שם הקובץ אומר מה יש בו', /^easycraft-cabinets-\d{4}-\d{2}-\d{2}\.json$/.test(libFile.name), libFile.name);
+ok('החבילה כוללת את כל הארגזים', lib?.tables?.catalog?.length === before.catalog, `${lib?.tables?.catalog?.length} מול ${before.catalog}`);
+ok('החבילה אינה כוללת לקוחות', !lib?.tables?.customers);
+ok('ואינה כוללת פרויקטים', !lib?.tables?.projects && !lib?.tables?.units);
 ok('נאמר כמה ארגזים ירדו', (await dlg().innerText()).includes(`${before.catalog} ארגזים ירדו`));
 
-const allFile = await download('הכול');
-const all = allFile.json;
-ok('גיבוי מלא יורד כקובץ', /^easycraft-backup-\d{4}-\d{2}-\d{2}\.json$/.test(allFile.name), allFile.name);
-ok('ייצוא מלא: לקוחות, פרויקטים, קירות וארגזים', all.kind === 'all'
-  && all.tables.customers.length === before.customers
-  && all.tables.projects.length === before.projects
-  && all.tables.units.length === before.units
-  && all.tables.walls.length === before.walls,
-  JSON.stringify({ c: all.tables.customers.length, p: all.tables.projects.length, u: all.tables.units.length }));
-ok('גם הגדרות, לוחות וגוונים יצאו', all.tables.settings.length >= 1 && all.tables.materials.length >= 1 && all.tables.finishes.length >= 1);
-
-/* ---- קובץ שאינו גיבוי ---- */
+/* ---- קובץ שאינו חבילת ארגזים ---- */
 await choose('שלום', 'junk.json');
-ok('קובץ שאינו גיבוי נעצר בהודעה ברורה', (await dlg().innerText()).includes('אינו קובץ גיבוי'));
+ok('קובץ שאינו חבילה נעצר בהודעה ברורה', (await dlg().innerText()).includes('אינו קובץ ארגזים'));
+
+/* ---- גיבוי מלא ישן: נאמר, ולא נבלע ---- */
+await choose({ app: 'easycraft', format: 3, at: Date.now(), kind: 'all', tables: { catalog: [] } }, 'old-all.json');
+ok('גיבוי מלא ישן נדחה במפורש', (await dlg().innerText()).includes('גיבוי מלא ישן'));
 
 /* ---- החלפה: הספרייה שהנגר בנה מחליפה את זו שהגיעה עם האפליקציה ---- */
 const mine = {
@@ -107,12 +101,12 @@ const mine = {
 await dlg().getByRole('button', { name: 'החלפה מלאה' }).click();
 await page.waitForTimeout(300);
 await choose(mine, 'mine.json');
-await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).click();
+await dlg().getByRole('button', { name: 'ייבוא ארגזים' }).click();
 await page.waitForTimeout(1000);
 const afterReplace = await counts();
 ok('ההחלפה השאירה בספרייה רק את מה שיובא', afterReplace.catalog === 1 && afterReplace.names[0] === 'הארגז של הנגרייה', JSON.stringify(afterReplace.names));
 ok('נאמר כמה הוסרו', (await dlg().innerText()).includes('הוסרו'));
-ok('הפרויקטים לא נפגעו מהחלפת הספרייה',
+ok('הפרויקטים לא נפגעו מהחלפת הארגזים',
   afterReplace.units === before.units && afterReplace.projects === before.projects && afterReplace.walls === before.walls,
   JSON.stringify({ u: afterReplace.units, p: afterReplace.projects }));
 await page.screenshot({ path: SP + 'L98-2-replaced.png' });
@@ -125,7 +119,7 @@ const more = {
 await dlg().getByRole('button', { name: 'מיזוג' }).click();
 await page.waitForTimeout(300);
 await choose(more, 'more.json');
-await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).click();
+await dlg().getByRole('button', { name: 'ייבוא ארגזים' }).click();
 await page.waitForTimeout(900);
 const afterMerge = await counts();
 ok('מיזוג הוסיף ולא מחק', afterMerge.catalog === 2 && afterMerge.names.includes('הארגז של הנגרייה') && afterMerge.names.includes('ארגז נוסף'), JSON.stringify(afterMerge.names));
@@ -145,30 +139,23 @@ ok('ובלי כפילות מק״טים', new Set(afterReseed.codes).size === aft
 ok('ומה שהנגר בנה נשאר', afterReseed.names.includes('הארגז של הנגרייה'));
 ok('וכולם נראים ברשימה', afterReseed.shown === afterReseed.catalog, `${afterReseed.shown}/${afterReseed.catalog}`);
 
-/* ---- שחזור מלא ---- */
+/* ---- הקובץ שירד נכנס בחזרה, ומגיע לאותה ספרייה ---- */
 await picker().setInputFiles(libFile.path);
-await page.waitForTimeout(400);
-await dlg().getByRole('button', { name: 'שחזור מלא' }).click();
 await page.waitForTimeout(500);
-ok('גיבוי ספרייה נדחה משחזור מלא', (await dlg().innerText()).includes('גיבוי של הספרייה בלבד'));
-
-await picker().setInputFiles(allFile.path);
-await page.waitForTimeout(400);
-await dlg().getByRole('button', { name: 'שחזור מלא' }).click();
+await dlg().getByRole('button', { name: 'ייבוא ארגזים' }).click();
 await page.waitForTimeout(1400);
 const restored = await counts();
-ok('שחזור מלא החזיר את המכשיר למה שהיה',
-  restored.catalog === before.catalog && restored.units === before.units
-  && restored.customers === before.customers && restored.projects === before.projects,
+ok('הקובץ שירד מחזיר את אותם ארגזים', restored.catalog === before.catalog, `${restored.catalog} מול ${before.catalog}`);
+ok('והפרויקטים לא נגעו בהם לאורך כל הדרך',
+  restored.units === before.units && restored.customers === before.customers && restored.projects === before.projects,
   JSON.stringify(restored).slice(0, 120));
-ok('ומה שנוסף אחרי הגיבוי נעלם', !restored.names.includes('הארגז של הנגרייה'));
 await page.screenshot({ path: SP + 'L98-3-restored.png' });
 
 /* ---- הנתונים שרדו רענון של הדף ---- */
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(1500);
 const afterReload = await counts();
-ok('השחזור נשמר גם אחרי רענון', afterReload.catalog === before.catalog && afterReload.units === before.units);
+ok('הייבוא נשמר גם אחרי רענון', afterReload.catalog === before.catalog && afterReload.units === before.units);
 
 console.log(`\n${pass} pass, ${fail} fail`);
 if (errs.length) console.log('PAGEERROR ' + errs.slice(0, 4).join(' | '));
