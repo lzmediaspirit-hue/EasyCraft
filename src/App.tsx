@@ -9,7 +9,7 @@ import { CalendarScreen } from './features/workflow/CalendarScreen';
 import { TasksScreen } from './features/workflow/TasksScreen';
 import { TeamScreen } from './features/team/TeamScreen';
 import { StockScreen } from './features/stock/StockScreen';
-import { seedCatalog } from './catalog/catalogRepo';
+import { addSystemProducts, seedCatalog } from './catalog/catalogRepo';
 import { seedRooms } from './catalog/roomsRepo';
 import { seedMaterials } from './materials/materialsRepo';
 import { seedAdmin } from './workflow/auth';
@@ -34,6 +34,8 @@ export default function App() {
   useEffect(() => {
     ensureWorkshop()
       .then(() => Promise.all([seedCatalog(), seedRooms(), seedMaterials(), seedAdmin()]))
+      /* מוצרי מערכת שנוספו אחרי ההתקנה — אחרי הזריעה, ורק מה שחסר */
+      .then(() => addSystemProducts())
       .finally(() => setReady(true));
   }, []);
 

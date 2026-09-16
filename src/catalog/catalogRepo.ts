@@ -5,8 +5,9 @@ import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind } from 
 import { CODE_PREFIX, codeNumber, fillCodes } from './codes';
 import { SEED_CATALOG, type SeedItem } from './builtins';
 import { SHIPPED_LIBRARY, type ShippedItem } from './shipped';
-import { SHIPPED_PRODUCTS } from './products';
+import { PRODUCTS_GENERATION, SHIPPED_PRODUCTS } from './products';
 import { allMine, eraseIds, mine, owned, patchRow } from '../db/rows';
+import { workshopId } from '../db/workshop';
 import { BuildError, checkItem } from './saveGate';
 
 /**
@@ -60,7 +61,42 @@ async function runSeed(): Promise<void> {
   const fresh = new Map(fillCodes(rows).map((c) => [c.id, c.code]));
   // bulkPut ולא bulkAdd — כדי ששתי הפעלות במקביל לא ייפלו על כפילות
   await db.catalog.bulkPut(rows.map((r) => ({ ...r, code: r.code ?? fresh.get(r.id) })));
-  await settingsRepo.save({ catalogSeededAt: now });
+  await settingsRepo.save({ catalogSeededAt: now, productsGeneration: PRODUCTS_GENERATION });
+}
+
+/**
+ * מוצרי מערכת שנוספו אחרי ההתקנה.
+ *
+ * הזריעה רצה פעם אחת, והסימון "הספרייה נזרעה" חסם אותה לתמיד —
+ * ולכן מי שהתקין לפני שהאי והמדף נוספו נשאר בלעדיהם לנצח, בזמן
+ * שהתקנה חדשה קיבלה אותם. שדרוג ממוקד: רק מה שהדור שלו חדש מהדור
+ * שהנגרייה כבר קיבלה, ורק מה שמעולם לא היה כאן.
+ *
+ * שני דברים שהוא אינו עושה: הוא אינו מחזיר את ספריית ההדגמה, והוא
+ * אינו מחזיר מה שנמחק בכוונה — סימון המחיקה הוא התשובה ל"כבר היה
+ * לי את זה ולא רציתי אותו".
+ */
+export async function addSystemProducts(): Promise<number> {
+  const settings = await settingsRepo.get();
+  const had = settings.productsGeneration ?? 0;
+  if (had >= PRODUCTS_GENERATION) return 0;
+
+  const [rows, marks] = await Promise.all([
+    allMine(db.catalog),
+    db.tombstones.where('[workshopId+table]').equals([workshopId(), 'catalog']).toArray(),
+  ]);
+  const byId = new Set(rows.map((i) => i.id));
+  const byCode = new Set(rows.filter((i) => i.code).map((i) => i.code!.toUpperCase()));
+  const erased = new Set(marks.map((m) => m.rowId));
+
+  const now = Date.now();
+  const missing = SHIPPED_PRODUCTS.filter(
+    (p) => !byId.has(p.id) && !erased.has(p.id) && !(p.code && byCode.has(p.code.toUpperCase())),
+  ).map((p) => ({ ...p, ...owned(), createdAt: now, updatedAt: now }));
+
+  if (missing.length) await db.catalog.bulkAdd(missing);
+  await settingsRepo.save({ productsGeneration: PRODUCTS_GENERATION });
+  return missing.length;
 }
 
 function toShipped(s: SeedItem, order: number): ShippedItem {

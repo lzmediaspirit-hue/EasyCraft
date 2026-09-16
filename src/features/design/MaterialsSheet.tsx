@@ -171,10 +171,30 @@ export function MaterialsSheet({
                     */}
                     <span
                       className={`num w-16 text-end text-sm ${
-                        a.noPrice ? 'text-amber-700' : 'text-stone-600'
+                        a.noPrice || a.noCost ? 'text-amber-700' : 'text-stone-600'
                       }`}
+                      title={
+                        a.noPrice && a.noCost
+                          ? 'לא נקבעו מחיר לקוח ועלות'
+                          : a.noPrice
+                            ? 'לא נקבע מחיר לקוח'
+                            : a.noCost
+                              ? 'לא נקבעה עלות'
+                              : undefined
+                      }
                     >
-                      {a.noPrice ? 'מחיר חסר' : a.consumerTotal > 0 ? shekels(a.consumerTotal) : '—'}
+                      {/*
+                        חוסר במחיר מכירה הוא מה שמשפיע על ההצעה, וחוסר
+                        בעלות הוא מה שמשפיע על הרווח. שורה עם עלות ובלי
+                        מחיר לקוח נראתה עד כה מתומחרת ושווה 0.
+                      */}
+                      {a.noPrice
+                        ? 'מחיר חסר'
+                        : a.noCost
+                          ? `${shekels(a.consumerTotal)} · עלות חסרה`
+                          : a.consumerTotal > 0
+                            ? shekels(a.consumerTotal)
+                            : '—'}
                     </span>
                   </li>
                 ))}

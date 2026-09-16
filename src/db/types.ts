@@ -1229,6 +1229,14 @@ export interface Settings {
    * ההדגמה כולה בחזרה, כי טבלה ריקה נראית כמו התקנה חדשה.
    */
   catalogSeededAt?: number;
+  /**
+   * איזה דור של מוצרי מערכת הנגרייה הזאת כבר קיבלה.
+   *
+   * בלעדיו מי שהתקין לפני שנוסף מוצר לא היה מקבל אותו לעולם:
+   * הזריעה רצה פעם אחת, והסימון "נזרעה" חסם אותה לתמיד. ראה
+   * `catalogRepo.addSystemProducts`.
+   */
+  productsGeneration?: number;
   updatedAt: number;
 }
 
