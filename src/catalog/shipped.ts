@@ -2052,6 +2052,46 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "sortOrder": 51
   },
   {
+    "glyph": "doors",
+    "doors": 2,
+    "id": "7c1f4a90-2d3e-4b86-9a51-0f6d8c2e4b17",
+    "code": "EC-081",
+    "name": "ארון תחתון שתי דלתות",
+    "rooms": [
+      "kitchen"
+    ],
+    "group": "base",
+    "level": "floor",
+    "drawers": 0,
+    "drawerCols": 1,
+    "shelves": 1,
+    "zones": [
+      {
+        "id": "main",
+        "heightMm": 800,
+        "kind": "shelves",
+        "shelves": 1
+      }
+    ],
+    "drawerStyle": "outer",
+    "defaultWidthMm": 800,
+    "widthOptionsMm": [
+      800,
+      900,
+      1000
+    ],
+    "defaultHeightMm": 900,
+    "defaultDepthMm": 580,
+    "defaultYMm": 0,
+    "socleMm": 100,
+    "counterMm": 0,
+    "backKind": "thin",
+    "drawerBox": "metal",
+    "common": true,
+    "isBuiltin": true,
+    "sortOrder": 52
+  },
+  {
     "glyph": "drawers",
     "zones": [
       {
@@ -2094,7 +2134,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 52
+    "sortOrder": 53
   },
   {
     "glyph": "drawers",
@@ -2139,7 +2179,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "note": "תבנית ארגז. מרווחי מכשיר, צנרת ופרזול ייעודי דורשים מידות יצרן לפני ייצור.",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 53
+    "sortOrder": 54
   },
   {
     "glyph": "open",
@@ -2177,7 +2217,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "note": "תבנית ארגז. מרווחי מכשיר, צנרת ופרזול ייעודי דורשים מידות יצרן לפני ייצור.",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 54
+    "sortOrder": 55
   },
   {
     "id": "a064a481-b9bc-4902-894f-db74db697aba",
@@ -2216,7 +2256,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "corner": "lShape",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 55
+    "sortOrder": 56
   },
   {
     "id": "0ca2db45-29e8-4d44-b1c8-af329c65e55e",
@@ -2257,7 +2297,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 56
+    "sortOrder": 57
   },
   {
     "id": "1616ff5e-8163-45a1-9d0c-f10df246fd48",
@@ -2295,7 +2335,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 57
+    "sortOrder": 58
   },
   {
     "glyph": "open",
@@ -2336,7 +2376,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "note": "תבנית ארגז. מרווחי מכשיר, צנרת ופרזול ייעודי דורשים מידות יצרן לפני ייצור.",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 58
+    "sortOrder": 59
   },
   {
     "glyph": "open",
@@ -2377,7 +2417,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "note": "תבנית ארגז. מרווחי מכשיר, צנרת ופרזול ייעודי דורשים מידות יצרן לפני ייצור.",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 59
+    "sortOrder": 60
   },
   {
     "glyph": "open",
@@ -2418,7 +2458,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "note": "תבנית ארגז. מרווחי מכשיר, צנרת ופרזול ייעודי דורשים מידות יצרן לפני ייצור.",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 60
+    "sortOrder": 61
   },
   {
     "glyph": "blindEnd",
@@ -2458,7 +2498,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "counterMm": 30,
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 61
+    "sortOrder": 62
   },
   {
     "glyph": "blindStart",
@@ -2498,7 +2538,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 62
+    "sortOrder": 63
   },
   {
     "id": "18167eb7-9ec9-45ee-a9a4-1a8060c36fe0",
@@ -2536,7 +2576,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 63
+    "sortOrder": 64
   },
   {
     "id": "646b9c8b-da34-4222-afaa-0838fb61b953",
@@ -2577,7 +2617,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 64
+    "sortOrder": 65
   },
   {
     "id": "6c3be67a-052d-4233-9f50-38aacf83e934",
@@ -2615,7 +2655,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 65
+    "sortOrder": 66
   },
   {
     "id": "c8fa0c85-6202-432c-91e8-6820e419cc67",
@@ -2653,7 +2693,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 66
+    "sortOrder": 67
   },
   {
     "id": "dac22878-5cdd-464a-a2de-a06a6c1ae53e",
@@ -2690,7 +2730,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 67
+    "sortOrder": 68
   },
   {
     "id": "963fcb04-5283-4fe1-a6d6-88f96602cfc0",
@@ -2728,7 +2768,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 68
+    "sortOrder": 69
   },
   {
     "id": "0e03f085-15f0-4a87-999a-5caef41d259e",
@@ -2766,7 +2806,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 69
+    "sortOrder": 70
   },
   {
     "glyph": "glass",
@@ -2805,7 +2845,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 70
+    "sortOrder": 71
   },
   {
     "glyph": "doors",
@@ -2843,7 +2883,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 71
+    "sortOrder": 72
   },
   {
     "glyph": "doors",
@@ -2881,7 +2921,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 72
+    "sortOrder": 73
   },
   {
     "glyph": "glass",
@@ -2920,7 +2960,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 73
+    "sortOrder": 74
   },
   {
     "glyph": "open",
@@ -2957,7 +2997,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 74
+    "sortOrder": 75
   },
   {
     "glyph": "doors",
@@ -2995,7 +3035,7 @@ export const SHIPPED_LIBRARY: ShippedItem[] = [
     "drawerBox": "metal",
     "common": true,
     "isBuiltin": true,
-    "sortOrder": 75
+    "sortOrder": 76
   }
 ];
 
