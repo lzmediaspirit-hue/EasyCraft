@@ -1,4 +1,5 @@
-import type { CatalogItem, Finish, Material } from './types';
+import { checkItem } from '../catalog/saveGate';
+import type { CatalogItem, Finish, Material, Room } from './types';
 
 /**
  * מה נחשב שורה תקינה בחבילת ארגזים.
@@ -67,6 +68,56 @@ interface TableSpec {
 
 const LEVELS = ['floor', 'wall', 'tall'] as const;
 const PART_ROLES = ['carcass', 'front', 'exposed', 'back'] as const;
+const ZONE_KINDS = ['shelves', 'drawers', 'rod', 'empty'] as const;
+const DRAWER_STYLES = ['outer', 'inner'] as const;
+
+/**
+ * אובייקט עם שדות, ולא רק "משהו".
+ *
+ * `zones: "oops"` עבר את הבדיקה ונכנס לספרייה, ואז הפיל את המסך
+ * ב-`zones.filter is not a function`. מחרוזת אינה רשימה, ורשימה של
+ * מחרוזות אינה רשימה של אזורים — וזה נבדק כאן, לא שם.
+ */
+const shape =
+  (need: Record<string, Check>, may: Record<string, Check> = {}): Check =>
+  (v) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+    const r = v as Record<string, unknown>;
+    if (!Object.entries(need).every(([f, ok]) => ok(r[f]))) return false;
+    return Object.entries(may).every(([f, ok]) => r[f] === undefined || ok(r[f]));
+  };
+
+/** התוכן של אזור — ושל כל עמודה בתוכו */
+const CONTENT: Record<string, Check> = {
+  shelves: count,
+  glassShelves: bool,
+  shelfGapsMm: listOf(mm),
+  drawers: count,
+  drawerCols: count,
+  drawerStyle: oneOf(...DRAWER_STYLES),
+};
+
+const zoneCheck: Check = shape(
+  { id: str, heightMm: mm, kind: oneOf(...ZONE_KINDS) },
+  {
+    ...CONTENT,
+    fixedHeight: bool,
+    depthMm: mm,
+    ownFront: bool,
+    columns: listOf(shape({ id: str, widthShare: num, kind: oneOf(...ZONE_KINDS) }, CONTENT)),
+  },
+);
+
+/**
+ * חלק בקבוצה — ובתוכו ארגז שלם.
+ *
+ * הוא אינו נבדק לעומק כארגז מונח: אין לו זהות ואין לו קיר, והשדות
+ * שלו הם השדות שמעתיקים. מה שכן נבדק הוא שיש שם אובייקט ומידות
+ * שאפשר לצייר לפיהן — `parts: "oops"` נכנס עד כה בדיוק כמו `zones`.
+ */
+const partCheck: Check = shape(
+  { dxMm: num, dyMm: num, unit: shape({}, { glyph: str, widthMm: size, heightMm: size, depthMm: size }) },
+);
 
 /** לכל שורה מזהה ותאריכי מעקב. טבלת ההגדרות היא היוצאת מן הכלל. */
 const ENTITY: Record<string, Check> = { id: str, createdAt: time, updatedAt: time };
@@ -92,6 +143,10 @@ export const SCHEMA: Record<string, TableSpec> = {
       edgeConsumerPerM: num,
     },
   },
+  rooms: {
+    need: { ...ENTITY, label: str, groups: listOf(str), sortOrder: order },
+    may: { hint: str, icon: str, isBuiltin: bool, hiddenAt: time },
+  },
   catalog: {
     /*
      * `rooms` הוא בדיוק השדה שהפיל את המסך: הספרייה מסננת לפיו,
@@ -115,20 +170,35 @@ export const SCHEMA: Record<string, TableSpec> = {
       code: str,
       group: str,
       island: bool,
-      /* פרזול שנשמר עם הפריט — שם וכמות הם המינימום שניתן להזמין לפיו */
+      /* פנים הארון: מה שהקוד קורא בכל ציור ובכל רשימת חיתוך */
+      zones: listOf(zoneCheck),
+      parts: listOf(partCheck),
+      /*
+       * פרזול שנשמר עם הפריט — שם וכמות הם המינימום שניתן להזמין
+       * לפיו, והמחירים חייבים להיות מספרים: מחיר שהוא מחרוזת נכנס
+       * לחשבון ויוצא ממנו `NaN`, וההצעה כולה מפסיקה להיות מספר.
+       */
       hardware: listOf(
-        (h) =>
-          !!h &&
-          typeof h === 'object' &&
-          str((h as { name?: unknown }).name) &&
-          num((h as { qty?: unknown }).qty),
+        shape(
+          { name: str, qty: num },
+          {
+            id: str,
+            specId: str,
+            supplier: str,
+            model: str,
+            unit: str,
+            note: str,
+            replaces: str,
+            factoryPrice: num,
+            consumerPrice: num,
+          },
+        ),
       ),
       doors: count,
       drawers: count,
       shelves: count,
       socleMm: mm,
       counterMm: mm,
-      hiddenAt: time,
       note: str,
       carcassFinishId: str,
       frontFinishId: str,
@@ -154,10 +224,15 @@ export const SCHEMA: Record<string, TableSpec> = {
  * כאן — הוא של הנגרייה המקבלת — ולכן נבדק מה שאינו תלוי בו.
  */
 function related(row: Record<string, unknown>): string | null {
-  const h = row.defaultHeightMm as number;
-  const socle = (row.socleMm as number) ?? 0;
-  if (socle >= h) return `הרגליים (${socle} מ״מ) גבוהות מהארגז כולו (${h} מ״מ)`;
-  return null;
+  /*
+   * אותו כלל של שער השמירה, בעובי התקן.
+   *
+   * העובי האמיתי הוא של הנגרייה המקבלת ואינו ידוע בקובץ, ולכן
+   * נבדק כאן מה שנופל אפילו בלוח הדק שבתקן: ארגז בגובה 110 מ״מ עם
+   * רגליים של 100 עבר עד כה את הקובץ, ואז נפסל בשער השמירה —
+   * כלומר נכנס לספרייה ולא היה ניתן להנחה.
+   */
+  return checkItem(row as unknown as CatalogItem);
 }
 
 /** תיאור של שורה אחת, כדי שההודעה תצביע על מה שנפל ולא על "משהו". */
@@ -287,6 +362,7 @@ export function packFingerprint(pack: {
   catalog: CatalogItem[];
   materials: Material[];
   finishes: Finish[];
+  rooms?: Room[];
 }): string {
   const by = <T extends { id: string }>(rows: T[]) => [...rows].sort((x, y) => (x.id < y.id ? -1 : 1));
   return fingerprint(
@@ -294,6 +370,8 @@ export function packFingerprint(pack: {
       catalog: by(pack.catalog),
       materials: by(pack.materials),
       finishes: by(pack.finishes),
+      /* חדרים נוספו בפורמט 5; חבילה בלעדיהם נותנת את אותה חתימה */
+      ...(pack.rooms?.length ? { rooms: by(pack.rooms) } : {}),
     }),
   );
 }

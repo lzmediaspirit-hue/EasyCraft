@@ -1,7 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 
 import { fillCodes, type CodeRow } from '../catalog/codes';
-import { glyphDef } from '../catalog/glyphList';
 import type {
   Attachment,
   CatalogItem,
@@ -22,6 +21,7 @@ import type {
   Workshop,
 } from './types';
 import { LOCAL_WORKSHOP } from './workshop';
+import { panelSize } from './legacy';
 
 /**
  * בסיס הנתונים המקומי (IndexedDB).
@@ -641,13 +641,8 @@ db.version(24)
       for (const row of rows) {
         const th = row.panelThicknessMm;
         if (th === undefined) continue;
-        const flat = glyphDef(row.glyph).noCarcass;
-        const size =
-          flat === 'horizontal'
-            ? { [table === 'catalog' ? 'defaultHeightMm' : 'heightMm']: th }
-            : flat === 'vertical'
-              ? { [table === 'catalog' ? 'defaultDepthMm' : 'depthMm']: th }
-              : {};
+        /* אותה המרה שרצה על קובץ מיובא — ראה `db/legacy` */
+        const size = panelSize(row.glyph, th, table === 'catalog' ? 'item' : 'unit');
         await tx.table(table).update(row.id, { ...size, panelThicknessMm: undefined });
       }
     }
@@ -756,3 +751,35 @@ db.version(27)
         });
     }
   });
+
+
+/*
+ * זהות מקור לשורות שהגיעו מחבילה.
+ *
+ * ייבוא של אותו ארגז לשתי נגריות דרס את השורה של הראשונה, כי המפתח
+ * גלובלי והכתיבה נשאה את המזהה המקורי. מי שמייבא מקבל מעכשיו עותק
+ * משלו, והמזהה שממנו הוא בא נשמר ב-`sourceId` — כדי שייבוא חוזר
+ * יעדכן את אותו עותק ולא ייצור שלישי.
+ */
+const TABLES_V28 = {
+  ...TABLES_V27,
+  catalog: 'id, workshopId, sourceId, group, sortOrder',
+  materials: 'id, workshopId, sourceId, sortOrder',
+  finishes: 'id, workshopId, sourceId, sortOrder',
+} as const;
+
+db.version(28).stores(TABLES_V28);
+
+/*
+ * גם החדר נוסע בחבילה.
+ *
+ * ארגז מצביע על חדרים, ולכן החבילה נושאת מעכשיו גם את הגדרות
+ * החדרים — וכל שורה שנוסעת צריכה את אותה זהות מקור. בלי האינדקס
+ * הזה הייבוא נפל על `SchemaError` ברגע שהחבילה כללה חדר.
+ */
+const TABLES_V29 = {
+  ...TABLES_V28,
+  rooms: 'id, workshopId, sourceId, sortOrder',
+} as const;
+
+db.version(29).stores(TABLES_V29);

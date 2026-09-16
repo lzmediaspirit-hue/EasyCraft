@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 106 — מק״ט לכל ארגז, קטגוריות, ומועדפים ב"ספרייה שלי" */
 import { chromium } from 'playwright';
 const SP = new URL('shots/', import.meta.url).pathname;

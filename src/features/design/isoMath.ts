@@ -1,6 +1,7 @@
 import { shade } from '../../ui/color';
 import { clamp } from '../../ui/units';
 import type { PlanWall } from './plan';
+import { rad } from './placement';
 
 /**
  * הגיאומטריה של המבט התלת־ממדי.
@@ -50,9 +51,9 @@ export const ORBIT_SLOP = 6;
  * נשארות נכונות — זו עדיין הטלה מקבילה ולא פרספקטיבה.
  */
 export function projector(view: IsoView) {
-  const rad = (view.yawDeg * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
+  const yaw = rad(view.yawDeg);
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
   const project = (x: number, y: number, z: number): [number, number] => {
     const rx = x * cos - z * sin;
     const rz = x * sin + z * cos;
@@ -564,8 +565,8 @@ export function roomFloor(plan: PlanWall[]): { x: number; y: number }[] {
   if (!plan.length) return [];
   const pts = [plan[0].start, ...plan.map((p) => p.end)];
   if (plan.length === 1) {
-    const rad = (plan[0].headingDeg * Math.PI) / 180;
-    const n = { x: -Math.sin(rad) * LONE_ROOM_MM, y: Math.cos(rad) * LONE_ROOM_MM };
+    const a = rad(plan[0].headingDeg);
+    const n = { x: -Math.sin(a) * LONE_ROOM_MM, y: Math.cos(a) * LONE_ROOM_MM };
     return [pts[0], pts[1], { x: pts[1].x + n.x, y: pts[1].y + n.y }, { x: pts[0].x + n.x, y: pts[0].y + n.y }];
   }
   if (plan.length === 2) {

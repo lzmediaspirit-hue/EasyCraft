@@ -8,8 +8,10 @@ import { Sheet } from '../../ui/Sheet';
 import { NumField, PrimaryButton } from '../../ui/Field';
 import { BoxForm, type BoxSpec } from '../../ui/BoxForm';
 import { cm } from '../../ui/units';
+import { checkUnit, convertZones } from '../../catalog/saveGate';
 import { alongWallMm } from '../../db/types';
-import type { PlacedUnit } from '../../db/types';
+import type { PartSettings } from '../../costing/boards';
+import type { PlacedUnit, Project } from '../../db/types';
 
 /**
  * עריכה מהירה של ארגז שכבר מונח על הקיר.
@@ -19,11 +21,21 @@ import type { PlacedUnit } from '../../db/types';
 export function UnitEditSheet({
   unit,
   wallLengthMm,
+  parts,
+  project,
   onClose,
 }: {
   unit: PlacedUnit;
   /** אורך הקיר — הגבול של המיקום המספרי */
   wallLengthMm?: number;
+  /**
+   * ההגדרות והפרויקט — מהם נגזר עובי הלוח בפועל.
+   *
+   * בלעדיהם הבדיקה רצה על עובי התקן בזמן שהארגז נחתך מעובי אחר,
+   * וזו בדיוק הבדיקה שמאשרת מה שאי אפשר לבנות.
+   */
+  parts?: PartSettings;
+  project?: Project;
   onClose: () => void;
 }) {
   /*
@@ -57,7 +69,27 @@ export function UnitEditSheet({
     counterMm: unit.counterMm ?? 0,
   });
 
-  const canSave = spec.name.trim().length > 0 && spec.widthMm > 0 && spec.heightMm > 0;
+  /*
+   * מה שאי אפשר לבנות אינו נשמר — גם כאן.
+   *
+   * הבדיקה הזאת ישבה בעריכה המתקדמת בלבד, ומסך העריכה המהיר כתב
+   * מסביבה: גובה 50 מ״מ עם רגליים של 100 נשמר בשקט, ורשימת החיתוך
+   * שיצאה ממנו הכילה דפנות בגובה אפס. אותו שער, אותו עובי חומר.
+   */
+  const build = { parts, project };
+  const problem = checkUnit({ ...unit, ...spec }, build);
+
+  /*
+   * החלפת סוג המוצר נוגעת גם בפנים הארון.
+   *
+   * "שלוש מגירות" שהוחלף ל"דלתות" עדכן את האיור והשאיר את האזורים
+   * מגירות: הארון המשיך להיחתך כמגירות והטופס הראה דלתות. ההמרה
+   * מפורשת, והמשפט נאמר לפני השמירה ולא מתגלה אחריה.
+   */
+  const conversion = convertZones(unit, spec.glyph);
+
+  const canSave =
+    spec.name.trim().length > 0 && spec.widthMm > 0 && spec.heightMm > 0 && !problem;
 
   /*
    * הגבול של המיקום המספרי — לפי המידות שנערכות עכשיו.
@@ -75,7 +107,7 @@ export function UnitEditSheet({
   const composed = !drawersAreSimple(unit);
 
   async function save() {
-    if (outOfWall) return;
+    if (outOfWall || problem) return;
     const caps = glyphDef(spec.glyph);
     /*
      * שינוי מספר השורות חייב להגיע גם אל האזור עצמו.
@@ -83,8 +115,11 @@ export function UnitEditSheet({
      * האזורים גוברים על השדה הישן, ולכן כתיבה לשדה בלבד דיווחה
      * על שינוי שלא קרה: הטופס הראה שש, והארון נשאר שלוש.
      */
-    const zones =
-      caps.drawers && !composed ? zonesWithDrawerRows(unit, spec.drawers) : undefined;
+    const zones = conversion.zones
+      ? conversion.zones
+      : caps.drawers && !composed
+        ? zonesWithDrawerRows(unit, spec.drawers)
+        : undefined;
     /*
      * צעד אחד לביטול.
      *
@@ -151,6 +186,16 @@ export function UnitEditSheet({
           <NumField label="ציר X — לרוחב החדר" value={freeX} onChange={setFreeX} />
           <NumField label="ציר Z — לעומק החדר" value={freeZ} onChange={setFreeZ} />
         </div>
+      )}
+      {problem && (
+        <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs leading-snug text-red-900">
+          {problem}
+        </p>
+      )}
+      {!problem && conversion.note && (
+        <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900">
+          {conversion.note}
+        </p>
       )}
       {outOfWall && maxX !== null && (
         <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs leading-snug text-red-900">

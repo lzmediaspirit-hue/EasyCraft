@@ -16,4 +16,5 @@ export type SheetName =
   | 'present'
   | 'wallTools'
   | 'bulk'
-  | 'finishes';
+  | 'finishes'
+  | 'warnings';

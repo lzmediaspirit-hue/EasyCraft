@@ -28,6 +28,7 @@ import type {
   PartRole,
   PlacedUnit,
   Project,
+  WallSide,
 } from '../../db/types';
 
 const DOOR_COUNTS = [0, 1, 2, 3, 4, 5, 6];
@@ -45,6 +46,12 @@ const LED_SPOTS: { key: LedSpot; label: string }[] = [
   { key: 'top', label: 'עליון' },
   { key: 'bottom', label: 'תחתון' },
   { key: 'shelf', label: 'מתחת למדף' },
+];
+
+/** לאיזה צד תלויה דלת יחידה. */
+const HINGE_SIDES: { key: WallSide; label: string }[] = [
+  { key: 'start', label: 'ימין' },
+  { key: 'end', label: 'שמאל' },
 ];
 
 const OPENINGS: { key: OpeningMech; label: string }[] = [
@@ -568,6 +575,26 @@ export function UnitEditor({
                     ))}
                   </Row>
 
+                  {/*
+                    צד הצירים. דלת אחת נפתחת לצד אחד, ורק הוא קובע
+                    אם ארון או קיר עומדים בדרכה — לשתי דלתות אין
+                    שאלה. בלי הנתון הזה הבדיקה מדווחת שהוא חסר,
+                    במקום לנחש.
+                  */}
+                  {(unit.doors ?? 0) === 1 && (unit.opening ?? 'hinge') === 'hinge' && (
+                    <Row label="צירים בצד" hint="הדלת נפתחת אל הצד השני">
+                      {HINGE_SIDES.map((h) => (
+                        <Pill
+                          key={h.key}
+                          active={unit.hingeSide === h.key}
+                          onClick={() => onChange({ hingeSide: h.key })}
+                        >
+                          {h.label}
+                        </Pill>
+                      ))}
+                    </Row>
+                  )}
+
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <button
                       onClick={() => onChange({ glassDoors: !unit.glassDoors })}
@@ -739,11 +766,28 @@ export function UnitEditor({
         היו פתוחות גם לו, והתשובות עליהן לא הגיעו לשום מקום.
       */}
       {caps.standalone && (
-        <p className="mt-4 rounded-xl bg-stone-50 px-3 py-2.5 text-xs leading-snug text-stone-500">
-          {glyphDef(unit.glyph).label} הוא מכשיר שנקנה שלם — הוא אינו נחתך
-          מפלטות ואין לו גב, מדפים או קושרות. מה שנקבע לו הוא המידה
-          והמקום.
-        </p>
+        <>
+          <p className="mt-4 rounded-xl bg-stone-50 px-3 py-2.5 text-xs leading-snug text-stone-500">
+            {glyphDef(unit.glyph).label} הוא מכשיר שנקנה שלם — הוא אינו נחתך
+            מפלטות ואין לו גב, מדפים או קושרות. מה שנקבע לו הוא המידה
+            והמקום.
+          </p>
+
+          {/*
+            מרווח הפתיחה, מדף המוצר של היצרן.
+            דלת תנור נופלת קדימה, דלת מקרר מסתובבת ומדיח נפתח
+            כלפי מטה — שלושה מספרים שונים שרק היצרן יודע. בלי
+            המספר הזה הבדיקה אומרת שהוא חסר; היא אינה ממציאה אותו.
+          */}
+          <Row label="מרווח פתיחה" hint="לפי היצרן — כמה הדלת יוצאת קדימה">
+            <MeasureInput
+              value={unit.openClearanceMm ?? 0}
+              onChange={(mm) => onChange({ openClearanceMm: mm > 0 ? mm : undefined })}
+              ariaLabel="מרווח הפתיחה של המכשיר"
+              className="num w-24 rounded-lg bg-stone-100 px-2 py-1.5 text-center text-sm font-medium text-stone-900 focus:bg-white focus:ring-1 focus:ring-oak-400 focus:outline-none"
+            />
+          </Row>
+        </>
       )}
 
       {/*
@@ -766,6 +810,26 @@ export function UnitEditor({
 
       {advanced && !caps.standalone && (
         <>
+          {/*
+            מרחק מהקיר — תנועה בניצב לו, בלי להפוך לאי.
+
+            ארגז צמוד קיר לא יכול היה לזוז בכיוון הזה כלל: הדרך
+            היחידה להרחיק אותו הייתה להפוך אותו לאי, וזה שינוי
+            אחר לגמרי — הוא מאבד את הקיר שהוא נמדד לפיו ואת מקומו
+            בשורה. כאן הוא נשאר על הקיר ורק עומד רחוק ממנו: צנרת,
+            טיח לא ישר, או פאנל שמאחוריו.
+          */}
+          {!unit.free && (
+            <Row label="מרחק מהקיר" hint="ריק = צמוד">
+              <MeasureInput
+                value={unit.offWallMm ?? 0}
+                onChange={(mm) => onChange({ offWallMm: mm > 0 ? mm : undefined })}
+                ariaLabel="מרחק הארגז מהקיר"
+                className="num w-24 rounded-lg bg-stone-100 px-2 py-1.5 text-center text-sm font-medium text-stone-900 focus:bg-white focus:ring-1 focus:ring-oak-400 focus:outline-none"
+              />
+            </Row>
+          )}
+
           <Row label="פס לד">
             {LED_SPOTS.map((s) => (
               <Pill key={s.key} active={led.includes(s.key)} onClick={() => toggleLed(s.key)}>
@@ -791,27 +855,37 @@ export function UnitEditor({
             ))}
           </Row>
 
+          {/*
+            קושרות במקום לוח: שתי רצועות של 10 ס"מ שמחזיקות את הארון
+            מרובע. זה מה שנגר בונה כשאין מה לכסות — ומה שיורד כאן
+            יורד גם מהפלטה ומהמחיר.
+
+            קושרת תקרה אינה תלויה בגב. בחירת "בלי גב" הסתירה גם
+            אותה, ולכן ארון בלי גב לא יכול היה לקבל קושרת תקרה
+            בכלל — והיא אף נעלמה מהמסך כשהיא כבר הייתה פעילה. הגב
+            מסתיר רק את קושרת הגב, שהיא אכן חלק ממנו.
+          */}
+          <Row label="קושרות" hint={`רצועות ${cm(RAIL_WIDTH_MM)} ${unitLabel()} במקום לוח`}>
+            <Pill
+              active={!!rails.top}
+              /* תקרה שבוטלה אינה יכולה לשאת קושרת — אין מה להחליף */
+              disabled={!!unit.omit?.top}
+              onClick={() => onChange({ rails: { ...rails, top: !rails.top } })}
+            >
+              תקרה
+            </Pill>
+            {backKind !== 'none' && (
+              <Pill
+                active={!!rails.back}
+                onClick={() => onChange({ rails: { ...rails, back: !rails.back } })}
+              >
+                גב
+              </Pill>
+            )}
+          </Row>
+
           {backKind !== 'none' && (
             <>
-              {/*
-                קושרות במקום לוח: שתי רצועות של 10 ס"מ שמחזיקות את
-                הארון מרובע. זה מה שנגר בונה כשאין מה לכסות — ומה
-                שיורד כאן יורד גם מהפלטה ומהמחיר.
-              */}
-              <Row label="קושרות" hint={`רצועות ${cm(RAIL_WIDTH_MM)} ${unitLabel()} במקום לוח`}>
-                <Pill
-                  active={!!rails.top}
-                  onClick={() => onChange({ rails: { ...rails, top: !rails.top } })}
-                >
-                  תקרה
-                </Pill>
-                <Pill
-                  active={!!rails.back}
-                  onClick={() => onChange({ rails: { ...rails, back: !rails.back } })}
-                >
-                  גב
-                </Pill>
-              </Row>
 
               {/*
                 גובה הגב, כשהוא אינו מכסה את כל הגוף. ריק = הגב
@@ -965,7 +1039,11 @@ export function UnitEditor({
     {addingFinish && <FinishSheet finish={null} onClose={() => setAddingFinish(false)} />}
 
     {savingToLibrary && (
-      <SaveToLibrarySheet unit={unit} onClose={() => setSavingToLibrary(false)} />
+      <SaveToLibrarySheet
+        unit={unit}
+        projectRoom={project?.roomKind}
+        onClose={() => setSavingToLibrary(false)}
+      />
     )}
     </>
   );

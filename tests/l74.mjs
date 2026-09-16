@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 23: נעילת החדר, ביטול גרירת הלוח, צד זכוכית לוויטרינה, אייקון הסיבוב */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';

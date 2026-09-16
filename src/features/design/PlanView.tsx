@@ -6,6 +6,7 @@ import { MeasureInput } from '../../ui/MeasureInput';
 import { selectOnFocus } from '../../ui/Field';
 import { PlusIcon, TrashIcon } from '../../ui/icons';
 import type { PlacedUnit, Wall } from '../../db/types';
+import { rad } from './placement';
 
 /**
  * מבט על של החדר.
@@ -55,9 +56,9 @@ export function PlanView({
           {plan.map((p) => {
             const active = p.wall.id === activeWallId;
             // הרצועה מצוירת בצד אחד של הקיר, בעובי הארונות שעליו
-            const rad = (p.headingDeg * Math.PI) / 180;
-            const nx = -Math.sin(rad);
-            const ny = Math.cos(rad);
+            const a = rad(p.headingDeg);
+            const nx = -Math.sin(a);
+            const ny = Math.cos(a);
             const d = p.depthMm;
             return (
               <g key={p.wall.id} onClick={() => onSelectWall(p.wall.id)} className="cursor-pointer">

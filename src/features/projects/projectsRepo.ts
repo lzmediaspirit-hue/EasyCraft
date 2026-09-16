@@ -13,7 +13,8 @@ import {
 } from '../../db/rows';
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
-import { projectCosting, type ProjectCosting } from '../../costing/boards';
+import { partsOf, projectCosting, type ProjectCosting } from '../../costing/boards';
+import { BuildError, checkUnit } from '../../catalog/saveGate';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { releaseConsumption } from '../../materials/consumptionRepo';
 import { reusableSpec } from '../../db/types';
@@ -314,6 +315,32 @@ export const wallsRepo = {
   },
 };
 
+/**
+ * כמה אי משוכפל נדחף הצידה.
+ *
+ * רוחב הארגז ועוד מרווח אצבע: מספיק כדי ששני הגופים לא ייגעו, וקרוב
+ * מספיק כדי שברור שזה העותק של מה שעמד כאן. הכיוון הוא ציר X של
+ * החדר — כיוון אחד וקבוע עדיף על ניחוש שתלוי בזווית המבט.
+ */
+const ISLAND_GAP_MM = 100;
+
+function islandStepMm(u: { widthMm: number }): number {
+  return u.widthMm + ISLAND_GAP_MM;
+}
+
+/** השדות שמשנים את מה שאפשר לבנות — ורק הם מפעילים את השער */
+const BUILD_FIELDS = ['glyph', 'heightMm', 'widthMm', 'depthMm', 'socleMm'] as const;
+
+/** ההגדרות והפרויקט שמהם נגזר עובי הלוח בפועל */
+async function buildContext(projectId: string) {
+  const [settings, materials, project] = await Promise.all([
+    settingsRepo.get(),
+    materialsRepo.list(),
+    projectsRepo.get(projectId),
+  ]);
+  return { parts: partsOf(settings, materials), project };
+}
+
 export const unitsRepo = {
   /** כל הארגזים של הנגרייה, בכל הפרויקטים — לסיכומים חוצי־פרויקט. */
   async all(): Promise<PlacedUnit[]> {
@@ -404,8 +431,16 @@ export const unitsRepo = {
       catalogItemId: item.id,
       name: item.name,
       glyph: item.glyph,
-      // תיבת המגירה היא דרך העבודה של הנגרייה, ולא מאפיין של הפריט
-      drawerBox: defaults.drawerBox,
+      /*
+       * תיבת המגירה שהתבנית נשמרה איתה, ואם אין — דרך העבודה
+       * של הנגרייה.
+       *
+       * הכלל היה הפוך: ברירת המחדל דרסה את מה שנשמר, ולכן ארגז
+       * שנבנה במכוון עם תיבת עץ חזר מהספרייה עם תיבת ברזל. מי
+       * שטרח לשמור תבנית מצפה לקבל אותה כפי ששמר; ברירת המחדל
+       * היא תשובה לשאלה שלא נענתה, לא דריסה של תשובה שכן.
+       */
+      drawerBox: item.drawerBox ?? defaults.drawerBox,
       // הגב שהפריט הגיע איתו, ואם אין — דרך העבודה של הנגרייה
       backKind: item.backKind ?? defaults.backKind,
       level: item.level,
@@ -463,7 +498,7 @@ export const unitsRepo = {
      * ההצעה מדברת בתפקידים, והספרייה היא של הנגרייה: כל תפקיד
      * מתורגם לארגז שקיים כאן בפועל, ולא למפתח של ארגזי התקן.
      */
-    const items = (await allMine(db.catalog)).filter((i) => !i.hiddenAt);
+    const items = await allMine(db.catalog);
     const chosen = new Map<string, CatalogItem>();
     for (const p of placements) {
       const item = matchCatalog(p.catalogKey, items, p.widthMm);
@@ -488,7 +523,22 @@ export const unitsRepo = {
     return { ok: true };
   },
 
+  /**
+   * שינוי ארגז — הגבול האחרון.
+   *
+   * המסכים בודקים לפני ואומרים למה; כאן נבדק שוב, כי שער שנאכף
+   * במסך אחד נעקף במסך הבא. הבדיקה רצה רק כשהשינוי נוגע במידה או
+   * בסוג — גרירה אינה משנה מה אפשר לבנות, ואין סיבה לקרוא הגדרות
+   * בכל תזוזה.
+   */
   async update(id: string, patch: Partial<Omit<PlacedUnit, 'id'>>): Promise<void> {
+    if (BUILD_FIELDS.some((f) => f in patch)) {
+      const unit = await db.units.get(id);
+      if (unit && mine(unit)) {
+        const why = checkUnit({ ...unit, ...patch }, await buildContext(unit.projectId));
+        if (why) throw new BuildError(why);
+      }
+    }
     await patchRow(db.units, id, patch);
   },
 
@@ -508,12 +558,30 @@ export const unitsRepo = {
   async restoreProject(projectId: string, units: PlacedUnit[]): Promise<void> {
     await db.transaction('rw', db.units, db.tombstones, async () => {
       const keep = new Set(units.map((u) => u.id));
-      const now = await db.units.where('projectId').equals(projectId).toArray();
+      const live = await db.units.where('projectId').equals(projectId).toArray();
       await eraseRows(
         db.units,
-        now.filter((u) => !keep.has(u.id)),
+        live.filter((u) => !keep.has(u.id)),
       );
-      if (units.length) await db.units.bulkPut(units);
+      /*
+       * "בטל" הוא כתיבה חדשה, לא שחזור של מה שהיה.
+       *
+       * התצלום הוחזר כפי שהוא, כולל מספר הגרסה שלו — ולכן ארגז
+       * שהיה בגרסה 2 חזר לגרסה 1, והסנכרון הבא היה רואה כתיבה
+       * שמכריזה על עצמה ישנה יותר ממה שכבר יש בצד השני. המידות
+       * חוזרות אחורה; המונה ממשיך קדימה.
+       */
+      const was = new Map(live.map((u) => [u.id, u.rev ?? 0]));
+      const at = Date.now();
+      if (units.length) {
+        await db.units.bulkPut(
+          units.map((u) => ({
+            ...u,
+            rev: Math.max(was.get(u.id) ?? 0, u.rev ?? 0) + 1,
+            updatedAt: at,
+          })),
+        );
+      }
       await revive(
         'units',
         units.map((u) => u.id),
@@ -539,6 +607,17 @@ export const unitsRepo = {
       ...rest,
       id: crypto.randomUUID(),
       xMm,
+      /*
+       * אי משוכפל אינו יכול לנחות על עצמו.
+       *
+       * `xMm` הוא המיקום על הקיר, ולאי אין קיר — ולכן העותק קיבל
+       * מיקום חדש בשדה שאינו בשימוש, ואת אותו מקום ברצפה בשדה שכן.
+       * שני גופים עמדו בדיוק זה בתוך זה: מנוע ההתנגשות ידע לומר
+       * את זה, ואיש לא שאל אותו. העותק נדחף לצד לאורך הרוחב שלו.
+       */
+      ...(source.free
+        ? { free: { ...source.free, xMm: source.free.xMm + islandStepMm(source) } }
+        : {}),
       ...owned(),
       createdAt: now,
       updatedAt: now,

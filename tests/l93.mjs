@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** משימה 93: עריכה מתקדמת — פס לד, גב וקושרות. */
 import { chromium } from 'playwright';
 import { setup, addNamed } from './mk.mjs';

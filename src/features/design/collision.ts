@@ -93,7 +93,7 @@ function hitsFeature(unit: PlacedUnit, at: UnitBox, plan: PlanWall[]): boolean {
        * ובין אם הוא עומד ברצפה מולו.
        */
       const depth = featureBlockMm(f);
-      if (depth > 0 && overlaps(at, featureBox(f, p, depth))) return true;
+      if (depth > 0 && boxesMeet(at, featureBox(f, p, depth))) return true;
     }
   }
   return false;
@@ -121,7 +121,7 @@ function featureBlockMm(f: Parameters<typeof featureBiteMm>[0]): number {
  * עמודה. מול סימון על הקיר ההיתר הזה אינו נכון, ולכן כאן נשאלת
  * השאלה הפיזית בלבד: האם שני הגופים נפגשים.
  */
-function overlaps(a: UnitBox, b: UnitBox): boolean {
+export function boxesMeet(a: UnitBox, b: UnitBox): boolean {
   if (a.y + a.h <= b.y + TOUCH || b.y + b.h <= a.y + TOUCH) return false;
   return floorsMeet(a, b);
 }

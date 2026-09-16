@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** משימה 82: תכנון אוטומטי מקצה לקצה — שאלות, הצעות, הנחה בהדמיה. */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';

@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 99 — ממצאי הביקורת מול בסיס נתונים אמיתי: מלאי, ביטול, ספרייה, הרשאות */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

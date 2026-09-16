@@ -27,6 +27,7 @@ import {
   UndoIcon,
   ToolsIcon,
   WallsIcon,
+  WarnIcon,
 } from '../../ui/icons';
 import { QuickCalcButton } from '../../ui/QuickCalc';
 import { ScreenHeader } from '../../ui/ScreenHeader';
@@ -64,6 +65,8 @@ export function DesignToolbar({
   onCenter,
   onFit,
   onClearSelection,
+  warnCount,
+  warnTone,
   onShowHidden,
 }: {
   project: Project;
@@ -87,6 +90,9 @@ export function DesignToolbar({
   /** מחזיר את המבט התלת־ממדי לזווית ההתחלתית */
   onFit: () => void;
   onClearSelection: () => void;
+  /** כמה בעיות יש בחדר, ומה החמורה שבהן — לאייקון הבדיקה */
+  warnCount: number;
+  warnTone: string | null;
   /** מחזיר לתצוגה את כל הארגזים שהוסתרו בפרויקט */
   onShowHidden: () => void;
 }) {
@@ -131,6 +137,31 @@ export function DesignToolbar({
               className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-oak-700 disabled:opacity-40"
             >
               <EyeIcon />
+            </button>
+          )}
+          {/*
+            הבדיקה — כאן, ולא בלוח הנתונים.
+
+            היא ישבה מתחת למחוונים, ולכן נעלמה ברגע שנבחר ארגז:
+            בדיוק כשהמשתמש עורך את מה שיצר את הבעיה. אייקון בכותרת
+            נשאר על המסך תמיד, נושא את המספר ואת צבע החומרה, ואינו
+            תלוי בתפקיד — תכנת ונגר רואים אותו כמו המנהל.
+          */}
+          {warnCount > 0 && (
+            <button
+              onClick={() => onSheet('warnings')}
+              aria-label={`בדיקת התכנון — ${warnCount} ממצאים`}
+              title="מה לא ייבנה ומה לא ייפתח"
+              className="relative rounded-full p-2 text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-stone-800"
+            >
+              <WarnIcon />
+              <span
+                className={`num absolute top-0.5 end-0.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold text-white ${
+                  warnTone ?? 'bg-stone-400'
+                }`}
+              >
+                {warnCount}
+              </span>
             </button>
           )}
           {/* סרגלי הכלים — שלוש שורות שאפשר לקפל כשלא עובדים */}

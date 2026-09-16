@@ -24,6 +24,17 @@ export function mine<T extends { workshopId?: string }>(row: T): boolean {
   return row.workshopId === workshopId();
 }
 
+/**
+ * האם מותר לכתוב על השורה הזאת.
+ *
+ * כמו `mine`, ובנוסף שורה בלי בעלות בכלל — שורה שנוצרה לפני שהיה
+ * שדה כזה ולא עברה את המעבר. היא של מי שמחזיק בה, ואין מי שתיגזל
+ * ממנו.
+ */
+function writable<T extends { workshopId?: string }>(row: T): boolean {
+  return row.workshopId === undefined || row.workshopId === workshopId();
+}
+
 /** מסנן רשימה לנגרייה הפעילה. */
 export function onlyMine<T extends { workshopId?: string }>(rows: T[]): T[] {
   return rows.filter(mine);
@@ -46,16 +57,39 @@ export function allMine<T, I>(table: Table<T, string, I>): Promise<T[]> {
  * כתיבה היו שתי פעולות, ושתי כתיבות בו-זמנית היו מקבלות את אותו
  * מספר.
  */
-export async function patchRow<T extends { id: string; rev: number; updatedAt: number }, I>(
-  table: Table<T, string, I>,
-  id: string,
-  changes: Partial<T>,
-): Promise<void> {
+export async function patchRow<
+  T extends { id: string; rev: number; updatedAt: number; workshopId?: string },
+  I,
+>(table: Table<T, string, I>, id: string, changes: Partial<T>): Promise<void> {
+  const owner = workshopId();
   await table
     .where('id')
     .equals(id)
     .modify((row) => {
-      Object.assign(row, changes, { rev: (row.rev ?? 0) + 1, updatedAt: Date.now() });
+      /*
+       * הבעלות נבדקת כאן, בתוך הפעולה עצמה.
+       *
+       * הקריאה הייתה מוגבלת לנגרייה והכתיבה לא: שאילתה על ארגז של
+       * נגרייה אחרת החזירה ריק כמצופה, אבל `update` על אותו מזהה
+       * בדיוק הצליח. גבול שנאכף בקריאה בלבד אינו גבול — הוא הסתרה.
+       *
+       * הבדיקה יושבת בתוך `modify` ולא לפניו כדי שלא יהיה רווח בין
+       * "בדקתי" ל"כתבתי".
+       */
+      if (row.workshopId !== undefined && row.workshopId !== owner) return;
+      Object.assign(row, changes, {
+        /*
+         * זהות ובעלות אינן שדות שמעדכנים בדרך.
+         *
+         * `patch` רגיל שנושא `workshopId` היה מעביר שורה לנגרייה
+         * אחרת בלי שאיש התכוון לכך, ו-`rev` מהקלט היה מאפשר לכתיבה
+         * להכריז על עצמה ישנה יותר ממה שהיא.
+         */
+        id: row.id,
+        workshopId: row.workshopId,
+        rev: (row.rev ?? 0) + 1,
+        updatedAt: Date.now(),
+      });
     });
 }
 
@@ -69,8 +103,10 @@ export async function patchRow<T extends { id: string; rev: number; updatedAt: n
  */
 export async function eraseRows<T extends { id: string; rev?: number; workshopId?: string }, I>(
   table: Table<T, string, I>,
-  rows: T[],
+  all: T[],
 ): Promise<void> {
+  /* אותו גבול, גם למי שמעביר שורות שקרא בעצמו */
+  const rows = all.filter(writable);
   if (!rows.length) return;
   const now = Date.now();
   await db.tombstones.bulkPut(
@@ -92,7 +128,8 @@ export async function eraseIds<T extends { id: string; rev?: number; workshopId?
   ids: string[],
 ): Promise<void> {
   if (!ids.length) return;
-  const rows = (await table.bulkGet(ids)).filter((r): r is T => !!r);
+  /* מחיקה חוצה נגרייה הצליחה כמו עדכון חוצה נגרייה. גם כאן: לא */
+  const rows = (await table.bulkGet(ids)).filter((r): r is T => !!r && writable(r));
   await eraseRows(table, rows);
 }
 

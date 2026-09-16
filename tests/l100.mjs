@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 100 — כסף: מע״מ, יתרה לגבייה, תשלום שהתקבל, ומחירי פרויקט בשכפול */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';

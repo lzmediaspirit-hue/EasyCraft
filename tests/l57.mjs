@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 21 — החדר: רצפה אחת, עובי קיר, וסימוני הקיר בתלת־ממד */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 21 — סיבוב הארגז: שני חצים בתלת־ממד, וציור שיודע לאן הוא פונה */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

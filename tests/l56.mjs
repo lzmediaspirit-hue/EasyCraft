@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 21 — עריכה בתלת־ממד: מתג צפייה/הזזה, גרירה, ומעבר בין קירות */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

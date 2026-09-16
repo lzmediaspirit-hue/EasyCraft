@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 104 — הרשאות ושחרור לייצור: תכנת עם אישור, ייצור לפני מכירה, ושלבים כפולים */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

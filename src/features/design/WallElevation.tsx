@@ -12,9 +12,10 @@ import { stackSnap } from './stacking';
 import { AxisGuide, DragGuide } from './dragGuide';
 import type { Guide } from './dragGuide';
 import { axesFor, longPress, pickAxis } from './axisLock';
+import type { GesturePhase } from './gesture';
 import type { Axis } from './axisLock';
 import { blocked } from './collision';
-import { unitBox, wallShadow } from './placement';
+import { rad, unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
 import { outOfSight } from './designView';
 import { RulerMeasure, RulerTargets, rulerSpan } from './wallRuler';
@@ -50,6 +51,14 @@ type Props = {
   allUnits: PlacedUnit[];
   plan: PlanWall[];
   selectedId: string | null;
+  /**
+   * מה שאזהרה מדברת עליו — ארגזים וסימוני קיר יחד.
+   *
+   * בחירה מסמנת דבר אחד; אזהרה היא יחס בין שניים, ולכן היא
+   * מדליקה את שניהם: מה שנפתח ומה שעומד בדרך. בלי זה הנגר קורא
+   * "דלת הארון לא תיפתח" ומחפש על הציור מי משניהם זה.
+   */
+  flagged?: Set<string>;
   onSelect: (id: string | null) => void;
   /**
    * הזזת ארגז. חסר = תצוגה בלבד, והגרירה אינה מתחילה כלל.
@@ -85,8 +94,11 @@ type Props = {
   project?: Project;
   /** ההגדרות שמהן נגזר עובי הלוח, כדי שהחזית תסומן בעוביה שלה */
   parts?: PartSettings;
-  /** תחילת גרירה וסופה — כדי שתנועה אחת תהיה צעד אחד לביטול */
-  onGesture?: (open: boolean) => void;
+  /**
+   * שלבי המחווה — כדי שתנועה אחת תהיה צעד אחד לביטול, וכדי
+   * שמחווה שבוטלה לא תיכתב בכלל.
+   */
+  onGesture?: (phase: GesturePhase) => void;
   /**
    * ההצמדה פעילה.
    *
@@ -108,6 +120,7 @@ export function WallElevation({
   allUnits,
   plan,
   selectedId,
+  flagged,
   onSelect,
   onMove,
   inside,
@@ -238,7 +251,7 @@ export function WallElevation({
     } catch {
       // אין תפיסה — ה-SVG עדיין מקבל את התנועה
     }
-    onGesture?.(true);
+    onGesture?.('start');
     drag.current = {
       id: unit.id,
       startX: e.clientX,
@@ -300,7 +313,7 @@ export function WallElevation({
      * שאינו אופקי.
      */
     if (d.free && unit.free && here) {
-      const a = (here.headingDeg * Math.PI) / 180;
+      const a = rad(here.headingDeg);
       /* נעילה לגובה: המקום ברצפה הוא בדיוק מה שהיה, עד המ"מ */
       const next =
         axis === 'y'
@@ -415,14 +428,20 @@ export function WallElevation({
     );
   }
 
-  function endDrag(e: React.PointerEvent) {
-    /*
-     * שחרור הגרירה לא נוגע בנעילה לרצפה. מי שכיבה את הנעילה רוצה
-     * לגרור לגובה, וארגז שנח על הרצפה תוך כדי לא אומר שהחליט
-     * להינעל אליה — נעילה חוזרת שם הפכה את המתג לחסר משמעות.
-     */
+  /**
+   * סוף הגרירה — באישור או בביטול.
+   *
+   * שחרור הגרירה לא נוגע בנעילה לרצפה. מי שכיבה את הנעילה רוצה
+   * לגרור לגובה, וארגז שנח על הרצפה תוך כדי לא אומר שהחליט
+   * להינעל אליה — נעילה חוזרת שם הפכה את המתג לחסר משמעות.
+   *
+   * ביטול והרפיה נכנסו עד כה לאותו ענף, ולכן `pointercancel` —
+   * שיחה נכנסת, אצבע שנייה, מחווה של המערכת — שמר את התנועה
+   * שהמשתמש ביטל. שני שמות, שתי תוצאות.
+   */
+  function endDrag(e: React.PointerEvent, phase: 'commit' | 'cancel') {
     if (drag.current) {
-      onGesture?.(false);
+      onGesture?.(phase);
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
       } catch {
@@ -449,9 +468,14 @@ export function WallElevation({
        * לא נתמכת.
        */
       onPointerMove={moveDrag}
-      onPointerUp={endDrag}
-      onPointerLeave={endDrag}
-      onPointerCancel={endDrag}
+      onPointerUp={(e) => endDrag(e, 'commit')}
+      /*
+        יציאה מהציור בזמן שהכפתור לחוץ קורית רק כשלכידת המצביע לא
+        תפסה. המקום האחרון שהוצג הוא מה שנראה, ולכן הוא מה שנשמר.
+      */
+      onPointerLeave={(e) => endDrag(e, 'commit')}
+      /* ביטול של המערכת — שיחה, אצבע שנייה, מחווה של הדפדפן */
+      onPointerCancel={(e) => endDrag(e, 'cancel')}
     >
       <rect x={0} y={0} width={wall.lengthMm} height={wall.heightMm} fill="#faf9f7" />
       <rect
@@ -812,6 +836,36 @@ export function WallElevation({
           </text>
         );
       })}
+
+      {/* מה שהאזהרה מדברת עליו — שני העצמים יחד, מעל הציור */}
+      {flagged && flagged.size > 0 && (
+        <g fill="none" stroke="#f59e0b" strokeWidth={stroke * 3} strokeLinejoin="round">
+          {shown
+            .filter((u) => flagged.has(u.id))
+            .map((u) => (
+              <rect
+                key={`flag-${u.id}`}
+                x={u.xMm}
+                y={flip(u.yMm + u.heightMm)}
+                width={alongWallMm(u)}
+                height={u.heightMm}
+                rx={stroke * 2}
+              />
+            ))}
+          {wall.features
+            .filter((f) => flagged.has(f.id))
+            .map((f) => (
+              <rect
+                key={`flag-${f.id}`}
+                x={f.xMm}
+                y={flip(f.yMm + Math.max(f.heightMm, 90))}
+                width={Math.max(f.widthMm, 90)}
+                height={Math.max(f.heightMm, 90)}
+                rx={stroke * 2}
+              />
+            ))}
+        </g>
+      )}
 
       {/*
         מדידה מוצגת על כל הארגזים בבת אחת: כשמודדים קיר רוצים לראות

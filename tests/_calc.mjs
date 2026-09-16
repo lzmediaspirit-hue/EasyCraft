@@ -1,3 +1,4 @@
+import './_exit.mjs';
 function evaluate(input) {
   const src = input.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
   const tokens = src.match(/\d+\.?\d*|[+\-*/()]/g);

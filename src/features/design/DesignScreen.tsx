@@ -4,9 +4,10 @@ import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { WallElevation } from './WallElevation';
 import { blocked } from './collision';
 import { nudge } from './dragSolve';
+import { partsOf } from '../../costing/boards';
 import { axisLabel } from './axisLock';
 import type { Axis } from './axisLock';
-import { unitBox } from './placement';
+import { rad, unitBox } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
@@ -37,8 +38,18 @@ import { clamp, cm } from '../../ui/units';
 import { ConfirmSheet } from '../../ui/ConfirmSheet';
 import { history, useHistory } from './history';
 import { preview, usePreview, withPreview } from './preview';
+import type { GesturePhase } from './gesture';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
-import { analyzeWall, fillSpan, nextFreeX } from './analysis';
+import {
+  WARN_ORDER,
+  analyzeWall,
+  fillSpan,
+  nextFreeX,
+  openingWarnings,
+  worstLevel,
+} from './analysis';
+import type { WallWarning } from './analysis';
+import { WarningsSheet, warnLevelTone } from './WarningsSheet';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumptionRepo';
@@ -179,13 +190,7 @@ export function DesignScreen({
    * המסך ולא בפלטה.
    */
   const parts = useMemo(
-    () =>
-      settings && {
-        ...settings,
-        thicknessById: Object.fromEntries(
-          (allMaterials ?? []).filter((m) => m.thicknessMm).map((m) => [m.id, m.thicknessMm!]),
-        ),
-      },
+    () => settings && partsOf(settings, allMaterials ?? []),
     [settings, allMaterials],
   );
 
@@ -300,6 +305,23 @@ export function DesignScreen({
     return () => window.removeEventListener('keydown', onKey);
   }, [editable, selected, walls, plan, allUnits]);
 
+  /*
+   * יציאה מהמסך באמצע מחווה היא ביטול.
+   *
+   * התצוגה המקדימה חיה במודול ולא ברכיב, ולכן היא שרדה ניווט: מי
+   * שיצא מהמסך באמצע גרירה השאיר אחריו מפה של תנועות שלא נכתבו,
+   * והן היו נכתבות במחווה הבאה — על ארגזים של פרויקט אחר.
+   */
+  useEffect(
+    () => () => {
+      if (preview.active() || history.inGesture(projectId)) {
+        preview.discard();
+        history.abort(projectId);
+      }
+    },
+    [projectId],
+  );
+
   /* המחוון נעלם מעצמו: הוא אומר מה קרה עכשיו, לא מה קרה פעם */
   useEffect(() => {
     if (!keyAxis) return;
@@ -333,6 +355,29 @@ export function DesignScreen({
   const analysis = useMemo(
     () => (wall ? analyzeWall(wall, units, clashing, neighbourUnits) : null),
     [wall, units, clashing, neighbourUnits],
+  );
+  /*
+   * בדיקת הפתיחה נעשית על החדר ולא על הקיר: דלת החדר יושבת בקיר
+   * אחד והארון שחוסם אותה עומד על השני. קיר בודד לעולם לא היה
+   * רואה את זה.
+   */
+  const warnings = useMemo(
+    () => [
+      ...(analysis?.warnings ?? []),
+      ...openingWarnings(allUnits ?? NO_UNITS, plan),
+    ],
+    [analysis, allUnits, plan],
+  );
+  const worst = worstLevel(warnings);
+  /*
+   * שני העצמים שהאזהרה מדברת עליהם, מודלקים יחד על הציור.
+   * בחירה מסמנת אחד; אזהרה היא יחס בין שניים, ולכן היא מדליקה
+   * את שניהם — מה שנפתח ומה שעומד בדרך.
+   */
+  const [flagged, setFlagged] = useState<WallWarning | null>(null);
+  const flaggedIds = useMemo(
+    () => new Set([...(flagged?.unitIds ?? []), ...(flagged?.featureIds ?? [])]),
+    [flagged],
   );
   /*
    * המקור למחוונים: הקיר שעובדים עליו, או כל הקירות יחד. שניהם
@@ -402,7 +447,7 @@ export function DesignScreen({
     if (!item.island || !wall) return undefined;
     const p = plan.find((q) => q.wall.id === wall.id);
     if (!p) return undefined;
-    const a = (p.headingDeg * Math.PI) / 180;
+    const a = rad(p.headingDeg);
     const dir = { x: Math.cos(a), z: Math.sin(a) };
     const normal = { x: -Math.sin(a), z: Math.cos(a) };
     const along = wall.lengthMm / 2;
@@ -512,9 +557,22 @@ export function DesignScreen({
    * ארגזים, וגם כשהיא נמשכת שתי שניות. הגבול מוכרז כאן ואינו
    * נגזר מקצב האירועים.
    */
-  function gesture(open: boolean) {
+  function gesture(phase: GesturePhase) {
     if (!editable) return;
-    if (open) return void history.begin(projectId, `drag:${Date.now()}`);
+    if (phase === 'start') return void history.begin(projectId, `drag:${Date.now()}`);
+    /*
+     * ביטול אינו סיום.
+     *
+     * `pointercancel` הפעיל עד כה בדיוק את אותו מסלול כמו הרפיה,
+     * ולכן תנועה שהמשתמש ביטל נשמרה — ב-2D מ-(500,1000) ל-(970,1270).
+     * כאן מה שביד יורד בלי להיכתב, והתצלום שנלקח בפתיחת המחווה יורד
+     * איתו: מחווה שלא שינתה דבר לא משאירה צעד ב"בטל".
+     */
+    if (phase === 'cancel') {
+      preview.discard();
+      history.abort(projectId);
+      return;
+    }
     /*
      * סוף התנועה: מה שהצטבר נכתב פעם אחת, ורק אז התצוגה המקדימה
      * מתרוקנת — סדר הפוך היה מחזיר את הארגז למקומו הישן לרגע.
@@ -561,6 +619,8 @@ export function DesignScreen({
         onCenter={centerWall}
         onFit={() => setFitAt(Date.now())}
         onClearSelection={() => setSelectedId(null)}
+        warnCount={warnings.length}
+        warnTone={worst ? warnLevelTone(worst) : null}
         onShowHidden={showHidden}
       />
 
@@ -584,6 +644,7 @@ export function DesignScreen({
               units={allUnits ?? NO_UNITS}
               activeWallId={wall.id}
               selectedId={selectedId}
+              flagged={flaggedIds}
               /* בחירה בתלת־ממד עשויה ליפול על קיר אחר — עוברים אליו */
               onSelect={(id) => {
                 const picked = (allUnits ?? NO_UNITS).find((u) => u.id === id);
@@ -636,6 +697,7 @@ export function DesignScreen({
             allUnits={allUnits ?? NO_UNITS}
             plan={plan}
             selectedId={selectedId}
+            flagged={flaggedIds}
             project={project}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
@@ -894,35 +956,51 @@ export function DesignScreen({
               שנחסם — לא.
 
               התראה מצביעה על ארגז, ולכן היא כפתור: לוחצים, והארגז
-              נבחר, מסומן על הקיר ונפתח לעריכה — במקום לחפש לפי השם
-              מי מבין הארגזים הוא זה.
+              נבחר ומודלק על הציור יחד עם מה שהאזהרה מדברת עליו —
+              במקום לחפש לפי השם מי מבין הארגזים הוא זה.
+
+              התראה היא עובדה על התכנון, ולא מידע של המנהל. היא
+              הייתה מוצגת למנהל בלבד, וכך תכנת שעבד על הקיר ונגר
+              שבנה לפיו לא ראו שארגז חורג מהחדר — מי שלא רשאי
+              לשנות עדיין צריך לדעת.
+
+              והיא נשארת כאן, ככתב, ולא רק כאייקון בכותרת. האייקון
+              הוא מה שנשאר על המסך גם כשלוח העריכה פתוח ומכסה את
+              הרשימה; הרשימה היא מה שנקרא בלי ללחוץ. נגר שצריך
+              ללחוץ כדי לדעת ששקע נחסם יגלה את זה בהתקנה.
             */}
-            {/*
-              התראה היא עובדה על התכנון, ולא מידע של המנהל.
-              היא הייתה מוצגת למנהל בלבד, וכך תכנת שעבד על הקיר
-              ונגר שבנה לפיו לא ראו שארגז חורג מהחדר — מי שלא
-              רשאי לשנות עדיין צריך לדעת.
-            */}
-            {analysis && view.warnings && analysis.warnings.length > 0 && (
+            {warnings.length > 0 && (
               <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                {/* המפתח כולל את הארגזים: שני ארגזים באותו שם מייצרים
-                    בדיוק את אותו משפט, ובלעדיהם השני נעלם */}
-                {analysis.warnings.map((w) =>
-                  w.unitIds.length > 0 ? (
-                    <li key={`${w.text}|${w.unitIds.join(',')}`}>
-                      <button
-                        onClick={() => setSelectedId(w.unitIds[0])}
-                        className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"
-                      >
+                {/* מהחמור לקל: מה שלא ייבנה קודם למה שחסר בו נתון */}
+                {[...warnings]
+                  .sort((a, b) => WARN_ORDER.indexOf(a.level) - WARN_ORDER.indexOf(b.level))
+                  .map((w) => {
+                    /* המפתח כולל את העצמים: שני ארגזים באותו שם מייצרים
+                       בדיוק את אותו משפט, ובלעדיהם השני נעלם */
+                    const key = `${w.text}|${w.unitIds.join(',')}|${(w.featureIds ?? []).join(',')}`;
+                    const dot = (
+                      <span className={`mt-1.5 size-2 shrink-0 rounded-full ${warnLevelTone(w.level)}`} />
+                    );
+                    return w.unitIds.length > 0 || (w.featureIds ?? []).length > 0 ? (
+                      <li key={key}>
+                        <button
+                          onClick={() => {
+                            setFlagged(w);
+                            if (w.unitIds.length) setSelectedId(w.unitIds[0]);
+                          }}
+                          className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"
+                        >
+                          {dot}
+                          {w.text}
+                        </button>
+                      </li>
+                    ) : (
+                      <li key={key} className="flex items-start gap-1.5 px-1 text-sm leading-snug text-amber-900">
+                        {dot}
                         {w.text}
-                      </button>
-                    </li>
-                  ) : (
-                    <li key={w.text} className="text-sm leading-snug text-amber-900">
-                      {w.text}
-                    </li>
-                  ),
-                )}
+                      </li>
+                    );
+                  })}
               </ul>
             )}
 
@@ -1061,6 +1139,22 @@ export function DesignScreen({
         />
       )}
 
+      {/*
+        הבדיקה אינה מחוון ואינה העדפת תצוגה, ולכן היא אינה מאחורי
+        מתג ואינה תלויה בתפקיד: תכנת שעובד על הקיר ונגר שבונה
+        לפיו צריכים לדעת שדלת לא תיפתח, גם כשאינם רשאים לשנות.
+      */}
+      {sheet === 'warnings' && (
+        <WarningsSheet
+          warnings={warnings}
+          onPick={(w) => {
+            setFlagged(w);
+            if (w.unitIds.length) setSelectedId(w.unitIds[0]);
+          }}
+          onClose={closeSheet}
+        />
+      )}
+
       {sheet === 'wallTools' && (
         <WallToolsSheet
           wall={wall}
@@ -1118,7 +1212,13 @@ export function DesignScreen({
       )}
 
       {sheet === 'edit' && selected && (
-        <UnitEditSheet unit={selected} wallLengthMm={wall.lengthMm} onClose={closeSheet} />
+        <UnitEditSheet
+          unit={selected}
+          wallLengthMm={wall.lengthMm}
+          parts={parts}
+          project={project}
+          onClose={closeSheet}
+        />
       )}
 
       {/*

@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 22 — חוקי הפיזיקה: נגיעה והכלה מותרות, חדירה חלקית לא */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

@@ -2,10 +2,9 @@ import { useState } from 'react';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import {
-  STAGE_CHAIN,
+  stagesOf,
   WORK_TONES,
   canAdvance,
-  stageIndex,
   stageOf,
   tracksOf,
   withStage,
@@ -69,8 +68,9 @@ export function UnitWorkSheet({
         ) : (
           tracks.map((t) => {
             const current = stageOf(unit, t.key);
-            const at = stageIndex(current);
-            const steps = STAGE_CHAIN.slice(0, stageIndex(t.last) + 1);
+            /* השרשרת של המסלול הזה — מדף אינו עובר דרך "הורכב" */
+            const steps = stagesOf(t);
+            const at = steps.findIndex((x) => x.key === current);
             return (
               <section key={t.key}>
                 <h3 className="mb-1.5 flex items-baseline gap-2">
@@ -86,7 +86,7 @@ export function UnitWorkSheet({
                     return (
                       <li key={step.key}>
                         <button
-                          onClick={() => check.ok && onChange(withStage(unit.work, t.key, step.key))}
+                          onClick={() => check.ok && onChange(withStage(unit.work, t, step.key))}
                           disabled={!check.ok}
                           aria-pressed={done}
                           title={check.why}

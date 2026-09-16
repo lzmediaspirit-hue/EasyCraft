@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 101 — הספרייה: מגירה פנימית, אפס שנשמר, "בלי תקרה" שעובר, והעברה עם התלויות */
 import { chromium } from 'playwright';
 const SP = new URL('shots/', import.meta.url).pathname;

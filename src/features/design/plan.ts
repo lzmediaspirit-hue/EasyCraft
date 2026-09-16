@@ -1,5 +1,5 @@
 import { alongWallMm, intoRoomMm } from '../../db/types';
-import { boxCorners, unitBox } from './placement';
+import { boxCorners, rad, unitBox } from './placement';
 import type { UnitBox } from './placement';
 import { clash } from './collision';
 import type { PlacedUnit, Wall } from '../../db/types';
@@ -49,10 +49,10 @@ export function buildPlan(walls: Wall[], units: PlacedUnit[]): PlanWall[] {
 
   for (const wall of walls) {
     if (out.length > 0) heading += wall.turnDeg ?? DEFAULT_TURN_DEG;
-    const rad = (heading * Math.PI) / 180;
+    const a = rad(heading);
     const end = {
-      x: cursor.x + Math.cos(rad) * wall.lengthMm,
-      y: cursor.y + Math.sin(rad) * wall.lengthMm,
+      x: cursor.x + Math.cos(a) * wall.lengthMm,
+      y: cursor.y + Math.sin(a) * wall.lengthMm,
     };
     out.push({
       wall,

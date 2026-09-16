@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 21 — עמוד, מדרגת קיר ונישה: תוספת על הקיר עם עומק */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

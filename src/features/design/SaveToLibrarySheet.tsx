@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
+import { roomsRepo } from '../../catalog/roomsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { Pill } from '../../ui/Pill';
@@ -9,6 +10,9 @@ import { reusableSpec } from '../../db/types';
 import type { CatalogGroup, PlacedUnit, UnitLevel } from '../../db/types';
 
 /** קבוצה סבירה לארגז שהמקור שלו כבר לא בספרייה */
+/** כשאין חדר ואין מקור — המטבח הוא ברירת המחדל הסבירה היחידה */
+const GROUP_FALLBACK_ROOM = 'kitchen';
+
 const GROUP_BY_LEVEL: Record<UnitLevel, CatalogGroup> = {
   floor: 'base',
   wall: 'upper',
@@ -27,9 +31,12 @@ const GROUP_BY_LEVEL: Record<UnitLevel, CatalogGroup> = {
  */
 export function SaveToLibrarySheet({
   unit,
+  projectRoom,
   onClose,
 }: {
   unit: PlacedUnit;
+  /** החדר שהפרויקט הזה הוא בו — ההצעה הראשונה לשיוך */
+  projectRoom?: string;
   onClose: () => void;
 }) {
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
@@ -37,6 +44,17 @@ export function SaveToLibrarySheet({
   const [mode, setMode] = useState<'update' | 'new'>('new');
   const [name, setName] = useState(unit.name);
   const [saving, setSaving] = useState(false);
+
+  /*
+   * לאילו חדרים הארגז שייך — שאלה, ולא ניחוש.
+   *
+   * כשפריט המקור נמחק, השמירה שייכה קשיח למטבח, סלון וחדר שינה:
+   * חדר שירות וכל חדר שהנגר יצר בעצמו לא נכללו, גם כשהארגז נבנה
+   * בדיוק שם. החדר של הפרויקט הוא ההצעה, והשאר נבחר ביד.
+   */
+  const rooms = useLiveQuery(() => roomsRepo.all(), []);
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const chosen = picked ?? source?.rooms ?? (projectRoom ? [projectRoom] : []);
 
   const target = canUpdate && mode === 'update' ? source : undefined;
 
@@ -57,7 +75,7 @@ export function SaveToLibrarySheet({
        * כל המפרט שלו — ולכן אפשר לשמור אותו כארגז חדש. רק המידע
        * הקטלוגי חסר, ורק הוא נגזר: קבוצה מהמפלס, וכל החדרים.
        */
-      rooms: source?.rooms ?? ['kitchen', 'living', 'bedroom'],
+      rooms: chosen.length ? chosen : [GROUP_FALLBACK_ROOM],
       group: source?.group ?? GROUP_BY_LEVEL[unit.level],
       name: name.trim() || unit.name,
       glyph: unit.glyph,
@@ -99,6 +117,30 @@ export function SaveToLibrarySheet({
           כל מה שכיווננת בארגז הזה — מידות, פנים, גב, ידיות וגוון — יישמר
           בספרייה ויחזור מוכן בפעם הבאה.
         </p>
+
+        {/*
+          החדרים שהארגז יופיע בהם. ההצעה היא החדר של הפרויקט — שם
+          הוא נבנה — ואפשר לסמן עוד. שיוך קשיח לשלושה חדרים השאיר
+          בחוץ את חדר השירות וכל חדר שהנגר יצר בעצמו.
+        */}
+        <Field label="חדרים" hint="איפה הוא יופיע בספרייה">
+          <div className="flex flex-wrap gap-1.5">
+            {(rooms ?? []).map((r) => (
+              <Pill
+                key={r.id}
+                active={chosen.includes(r.id)}
+                wide
+                onClick={() =>
+                  setPicked(
+                    chosen.includes(r.id) ? chosen.filter((x) => x !== r.id) : [...chosen, r.id],
+                  )
+                }
+              >
+                {r.label}
+              </Pill>
+            ))}
+          </div>
+        </Field>
 
         <Field label="שם בספרייה">
           <input

@@ -139,6 +139,7 @@ export function NumField({
   value,
   onChange,
   minMm = 0,
+  maxMm,
   inMm = false,
   hint,
   help,
@@ -149,6 +150,8 @@ export function NumField({
   /** במ"מ */
   onChange: (mm: number) => void;
   minMm?: number;
+  /** תקרה, כשיש כזו — עובי לוח אינו גדל בלי גבול */
+  maxMm?: number;
   /** הצגה במ"מ במקום בסנטימטרים */
   inMm?: boolean;
   hint?: string;
@@ -160,6 +163,7 @@ export function NumField({
         value={value}
         onChange={onChange}
         minMm={minMm}
+        maxMm={maxMm}
         inMm={inMm}
         className={`${inputClass} num text-end`}
       />

@@ -2,7 +2,7 @@ import { COS30 } from './isoMath';
 import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
 import { stackSnap } from './stacking';
 import { blocked } from './collision';
-import { unitBox } from './placement';
+import { rad, unitBox } from './placement';
 import { cornerZones } from './plan';
 import { alongWallMm } from '../../db/types';
 import { clamp } from '../../ui/units';
@@ -60,7 +60,7 @@ export interface DragResult {
 /** `null` = אין תשובה, והארגז נשאר איפה שהוא */
 export function solveDrag(input: DragInput): DragResult | null {
   const { from, dxMm, dyMm, view, plan, walls, units, pxPerUnit, snap = true, axis } = input;
-  const yaw = (view.yawDeg * Math.PI) / 180;
+  const yaw = rad(view.yawDeg);
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   /* אפס = ההצמדה כבויה: יעד שמרחקו קטן מאפס אינו קיים */
@@ -81,7 +81,18 @@ export function solveDrag(input: DragInput): DragResult | null {
     }
     const dx = axis === 'z' ? 0 : ((c - s) * view.rise * dxMm + (s + c) * COS30 * dyMm) / det;
     const dz = axis === 'x' ? 0 : (-(c + s) * view.rise * dxMm + (c - s) * COS30 * dyMm) / det;
-    const free = { ...from.free, xMm: step(from.free.xMm + dx), zMm: step(from.free.zMm + dz) };
+    /*
+     * העיגול שייך לציר שזז, ולציר שזז בלבד.
+     *
+     * אי שעמד ב-Z=1707 קיבל Z=1710 בגרירת X: הציר הנעול לא זז, אבל
+     * הוא עבר את אותו עיגול לסנטימטר שלם — והמידה שהנגר מדד בשטח
+     * השתנתה בדרך. מה שלא נגררים בו נשאר בדיוק כפי שהיה.
+     */
+    const free = {
+      ...from.free,
+      xMm: axis === 'z' ? from.free.xMm : step(from.free.xMm + dx),
+      zMm: axis === 'x' ? from.free.zMm : step(from.free.zMm + dz),
+    };
     const box = unitBox({ ...from, free }, plan);
     return box && !blocked(from, box, units, plan) ? { patch: { free } } : null;
   }
@@ -89,7 +100,7 @@ export function solveDrag(input: DragInput): DragResult | null {
   const here = plan.find((q) => q.wall.id === from.wallId);
   if (!here) return null;
   // הכיוון של "מטר אחד לאורך הקיר" על המסך, בזווית המבט הנוכחית
-  const theta = ((here.headingDeg + view.yawDeg) * Math.PI) / 180;
+  const theta = rad(here.headingDeg + view.yawDeg);
   const ax = (Math.cos(theta) - Math.sin(theta)) * COS30;
   const ay = (Math.cos(theta) + Math.sin(theta)) * view.rise;
   // קיר שנראה כמעט מקצהו אינו נותן תשובה לאורך — עדיף לא לנחש
@@ -227,10 +238,11 @@ export function nudge(
 
   if (unit.free) {
     /* אי: הצירים שלו הם רצפת החדר, ו"לאורך" אינו קיים לו */
+    /* גם כאן: רק הציר שזז מעוגל, והאחר מועתק כפי שהוא */
     const free = {
       ...unit.free,
-      xMm: Math.round(unit.free.xMm + (axis === 'z' ? 0 : deltaMm)),
-      zMm: Math.round(unit.free.zMm + (axis === 'z' ? deltaMm : 0)),
+      xMm: axis === 'z' ? unit.free.xMm : Math.round(unit.free.xMm + deltaMm),
+      zMm: axis === 'z' ? Math.round(unit.free.zMm + deltaMm) : unit.free.zMm,
     };
     return fits({ ...unit, free }) ? { free } : null;
   }

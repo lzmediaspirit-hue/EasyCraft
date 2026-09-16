@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 105 — מגירות: מיקוד שנכנס פנימה, Escape שסוגר שכבה אחת, וקובץ בודד לנייד */
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';

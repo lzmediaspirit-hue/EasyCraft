@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** משימות 83 ו-94: מודל הלוח — ליבה וגוון, גוון שני, פחתים ומחשבון. */
 import { chromium } from 'playwright';
 

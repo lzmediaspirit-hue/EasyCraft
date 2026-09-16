@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** בדיקת עשן לקובץ הבודד: נטען מקובץ, נכנסים, ואין שגיאות. */
 import { chromium } from 'playwright';
 const SP = new URL('shots/', import.meta.url).pathname;

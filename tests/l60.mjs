@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 21 — האשף: קיר יחיד, כמה קירות, חדר מורכב */
 import { chromium } from 'playwright';
 import { pickFinishes } from './mk.mjs';

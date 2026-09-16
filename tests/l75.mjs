@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 24א: גרירות, מגז פתוח, מחיקת פרויקט, עריכה מתקדמת */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';

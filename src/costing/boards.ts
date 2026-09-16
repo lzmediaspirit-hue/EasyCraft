@@ -91,11 +91,27 @@ interface AccessoryLine {
   factoryTotal: number;
   consumerTotal: number;
   /**
-   * לשורה אין מחיר כלל — להבדיל ממחיר אפס שנקבע בכוונה.
-   * פרזול שמגיע בחינם מהספק הוא אפס אמיתי; פרזול שאיש לא תמחר
-   * הוא חוסר, והוא נאמר ולא נבלע בסכום.
+   * אין מחיר מכירה — להבדיל ממחיר אפס שנקבע בכוונה.
+   *
+   * פרזול שמגיע בחינם מהספק הוא אפס אמיתי; פרזול שאיש לא תמחר הוא
+   * חוסר, והוא נאמר ולא נבלע בסכום. עד כה נבדק "אין עלות ואין
+   * מחיר" יחד, ולכן שורה עם עלות 100 ובלי מחיר לקוח הוצגה כמתומחרת
+   * ותרמה 0 להצעה — בדיוק המקרה שבו הנגר קנה ולא גבה.
    */
   noPrice?: boolean;
+  /** אין מחיר עלות — מה שהנגר משלם אינו ידוע, גם אם הוא גובה */
+  noCost?: boolean;
+}
+
+/**
+ * האם זה מחיר.
+ *
+ * `undefined` הוא "לא תומחר", וגם `NaN` או אינסוף — מספר שאינו
+ * סופי שנכנס לסכום מדביק אותו כולו, ומחיר ההצעה מפסיק להיות מספר.
+ * אפס מפורש הוא מחיר תקין לגמרי.
+ */
+function priced(v: number | undefined): boolean {
+  return typeof v === 'number' && Number.isFinite(v);
 }
 
 /** דלת זכוכית בגודל מסוים, וכמה כאלה יש בפרויקט. */
@@ -161,11 +177,20 @@ export interface ProjectCosting {
  * החזיתות של הארגז כפי שהן נחתכות: כל רצף והדלתות שבו.
  *
  * מגירה פנימית מוסתרת מאחורי דלת, ולכן יש חזית גם בלי שהוגדרו
- * דלתות. בנישה למכשיר החזית היא המכשיר עצמו — ערך ישן שנשאר משינוי
- * איור לא ייהפך לדלת שמישהו ישלם עליה.
+ * דלתות.
+ *
+ * הגבול כאן הוא **מכשיר עצמאי** ולא "מכשיר": תנור ומקרר מגיעים
+ * שלמים מהיצרן ואין להם חזית נגרות, אבל ארגז כיור וסחרחרה הם ארגזי
+ * נגרות לכל דבר — הכיור יושב במשטח, והדלתות שמתחתיו נחתכות ונתלות
+ * כמו בכל ארגז. הסינון לפי `appliance` הוציא את שתיהן מרשימת
+ * החיתוך: אותו ארגז בדיוק, פעם עם שתי חזיתות ופעם עם אפס, לפי
+ * האיור שנבחר לו. ואותו מניין משמש גם את הפרזול.
+ *
+ * מה שהגן כאן קודם — ערך `doors` ישן ששרד החלפת איור — נפתר במקום
+ * הנכון: החלפת סוג ממירה את המבנה במפורש. ראה `saveGate`.
  */
 function doorFronts(u: PlacedUnit): { fromMm: number; toMm: number; doors: number }[] {
-  if (glyphDef(u.glyph).appliance) return [];
+  if (glyphDef(u.glyph).standalone) return [];
   const h = bodyHeightMm(u);
   const hasInner = unitZones(u).some((z) => z.kind === 'drawers' && z.drawerStyle === 'inner');
   const doors = Math.max(u.doors ?? 0, hasInner ? 1 : 0);
@@ -489,6 +514,26 @@ export function unitParts(u: PlacedUnit, s: PartSettings, project?: Project): Pa
 
 
 /** ההגדרות שנחוצות לפירוק לחלקים. */
+/**
+ * ההגדרות עם עובי כל לוח — המספר שלפיו הארגז באמת נחתך.
+ *
+ * ההרכבה הזאת ישבה במסך ההדמיה בלבד, ולכן שער שמירה שרץ מחוץ למסך
+ * קיבל את עובי ברירת המחדל: אותו ארגז נבדק פעם מול 17 מ״מ ופעם
+ * מול 18, ושתי הבדיקות נתנו שני מינימומים שונים לאותו גובה. מקום
+ * אחד, ושני הצדדים קוראים ממנו.
+ */
+export function partsOf(
+  settings: PartSettings,
+  materials: { id: string; thicknessMm?: number }[],
+): PartSettings {
+  return {
+    ...settings,
+    thicknessById: Object.fromEntries(
+      materials.filter((m) => m.thicknessMm).map((m) => [m.id, m.thicknessMm!]),
+    ),
+  };
+}
+
 export interface PartSettings {
   /** עובי הגוף כשללוח שנבחר אין עובי משלו */
   carcassThicknessMm: number;
@@ -728,7 +773,15 @@ export function projectCosting(
   /* שורות הפרזול, מקובצות לפי שם ומחיר — ככה נראית הזמנה מהספק */
   const hardwareMap = new Map<
     string,
-    { label: string; unit: string; qty: number; factoryPrice: number; consumerPrice: number; noPrice: boolean }
+    {
+      label: string;
+      unit: string;
+      qty: number;
+      factoryPrice: number;
+      consumerPrice: number;
+      noPrice: boolean;
+      noCost: boolean;
+    }
   >();
   let handles = 0;
   let edgeMeters = 0;
@@ -789,10 +842,27 @@ export function projectCosting(
         label: h.name,
         unit: h.unit,
         qty: 0,
-        factoryPrice: h.factoryPrice ?? 0,
-        consumerPrice: h.consumerPrice ?? 0,
-        /* מחיר חסר אינו אפס — הוא נאמר, ולא מתחזה למחיר */
-        noPrice: h.consumerPrice === undefined && h.factoryPrice === undefined,
+        /*
+         * מה שאינו מחיר נספר כאפס בסכום, ונאמר בדגל.
+         *
+         * `?? 0` תפס `undefined` ולא `NaN`, ולכן מחיר פגום המשיך
+         * אל החשבון — וההצעה כולה הפסיקה להיות מספר. הדגל אומר
+         * שחסר; הסכום נשאר סכום.
+         */
+        factoryPrice: priced(h.factoryPrice) ? h.factoryPrice! : 0,
+        consumerPrice: priced(h.consumerPrice) ? h.consumerPrice! : 0,
+        /*
+         * שני חוסרים שונים, ולכן שני דגלים.
+         *
+         * מחיר מכירה חסר הוא מה שמשפיע על ההצעה; עלות חסרה היא מה
+         * שמשפיע על הרווח. בדיקה אחת שדרשה ששניהם יחסרו הפכה שורה
+         * עם עלות 100 ובלי מחיר לקוח לשורה "מתומחרת" ששווה 0.
+         *
+         * מספר שאינו סופי אינו מחיר: `NaN` בהצעה מדביק את הסכום
+         * כולו, ולכן הוא נספר כחוסר ולא כאפס.
+         */
+        noPrice: !priced(h.consumerPrice),
+        noCost: !priced(h.factoryPrice),
       };
       row.qty += h.qty;
       hardwareMap.set(key, row);
@@ -913,6 +983,7 @@ export function projectCosting(
     ...[...hardwareMap.values()].map((h) => ({
       ...accessory(h.label, h.qty, h.unit, h.factoryPrice, h.consumerPrice),
       noPrice: h.noPrice,
+      noCost: h.noCost,
     })),
     accessory('מגירות', drawers, 'יח׳', a.drawerFactory, a.drawerConsumer),
     accessory('פס לד', ledMeters, 'מ׳', a.ledFactory, a.ledConsumer),

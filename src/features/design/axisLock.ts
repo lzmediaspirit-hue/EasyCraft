@@ -1,6 +1,7 @@
 import { COS30 } from './isoMath';
 import type { IsoView } from './isoMath';
 import type { PlacedUnit } from '../../db/types';
+import { rad } from './placement';
 
 /*
  * תנועה בציר אחד.
@@ -79,10 +80,10 @@ export function axesFor(unit: PlacedUnit, iso: boolean): Axis[] {
  * יותר אנכי" — שנכון בציור החזית ושגוי לגמרי בתלת־ממד.
  */
 export function axisOnScreen(axis: Axis, view: IsoView, headingDeg = 0): [number, number] {
-  const yaw = (view.yawDeg * Math.PI) / 180;
+  const yaw = rad(view.yawDeg);
   if (axis === 'y') return [0, -1];
   if (axis === 'along') {
-    const t = ((headingDeg + view.yawDeg) * Math.PI) / 180;
+    const t = rad(headingDeg + view.yawDeg);
     return [(Math.cos(t) - Math.sin(t)) * COS30, (Math.cos(t) + Math.sin(t)) * view.rise];
   }
   const c = Math.cos(yaw);

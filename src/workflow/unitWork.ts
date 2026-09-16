@@ -54,6 +54,14 @@ export interface TrackDef {
   label: string;
   /** השלב האחרון שיש לו משמעות במסלול הזה */
   last: Exclude<TrackStage, 'none'>;
+  /**
+   * שלבים שאינם קיימים במסלול הזה, גם כשהם לפני השלב האחרון.
+   *
+   * `last` חותך את הזנב, אבל מדף אינו זנב קצר — הוא נחתך, מקונט
+   * ומותקן, ורק "הורכב" חסר בו: אין מה להרכיב בלוח אחד. בלי
+   * החור הזה באמצע הוא היה נאלץ לעבור דרך שלב שלא קיים בשטח.
+   */
+  skip?: Exclude<TrackStage, 'none'>[];
   hint: string;
 }
 
@@ -71,6 +79,18 @@ export const TRACKS: TrackDef[] = [
 export const stageIndex = (s: TrackStage): number =>
   s === 'none' ? -1 : STAGE_CHAIN.findIndex((x) => x.key === s);
 
+/**
+ * השלבים שקיימים במסלול מסוים — הזנב נחתך והחורים מושמטים.
+ *
+ * זו השרשרת שממנה נגזר "השלב שלפניו": מסלול שדילג על שלב אינו
+ * יכול לדרוש אותו, ואינו יכול לחזור אליו.
+ */
+export function stagesOf(track: TrackDef): StageDef[] {
+  return STAGE_CHAIN.filter(
+    (s) => stageIndex(s.key) <= stageIndex(track.last) && !track.skip?.includes(s.key),
+  );
+}
+
 /** האם לארגז יש חזיתות שצריך להתקין. */
 function hasFronts(u: PlacedUnit): boolean {
   return (
@@ -85,15 +105,37 @@ function hasPanels(u: PlacedUnit): boolean {
   return !!(e.start || e.end || e.top || e.bottom);
 }
 
-/** לוח בודד אינו ארגז, ומכשיר חשמלי נקנה — לשניהם אין תהליך הרכבה. */
-export const tracksWork = (u: PlacedUnit): boolean => {
-  const def = glyphDef(u.glyph);
-  return !def.noCarcass && !def.standalone;
+/**
+ * "אין הרכבת ארגז" אינו "אין עבודה לבצע".
+ *
+ * מדף ומדף בלבד — לוח אחד — הוחרג עד כאן ממעקב הייצור כולו, יחד
+ * עם מכשיר חשמלי. אבל מכשיר באמת נקנה שלם, ואילו את המדף עדיין
+ * צריך לנסר מהפלטה, לקנט אותו ולתלות אותו על הקיר. מי שסינן את
+ * שניהם באותה שורה השאיר את הנגר בלי המדפים ברשימת החיתוך.
+ *
+ * מה שאין בו עבודה הוא המכשיר, ורק הוא.
+ */
+export const tracksWork = (u: PlacedUnit): boolean => !glyphDef(u.glyph).standalone;
+
+/**
+ * מסלול הלוח הבודד.
+ *
+ * אותו מקום במסלולים כמו הגוף — לוח אינו נחתך פעמיים — ובלי
+ * ההרכבה, שאין מה לעשות בה כשיש לוח אחד.
+ */
+const BOARD_TRACK: TrackDef = {
+  key: 'carcass',
+  label: 'הלוח',
+  last: 'installed',
+  skip: ['assembled'],
+  hint: 'ניסור, קנטים והתקנה — אין מה להרכיב בלוח אחד',
 };
 
 /** המסלולים שקיימים בארגז הזה. */
 export function tracksOf(u: PlacedUnit): TrackDef[] {
   if (!tracksWork(u)) return [];
+  /* לוח בודד: אין גוף, אין גב ואין חזיתות — יש לוח */
+  if (glyphDef(u.glyph).noCarcass) return [BOARD_TRACK];
   return TRACKS.filter((t) => {
     if (t.key === 'fronts') return hasFronts(u);
     if (t.key === 'panels') return hasPanels(u);
@@ -147,12 +189,15 @@ export function canAdvance(
     return { ok: false, why: 'הפרויקט עוד לא נמכר' };
   }
 
-  if (stageIndex(to) > stageIndex(track.last)) return { ok: false, why: 'לא שייך למסלול הזה' };
+  /* השרשרת של המסלול הזה, ולא השרשרת המלאה */
+  const chain = stagesOf(track);
+  const at = (s: TrackStage) => chain.findIndex((x) => x.key === s);
+  if (at(to) < 0) return { ok: false, why: 'לא שייך למסלול הזה' };
 
-  const current = stageIndex(stageOf(u, track.key));
+  const current = at(stageOf(u, track.key));
   // צעד אחורה תמיד מותר: טעות בסימון היא דבר שקורה
-  if (stageIndex(to) <= current) return { ok: true };
-  if (stageIndex(to) > current + 1) return { ok: false, why: 'צריך לסמן את השלב שלפניו' };
+  if (at(to) <= current) return { ok: true };
+  if (at(to) > current + 1) return { ok: false, why: 'צריך לסמן את השלב שלפניו' };
 
   if (to === 'installed' && track.key !== 'carcass') {
     const body = stageOf(u, 'carcass');
@@ -166,13 +211,19 @@ export function canAdvance(
 /** מעביר מסלול לשלב, או מבטל אותו כשלוחצים על השלב הנוכחי. */
 export function withStage(
   work: UnitWork | undefined,
-  track: WorkTrack,
+  track: TrackDef,
   to: Exclude<TrackStage, 'none'>,
 ): UnitWork {
   const tracks = { ...(work?.tracks ?? {}) };
-  const current = tracks[track] ?? 'none';
-  // לחיצה על השלב הנוכחי מחזירה אחורה — כך מתקנים סימון שגוי
-  tracks[track] = current === to ? (STAGE_CHAIN[stageIndex(to) - 1]?.key ?? 'none') : to;
+  const current = tracks[track.key] ?? 'none';
+  /*
+   * לחיצה על השלב הנוכחי מחזירה אחורה — כך מתקנים סימון שגוי.
+   * אחורה בשרשרת של המסלול, ולא בשרשרת המלאה: ביטול "הותקן"
+   * במדף היה מחזיר אותו ל"הורכב", שלב שאינו קיים בו.
+   */
+  const chain = stagesOf(track);
+  const back = chain[chain.findIndex((x) => x.key === to) - 1]?.key ?? 'none';
+  tracks[track.key] = current === to ? back : to;
   return { ...work, tracks };
 }
 
@@ -224,8 +275,9 @@ export function workSummary(u: PlacedUnit): string {
  * נספר עד השלב האחרון שלו — לגב זה חיתוך, ולגוף התקנה — כי מסלול
  * שהגיע לסופו סיים את חלקו גם אם הוא קצר משכניו.
  *
- * ארגזים שאינם נספרים בייצור, כמו מכשירי חשמל ולוחות בודדים,
- * יוצאים מהחשבון לגמרי: הם לא עבודה שאפשר להתקדם בה.
+ * מכשיר חשמלי יוצא מהחשבון לגמרי — הוא נקנה שלם ואינו עבודה
+ * שאפשר להתקדם בה. לוח בודד דווקא נספר: מישהו עדיין מנסר אותו,
+ * מקנט אותו ותולה אותו.
  */
 export function workProgress(units: PlacedUnit[]): number {
   let done = 0;

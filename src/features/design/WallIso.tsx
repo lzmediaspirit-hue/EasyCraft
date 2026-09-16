@@ -8,10 +8,12 @@ import { LockIcon, UnlockIcon } from '../../ui/icons';
 import { solveDrag } from './dragSolve';
 import { axesFor, axisLabel, longPress, pickAxis } from './axisLock';
 import type { Axis } from './axisLock';
+import type { GesturePhase } from './gesture';
 import { alongWallMm } from '../../db/types';
 import type { PartSettings } from '../../costing/boards';
 
 import type { PlacedUnit, Project, Wall } from '../../db/types';
+import { rad } from './placement';
 
 
 /**
@@ -35,6 +37,7 @@ export function WallIso({
   units,
   activeWallId,
   selectedId,
+  flagged,
   onSelect,
   onMoveTo,
   onGesture,
@@ -61,6 +64,8 @@ export function WallIso({
   /** הקיר שעובדים עליו כרגע, מסומן בציור */
   activeWallId: string;
   selectedId: string | null;
+  /** מה שאזהרה מדברת עליו — מודלק יחד, ראה `WallElevation` */
+  flagged?: Set<string>;
   onSelect: (id: string | null) => void;
   /**
    * הזזת ארגז אל מקום אחר — ואולי אל קיר אחר.
@@ -77,7 +82,7 @@ export function WallIso({
    * בלי הכרזה מפורשת הגבול נגזר מתגיות ומחלון זמן, וגרירת קבוצה
    * התפרקה לעשרות צעדים שתלויים בקצב האירועים.
    */
-  onGesture?: (open: boolean) => void;
+  onGesture?: (phase: GesturePhase) => void;
   /** מצב תהליך עבודה: הארגזים נצבעים לפי מה שנעשה בהם */
   work?: boolean;
   /**
@@ -275,11 +280,25 @@ export function WallIso({
             נשאר קו דק מאוד בגוון המשטח עצמו, כדי שפאה בהירה על
             רקע בהיר עדיין תיראה.
           */
+          /*
+            ענבר גובר על בחירה: אזהרה מדברת על שני עצמים, והיא
+            מה שהמשתמש חיפש כשלחץ עליה.
+          */
           stroke={
-            present ? 'rgba(87,83,78,0.18)' : f.unitId === selectedId ? '#a06236' : '#57534e'
+            present
+              ? 'rgba(87,83,78,0.18)'
+              : f.unitId && flagged?.has(f.unitId)
+                ? '#f59e0b'
+                : f.unitId === selectedId
+                  ? '#a06236'
+                  : '#57534e'
           }
           strokeWidth={
-            present ? stroke * 0.35 : f.unitId === selectedId ? stroke * 1.6 : stroke * 0.7
+            present
+              ? stroke * 0.35
+              : (f.unitId && flagged?.has(f.unitId)) || f.unitId === selectedId
+                ? stroke * 1.6
+                : stroke * 0.7
           }
           strokeLinejoin="round"
           data-unit={f.unitId}
@@ -287,7 +306,7 @@ export function WallIso({
           className={f.unitId && !present ? 'cursor-pointer' : undefined}
         />
       )),
-    [faces, present, selectedId, stroke],
+    [faces, present, selectedId, flagged, stroke],
   );
 
   /*
@@ -408,9 +427,16 @@ export function WallIso({
     if (!onMoveTo || present) return;
     press.current.start(clientX, clientY, () => {
       if (!drag.current) {
-        if (!orbit.current) return;
+        /*
+         * מחווה שכבר הוכרזה כסיבוב נשארת סיבוב עד ההרפיה.
+         *
+         * הביטול בתנועה אמור היה לכבות את המדידה הרבה לפני כאן;
+         * זו השורה שאומרת את הכלל עצמו, ולא רק מסתמכת על העיתוי.
+         * החלפת סוג מחווה באמצע היא ההפתעה שאין ממנה דרך חזרה.
+         */
+        if (!orbit.current || orbit.current.moved) return;
         orbit.current = null;
-        onGesture?.(true);
+        onGesture?.('start');
         drag.current = { from: held, mates: [], startX: clientX, startY: clientY, moved: true };
         onSelect(held.id);
       }
@@ -536,7 +562,7 @@ export function WallIso({
         if (placing && onMoveTo) {
           const anchor = units.find((u) => u.id === placing.ids[0]);
           if (anchor) {
-            onGesture?.(true);
+            onGesture?.('start');
             drag.current = {
               from: anchor,
               mates: placing.ids
@@ -559,7 +585,7 @@ export function WallIso({
          */
         if (locked && !present) {
           if (held && onMoveTo) {
-            onGesture?.(true);
+            onGesture?.('start');
             drag.current = {
               from: held,
               mates: [],
@@ -584,6 +610,15 @@ export function WallIso({
         if (held) armAxis(e.clientX, e.clientY, held);
       }}
       onPointerMove={(e) => {
+        /*
+         * האצבע זזה — וזה נוגע גם למחווה שאינה גרירה.
+         *
+         * המדידה של הלחיצה הארוכה בוטלה עד כה רק במסלול הגרירה,
+         * ולכן סיבוב מצלמה המשיך להריץ אותה: מי שזז 25 פיקסלים
+         * והמשיך להחזיק חצי שנייה קיבל את הארון נגרר מתחת לידו,
+         * באמצע סיבוב. הביטול שייך לתנועה עצמה ולא למסלול שבחר בה.
+         */
+        press.current.move(e.clientX, e.clientY);
         if (drag.current) return moveDrag(e);
         const o = orbit.current;
         if (!o) return;
@@ -612,7 +647,7 @@ export function WallIso({
         press.current.cancel();
         orbit.current = null;
         drag.current = null;
-        if (d) onGesture?.(false);
+        if (d) onGesture?.('commit');
         setLanding(null);
         setLock(null);
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -629,10 +664,16 @@ export function WallIso({
         }
         onSelect(o.hit);
       }}
+      /*
+       * ביטול של המערכת אינו סיום של המשתמש.
+       *
+       * שני המסלולים נכנסו עד כה לאותה שורה, ולכן תנועה שבוטלה
+       * נשמרה: בתלת־ממד מ-(970,1270) ל-(2200,1900). מה שביד יורד.
+       */
       onPointerCancel={() => {
         press.current.cancel();
         orbit.current = null;
-        if (drag.current) onGesture?.(false);
+        if (drag.current) onGesture?.('cancel');
         drag.current = null;
         setLanding(null);
         setLock(null);
@@ -923,12 +964,12 @@ export function WallIso({
                   const a = r * 0.44;
                   /* נקודה על הקשת. `dir` הופך את הציור, ואיתו גם את כיוון הסיבוב */
                   const at = (deg: number) => {
-                    const t = (deg * Math.PI) / 180;
+                    const t = rad(deg);
                     return [cx + dir * a * Math.cos(t), cy + a * Math.sin(t)] as const;
                   };
                   const [x0, y0] = at(60);
                   const [x1, y1] = at(-30);
-                  const t1 = (-30 * Math.PI) / 180;
+                  const t1 = rad(-30);
                   /* המשיק בקצה, בכיוון שבו הקשת נסגרת */
                   const tx = -Math.sin(t1) * dir;
                   const ty = Math.cos(t1);

@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 24ב: טבעת הכפתורים בתלת־ממד — תזוזה, בחירה מרובה, עיפרון */
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';

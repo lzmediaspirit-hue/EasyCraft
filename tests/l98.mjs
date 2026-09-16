@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /** משימה 98: ארגזים — הוצאת ארגזים מהמכשיר, והכנסת ארגזים אליו. */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';

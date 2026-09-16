@@ -19,7 +19,7 @@ import {
   solidFaces,
 } from './isoMath';
 
-import { unitBox, unitFrame } from './placement';
+import { rad, unitBox, unitFrame } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import type { Face, IsoView, Solid, Tf } from './isoMath';
@@ -671,9 +671,9 @@ function wallScenery(
   const out: Solid[] = [];
   const bounds: [number, number][] = [];
   let mark: WallMark | null = null;
-  const rad = (p.headingDeg * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
+  const a = rad(p.headingDeg);
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
   const tf: Tf = (x, z) => [p.start.x + x * cos - z * sin, p.start.y + x * sin + z * cos];
   const w0 = p.wall;
   const at = (x: number, y: number, z: number): [number, number] => {

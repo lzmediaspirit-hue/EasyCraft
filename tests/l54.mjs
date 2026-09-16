@@ -1,3 +1,4 @@
+import './_exit.mjs';
 /* שכבה 21 — תשתית: הסתרת ארגז מהתצוגה וסיבובו ב-90 מעלות */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
