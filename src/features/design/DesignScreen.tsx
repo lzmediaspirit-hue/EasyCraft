@@ -7,7 +7,7 @@ import { nudge } from './dragSolve';
 import { partsOf } from '../../costing/boards';
 import { axisLabel } from './axisLock';
 import type { Axis } from './axisLock';
-import { unitBox } from './placement';
+import { rad, unitBox } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
@@ -447,7 +447,7 @@ export function DesignScreen({
     if (!item.island || !wall) return undefined;
     const p = plan.find((q) => q.wall.id === wall.id);
     if (!p) return undefined;
-    const a = (p.headingDeg * Math.PI) / 180;
+    const a = rad(p.headingDeg);
     const dir = { x: Math.cos(a), z: Math.sin(a) };
     const normal = { x: -Math.sin(a), z: Math.cos(a) };
     const along = wall.lengthMm / 2;

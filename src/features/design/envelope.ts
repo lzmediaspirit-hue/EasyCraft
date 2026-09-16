@@ -2,7 +2,7 @@ import { bodyHeightMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, WallFeature } from '../../db/types';
 import { glyphDef } from '../../catalog/glyphList';
 import { unitFronts, unitZones } from '../../catalog/zones';
-import { unitBox, unitFrame } from './placement';
+import { rad, unitBox, unitFrame } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import { boxesMeet } from './collision';
@@ -187,7 +187,7 @@ export function featureEnvelope(f: WallFeature, p: PlanWall): Envelope | null {
    * את כל הקשת. בלי צד הצירים אין דרך לדעת לאיזה צד — והמעטפת
    * נמתחת על כל הפתח, שזו ההערכה הבטוחה.
    */
-  const a = (p.headingDeg * Math.PI) / 180;
+  const a = rad(p.headingDeg);
   const dir = { x: Math.cos(a), z: Math.sin(a) };
   const normal = { x: -Math.sin(a), z: Math.cos(a) };
   const reach = f.widthMm;

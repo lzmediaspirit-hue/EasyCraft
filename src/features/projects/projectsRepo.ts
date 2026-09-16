@@ -498,7 +498,7 @@ export const unitsRepo = {
      * ההצעה מדברת בתפקידים, והספרייה היא של הנגרייה: כל תפקיד
      * מתורגם לארגז שקיים כאן בפועל, ולא למפתח של ארגזי התקן.
      */
-    const items = (await allMine(db.catalog)).filter((i) => !i.hiddenAt);
+    const items = await allMine(db.catalog);
     const chosen = new Map<string, CatalogItem>();
     for (const p of placements) {
       const item = matchCatalog(p.catalogKey, items, p.widthMm);

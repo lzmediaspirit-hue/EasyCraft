@@ -246,6 +246,7 @@ export function BoxForm({
           label={limits.heightLabel}
           value={value.heightMm}
           minMm={limits.minHeightMm}
+          maxMm={limits.maxHeightMm}
           inMm={limits.heightInMm}
           onChange={(v) => onChange({ heightMm: v })}
         />

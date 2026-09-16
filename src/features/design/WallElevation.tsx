@@ -15,7 +15,7 @@ import { axesFor, longPress, pickAxis } from './axisLock';
 import type { GesturePhase } from './gesture';
 import type { Axis } from './axisLock';
 import { blocked } from './collision';
-import { unitBox, wallShadow } from './placement';
+import { rad, unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
 import { outOfSight } from './designView';
 import { RulerMeasure, RulerTargets, rulerSpan } from './wallRuler';
@@ -313,7 +313,7 @@ export function WallElevation({
      * שאינו אופקי.
      */
     if (d.free && unit.free && here) {
-      const a = (here.headingDeg * Math.PI) / 180;
+      const a = rad(here.headingDeg);
       /* נעילה לגובה: המקום ברצפה הוא בדיוק מה שהיה, עד המ"מ */
       const next =
         axis === 'y'

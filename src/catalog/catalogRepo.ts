@@ -161,7 +161,7 @@ export const catalogRepo = {
   /** כל הפריטים שבספרייה, ממוינים לפי הסדר שלה. מה שהוסר אינו כאן. */
   async all(): Promise<CatalogItem[]> {
     const rows = await allMine(db.catalog);
-    return rows.filter((i) => !i.hiddenAt).sort((a, b) => a.sortOrder - b.sortOrder);
+    return rows.sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
   async get(id: string): Promise<CatalogItem | undefined> {

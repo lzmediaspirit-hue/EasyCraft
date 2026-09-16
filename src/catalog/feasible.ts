@@ -1,4 +1,4 @@
-import { bodyHeightMm } from '../db/types';
+import { bodyHeightMm, slabThicknessMm } from '../db/types';
 import { glyphDef } from './glyphList';
 import type { PlacedUnit } from '../db/types';
 
@@ -39,6 +39,15 @@ function buildsFromBoards(glyph: string): boolean {
 }
 
 /**
+ * עובי לוח סביר: מדף דק מ-3 מ״מ אינו מדף, ועבה מ-100 אינו לוח.
+ *
+ * כאן ולא בשער השמירה, כי כאן הם נאכפים — קבוע שיושב רחוק מהבדיקה
+ * שלו הוא בדיוק איך `MAX_BOARD_MM` הפך למספר שאיש לא שאל.
+ */
+export const MIN_BOARD_MM = 3;
+export const MAX_BOARD_MM = 100;
+
+/**
  * מה שאי אפשר לבנות, במשפט אחד — או `null` כשהכול תקין.
  *
  * ההודעה אומרת גם את המינימום עצמו: "אי אפשר" בלי מספר שולח את
@@ -48,6 +57,24 @@ export function unitProblem(
   u: Pick<PlacedUnit, 'glyph' | 'heightMm' | 'widthMm' | 'depthMm' | 'socleMm'>,
   t: number,
 ): string | null {
+  /*
+   * לוח בודד נבדק על מה שהוא כן — העובי שלו.
+   *
+   * עד כאן הוא יצא מהבדיקה כולה בשורה הראשונה, ולכן מדף בעובי
+   * 300 מ״מ נשמר בשקט: הטופס הציע מינימום, והשער לא בדק דבר.
+   * `MAX_BOARD_MM` היה קיים כמספר שאיש לא שאל אותו.
+   */
+  const flat = glyphDef(u.glyph).noCarcass;
+  if (flat) {
+    const th = slabThicknessMm(u, flat);
+    if (th < MIN_BOARD_MM) {
+      return `עובי ${th} מ״מ דק מדי ללוח. המינימום הוא ${MIN_BOARD_MM} מ״מ.`;
+    }
+    if (th > MAX_BOARD_MM) {
+      return `עובי ${th} מ״מ אינו לוח אלא גוף. המקסימום כאן ${MAX_BOARD_MM} מ״מ.`;
+    }
+    return null;
+  }
   if (!buildsFromBoards(u.glyph)) return null;
 
   const socle = u.socleMm ?? 0;

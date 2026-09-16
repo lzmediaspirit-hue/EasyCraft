@@ -118,7 +118,7 @@ export async function exportCabinets(): Promise<CabinetPack> {
    * אינו חלק מהספרייה — וכשהוא נסע עם החבילה הוא חזר במכשיר הבא,
    * שם איש לא ידע שהוא הוסר פעם.
    */
-  const catalog = (await allMine(db.catalog)).filter((i) => !i.hiddenAt);
+  const catalog = await allMine(db.catalog);
   const [allMaterials, allFinishes] = await Promise.all([
     allMine(db.materials),
     allMine(db.finishes),

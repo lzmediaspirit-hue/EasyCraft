@@ -1,4 +1,4 @@
-import { unitProblem } from './feasible';
+import { MAX_BOARD_MM, MIN_BOARD_MM, unitProblem } from './feasible';
 import { glyphDef } from './glyphList';
 import { MATERIAL } from './standards';
 import { partThicknessMm } from '../costing/boards';
@@ -90,15 +90,13 @@ export interface Limits {
   heightLabel: string;
   heightHint?: string;
   minHeightMm: number;
+  /** תקרה לשדה הגובה. קיימת ללוח בלבד — לארגז אין גובה מרבי */
+  maxHeightMm?: number;
   minWidthMm: number;
   minDepthMm: number;
   /** לוח בודד נמדד במ״מ: 18 ו-22 בסנטימטרים הם 1.8 ו-2.2 */
   heightInMm: boolean;
 }
-
-/** עובי לוח סביר: מדף דק מ-3 מ״מ אינו מדף, ועבה מ-100 אינו לוח. */
-export const MIN_BOARD_MM = 3;
-export const MAX_BOARD_MM = 100;
 
 export function limitsFor(glyph: string): Limits {
   const def = glyphDef(glyph);
@@ -107,6 +105,7 @@ export function limitsFor(glyph: string): Limits {
       heightLabel: 'עובי הלוח',
       heightHint: 'מ״מ',
       minHeightMm: MIN_BOARD_MM,
+      maxHeightMm: MAX_BOARD_MM,
       minWidthMm: 50,
       minDepthMm: 50,
       heightInMm: true,

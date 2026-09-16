@@ -13,6 +13,7 @@ import { alongWallMm } from '../../db/types';
 import type { PartSettings } from '../../costing/boards';
 
 import type { PlacedUnit, Project, Wall } from '../../db/types';
+import { rad } from './placement';
 
 
 /**
@@ -963,12 +964,12 @@ export function WallIso({
                   const a = r * 0.44;
                   /* נקודה על הקשת. `dir` הופך את הציור, ואיתו גם את כיוון הסיבוב */
                   const at = (deg: number) => {
-                    const t = (deg * Math.PI) / 180;
+                    const t = rad(deg);
                     return [cx + dir * a * Math.cos(t), cy + a * Math.sin(t)] as const;
                   };
                   const [x0, y0] = at(60);
                   const [x1, y1] = at(-30);
-                  const t1 = (-30 * Math.PI) / 180;
+                  const t1 = rad(-30);
                   /* המשיק בקצה, בכיוון שבו הקשת נסגרת */
                   const tx = -Math.sin(t1) * dir;
                   const ty = Math.cos(t1);

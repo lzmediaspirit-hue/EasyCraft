@@ -2,7 +2,7 @@ import { COS30 } from './isoMath';
 import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
 import { stackSnap } from './stacking';
 import { blocked } from './collision';
-import { unitBox } from './placement';
+import { rad, unitBox } from './placement';
 import { cornerZones } from './plan';
 import { alongWallMm } from '../../db/types';
 import { clamp } from '../../ui/units';
@@ -60,7 +60,7 @@ export interface DragResult {
 /** `null` = אין תשובה, והארגז נשאר איפה שהוא */
 export function solveDrag(input: DragInput): DragResult | null {
   const { from, dxMm, dyMm, view, plan, walls, units, pxPerUnit, snap = true, axis } = input;
-  const yaw = (view.yawDeg * Math.PI) / 180;
+  const yaw = rad(view.yawDeg);
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   /* אפס = ההצמדה כבויה: יעד שמרחקו קטן מאפס אינו קיים */
@@ -100,7 +100,7 @@ export function solveDrag(input: DragInput): DragResult | null {
   const here = plan.find((q) => q.wall.id === from.wallId);
   if (!here) return null;
   // הכיוון של "מטר אחד לאורך הקיר" על המסך, בזווית המבט הנוכחית
-  const theta = ((here.headingDeg + view.yawDeg) * Math.PI) / 180;
+  const theta = rad(here.headingDeg + view.yawDeg);
   const ax = (Math.cos(theta) - Math.sin(theta)) * COS30;
   const ay = (Math.cos(theta) + Math.sin(theta)) * view.rise;
   // קיר שנראה כמעט מקצהו אינו נותן תשובה לאורך — עדיף לא לנחש

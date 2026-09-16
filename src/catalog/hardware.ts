@@ -68,13 +68,6 @@ export function missingFacts(row: Pick<Hardware, 'supplier' | 'model' | 'consume
   return out;
 }
 
-/** מה שהפרזול של הארגז מוסיף למחיר ללקוח. */
-export function hardwareTotal(rows: Hardware[] | undefined, who: 'factory' | 'consumer'): number {
-  return (rows ?? []).reduce((n, r) => {
-    const price = who === 'factory' ? r.factoryPrice : r.consumerPrice;
-    return n + (price ?? 0) * r.qty;
-  }, 0);
-}
 
 /** יחידות ההזמנה, לבחירה במסך. */
 export const HARDWARE_UNITS: HardwareUnit[] = ['יח׳', 'זוג', 'מ׳', 'סט'];

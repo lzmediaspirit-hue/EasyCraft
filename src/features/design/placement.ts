@@ -149,6 +149,13 @@ export function wallShadow(b: UnitBox, p: PlanWall): { xMm: number; widthMm: num
   return { xMm: lo, widthMm: hi - lo, awayMm: near };
 }
 
-function rad(deg: number): number {
+/**
+ * מעלות לרדיאנים.
+ *
+ * `(deg * Math.PI) / 180` היה כתוב שש־עשרה פעמים באחד־עשר קבצים,
+ * ובכל אחד מהם צריך לעצור ולוודא שזה אכן הכיוון הזה ולא ההפוך.
+ * כאן זה נקרא פעם אחת, בשם.
+ */
+export function rad(deg: number): number {
   return (deg * Math.PI) / 180;
 }

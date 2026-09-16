@@ -199,7 +199,6 @@ export const SCHEMA: Record<string, TableSpec> = {
       shelves: count,
       socleMm: mm,
       counterMm: mm,
-      hiddenAt: time,
       note: str,
       carcassFinishId: str,
       frontFinishId: str,

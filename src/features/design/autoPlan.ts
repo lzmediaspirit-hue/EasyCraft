@@ -3,6 +3,7 @@ import type { FreePlacement, PlacedUnit, UnitLevel, Wall, WallFeature } from '..
 import { SEED_CATALOG } from '../../catalog/builtins';
 import type { PlanWall } from './plan';
 import { owned } from '../../db/rows';
+import { rad } from './placement';
 
 /**
  * תכנון מטבח אוטומטי.
@@ -237,9 +238,9 @@ function aisleOf(run: PlanWall[]): number {
   const [a, b] = run;
   const dx = b.start.x - a.start.x;
   const dy = b.start.y - a.start.y;
-  const rad = (a.headingDeg * Math.PI) / 180;
+  const theta = rad(a.headingDeg);
   /* המרחק הניצב בין הקירות, פחות שתי שורות ארונות */
-  const gap = Math.abs(-Math.sin(rad) * dx + Math.cos(rad) * dy);
+  const gap = Math.abs(-Math.sin(theta) * dx + Math.cos(theta) * dy);
   return Math.max(0, gap - 2 * KITCHEN.baseDepthMm);
 }
 

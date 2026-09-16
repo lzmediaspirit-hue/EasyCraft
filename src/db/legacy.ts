@@ -41,6 +41,17 @@ export function normalizeRow<T extends Record<string, unknown>>(
     const { panelThicknessMm: _drop, ...rest } = out;
     out = { ...rest, ...panelSize(String(out.glyph ?? ''), th, shape) } as unknown as T;
   }
+  /*
+   * "הוסר מהספרייה" אינו נוסע בין מכשירים.
+   *
+   * בגרסה ישנה הסרה רק סימנה את הפריט, והוא המשיך לצאת בכל קובץ.
+   * המקבל היה קולט שורה שלא מופיעה לו בשום רשימה ואינו יכול
+   * למחוק — ארגז רפאים. מי שהסיר, הסיר; מה שנשלח, נשלח שלם.
+   */
+  if (out.hiddenAt !== undefined) {
+    const { hiddenAt: _gone, ...rest } = out;
+    out = rest as unknown as T;
+  }
   /* חלקי קבוצה נושאים ארגז שלם בתוכם, והוא ישן באותה מידה */
   const parts = out.parts;
   if (Array.isArray(parts)) {
