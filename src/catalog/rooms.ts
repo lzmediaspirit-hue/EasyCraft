@@ -49,6 +49,63 @@ export const SEED_ROOMS: SeedRoom[] = [
     sortOrder: 40,
     isBuiltin: true,
   },
+  /*
+   * חמשת החדרים שהגיעו עם הספרייה החדשה.
+   *
+   * המזהה הוא סלאג ולא UUID: הוא נוסע עם כל ארגז שמשויך לחדר,
+   * הוא מה שמתאים אותו לאייקון, והוא מה שקוראים כשמסתכלים על
+   * שורה במסד. מזהה אקראי בקוד אינו ניתן לקריאה ואינו ניתן
+   * להתאמה.
+   *
+   * הקבוצות הן מה שבאמת יש בחדר. הקובץ שהגיע ביקש גם `appliance`,
+   * שאינה קטגוריה קיימת כאן ואין בה אף ארגז — כרטיסייה ריקה
+   * לתמיד היא הבטחה שלא מתקיימת.
+   */
+  {
+    id: 'bathroom',
+    label: 'אמבטיה',
+    hint: 'ארונות כיור, מראה ועמודות שירות',
+    icon: 'bathroom',
+    groups: ['base', 'upper', 'tall'],
+    sortOrder: 50,
+    isBuiltin: true,
+  },
+  {
+    id: 'closet',
+    label: 'חדר ארונות',
+    hint: 'תלייה, מדפים, מגירות ואי',
+    icon: 'closet',
+    groups: ['base', 'tall'],
+    sortOrder: 60,
+    isBuiltin: true,
+  },
+  {
+    id: 'children',
+    label: 'חדר ילדים',
+    hint: 'ארונות נמוכים, שולחן ומדפים',
+    icon: 'children',
+    groups: ['base', 'upper', 'tall'],
+    sortOrder: 70,
+    isBuiltin: true,
+  },
+  {
+    id: 'entrance',
+    label: 'כניסה לבית',
+    hint: 'ארון נעליים, מושב ותלייה',
+    icon: 'entrance',
+    groups: ['base', 'upper', 'tall'],
+    sortOrder: 80,
+    isBuiltin: true,
+  },
+  {
+    id: 'office',
+    label: 'משרד',
+    hint: 'שולחנות, ספריות וארונות תיקים',
+    icon: 'office',
+    groups: ['base', 'upper', 'tall'],
+    sortOrder: 90,
+    isBuiltin: true,
+  },
 ];
 
 /**
