@@ -1,6 +1,6 @@
 import { subscribers } from '../ui/store';
 import { clearPref, readPref, writePref } from '../ui/prefs';
-import { db } from '../db/db';
+import { teamRepo } from './workflowRepo';
 import type { TeamMember, UserRole } from '../db/types';
 
 /**
@@ -53,7 +53,7 @@ export type LoginResult =
 /** בדיקת שם משתמש וסיסמה מול הצוות. */
 export async function login(username: string, password: string): Promise<LoginResult> {
   const key = normalizeUsername(username);
-  const member = (await db.team.toArray()).find((m) => m.username === key);
+  const member = (await teamRepo.list()).find((m) => m.username === key);
   if (!member) return { ok: false, reason: 'notFound' };
   if (!member.active) return { ok: false, reason: 'inactive' };
   if (!member.passwordHash || !member.passwordSalt) return { ok: false, reason: 'wrongPassword' };
@@ -66,19 +66,19 @@ export async function login(username: string, password: string): Promise<LoginRe
 /** האם שם המשתמש פנוי. */
 export async function usernameTaken(username: string, exceptId?: string): Promise<boolean> {
   const key = normalizeUsername(username);
-  return (await db.team.toArray()).some((m) => m.username === key && m.id !== exceptId);
+  return (await teamRepo.list()).some((m) => m.username === key && m.id !== exceptId);
 }
 
 /** האם כבר קיים משתמש כלשהו — אם לא, זו ההתקנה הראשונה. */
 export async function hasAnyUser(): Promise<boolean> {
-  return (await db.team.count()) > 0;
+  return (await teamRepo.list()).length > 0;
 }
 
 /** קובע או מחליף סיסמה לאיש צוות. */
 export async function setPassword(memberId: string, password: string): Promise<void> {
   const salt = newSalt();
   const passwordHash = await hashPassword(password, salt);
-  await db.team.update(memberId, { passwordSalt: salt, passwordHash, updatedAt: Date.now() });
+  await teamRepo.setSecret(memberId, salt, passwordHash);
 }
 
 /* ------------------------------------------------------------------ */
@@ -135,21 +135,17 @@ export function seedAdmin(): Promise<void> {
 }
 
 async function runSeed(): Promise<void> {
-  if (await db.team.count()) return;
+  if ((await teamRepo.list()).length) return;
 
-  const now = Date.now();
   const salt = newSalt();
   const passwordHash = await hashPassword(DEFAULT_ADMIN.password, salt);
-  await db.team.put({
-    id: crypto.randomUUID(),
+  await teamRepo.save({
     name: 'מנהל',
     role: 'manager',
     active: true,
     username: DEFAULT_ADMIN.username,
     passwordSalt: salt,
     passwordHash,
-    createdAt: now,
-    updatedAt: now,
   });
 }
 

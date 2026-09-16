@@ -2,6 +2,7 @@ import { AISLE, BLIND_CORNER, ISLAND, KITCHEN, LANDING, PREP, SAFETY, TRIANGLE }
 import type { FreePlacement, PlacedUnit, UnitLevel, Wall, WallFeature } from '../../db/types';
 import { SEED_CATALOG } from '../../catalog/builtins';
 import type { PlanWall } from './plan';
+import { owned } from '../../db/rows';
 
 /**
  * תכנון מטבח אוטומטי.
@@ -968,6 +969,7 @@ export function previewUnits(proposal: Proposal): PlacedUnit[] {
         corner: item.corner,
         blindMm: p.blindMm ?? item.blind,
         free: p.free,
+        ...owned(),
         createdAt: now,
         updatedAt: now,
       } satisfies PlacedUnit,

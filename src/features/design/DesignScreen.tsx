@@ -41,7 +41,7 @@ import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from '.
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
-import { syncConsumption } from '../../materials/consumption';
+import { syncConsumption } from '../../materials/consumptionRepo';
 import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,

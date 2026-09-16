@@ -1,4 +1,5 @@
 import { db } from './db';
+import { allMine, eraseIds, owned } from './rows';
 import { checkTable, packFingerprint } from './packSchema';
 import type { CatalogItem, Finish, Material } from './types';
 
@@ -104,12 +105,10 @@ export async function exportCabinets(): Promise<CabinetPack> {
    * אינו חלק מהספרייה — וכשהוא נסע עם החבילה הוא חזר במכשיר הבא,
    * שם איש לא ידע שהוא הוסר פעם.
    */
-  const catalog = ((await db.table('catalog').toArray()) as CatalogItem[]).filter(
-    (i) => !i.hiddenAt,
-  );
+  const catalog = (await allMine(db.catalog)).filter((i) => !i.hiddenAt);
   const [allMaterials, allFinishes] = await Promise.all([
-    db.materials.toArray(),
-    db.finishes.toArray(),
+    allMine(db.materials),
+    allMine(db.finishes),
   ]);
 
   const need = referenced(catalog);
@@ -119,7 +118,19 @@ export async function exportCabinets(): Promise<CabinetPack> {
   const materials = allMaterials.filter((m) => need.materials.has(m.id));
 
   const at = Date.now();
-  const tables = { catalog, materials, finishes };
+  /*
+   * הבעלות אינה נוסעת.
+   *
+   * חבילה היא ארגזים, לא חשבון: שורה שנושאת את מזהה הנגרייה
+   * ששלחה אותה הייתה נכנסת אצל המקבל כשורה של מישהו אחר, ואז לא
+   * מופיעה אצלו בשום רשימה. הכניסה מטביעה בעלות חדשה.
+   */
+  const bare = <T extends object>(rows: T[]): T[] =>
+    rows.map((r) => {
+      const { workshopId: _w, rev: _r, ...rest } = r as T & { workshopId?: string; rev?: number };
+      return rest as T;
+    });
+  const tables = { catalog: bare(catalog), materials: bare(materials), finishes: bare(finishes) };
   return {
     app: 'easycraft',
     format: PACK_FORMAT,
@@ -275,22 +286,31 @@ export async function importCabinets(
   const now = Date.now();
   const out: ImportResult = { added: 0, replaced: 0, removed: 0, deps: 0, unresolved: 0 };
 
-  await db.transaction('rw', db.catalog, db.materials, db.finishes, async () => {
+  /*
+   * מה שנכנס נרשם על הנגרייה שמייבאת.
+   *
+   * החבילה נושאת את הבעלות של מי ששלח אותה, וזו אינה בעלות כאן:
+   * ארגז שנכנס הופך לארגז של הנגרייה הזאת, והגרסה שלו מתחילה מ-1
+   * — היא מונה מקומי ולא היסטוריה של המכשיר ששלח.
+   */
+  const asMine = <T,>(rows: T[]): T[] => rows.map((r) => ({ ...r, ...owned() }));
+
+  await db.transaction('rw', db.catalog, db.materials, db.finishes, db.tombstones, async () => {
     /*
      * התלויות ראשונות, ובמזהה המקורי שלהן — כך ההפניות שבארגזים
      * נשארות תקפות. מה שכבר קיים באותו מזהה אינו נדרס: המחיר של לוח
      * הוא של העסק הזה, ולא של מי ששלח את הארגזים.
      */
-    const haveMaterials = new Set((await db.materials.toArray()).map((m) => m.id));
+    const haveMaterials = new Set((await allMine(db.materials)).map((m) => m.id));
     const newMaterials = materials.filter((m) => !haveMaterials.has(m.id));
-    if (newMaterials.length) await db.materials.bulkAdd(newMaterials);
+    if (newMaterials.length) await db.materials.bulkAdd(asMine(newMaterials));
 
-    const haveFinishes = new Set((await db.finishes.toArray()).map((f) => f.id));
+    const haveFinishes = new Set((await allMine(db.finishes)).map((f) => f.id));
     const newFinishes = finishes.filter((f) => !haveFinishes.has(f.id));
-    if (newFinishes.length) await db.finishes.bulkAdd(newFinishes);
+    if (newFinishes.length) await db.finishes.bulkAdd(asMine(newFinishes));
     out.deps = newMaterials.length + newFinishes.length;
 
-    const rows = await db.catalog.toArray();
+    const rows = await allMine(db.catalog);
     const existing = new Map(rows.map((i) => [i.id, i]));
     /*
      * המק״ט הוא הזהות שבין המכשירים.
@@ -317,19 +337,19 @@ export async function importCabinets(
       const keep = new Set(landed.map((i) => i.id));
       const drop = [...existing.keys()].filter((id) => !keep.has(id));
       out.removed = drop.length;
-      await db.catalog.bulkDelete(drop);
+      await eraseIds(db.catalog, drop);
     }
     for (const item of landed) {
       if (existing.has(item.id)) out.replaced++;
       else out.added++;
     }
-    await db.catalog.bulkPut(landed.map((i) => ({ ...i, updatedAt: now })));
+    await db.catalog.bulkPut(asMine(landed).map((i) => ({ ...i, updatedAt: now })));
 
 
     /* מה שנשאר בלי כיסוי — נאמר במספר ולא מתגלה אחר כך בהדמיה */
-    const finishIds = new Set((await db.finishes.toArray()).map((f) => f.id));
+    const finishIds = new Set((await allMine(db.finishes)).map((f) => f.id));
 
-    const materialIds = new Set((await db.materials.toArray()).map((m) => m.id));
+    const materialIds = new Set((await allMine(db.materials)).map((m) => m.id));
     out.unresolved = landed.filter((i) => {
 
       const f = [i.carcassFinishId, i.frontFinishId, i.exposedFinishId, i.backFinishId];

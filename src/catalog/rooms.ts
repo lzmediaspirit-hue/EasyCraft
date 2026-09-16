@@ -2,7 +2,8 @@ import type { CatalogGroup, Room } from '../db/types';
 import { CUSTOM_ROOM } from '../db/types';
 
 /** חדר כפי שהוא מגיע עם האפליקציה, לפני שנזרע. */
-export type SeedRoom = Omit<Room, 'createdAt' | 'updatedAt'>;
+/* כמו בספרייה: הבעלות נקבעת בזריעה, ואינה חלק מהזרע */
+export type SeedRoom = Omit<Room, 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'>;
 
 /**
  * החדרים שמגיעים עם האפליקציה.

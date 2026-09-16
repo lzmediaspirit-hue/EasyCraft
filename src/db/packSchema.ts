@@ -252,8 +252,11 @@ export function fingerprint(text: string): string {
  * `updatedAt` משתנה בכל ייבוא, ולכן שתי נגריות עם אותה ספרייה בדיוק
  * היו מקבלות טביעות אצבע שונות. טביעת האצבע אומרת מה יש בחבילה,
  * ולא מתי נגעו בה לאחרונה — לזה יש `revision`.
+ *
+ * הבעלות והגרסה מאותה משפחה: אותה ספרייה בשתי נגריות היא אותה
+ * ספרייה, ומונה הכתיבות המקומי אינו תוכן.
  */
-const VOLATILE = new Set(['createdAt', 'updatedAt']);
+const VOLATILE = new Set(['createdAt', 'updatedAt', 'workshopId', 'rev']);
 
 /** סידור יציב: מפתחות ממוינים, `undefined` יורד, ואין רווחים. */
 function stable(value: unknown): string {

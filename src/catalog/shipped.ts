@@ -1,9 +1,16 @@
 import type { CatalogItem, Finish, Material } from '../db/types';
 
 /** פריט ספרייה מוכן, לפני שנזרע — חותמות הזמן נקבעות בזריעה עצמה. */
-export type ShippedItem = Omit<CatalogItem, 'createdAt' | 'updatedAt'>;
-export type ShippedMaterial = Omit<Material, 'createdAt' | 'updatedAt'>;
-export type ShippedFinish = Omit<Finish, 'createdAt' | 'updatedAt'>;
+/*
+ * פריט שמגיע עם האפליקציה.
+ *
+ * הבעלות והגרסה אינן חלק ממנו: הן נקבעות ברגע שהוא נזרע אל נגרייה
+ * מסוימת. רשימה שנושאת בעלות הייתה טוענת שהיא שייכת למישהו עוד
+ * לפני שהותקנה.
+ */
+export type ShippedItem = Omit<CatalogItem, 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'>;
+export type ShippedMaterial = Omit<Material, 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'>;
+export type ShippedFinish = Omit<Finish, 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'>;
 
 /**
  * הספרייה שמגיעה עם האפליקציה — הספרייה שנבנתה בנגרייה.

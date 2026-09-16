@@ -1,10 +1,11 @@
 import { db } from '../db/db';
 import { partChoice, unitParts } from '../costing/boards';
 import { settingsRepo } from './materialsRepo';
-import { projectsRepo } from '../features/projects/projectsRepo';
+import { projectsRepo, unitsRepo } from '../features/projects/projectsRepo';
 import { stageIndex, stageOf, tracksOf } from '../workflow/unitWork';
 import type { PartSettings } from '../costing/boards';
 import type { Consumption, PartRole, PlacedUnit, Project, WorkTrack } from '../db/types';
+import { allMine, eraseIds, onlyMine, owned, patchRow } from '../db/rows';
 
 /**
  * מעקב אוטומטי אחרי הלוחות שהפרויקטים צורכים.
@@ -76,10 +77,10 @@ function cutLines(
 
 export const consumptionRepo = {
   async all(): Promise<Consumption[]> {
-    return db.consumption.toArray();
+    return allMine(db.consumption);
   },
   async listForProject(projectId: string): Promise<Consumption[]> {
-    return db.consumption.where('projectId').equals(projectId).toArray();
+    return onlyMine(await db.consumption.where('projectId').equals(projectId).toArray());
   },
 };
 
@@ -109,9 +110,9 @@ const pending = new Map<string, Promise<void>>();
 async function runSync(projectId: string): Promise<void> {
   const [costing, units, settings, project] = await Promise.all([
     projectsRepo.costing(projectId),
-    db.units.where('projectId').equals(projectId).toArray(),
+    unitsRepo.listForProject(projectId),
     settingsRepo.get(),
-    db.projects.get(projectId),
+    projectsRepo.get(projectId),
   ]);
   const cut = cutLines(units, settings, project);
   const now = Date.now();
@@ -122,8 +123,8 @@ async function runSync(projectId: string): Promise<void> {
    * שורת מלאי ודרסו זה את זה, ופלטה אחת נעלמה מההפחתה. התור שלפני
    * כן מסדר רק פרויקט מול עצמו, והעסקה מסדרת פרויקט מול פרויקט.
    */
-  await db.transaction('rw', db.consumption, db.stock, async () => {
-    const existing = await db.consumption.where('projectId').equals(projectId).toArray();
+  await db.transaction('rw', db.consumption, db.stock, db.tombstones, async () => {
+    const existing = await consumptionRepo.listForProject(projectId);
 
     for (const line of costing.lines) {
       const was = existing.find((c) => c.lineKey === line.key);
@@ -133,9 +134,9 @@ async function runSync(projectId: string): Promise<void> {
 
       await moveStock(line.finish?.id, line.material.id, had - wants);
       if (wants === 0) {
-        if (was) await db.consumption.delete(was.id);
+        if (was) await eraseIds(db.consumption, [was.id]);
       } else if (was) {
-        await db.consumption.update(was.id, { sheets: wants, updatedAt: now });
+        await patchRow(db.consumption, was.id, { sheets: wants });
       } else {
         await db.consumption.add({
           id: crypto.randomUUID(),
@@ -144,6 +145,7 @@ async function runSync(projectId: string): Promise<void> {
           finishId: line.finish?.id,
           materialId: line.material.id,
           sheets: wants,
+          ...owned(),
           createdAt: now,
           updatedAt: now,
         });
@@ -154,7 +156,7 @@ async function runSync(projectId: string): Promise<void> {
     for (const c of existing) {
       if (costing.lines.some((l) => l.key === c.lineKey)) continue;
       await moveStock(c.finishId, c.materialId, c.sheets);
-      await db.consumption.delete(c.id);
+      await eraseIds(db.consumption, [c.id]);
     }
   });
 }
@@ -166,11 +168,11 @@ async function runSync(projectId: string): Promise<void> {
  * נשארות חסרות במלאי לנצח, בלי שום רישום שמסביר לאן הלכו.
  */
 export async function releaseConsumption(projectId: string): Promise<void> {
-  await db.transaction('rw', db.consumption, db.stock, async () => {
-    const rows = await db.consumption.where('projectId').equals(projectId).toArray();
+  await db.transaction('rw', db.consumption, db.stock, db.tombstones, async () => {
+    const rows = await consumptionRepo.listForProject(projectId);
     for (const c of rows) {
       await moveStock(c.finishId, c.materialId, c.sheets);
-      await db.consumption.delete(c.id);
+      await eraseIds(db.consumption, [c.id]);
     }
   });
 }
@@ -187,7 +189,7 @@ async function moveStock(
 ): Promise<void> {
   if (!finishId || delta === 0) return;
   await db.transaction('rw', db.stock, async () => {
-    const rows = await db.stock.toArray();
+    const rows = await allMine(db.stock);
     const row = rows.find((r) => r.finishId === finishId && r.materialId === materialId);
     const now = Date.now();
     /*
@@ -195,7 +197,7 @@ async function moveStock(
      * וזה מידע. עיגול לאפס היה מסתיר את הפער במקום להראות אותו.
      */
     if (row) {
-      await db.stock.update(row.id, { sheets: row.sheets + delta, updatedAt: now });
+      await patchRow(db.stock, row.id, { sheets: row.sheets + delta });
       return;
     }
     await db.stock.add({
@@ -204,6 +206,7 @@ async function moveStock(
       materialId,
       sheets: delta,
       ordered: 0,
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     });

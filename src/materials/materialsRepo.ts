@@ -1,4 +1,6 @@
+import { allMine, eraseIds, mine, owned, patchRow } from '../db/rows';
 import { db } from '../db/db';
+import { workshopId } from '../db/workshop';
 import { SHIPPED_FINISHES, SHIPPED_MATERIALS } from '../catalog/shipped';
 
 import { KITCHEN } from '../catalog/standards';
@@ -14,8 +16,18 @@ import type {
 } from '../db/types';
 
 /** הגדרות ברירת מחדל, עד שהמשתמש משנה אותן במסך ההגדרות. */
+/*
+ * ההגדרות הן של הנגרייה, ולא של האפליקציה.
+ *
+ * הן ישבו תחת מזהה קבוע אחד — `'app'` — ולכן שתי נגריות באותו
+ * מכשיר היו חולקות מחירון, מידות לוח ואחוז פחת. המזהה הוא מזהה
+ * הנגרייה, והשורה הישנה נרשמה על המקומית במעבר.
+ */
 const DEFAULT_SETTINGS: Settings = {
   id: 'app',
+  workshopId: '',
+  rev: 1,
+  createdAt: 0,
   sheetWidthMm: 2440,
   sheetHeightMm: 1220,
   kerfMm: 4,
@@ -63,7 +75,7 @@ const DEFAULT_SETTINGS: Settings = {
  * זו נקודת הפתיחה ולא כלל — מי שמוסיף MDF בעובי אחר או ליבה בצבע
  * אחר מוסיף שורה, וכל שורה כאן היא לוח שאפשר להצביע עליו במחסן.
  */
-const SEED_MATERIALS: Omit<Material, 'id' | 'createdAt' | 'updatedAt'>[] = [
+const SEED_MATERIALS: Omit<Material, 'id' | 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'>[] = [
   {
     name: 'סנדוויץ׳ 17 מ״מ',
     core: 'sandwich',
@@ -146,10 +158,16 @@ export function seedMaterials(): Promise<void> {
 
 async function runSeed(): Promise<void> {
   const now = Date.now();
-  if ((await db.settings.get('app')) === undefined) {
-    await db.settings.put({ ...DEFAULT_SETTINGS, updatedAt: now });
+  if (!(await settingsRow())) {
+    await db.settings.put({
+      ...DEFAULT_SETTINGS,
+      id: workshopId(),
+      ...owned(),
+      createdAt: now,
+      updatedAt: now,
+    });
   }
-  if ((await db.materials.count()) === 0) {
+  if ((await allMine(db.materials)).length === 0) {
     /*
      * ספרייה שנבנתה בנגרייה מגיעה עם הלוחות והגוונים שלה, ואז הם
      * אלה שנזרעים — עם המזהים המקוריים שלהם, כי הארגזים מפנים אליהם.
@@ -158,11 +176,11 @@ async function runSeed(): Promise<void> {
      */
     if (SHIPPED_MATERIALS.length) {
       await db.materials.bulkPut(
-        SHIPPED_MATERIALS.map((m) => ({ ...m, createdAt: now, updatedAt: now })),
+        SHIPPED_MATERIALS.map((m) => ({ ...m, ...owned(), createdAt: now, updatedAt: now })),
       );
-      if ((await db.finishes.count()) === 0 && SHIPPED_FINISHES.length) {
+      if ((await allMine(db.finishes)).length === 0 && SHIPPED_FINISHES.length) {
         await db.finishes.bulkPut(
-          SHIPPED_FINISHES.map((f) => ({ ...f, createdAt: now, updatedAt: now })),
+          SHIPPED_FINISHES.map((f) => ({ ...f, ...owned(), createdAt: now, updatedAt: now })),
         );
       }
       return;
@@ -170,13 +188,14 @@ async function runSeed(): Promise<void> {
     const materials = SEED_MATERIALS.map((m) => ({
       ...m,
       id: crypto.randomUUID(),
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     }));
     await db.materials.bulkPut(materials);
 
     // הגוונים נזרעים רק יחד עם החומרים, כי המחיר תלוי בהם
-    if ((await db.finishes.count()) === 0) {
+    if ((await allMine(db.finishes)).length === 0) {
       await db.finishes.bulkPut(
         SEED_FINISHES.map((f, i) => ({
           id: crypto.randomUUID(),
@@ -192,6 +211,7 @@ async function runSeed(): Promise<void> {
             {},
           ),
           sortOrder: i,
+          ...owned(),
           createdAt: now,
           updatedAt: now,
         })),
@@ -200,9 +220,17 @@ async function runSeed(): Promise<void> {
   }
 }
 
+/** שורת ההגדרות של הנגרייה הפעילה, אם כבר נשמרה. */
+async function settingsRow(): Promise<Settings | undefined> {
+  const byId = await db.settings.get(workshopId());
+  if (byId) return byId;
+  /* המעבר הטביע את השורה הישנה ולא שינה את מזהה שלה */
+  return (await allMine(db.settings))[0];
+}
+
 export const settingsRepo = {
   async get(): Promise<Settings> {
-    const stored = await db.settings.get('app');
+    const stored = await settingsRow();
     // מיזוג עם ברירות המחדל, כדי שהגדרות שנוספו בגרסה חדשה לא יחזרו ריקות
     return stored
       ? {
@@ -215,36 +243,47 @@ export const settingsRepo = {
       : DEFAULT_SETTINGS;
   },
   async save(patch: Partial<Omit<Settings, 'id'>>): Promise<void> {
-    const current = await settingsRepo.get();
-    await db.settings.put({ ...current, ...patch, id: 'app', updatedAt: Date.now() });
+    const current = await settingsRow();
+    const base = await settingsRepo.get();
+    await db.settings.put({
+      ...base,
+      ...patch,
+      id: current?.id ?? workshopId(),
+      workshopId: workshopId(),
+      rev: (current?.rev ?? 0) + 1,
+      createdAt: current?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    });
   },
 };
 
 export const materialsRepo = {
   async list(): Promise<Material[]> {
-    const rows = await db.materials.toArray();
+    const rows = await allMine(db.materials);
     return rows.sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
   async get(id: string): Promise<Material | undefined> {
-    return db.materials.get(id);
+    const row = await db.materials.get(id);
+    return row && mine(row) ? row : undefined;
   },
 
   async save(input: Partial<Material> & { name: string }): Promise<string> {
     const now = Date.now();
     if (input.id) {
       const { id, ...rest } = input;
-      await db.materials.update(id, { ...rest, updatedAt: now });
+      await patchRow(db.materials, id, rest);
       return id;
     }
     const id = crypto.randomUUID();
-    const count = await db.materials.count();
+    const count = (await allMine(db.materials)).length;
     await db.materials.add({
       sheetWidthMm: 1220,
       sheetHeightMm: 2440,
       sortOrder: count,
       ...input,
       id,
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     });
@@ -296,14 +335,14 @@ export const materialsRepo = {
           f.prices = rest;
         }
       });
-      await db.materials.delete(id);
+      await eraseIds(db.materials, [id]);
     });
   },
 };
 
 export const finishesRepo = {
   async all(): Promise<Finish[]> {
-    const rows = await db.finishes.toArray();
+    const rows = await allMine(db.finishes);
     return rows.sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
@@ -313,23 +352,25 @@ export const finishesRepo = {
   },
 
   async get(id: string): Promise<Finish | undefined> {
-    return db.finishes.get(id);
+    const row = await db.finishes.get(id);
+    return row && mine(row) ? row : undefined;
   },
 
   async save(input: Partial<Finish> & { name: string; hex: string }): Promise<string> {
     const now = Date.now();
     if (input.id) {
       const { id, ...rest } = input;
-      await db.finishes.update(id, { ...rest, updatedAt: now });
+      await patchRow(db.finishes, id, rest);
       return id;
     }
     const id = crypto.randomUUID();
-    const count = await db.finishes.count();
+    const count = (await allMine(db.finishes)).length;
     await db.finishes.add({
       prices: {},
       sortOrder: count,
       ...input,
       id,
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     });
@@ -337,13 +378,13 @@ export const finishesRepo = {
   },
 
   async remove(id: string): Promise<void> {
-    await db.finishes.delete(id);
+    await eraseIds(db.finishes, [id]);
   },
 };
 
 export const stockRepo = {
   async all(): Promise<StockItem[]> {
-    return db.stock.toArray();
+    return allMine(db.stock);
   },
 
   /**
@@ -362,7 +403,7 @@ export const stockRepo = {
       offcuts?: Offcut[];
     },
   ): Promise<void> {
-    const rows = await db.stock.toArray();
+    const rows = await allMine(db.stock);
     const existing = rows.find((r) => r.finishId === finishId && r.materialId === materialId);
     const now = Date.now();
     const next = {
@@ -377,8 +418,8 @@ export const stockRepo = {
       next.sheets === 0 && next.ordered === 0 && !next.edgeInStock && !next.offcuts?.length;
 
     if (existing) {
-      if (empty) await db.stock.delete(existing.id);
-      else await db.stock.update(existing.id, { ...next, updatedAt: now });
+      if (empty) await eraseIds(db.stock, [existing.id]);
+      else await patchRow(db.stock, existing.id, next);
       return;
     }
     if (empty) return;
@@ -387,6 +428,7 @@ export const stockRepo = {
       finishId,
       materialId,
       ...next,
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     });
@@ -398,7 +440,7 @@ export const stockRepo = {
  * פעולה אחת ולא שתי הקלדות — מי שפורק משאית לא אמור לחשב הפרשים.
  */
 export async function receiveOrder(finishId: string, materialId: string): Promise<void> {
-  const rows = await db.stock.toArray();
+  const rows = await allMine(db.stock);
   const item = rows.find((r) => r.finishId === finishId && r.materialId === materialId);
   if (!item || item.ordered <= 0) return;
   await db.stock.update(item.id, {
@@ -426,8 +468,8 @@ export const projectPricesRepo = {
     const now = Date.now();
 
     if (existing) {
-      if (empty) await db.projectPrices.delete(existing.id);
-      else await db.projectPrices.update(existing.id, { ...prices, updatedAt: now });
+      if (empty) await eraseIds(db.projectPrices, [existing.id]);
+      else await patchRow(db.projectPrices, existing.id, prices);
       return;
     }
     if (empty) return;
@@ -436,6 +478,7 @@ export const projectPricesRepo = {
       projectId,
       lineKey: key,
       ...prices,
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     });

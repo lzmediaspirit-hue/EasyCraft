@@ -1,6 +1,47 @@
 /** ישות בסיס — לכל רשומה מזהה ותאריכי מעקב. */
 interface Entity {
   id: string;
+  /**
+   * הנגרייה שהשורה שייכת לה.
+   *
+   * זה מה שהופך "כל הלקוחות" ל"כל הלקוחות שלי". כל שאילתה עוברת
+   * דרכו, וכל שורה חדשה נרשמת על הנגרייה הפעילה. ראה `db/workshop`.
+   */
+  workshopId: string;
+  /**
+   * גרסת השורה — עולה באחד בכל עדכון.
+   *
+   * בלעדיה סנכרון בין שני מכשירים אינו יכול להכריע בין שני שינויים
+   * באותו שדה: `updatedAt` לבדו הוא שעון של מכשיר, ושעונים לא
+   * מסכימים. הגרסה היא מונה, ומונה אפשר להשוות.
+   */
+  rev: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * סימון מחיקה.
+ *
+ * שורה שנמחקה במכשיר אחד ואינה מוכרת לשני חוזרת מהשני — מחיקה
+ * שאינה מסונכרנת היא תחייה. הסימון הוא מזהה וגרסה בלבד: הוא פנימי,
+ * הוא לא סל מחזור, ואין לו מסך.
+ */
+export interface Tombstone {
+  /** `table:rowId` — מפתח יציב, כדי שמחיקה חוזרת לא תכפיל */
+  id: string;
+  table: string;
+  rowId: string;
+  workshopId: string;
+  /** הגרסה שהייתה לשורה כשנמחקה */
+  rev: number;
+  deletedAt: number;
+}
+
+/** נגרייה: החשבון שהנתונים שייכים לו. */
+export interface Workshop {
+  id: string;
+  name: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -1120,7 +1161,17 @@ export interface ProjectPrice extends Entity {
 
 /** הגדרות כלליות של העסק. רשומה יחידה. */
 export interface Settings {
-  id: 'app';
+  /*
+   * המזהה הוא מזהה הנגרייה.
+   *
+   * עד כאן הוא היה `'app'` קבוע, ולכן שתי נגריות באותו מכשיר היו
+   * חולקות מחירון ומידות לוח. השורה הישנה שומרת את שמה ונרשמת על
+   * הנגרייה המקומית, וכל נגרייה חדשה מקבלת שורה משלה.
+   */
+  id: string;
+  workshopId: string;
+  rev: number;
+  createdAt: number;
   sheetWidthMm: number;
   sheetHeightMm: number;
   /** עובי כרסום — רוחב חתך המסור, נוסף לכל חלק בחישוב */

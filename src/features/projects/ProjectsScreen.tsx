@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/db';
-import { projectsRepo } from './projectsRepo';
+import { projectsRepo, unitsRepo } from './projectsRepo';
+import { customersRepo } from '../customers/customersRepo';
 import { NewProjectWizard } from './NewProjectWizard';
 import { SaleSheet } from './SaleSheet';
 import { roomDef } from '../../catalog/roomsRepo';
@@ -23,7 +23,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [saleFor, setSaleFor] = useState<Project | null>(null);
 
-  const customer = useLiveQuery(() => db.customers.get(customerId), [customerId]);
+  const customer = useLiveQuery(() => customersRepo.get(customerId), [customerId]);
   const projects = useLiveQuery(() => projectsRepo.listForCustomer(customerId), [customerId]);
   const summaries = useLiveQuery(
     async (): Promise<Record<string, ProjectCosting>> =>
@@ -31,7 +31,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
     [projects],
   );
   const stages = useLiveQuery(() => stagesRepo.all(), []);
-  const allUnits = useLiveQuery(() => db.units.toArray(), []);
+  const allUnits = useLiveQuery(() => unitsRepo.all(), []);
   const me = useCurrentMember();
   /* גם תצוגה של תפקיד אחר מסתירה מחיר — זו כל הנקודה שלה */
   const role = useEffectiveRole(me?.role);

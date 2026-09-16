@@ -3,6 +3,7 @@ import { liveQuery } from 'dexie';
 import { db } from '../db/db';
 import { CUSTOM_ROOM, type CatalogGroup, type Room, type RoomKind } from '../db/types';
 import { CUSTOM_ROOM_DEF, SEED_ROOMS, type SeedRoom } from './rooms';
+import { allMine, eraseIds, mine, onlyMine, owned, patchRow } from '../db/rows';
 
 /**
  * החדרים — נתונים, לא רשימה בקוד.
@@ -44,13 +45,16 @@ async function runSeed(): Promise<void> {
    * זריעה רק לטבלה ריקה, כמו בספריית הארגזים: מי שמחק חדר שהגיע
    * עם האפליקציה לא אמור למצוא אותו שוב בפתיחה הבאה.
    */
-  if (!(await db.rooms.count())) {
-    await db.rooms.bulkPut(SEED_ROOMS.map((r) => ({ ...r, createdAt: now, updatedAt: now })));
+  if (!(await allMine(db.rooms)).length) {
+    await db.rooms.bulkPut(SEED_ROOMS.map((r) => ({ ...r, ...owned(), createdAt: now, updatedAt: now })));
   }
   await new Promise<void>((done) => {
     let first = true;
-    liveQuery(() => db.rooms.toArray()).subscribe((rows) => {
-      snapshot = rows.filter((r) => !r.hiddenAt).sort((a, b) => a.sortOrder - b.sortOrder);
+    liveQuery(() => db.rooms.toArray()).subscribe((all) => {
+      /* הרשימה החיה רואה את הטבלה כולה, והמסך רואה את הנגרייה */
+      snapshot = onlyMine(all)
+        .filter((r) => !r.hiddenAt)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
       if (first) {
         first = false;
         done();
@@ -62,7 +66,7 @@ async function runSeed(): Promise<void> {
 export const roomsRepo = {
   /** כל החדרים הגלויים, לפי הסדר. */
   async all(): Promise<Room[]> {
-    const rows = await db.rooms.toArray();
+    const rows = await allMine(db.rooms);
     return rows.filter((r) => !r.hiddenAt).sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
@@ -74,7 +78,7 @@ export const roomsRepo = {
   }): Promise<string> {
     const now = Date.now();
     const id = crypto.randomUUID();
-    const top = (await db.rooms.toArray()).reduce((n, r) => Math.max(n, r.sortOrder), 0);
+    const top = (await allMine(db.rooms)).reduce((n, r) => Math.max(n, r.sortOrder), 0);
     await db.rooms.add({
       id,
       label: input.label.trim(),
@@ -83,6 +87,7 @@ export const roomsRepo = {
       groups: input.groups?.length ? input.groups : CUSTOM_ROOM_DEF.groups,
       sortOrder: top + 10,
       isBuiltin: false,
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     });
@@ -90,7 +95,7 @@ export const roomsRepo = {
   },
 
   async update(id: string, patch: Partial<Omit<Room, 'id'>>): Promise<void> {
-    await db.rooms.update(id, { ...patch, updatedAt: Date.now() });
+    await patchRow(db.rooms, id, patch);
   },
 
   /**
@@ -102,17 +107,18 @@ export const roomsRepo = {
    */
   async remove(id: string): Promise<void> {
     const room = await db.rooms.get(id);
+    if (room && !mine(room)) return;
     if (!room) return;
-    if (room.isBuiltin) await db.rooms.update(id, { hiddenAt: Date.now() });
-    else await db.rooms.delete(id);
+    if (room.isBuiltin) await patchRow(db.rooms, id, { hiddenAt: Date.now() });
+    else await eraseIds(db.rooms, [id]);
   },
 
   /** מה שהוסר, כדי שאפשר יהיה להחזיר. */
   async hidden(): Promise<Room[]> {
-    return (await db.rooms.toArray()).filter((r) => r.hiddenAt);
+    return (await allMine(db.rooms)).filter((r) => r.hiddenAt);
   },
 
   async restore(id: string): Promise<void> {
-    await db.rooms.update(id, { hiddenAt: undefined, updatedAt: Date.now() });
+    await patchRow(db.rooms, id, { hiddenAt: undefined });
   },
 };

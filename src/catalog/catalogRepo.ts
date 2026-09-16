@@ -6,6 +6,7 @@ import { CODE_PREFIX, codeNumber, fillCodes } from './codes';
 import { SEED_CATALOG, type SeedItem } from './builtins';
 import { SHIPPED_LIBRARY, type ShippedItem } from './shipped';
 import { SHIPPED_PRODUCTS } from './products';
+import { allMine, eraseIds, mine, owned, patchRow } from '../db/rows';
 
 /**
  * הספרייה נזרעת לתוך בסיס הנתונים בהפעלה הראשונה, כך שכל פריט —
@@ -49,7 +50,7 @@ async function runSeed(): Promise<void> {
   const settings = await settingsRepo.get();
   if (settings.catalogSeededAt) return;
   const now = Date.now();
-  const rows = shippedLibrary().map((s) => ({ ...s, createdAt: now, updatedAt: now }));
+  const rows = shippedLibrary().map((s) => ({ ...s, ...owned(), createdAt: now, updatedAt: now }));
   /*
    * מק״ט כבר בזריעה, ולא רק בהגירה של ספרייה קיימת. התקנה
    * חדשה אינה עוברת דרך ההגירה, ובלי זה היא מקבלת ספרייה שלמה
@@ -97,7 +98,7 @@ export const catalogRepo = {
    */
   async nextCode(group: CatalogGroup): Promise<string> {
     const prefix = CODE_PREFIX[group];
-    const rows = await db.catalog.toArray();
+    const rows = await allMine(db.catalog);
     const top = rows.reduce((n, i) => Math.max(n, codeNumber(i.code, prefix)), 100);
     return `${prefix}-${top + 1}`;
   },
@@ -106,12 +107,12 @@ export const catalogRepo = {
   async byCode(code: string): Promise<CatalogItem | undefined> {
     const key = code.trim().toUpperCase();
     if (!key) return undefined;
-    return (await db.catalog.toArray()).find((i) => i.code?.toUpperCase() === key);
+    return (await allMine(db.catalog)).find((i) => i.code?.toUpperCase() === key);
   },
 
   /** סימון ארגז כמועדף, או הסרתו מהמועדפים. */
   async setFavorite(id: string, favorite: boolean): Promise<void> {
-    await db.catalog.update(id, { favorite, updatedAt: Date.now() });
+    await patchRow(db.catalog, id, { favorite });
   },
 
   /** פריטי הספרייה הרלוונטיים לחדר מסוים. חדר בהגדרה אישית מקבל הכול. */
@@ -122,12 +123,13 @@ export const catalogRepo = {
 
   /** כל הפריטים שבספרייה, ממוינים לפי הסדר שלה. מה שהוסר אינו כאן. */
   async all(): Promise<CatalogItem[]> {
-    const rows = await db.catalog.toArray();
+    const rows = await allMine(db.catalog);
     return rows.filter((i) => !i.hiddenAt).sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
   async get(id: string): Promise<CatalogItem | undefined> {
-    return db.catalog.get(id);
+    const row = await db.catalog.get(id);
+    return row && mine(row) ? row : undefined;
   },
 
   /**
@@ -140,7 +142,7 @@ export const catalogRepo = {
   async saveCustom(
     input: Omit<
       CatalogItem,
-      'id' | 'createdAt' | 'updatedAt' | 'isBuiltin' | 'sortOrder'
+      'id' | 'createdAt' | 'updatedAt' | 'isBuiltin' | 'sortOrder' | 'workshopId' | 'rev'
     > & { id?: string },
   ): Promise<string> {
     const now = Date.now();
@@ -160,7 +162,7 @@ export const catalogRepo = {
       const { id: _drop, ...rest } = input;
       // שדות שלא נשלחו נשארים כמו שהם, כדי שעריכה לא תמחק מאפיין קיים
       const patch = defined({ ...rest, code });
-      await db.catalog.update(id, { ...patch, updatedAt: now });
+      await patchRow(db.catalog, id, patch);
       return id;
     }
 
@@ -173,6 +175,7 @@ export const catalogRepo = {
       common: true,
       isBuiltin: false,
       sortOrder: 1000 + (now % 1000),
+      ...owned(),
       createdAt: now,
       updatedAt: now,
     });
@@ -199,10 +202,9 @@ export const catalogRepo = {
     const at = peers.findIndex((i) => i.id === id);
     const swap = peers[at + dir];
     if (!swap) return;
-    const now = Date.now();
     await db.transaction('rw', db.catalog, async () => {
-      await db.catalog.update(item.id, { sortOrder: swap.sortOrder, updatedAt: now });
-      await db.catalog.update(swap.id, { sortOrder: item.sortOrder, updatedAt: now });
+      await patchRow(db.catalog, item.id, { sortOrder: swap.sortOrder });
+      await patchRow(db.catalog, swap.id, { sortOrder: item.sortOrder });
     });
   },
 
@@ -219,7 +221,7 @@ export const catalogRepo = {
    * מהספרייה. "החזרת ארגזי הספרייה" נשארת הדרך המפורשת חזרה.
    */
   async remove(id: string): Promise<void> {
-    await db.catalog.delete(id);
+    await eraseIds(db.catalog, [id]);
   },
 
   /**
@@ -240,7 +242,7 @@ export const catalogRepo = {
     const now = Date.now();
     let back = 0;
     await db.transaction('rw', db.catalog, async () => {
-      const rows = await db.catalog.toArray();
+      const rows = await allMine(db.catalog);
       const byId = new Map(rows.map((i) => [i.id, i]));
       const byCode = new Map(
         rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i]),
@@ -248,7 +250,7 @@ export const catalogRepo = {
       const missing: CatalogItem[] = [];
       for (const s of shippedLibrary()) {
         const have = byId.get(s.id) ?? (s.code ? byCode.get(s.code.toUpperCase()) : undefined);
-        if (!have) missing.push({ ...s, createdAt: now, updatedAt: now });
+        if (!have) missing.push({ ...s, ...owned(), createdAt: now, updatedAt: now });
       }
       back = missing.length;
       if (missing.length) await db.catalog.bulkPut(missing);

@@ -17,8 +17,11 @@ import type {
   ProjectStage,
   Settings,
   TeamMember,
+  Tombstone,
   Wall,
+  Workshop,
 } from './types';
+import { LOCAL_WORKSHOP } from './workshop';
 
 /**
  * בסיס הנתונים המקומי (IndexedDB).
@@ -41,6 +44,8 @@ export const db = new Dexie('easycraft') as Dexie & {
   attachments: EntityTable<Attachment, 'id'>;
   consumption: EntityTable<Consumption, 'id'>;
   rooms: EntityTable<Room, 'id'>;
+  workshops: EntityTable<Workshop, 'id'>;
+  tombstones: EntityTable<Tombstone, 'id'>;
 };
 
 db.version(1).stores({
@@ -689,4 +694,65 @@ db.version(26)
     const now = Date.now();
     const settings = await tx.table('settings').get('app');
     if (settings) await tx.table('settings').update('app', { catalogSeededAt: now });
+  });
+
+
+/*
+ * בעלות על כל שורה, גרסה לכל שורה, וסימוני מחיקה.
+ *
+ * עד כאן כל הטבלאות היו גלובליות — "כל הלקוחות" היו כל הלקוחות
+ * שבמכשיר — ולא היה שדה שאפשר לשאול לפיו "של מי זה". זה עובד בדיוק
+ * כל עוד יש נגרייה אחת ומכשיר אחד, ונשבר ברגע שיש שרת.
+ *
+ * המעבר עצמו זול: יש נגרייה אחת, ולכן כל מה שקיים שייך לה. הוא
+ * נעשה עכשיו דווקא כי הוא זול עכשיו — אחרי שיהיו נתונים אצל נגרים
+ * אמיתיים, אותו מעבר הוא כבר סיכון.
+ *
+ * `rev` מתחיל ב-1 ולא ב-0: שורה קיימת היא שורה שנכתבה פעם אחת.
+ */
+const TABLES_V27 = {
+  ...TABLES_V22,
+  customers: 'id, workshopId, name, city, createdAt',
+  projects: 'id, workshopId, customerId, createdAt',
+  walls: 'id, workshopId, projectId, index',
+  units: 'id, workshopId, projectId, wallId',
+  catalog: 'id, workshopId, group, sortOrder',
+  materials: 'id, workshopId, sortOrder',
+  finishes: 'id, workshopId, sortOrder',
+  projectPrices: 'id, workshopId, projectId, lineKey',
+  stock: 'id, workshopId, finishId, materialId',
+  team: 'id, workshopId, role, active, username',
+  stages: 'id, workshopId, projectId, key, status, assigneeId, scheduledAt',
+  attachments: 'id, workshopId, projectId, kind',
+  consumption: 'id, workshopId, projectId, lineKey',
+  rooms: 'id, workshopId, sortOrder',
+  settings: 'id, workshopId',
+  workshops: 'id',
+  tombstones: 'id, [workshopId+table], deletedAt',
+} as const;
+
+db.version(27)
+  .stores(TABLES_V27)
+  .upgrade(async (tx) => {
+    const now = Date.now();
+    await tx.table('workshops').put({
+      id: LOCAL_WORKSHOP,
+      name: 'הנגרייה שלי',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const owned = [
+      'customers', 'projects', 'walls', 'units', 'catalog', 'materials', 'stock',
+      'finishes', 'projectPrices', 'settings', 'team', 'stages', 'attachments',
+      'consumption', 'rooms',
+    ];
+    for (const name of owned) {
+      await tx
+        .table(name)
+        .toCollection()
+        .modify((row: { workshopId?: string; rev?: number }) => {
+          row.workshopId ??= LOCAL_WORKSHOP;
+          row.rev ??= 1;
+        });
+    }
   });

@@ -1,7 +1,7 @@
 import { subscribers } from '../../ui/store';
 import { useSyncExternalStore } from 'react';
-import { db } from '../../db/db';
-import { syncConsumption } from '../../materials/consumption';
+import { unitsRepo } from '../projects/projectsRepo';
+import { syncConsumption } from '../../materials/consumptionRepo';
 import type { PlacedUnit } from '../../db/types';
 
 /**
@@ -50,7 +50,7 @@ function stackOf(projectId: string): Stack {
 
 const emit = bus.notify;
 
-const snapshot = (projectId: string) => db.units.where('projectId').equals(projectId).toArray();
+const snapshot = (projectId: string) => unitsRepo.listForProject(projectId);
 
 /**
  * מחזיר את הארגזים למצב שבתצלום, ומיישר אחריהם את המלאי.
@@ -60,10 +60,7 @@ const snapshot = (projectId: string) => db.units.where('projectId').equals(proje
  * להיות "מוכן לחיתוך" בזמן שהמלאי ממשיך לספור אותו כנחתך.
  */
 async function restore(projectId: string, units: PlacedUnit[]): Promise<void> {
-  await db.transaction('rw', db.units, async () => {
-    await db.units.where('projectId').equals(projectId).delete();
-    if (units.length) await db.units.bulkAdd(units);
-  });
+  await unitsRepo.restoreProject(projectId, units);
   await syncConsumption(projectId);
 }
 
