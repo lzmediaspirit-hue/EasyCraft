@@ -114,6 +114,7 @@ export const SCHEMA: Record<string, TableSpec> = {
     may: {
       code: str,
       group: str,
+      island: bool,
       doors: count,
       drawers: count,
       shelves: count,

@@ -16,13 +16,15 @@ import { BoxForm, type BoxSpec } from '../../ui/BoxForm';
 import { TrashIcon } from '../../ui/icons';
 import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind, type UnitLevel } from '../../db/types';
 
-const GROUPS: CatalogGroup[] = ['base', 'upper', 'tall', 'storage', 'panel'];
+const GROUPS: CatalogGroup[] = ['base', 'upper', 'tall', 'storage', 'island', 'shelf', 'panel'];
 /** המפלס נגזר מהקבוצה — פחות החלטות למשתמש. */
 const LEVEL_BY_GROUP: Record<CatalogGroup, UnitLevel> = {
   base: 'floor',
   upper: 'wall',
   tall: 'tall',
   storage: 'floor',
+  island: 'floor',
+  shelf: 'wall',
   panel: 'floor',
 };
 
@@ -32,6 +34,8 @@ const Y_BY_GROUP: Record<CatalogGroup, number> = {
   upper: KITCHEN.upperBottom,
   tall: KITCHEN.socleH,
   storage: 80,
+  island: 0,
+  shelf: KITCHEN.upperBottom,
   panel: 0,
 };
 

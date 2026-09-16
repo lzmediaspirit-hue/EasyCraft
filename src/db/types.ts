@@ -566,7 +566,12 @@ export const RAIL_WIDTH_MM = 100;
 /* ------------------------------------------------------------------ */
 
 /** קבוצה בספרייה — הכרטיסייה שבה המוצר מופיע. */
-export type CatalogGroup = 'base' | 'upper' | 'tall' | 'storage' | 'panel';
+/**
+ * הקטגוריה שהפריט יושב בה בספרייה.
+ * `island` ו-`shelf` הם מוצרים בפני עצמם ולא ארגז על קיר, ולכן
+ * יש להם מקום משלהם ולא שורה בתוך "תחתונים".
+ */
+export type CatalogGroup = 'base' | 'upper' | 'tall' | 'storage' | 'panel' | 'island' | 'shelf';
 
 /**
  * חלק בפריט מורכב.
@@ -649,6 +654,13 @@ export interface CatalogItem extends Entity {
   backFinishId?: string;
   backMaterialId?: string;
   level: UnitLevel;
+  /**
+   * תבנית של אי: הפריט נוחת בחדר ולא על קיר.
+   *
+   * זו תכונה של התבנית ולא של המופע — מה שמונח בפרויקט מחזיק
+   * `free` משלו, ומשם והלאה הוא נערך כמו כל ארגז אחר.
+   */
+  island?: boolean;
   defaultWidthMm: number;
 
   /** רוחבי תקן נפוצים למוצר הזה */

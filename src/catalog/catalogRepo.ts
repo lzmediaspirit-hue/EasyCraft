@@ -4,6 +4,7 @@ import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind } from 
 import { CODE_PREFIX, codeNumber, fillCodes } from './codes';
 import { SEED_CATALOG, type SeedItem } from './builtins';
 import { SHIPPED_LIBRARY, type ShippedItem } from './shipped';
+import { SHIPPED_PRODUCTS } from './products';
 
 /**
  * הספרייה נזרעת לתוך בסיס הנתונים בהפעלה הראשונה, כך שכל פריט —
@@ -23,9 +24,15 @@ export function seedCatalog(): Promise<void> {
  * ספרייה שנבנתה בנגרייה והוכנסה לקוד גוברת על ארגזי התקן: מי שכבר
  * בנה לעצמו את הארגזים שהוא עובד איתם לא צריך לראות רשימה כללית
  * לצידם. כשאין כזו — ארגזי התקן הם נקודת הפתיחה.
+ *
+ * המוצרים של האפליקציה — האי והמדף — נוסעים לצד שתיהן: הם אינם
+ * ארגז שנבנה בנגרייה אלא תבנית של המערכת, ומזהה קבוע שומר עליהם
+ * מלהשתכפל בזריעה, בייבוא או בהחזרה.
  */
 function shippedLibrary(): ShippedItem[] {
-  return SHIPPED_LIBRARY.length ? SHIPPED_LIBRARY : SEED_CATALOG.map(toShipped);
+  const base = SHIPPED_LIBRARY.length ? SHIPPED_LIBRARY : SEED_CATALOG.map(toShipped);
+  const have = new Set(base.map((i) => i.id));
+  return [...base, ...SHIPPED_PRODUCTS.filter((p) => !have.has(p.id))];
 }
 
 /**

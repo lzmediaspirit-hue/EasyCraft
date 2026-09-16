@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { WallElevation } from './WallElevation';
 import { blocked } from './collision';
-import { unitBox, wallShadow } from './placement';
+import { unitBox } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
@@ -51,7 +51,8 @@ import {
   WandIcon,
 } from '../../ui/icons';
 import { turned } from '../../db/types';
-import type { CatalogItem, PlacedUnit, Project, UserRole } from '../../db/types';
+import { AISLE } from '../../catalog/kitchenRules';
+import type { CatalogItem, FreePlacement, PlacedUnit, Project, UserRole } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
 
@@ -331,9 +332,32 @@ export function DesignScreen({
     /* פריט מורכב מניח כמה ארגזים; הראשון הוא זה שנבחר אחריו */
     const made = item.parts?.length
       ? await unitsRepo.addGroup(projectId, wall.id, item, at)
-      : [await unitsRepo.add(projectId, wall.id, item, at)];
+      : [await unitsRepo.add(projectId, wall.id, item, at, undefined, islandSpot(item))];
     closeSheet();
     if (made[0]) setSelectedId(made[0].id);
+  }
+
+  /**
+   * איפה אי נוחת.
+   *
+   * לא על הקיר אלא מולו: במרכז הקיר שעובדים עליו, ומעבר עבודה
+   * שלם ממנו והלאה — המרחק שבו אי עומד באמת. משם גוררים אותו.
+   * ריק = הפריט אינו תבנית אי, והוא נוחת על הקיר כרגיל.
+   */
+  function islandSpot(item: CatalogItem): FreePlacement | undefined {
+    if (!item.island || !wall) return undefined;
+    const p = plan.find((q) => q.wall.id === wall.id);
+    if (!p) return undefined;
+    const a = (p.headingDeg * Math.PI) / 180;
+    const dir = { x: Math.cos(a), z: Math.sin(a) };
+    const normal = { x: -Math.sin(a), z: Math.cos(a) };
+    const along = wall.lengthMm / 2;
+    const into = AISLE.workMm + item.defaultDepthMm / 2;
+    return {
+      xMm: Math.round(p.start.x + dir.x * along + normal.x * into),
+      zMm: Math.round(p.start.y + dir.z * along + normal.z * into),
+      headingDeg: Math.round(p.headingDeg + 90),
+    };
   }
 
   /**
@@ -388,29 +412,6 @@ export function DesignScreen({
    * במקום שבו הצל שלו נפל על הקיר, ולא ב-xMm הישן שכבר לא אומר
    * כלום.
    */
-  async function setFree(id: string, free: boolean) {
-    const u = (allUnits ?? NO_UNITS).find((x) => x.id === id);
-    const b = u && unitBox(u, plan);
-    if (!u || !b) return;
-    await history.capture(projectId, `free:${id}`);
-    if (free) {
-      await unitsRepo.update(id, {
-        free: {
-          xMm: Math.round(b.cx),
-          zMm: Math.round(b.cz),
-          headingDeg: Math.round((b.facing * 180) / Math.PI),
-        },
-      });
-      return;
-    }
-    const p = plan.find((q) => q.wall.id === u.wallId);
-    const shadow = p ? wallShadow(b, p) : null;
-    await unitsRepo.update(id, {
-      free: undefined,
-      xMm: shadow ? Math.max(Math.round(shadow.xMm), 0) : u.xMm,
-    });
-  }
-
   /** מחזיר לתצוגה את כל מה שהוסתר — צעד אחד, ולא ארגז אחרי ארגז. */
   async function showHidden() {
     const back = (allUnits ?? NO_UNITS).filter((u) => u.hidden);
@@ -703,7 +704,6 @@ export function DesignScreen({
           fillWidth={turned(selected) ? undefined : fillSpan(selected, units, wall, 'w')}
           fillHeight={fillSpan(selected, units, wall, 'h')}
           defaultSocleMm={settings?.defaults.socleMm ?? 0}
-          onFree={(v) => setFree(selected.id, v)}
           onApplyChoiceAll={(role, choice) =>
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }

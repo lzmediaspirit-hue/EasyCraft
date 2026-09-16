@@ -1,4 +1,4 @@
-/* שכבה 22 — אי חופשי בחדר: מיקום ברצפה ולא לאורך קיר */
+/* שכבה 22 — האי: תבנית בספרייה, ומיקום ברצפת החדר ולא לאורך קיר */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
@@ -18,7 +18,7 @@ const ok = (name, cond, extra = '') =>
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ' — ' + extra : ''}`);
 const btn = (re) => page.getByRole('button', { name: re }).first();
 
-const first = () =>
+const all = () =>
   page.evaluate(async () => {
     const req = indexedDB.open('easycraft');
     const dbh = await new Promise((res) => (req.onsuccess = () => res(req.result)));
@@ -28,8 +28,12 @@ const first = () =>
       g.onsuccess = () => res(g.result);
     });
     dbh.close();
-    return rows[0];
+    return rows;
   });
+
+/** האיים שבפרויקט, לפי סדר ההוספה */
+const islands = async () => (await all()).filter((u) => u.free);
+const first = async () => (await all())[0];
 
 async function toDesign() {
   await page.reload({ waitUntil: 'networkidle' });
@@ -56,20 +60,60 @@ await addUnit(page, 0);
 await page.waitForTimeout(700);
 await toDesign();
 
-/* --- ההפיכה לאי חיה במגירת העריכה המתקדמת (שכבה 24) --- */
+/* --- אין יותר מתג "אי" בעריכה המתקדמת --- */
+const before = await first();
 await page.locator('[data-unit-id]').first().click();
 await page.waitForTimeout(800);
-ok('no island row before opening advanced', (await page.getByRole('button', { name: 'אי בחדר' }).count()) === 0);
 await page.getByRole('button', { name: 'עריכה מתקדמת' }).click();
 await page.waitForTimeout(600);
-ok('and appears inside it', (await page.getByRole('button', { name: 'אי בחדר' }).count()) === 1);
+ok('the island switch is gone from advanced editing', (await page.getByRole('button', { name: 'אי בחדר' }).count()) === 0);
+await btn(/סיום עריכה/).click().catch(() => {});
+await page.waitForTimeout(600);
 
-/* --- ההפיכה לא מזיזה את הארגז --- */
-const before = await first();
-await page.getByRole('button', { name: 'אי בחדר' }).click();
-await page.waitForTimeout(900);
-const island = await first();
-ok('turning it into an island stores a room position', !!island.free, JSON.stringify(island.free));
+/** מוסיף פריט לפי שם, דרך החיפוש שבספרייה */
+async function addFromLibrary(name) {
+  await btn(/סיום עריכה/).click().catch(() => {});
+  await page.waitForTimeout(400);
+  await btn(/הוספת ארגז/).click();
+  await page.waitForTimeout(700);
+  const dlg = page.getByRole('dialog').last();
+  await dlg.getByLabel('חיפוש ארגז לפי שם').fill(name);
+  await page.waitForTimeout(600);
+  await dlg.getByRole('button', { name: new RegExp('^' + name) }).first().click();
+  await page.waitForTimeout(1000);
+  await btn(/סיום עריכה/).click().catch(() => {});
+  await page.waitForTimeout(500);
+}
+
+/* --- האי מגיע מהספרייה, כתבנית --- */
+await addFromLibrary('אי');
+let onFloor = await islands();
+ok('adding the island template lands it in the room', onFloor.length === 1, JSON.stringify(onFloor[0]?.free));
+ok('and it did not take a place on the wall', onFloor[0]?.free?.zMm !== undefined);
+
+/* --- אפשר להוסיף עוד מופע, והתבנית אינה משתכפלת --- */
+await addFromLibrary('אי');
+onFloor = await islands();
+ok('a second instance can be added', onFloor.length === 2, String(onFloor.length));
+const templates = await page.evaluate(async () => {
+  const { db } = await import('/src/db/db.ts?v=' + Date.now());
+  return (await db.catalog.toArray()).filter((i) => i.island).length;
+});
+ok('and the library still holds one template', templates === 1, String(templates));
+
+/* --- כל מופע נערך בנפרד --- */
+await page.evaluate(async () => {
+  const { db } = await import('/src/db/db.ts?v=' + Date.now());
+  const two = (await db.units.toArray()).filter((u) => u.free);
+  await db.units.update(two[0].id, { widthMm: 1500 });
+});
+await page.waitForTimeout(600);
+onFloor = await islands();
+ok('each instance keeps its own size', onFloor[0].widthMm !== onFloor[1].widthMm,
+  `${onFloor[0].widthMm} / ${onFloor[1].widthMm}`);
+
+/* המשך הבדיקה על האי הראשון */
+const island = onFloor[0];
 await page.screenshot({ path: SP + 'L62-1-island.png' });
 
 /* --- גרירה בתלת־ממד מזיזה אותו על הרצפה, בשני הצירים --- */
@@ -81,7 +125,7 @@ await btn(/נעילת סיבוב החדר|שחרור סיבוב החדר/).click
 await page.waitForTimeout(400);
 const box = await page.locator('[data-unit]').last().boundingBox();
 await dragBy({ x: box.x + box.width / 2, y: box.y + box.height / 2 }, 0, 60);
-const moved = await first();
+const moved = (await islands()).find((u) => u.id === island.id) ?? (await islands())[0];
 ok(
   'dragging an island moves it across the floor',
   Math.hypot(moved.free.xMm - island.free.xMm, moved.free.zMm - island.free.zMm) > 100,
@@ -95,7 +139,7 @@ await page.locator('[data-unit]').last().click({ force: true });
 await page.waitForTimeout(700);
 await page.getByRole('button', { name: 'סיבוב ימינה' }).click();
 await page.waitForTimeout(800);
-const turned = await first();
+const turned = (await islands()).find((u) => u.id === moved.id) ?? (await islands())[0];
 ok(
   'the arrows turn the island itself',
   ((turned.free.headingDeg - moved.free.headingDeg + 360) % 360) === 90,
@@ -110,13 +154,10 @@ const flat = await page.locator('svg:has([data-unit-id])').first().innerHTML();
 ok('the elevation marks it as an island', /אי ·/.test(flat), (flat.match(/>[^<]*אי[^<]*</) ?? [''])[0]);
 await page.screenshot({ path: SP + 'L62-4-elevation.png' });
 
-/* --- ובחזרה אל הקיר --- */
-await page.locator('[data-unit-id]').first().click();
-await page.waitForTimeout(800);
-await page.getByRole('button', { name: 'על הקיר', exact: true }).click();
-await page.waitForTimeout(900);
-const back = await first();
-ok('it can come back to the wall', !back.free, JSON.stringify(back.free ?? null));
+/* --- האיים שרדו רענון --- */
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(1600);
+ok('both islands survive a reload', (await islands()).length === 2, String((await islands()).length));
 
 ok('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
 await browser.close();

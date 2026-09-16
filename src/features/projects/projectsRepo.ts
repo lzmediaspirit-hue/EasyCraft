@@ -9,6 +9,7 @@ import { reusableSpec } from '../../db/types';
 import type {
 
   CatalogItem,
+  FreePlacement,
   PartChoice,
   PartRole,
   PlacedUnit,
@@ -340,6 +341,14 @@ export const unitsRepo = {
     item: CatalogItem,
     xMm: number,
     widthMm?: number,
+    /*
+     * המקום בחדר, לתבנית אי.
+     *
+     * אי אינו נמדד על קיר, ולכן הוא אינו מקבל `xMm` אלא נקודה
+     * ברצפת החדר. הקיר עדיין נשמר בשורה — הוא הקיר שממנו הוא
+     * נולד, וזה מה שמחזיר אותו לקיר אם ירצו.
+     */
+    free?: FreePlacement,
   ): Promise<PlacedUnit> {
     const now = Date.now();
     const { defaults } = await settingsRepo.get();
@@ -380,6 +389,8 @@ export const unitsRepo = {
       counterMm: item.counterMm,
       // ארגז שעומד על הרצפה נעול אליה כברירת מחדל; ארון תלוי חופשי לגובה
       floorLocked: item.level !== 'wall',
+      /* תבנית אי נוחתת בחדר; כל השאר נוחת על הקיר */
+      ...(item.island && free ? { free } : {}),
       createdAt: now,
       updatedAt: now,
     };

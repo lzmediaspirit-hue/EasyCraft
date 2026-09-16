@@ -647,3 +647,30 @@ db.version(24)
       }
     }
   });
+
+/*
+ * קטגוריות חדשות בחדרים שכבר נזרעו.
+ *
+ * "איים" ו"מדפים" הם מוצרים בפני עצמם, ולא שורה בתוך "תחתונים".
+ * החדרים נזרעים פעם אחת בהתקנה, ולכן מי שכבר התקין היה מקבל
+ * ספרייה שהפריטים החדשים אינם מופיעים בה בכלל.
+ */
+db.version(25)
+  .stores(TABLES_V22)
+  .upgrade(async (tx) => {
+    const rows = (await tx.table('rooms').toArray()) as {
+      id: string;
+      isBuiltin?: boolean;
+      groups: string[];
+    }[];
+    for (const room of rows) {
+      if (!room.isBuiltin) continue;
+      const add = ['island', 'shelf'].filter((g) => !room.groups.includes(g));
+      if (!add.length) continue;
+      /* לפני "דפנות ולוחות", שהוא תמיד האחרון */
+      const at = room.groups.indexOf('panel');
+      const groups = [...room.groups];
+      groups.splice(at < 0 ? groups.length : at, 0, ...add);
+      await tx.table('rooms').update(room.id, { groups });
+    }
+  });

@@ -81,7 +81,6 @@ export function UnitEditor({
   fillWidth,
   fillHeight,
   defaultSocleMm = 0,
-  onFree,
   onChange,
   onApplyChoiceAll,
   onEdit,
@@ -103,7 +102,6 @@ export function UnitEditor({
   /** גובה הרגליים שהעסק עובד בו — לארגז שחוזר לרצפה */
   defaultSocleMm?: number;
   /** הופך את הארגז לאי בחדר, או מחזיר אותו אל הקיר */
-  onFree?: (free: boolean) => void;
   onChange: (patch: Partial<PlacedUnit>) => void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
@@ -296,12 +294,19 @@ export function UnitEditor({
           label="רוחב"
           value={unit.widthMm}
         />
-        <AxisTab
-          active={axis === 'h'}
-          onSelect={() => setAxis('h')}
-          label="גובה"
-          value={unit.heightMm}
-        />
+        {/*
+          ללוח מונח אין "גובה" אלא עובי, והוא נערך בשדה משלו למטה.
+          כרטיסיית גובה כאן הייתה מציעה לו מידות של ארון — ומידת
+          התקן הקטנה ביותר שם היא 50 מ״מ, בזמן שמדף הוא 18 או 30.
+        */}
+        {flat !== 'horizontal' && (
+          <AxisTab
+            active={axis === 'h'}
+            onSelect={() => setAxis('h')}
+            label="גובה"
+            value={unit.heightMm}
+          />
+        )}
         <AxisTab
           active={axis === 'd'}
           onSelect={() => setAxis('d')}
@@ -876,20 +881,6 @@ export function UnitEditor({
             ))}
           </Row>
 
-          {/*
-            אי: הארגז יורד מהקיר ועומד בחדר. אחרי ההפיכה גוררים אותו
-            בתלת־ממד אל המקום שלו; הכפתור רק מוריד אותו מהקיר.
-          */}
-          {onFree && (
-            <Row label="אי" hint="ארגז שעומד בחדר ולא על קיר">
-              <Pill active={!unit.free} ariaLabel="על הקיר" onClick={() => onFree(false)}>
-                על הקיר
-              </Pill>
-              <Pill active={!!unit.free} ariaLabel="אי בחדר" onClick={() => onFree(true)}>
-                אי בחדר
-              </Pill>
-            </Row>
-          )}
         </>
       )}
 

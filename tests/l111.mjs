@@ -48,13 +48,14 @@ const lib = await page.evaluate(async () => {
     sample: all.find((i) => i.code === 'B-137'),
   };
 });
-ok('נזרעו 61 הארגזים של הנגרייה', lib.n === 61, String(lib.n));
-ok('אין ארגז מוסתר בספרייה שנזרעה', lib.hidden === 0 && lib.rows === 61, `${lib.hidden} מוסתרים מתוך ${lib.rows}`);
+/* 61 של הנגרייה, ולצדם שני המוצרים של האפליקציה: אי ומדף */
+ok('נזרעו 61 הארגזים של הנגרייה ושני המוצרים', lib.n === 63, String(lib.n));
+ok('אין ארגז מוסתר בספרייה שנזרעה', lib.hidden === 0 && lib.rows === 63, `${lib.hidden} מוסתרים מתוך ${lib.rows}`);
 ok('אין כפילות מזהים', lib.ids === lib.n, `${lib.ids}/${lib.n}`);
 ok('אין כפילות מק״טים', lib.codes === lib.n, `${lib.codes}/${lib.n}`);
 ok('אין אותו ארגז פעמיים', lib.twins === lib.n, `${lib.twins}/${lib.n}`);
 ok('כל הארגזים נגישים מהספרייה הקלאסית', lib.common === lib.n, `${lib.common}/${lib.n}`);
-ok('כל חמש הקטגוריות מיוצגות', lib.groups.join() === 'base,panel,storage,tall,upper', lib.groups.join());
+ok('כל הקטגוריות מיוצגות', lib.groups.join() === 'base,island,panel,shelf,storage,tall,upper', lib.groups.join());
 /* ארגז שנבנה בנגרייה שמר את המבנה שלו, ולא רק את המידות */
 ok('ארגז הכיריים שמר את האזורים שלו',
   lib.sample?.zones?.length === 2 && lib.sample.zones[0].drawers === 3,
