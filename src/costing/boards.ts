@@ -489,6 +489,26 @@ export function unitParts(u: PlacedUnit, s: PartSettings, project?: Project): Pa
 
 
 /** ההגדרות שנחוצות לפירוק לחלקים. */
+/**
+ * ההגדרות עם עובי כל לוח — המספר שלפיו הארגז באמת נחתך.
+ *
+ * ההרכבה הזאת ישבה במסך ההדמיה בלבד, ולכן שער שמירה שרץ מחוץ למסך
+ * קיבל את עובי ברירת המחדל: אותו ארגז נבדק פעם מול 17 מ״מ ופעם
+ * מול 18, ושתי הבדיקות נתנו שני מינימומים שונים לאותו גובה. מקום
+ * אחד, ושני הצדדים קוראים ממנו.
+ */
+export function partsOf(
+  settings: PartSettings,
+  materials: { id: string; thicknessMm?: number }[],
+): PartSettings {
+  return {
+    ...settings,
+    thicknessById: Object.fromEntries(
+      materials.filter((m) => m.thicknessMm).map((m) => [m.id, m.thicknessMm!]),
+    ),
+  };
+}
+
 export interface PartSettings {
   /** עובי הגוף כשללוח שנבחר אין עובי משלו */
   carcassThicknessMm: number;

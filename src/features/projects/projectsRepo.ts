@@ -13,7 +13,8 @@ import {
 } from '../../db/rows';
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
-import { projectCosting, type ProjectCosting } from '../../costing/boards';
+import { partsOf, projectCosting, type ProjectCosting } from '../../costing/boards';
+import { BuildError, checkUnit } from '../../catalog/saveGate';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { releaseConsumption } from '../../materials/consumptionRepo';
 import { reusableSpec } from '../../db/types';
@@ -314,6 +315,19 @@ export const wallsRepo = {
   },
 };
 
+/** השדות שמשנים את מה שאפשר לבנות — ורק הם מפעילים את השער */
+const BUILD_FIELDS = ['glyph', 'heightMm', 'widthMm', 'depthMm', 'socleMm'] as const;
+
+/** ההגדרות והפרויקט שמהם נגזר עובי הלוח בפועל */
+async function buildContext(projectId: string) {
+  const [settings, materials, project] = await Promise.all([
+    settingsRepo.get(),
+    materialsRepo.list(),
+    projectsRepo.get(projectId),
+  ]);
+  return { parts: partsOf(settings, materials), project };
+}
+
 export const unitsRepo = {
   /** כל הארגזים של הנגרייה, בכל הפרויקטים — לסיכומים חוצי־פרויקט. */
   async all(): Promise<PlacedUnit[]> {
@@ -488,7 +502,22 @@ export const unitsRepo = {
     return { ok: true };
   },
 
+  /**
+   * שינוי ארגז — הגבול האחרון.
+   *
+   * המסכים בודקים לפני ואומרים למה; כאן נבדק שוב, כי שער שנאכף
+   * במסך אחד נעקף במסך הבא. הבדיקה רצה רק כשהשינוי נוגע במידה או
+   * בסוג — גרירה אינה משנה מה אפשר לבנות, ואין סיבה לקרוא הגדרות
+   * בכל תזוזה.
+   */
   async update(id: string, patch: Partial<Omit<PlacedUnit, 'id'>>): Promise<void> {
+    if (BUILD_FIELDS.some((f) => f in patch)) {
+      const unit = await db.units.get(id);
+      if (unit && mine(unit)) {
+        const why = checkUnit({ ...unit, ...patch }, await buildContext(unit.projectId));
+        if (why) throw new BuildError(why);
+      }
+    }
     await patchRow(db.units, id, patch);
   },
 

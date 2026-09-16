@@ -4,6 +4,7 @@ import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { WallElevation } from './WallElevation';
 import { blocked } from './collision';
 import { nudge } from './dragSolve';
+import { partsOf } from '../../costing/boards';
 import { axisLabel } from './axisLock';
 import type { Axis } from './axisLock';
 import { unitBox } from './placement';
@@ -179,13 +180,7 @@ export function DesignScreen({
    * המסך ולא בפלטה.
    */
   const parts = useMemo(
-    () =>
-      settings && {
-        ...settings,
-        thicknessById: Object.fromEntries(
-          (allMaterials ?? []).filter((m) => m.thicknessMm).map((m) => [m.id, m.thicknessMm!]),
-        ),
-      },
+    () => settings && partsOf(settings, allMaterials ?? []),
     [settings, allMaterials],
   );
 
@@ -1118,7 +1113,13 @@ export function DesignScreen({
       )}
 
       {sheet === 'edit' && selected && (
-        <UnitEditSheet unit={selected} wallLengthMm={wall.lengthMm} onClose={closeSheet} />
+        <UnitEditSheet
+          unit={selected}
+          wallLengthMm={wall.lengthMm}
+          parts={parts}
+          project={project}
+          onClose={closeSheet}
+        />
       )}
 
       {/*

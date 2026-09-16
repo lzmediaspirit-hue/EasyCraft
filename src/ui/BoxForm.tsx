@@ -1,4 +1,5 @@
 import { GLYPHS, glyphDef } from '../catalog/glyphList';
+import { limitsFor } from '../catalog/saveGate';
 import { GlyphPreview } from '../catalog/GlyphPreview';
 import { Field, Chip, NumField, inputClass, selectOnFocus } from './Field';
 
@@ -53,6 +54,8 @@ export function BoxForm({
    * הוא עומד — וזה בדיוק מה שהנגר מודד בקטלוג של היצרן.
    */
   const bought = !!caps.standalone;
+  /* הגבולות והתוויות של שדות המידה נגזרים ממה שהמוצר הוא */
+  const limits = limitsFor(value.glyph);
 
   return (
     <div className="space-y-5">
@@ -213,11 +216,22 @@ export function BoxForm({
       )}
 
       <div className="grid grid-cols-2 gap-3 border-t border-stone-100 pt-5">
-        <NumField label="רוחב" value={value.widthMm} minMm={50}
+        <NumField label="רוחב" value={value.widthMm} minMm={limits.minWidthMm}
           onChange={(v) => onChange({ widthMm: v })} />
-        <NumField label="גובה" value={value.heightMm} minMm={50}
-          onChange={(v) => onChange({ heightMm: v })} />
-        <NumField label="עומק" value={value.depthMm} minMm={50}
+        {/*
+          "גובה" של ארגז ו"גובה" של מדף אינם אותו דבר: באחד זה
+          המרחק מהרצפה לתקרה שלו, ובשני זה עובי הלוח. מינימום של
+          50 מ״מ שהוחל על שניהם הפך מדף של 30 ל-50 בלי לומר מילה
+          — הטופס "תיקן" מידה תקינה לגמרי.
+        */}
+        <NumField
+          label={limits.heightLabel}
+          value={value.heightMm}
+          minMm={limits.minHeightMm}
+          inMm={limits.heightInMm}
+          onChange={(v) => onChange({ heightMm: v })}
+        />
+        <NumField label="עומק" value={value.depthMm} minMm={limits.minDepthMm}
           onChange={(v) => onChange({ depthMm: v })} />
         <NumField
           label="גובה מהרצפה"

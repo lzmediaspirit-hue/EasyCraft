@@ -7,6 +7,7 @@ import { SEED_CATALOG, type SeedItem } from './builtins';
 import { SHIPPED_LIBRARY, type ShippedItem } from './shipped';
 import { SHIPPED_PRODUCTS } from './products';
 import { allMine, eraseIds, mine, owned, patchRow } from '../db/rows';
+import { BuildError, checkItem } from './saveGate';
 
 /**
  * הספרייה נזרעת לתוך בסיס הנתונים בהפעלה הראשונה, כך שכל פריט —
@@ -145,6 +146,14 @@ export const catalogRepo = {
       'id' | 'createdAt' | 'updatedAt' | 'isBuiltin' | 'sortOrder' | 'workshopId' | 'rev'
     > & { id?: string },
   ): Promise<string> {
+    /*
+     * הספרייה היא שער שמירה ככל שער אחר.
+     *
+     * פריט שאי אפשר לבנות ממנו ארגז אינו פריט — הוא ייצור חלקים
+     * בגובה אפס בכל פרויקט שיניח אותו, ורק שם זה יתגלה.
+     */
+    const why = checkItem(input);
+    if (why) throw new BuildError(why);
     const now = Date.now();
     const code = input.code?.trim().toUpperCase();
     /*
