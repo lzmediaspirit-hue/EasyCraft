@@ -24,6 +24,7 @@ import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import type { Face, IsoView, Solid, Tf } from './isoMath';
 import { RAIL_WIDTH_MM, slabThicknessMm } from '../../db/types';
+import { WORK_TONES, tracksWork, workTone } from '../../workflow/unitWork';
 import { partChoice, partThicknessMm } from '../../costing/boards';
 import type { PartSettings } from '../../costing/boards';
 import type { PartRole, PlacedUnit, Project, Wall } from '../../db/types';
@@ -100,6 +101,7 @@ export function buildScene({
   view,
   project,
   parts,
+  work,
 }: {
   walls: Wall[];
   units: PlacedUnit[];
@@ -113,6 +115,14 @@ export function buildScene({
   project?: Project;
   /** העוביים שלפיהם נחתך, כדי שהציור והניסור יסכימו */
   parts?: PartSettings;
+  /**
+   * מצב תהליך עבודה: הצבע הוא הדוח.
+   *
+   * בחזית הארגזים כבר נצבעו לפי מצב העבודה, ובתלת־ממד הם נשארו
+   * בגוון של הלקוח — אותו מסך בדיוק, שתי תשובות שונות לשאלה "מה
+   * מוכן". מי שעובד בייצור בתלת־ממד לא ראה שום סטטוס.
+   */
+  work?: boolean;
 }): Scene {
 
   const plan = buildPlan(walls, units);
@@ -160,7 +170,7 @@ export function buildScene({
     if (!place) continue;
     if (u.id === selectedId && !present) spin = spinPoint(u, place, v);
     const first = solids.length;
-    solids.push(...unitSolids(u, place, inside, finishHex, project, parts));
+    solids.push(...unitSolids(u, place, inside, finishHex, project, parts, work));
     /*
      * הארגז נכנס למסגרת גם הוא.
      *
@@ -221,6 +231,7 @@ function unitSolids(
   finishHex: Record<string, string>,
   project?: Project,
   parts?: PartSettings,
+  work?: boolean,
 ): Solid[] {
   const out: Solid[] = [];
   /*
@@ -229,7 +240,13 @@ function unitSolids(
    * ולכן גוון שנבחר לפרויקט כולו לא הגיע לשרטוט — הלקוח ראה ארון
    * לבן בזמן שבחרנו לו אדום.
    */
+  /*
+   * במצב תהליך עבודה הצבע הוא הדוח, ולא הגוון שנבחר ללקוח — אותה
+   * החלטה בדיוק שנעשית בציור החזית, ובאותם גוונים.
+   */
+  const workFill = work && tracksWork(u) ? WORK_TONES[workTone(u)].fill : null;
   const hexOf = (role: PartRole, fallback: string) => {
+    if (workFill) return workFill;
     const id = partChoice(u, role, project).finishId;
     return (id && finishHex[id]) || fallback;
   };

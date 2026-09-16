@@ -36,6 +36,7 @@ export function WallIso({
   onSelect,
   onMoveTo,
   onGesture,
+  work,
   onRotate,
   onEdit,
   onBulk,
@@ -75,6 +76,8 @@ export function WallIso({
    * התפרקה לעשרות צעדים שתלויים בקצב האירועים.
    */
   onGesture?: (open: boolean) => void;
+  /** מצב תהליך עבודה: הארגזים נצבעים לפי מה שנעשה בהם */
+  work?: boolean;
   /**
    * סיבוב הארגז הנבחר ברבע סיבוב.
    *
@@ -175,8 +178,9 @@ export function WallIso({
     () =>
       buildScene({
         walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts,
+        work,
       }),
-    [walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts],
+    [walls, units, activeWallId, selectedId, inside, finishHex, present, view, project, parts, work],
 
   );
   const { faces, backdrops, marks, floor, bounds, spin } = scene;
@@ -306,7 +310,14 @@ export function WallIso({
 
   const screenBox = (id: string) => unitScreenBox(faces, id);
 
-  /** כפתור עגול על הציור, במידות שנשארות אמיתיות בכל זום. */
+  /**
+   * כפתור עגול על הציור, במידות שנשארות אמיתיות בכל זום.
+   *
+   * `role="button"` ותווית לבדם אינם כפתור: הם אומרים לקורא המסך
+   * מה זה, ולא מאפשרים להגיע לזה. בלי `tabIndex` ובלי מקלדת
+   * הכפתורים האלה היו נגישים לאצבע בלבד — מי שעובד במקלדת לא
+   * יכול היה להזיז או לסובב ארגז בכלל.
+   */
   const ringButton = (
     label: string,
     d: string,
@@ -320,13 +331,30 @@ export function WallIso({
       key={label}
       role="button"
       aria-label={label}
-      className="cursor-pointer"
+      tabIndex={0}
+      className="group cursor-pointer focus:outline-none"
       onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => {
         e.stopPropagation();
         onTap();
       }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        onTap();
+      }}
     >
+      {/* טבעת המיקוד: מי שמגיע במקלדת רואה איפה הוא עומד */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r * 1.25}
+        fill="none"
+        stroke={tone}
+        strokeWidth={r * 0.12}
+        className="opacity-0 group-focus:opacity-100"
+      />
       <circle cx={cx} cy={cy} r={r} fill="#ffffff" stroke={tone} strokeWidth={r * 0.09} />
       <g
         transform={`translate(${cx} ${cy}) scale(${r / 11})`}
@@ -792,9 +820,16 @@ export function WallIso({
                 key={label}
                 role="button"
                 aria-label={label}
+                tabIndex={0}
                 className="cursor-pointer"
                 onPointerDown={(e) => e.stopPropagation()}
                 onPointerUp={(e) => {
+                  e.stopPropagation();
+                  onRotate(selectedUnit.id, next);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
                   e.stopPropagation();
                   onRotate(selectedUnit.id, next);
                 }}

@@ -87,6 +87,11 @@ export const history = {
     emit();
   },
 
+  /** האם מחווה פתוחה עכשיו — מי שכותב בתוכה מצייר ולא שומר */
+  inGesture(projectId: string): boolean {
+    return !!stacks.get(projectId)?.gesture;
+  },
+
   /** סגירת המחווה. מה שייכתב מכאן והלאה הוא פעולה חדשה. */
   end(projectId: string): void {
     const s = stackOf(projectId);

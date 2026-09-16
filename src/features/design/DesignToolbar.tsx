@@ -1,3 +1,4 @@
+import { WORK_TONES } from '../../workflow/unitWork';
 import { history } from './history';
 import { wallsRepo } from '../projects/projectsRepo';
 import { wallLabel } from '../projects/wallLayouts';
@@ -352,6 +353,26 @@ export function DesignToolbar({
             title="לסמן שלב על כל הארגזים בקיר"
           />
         </div>
+      )}
+
+      {/*
+        מקרא הצבעים.
+        במצב ייצור הצבע הוא הדוח, ובלי מקרא הוא חידה: צהוב וכתום
+        נראים דומה על מסך בנגרייה. הוא מופיע בשני המבטים, כי
+        בשניהם הצבע אומר עכשיו את אותו דבר.
+      */}
+      {workMode && (
+        <ul className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {(Object.keys(WORK_TONES) as (keyof typeof WORK_TONES)[]).map((k) => (
+            <li key={k} className="flex items-center gap-1 text-[11px] text-stone-500">
+              <span
+                className="size-2.5 rounded-sm border"
+                style={{ background: WORK_TONES[k].fill, borderColor: WORK_TONES[k].stroke }}
+              />
+              {WORK_TONES[k].label}
+            </li>
+          ))}
+        </ul>
       )}
 
       {editable && (

@@ -32,6 +32,7 @@ import type { SheetName } from './sheets';
 import { readPref, writePref } from '../../ui/prefs';
 import { clamp } from '../../ui/units';
 import { history, useHistory } from './history';
+import { preview, usePreview, withPreview } from './preview';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
@@ -141,7 +142,17 @@ export function DesignScreen({
     opened.current = true;
     if (isComplexRoom(walls)) design.set('iso', true);
   }, [walls, design]);
-  const allUnits = useLiveQuery(() => unitsRepo.listForProject(projectId), [projectId]);
+  const stored = useLiveQuery(() => unitsRepo.listForProject(projectId), [projectId]);
+  /*
+   * המסך קורא את הארגזים דרך התצוגה המקדימה: בזמן גרירה המקום
+   * החדש חי בזיכרון, ונכתב פעם אחת בסוף התנועה.
+   */
+  const previewAt = usePreview();
+  const allUnits = useMemo(
+    () => (stored ? withPreview(stored) : stored),
+    /* `previewAt` הוא המונה שמכריח חישוב מחדש — הוא אינו נקרא כאן */
+    [stored, previewAt],
+  );
   const customer = useLiveQuery(
     () => customersRepo.get(project?.customerId ?? ''),
     [project?.customerId],
@@ -230,7 +241,6 @@ export function DesignScreen({
       const picked = (allUnits ?? NO_UNITS).find((u) => u.id === id);
       return picked && picked.wallId === wallId ? id : null;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallIndex]);
 
   const corners = useMemo(
@@ -441,14 +451,27 @@ export function DesignScreen({
    */
   function gesture(open: boolean) {
     if (!editable) return;
-    if (open) void history.begin(projectId, `drag:${Date.now()}`);
-    else history.end(projectId);
+    if (open) return void history.begin(projectId, `drag:${Date.now()}`);
+    /*
+     * סוף התנועה: מה שהצטבר נכתב פעם אחת, ורק אז התצוגה המקדימה
+     * מתרוקנת — סדר הפוך היה מחזיר את הארגז למקומו הישן לרגע.
+     */
+    void (async () => {
+      const moves = preview.drain();
+      for (const [id, patch] of moves) await unitsRepo.update(id, patch);
+      history.end(projectId);
+    })();
   }
 
   async function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
     const workOnly = Object.keys(patch).every((k) => k === 'work');
     if (!editable && !workOnly) return;
     await history.capture(projectId, tag);
+    /*
+     * בזמן תנועה השינוי נשאר בזיכרון. הכתיבה היא בסוף, בבת אחת,
+     * ולא בכל תזוזה של המצביע.
+     */
+    if (history.inGesture(projectId)) return preview.set(id, patch);
     await unitsRepo.update(id, patch);
   }
 
@@ -499,6 +522,13 @@ export function DesignScreen({
                   const i = walls.findIndex((w) => w.id === picked.wallId);
                   if (i >= 0) setWallIndex(i);
                 }
+                /*
+                 * במצב ייצור נגיעה בארגז פותחת את לוח העבודה שלו,
+                 * בדיוק כמו בחזית. בתלת־ממד היא רק סימנה אותו —
+                 * ומכיוון שבמצב ייצור אין לוח עריכה, שום דבר לא קרה:
+                 * ההוראה על המסך הבטיחה מה שלא התרחש.
+                 */
+                if (workMode) return setWorkUnitId(id);
                 setSelectedId(id);
               }}
               /*
@@ -525,6 +555,7 @@ export function DesignScreen({
               project={project}
               parts={parts ?? undefined}
               onGesture={gesture}
+              work={workMode}
               snap={design.view.snap}
               fitAt={fitAt}
             />
