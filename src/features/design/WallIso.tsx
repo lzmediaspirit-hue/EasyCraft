@@ -36,6 +36,7 @@ export function WallIso({
   units,
   activeWallId,
   selectedId,
+  flagged,
   onSelect,
   onMoveTo,
   onGesture,
@@ -62,6 +63,8 @@ export function WallIso({
   /** הקיר שעובדים עליו כרגע, מסומן בציור */
   activeWallId: string;
   selectedId: string | null;
+  /** מה שאזהרה מדברת עליו — מודלק יחד, ראה `WallElevation` */
+  flagged?: Set<string>;
   onSelect: (id: string | null) => void;
   /**
    * הזזת ארגז אל מקום אחר — ואולי אל קיר אחר.
@@ -276,11 +279,25 @@ export function WallIso({
             נשאר קו דק מאוד בגוון המשטח עצמו, כדי שפאה בהירה על
             רקע בהיר עדיין תיראה.
           */
+          /*
+            ענבר גובר על בחירה: אזהרה מדברת על שני עצמים, והיא
+            מה שהמשתמש חיפש כשלחץ עליה.
+          */
           stroke={
-            present ? 'rgba(87,83,78,0.18)' : f.unitId === selectedId ? '#a06236' : '#57534e'
+            present
+              ? 'rgba(87,83,78,0.18)'
+              : f.unitId && flagged?.has(f.unitId)
+                ? '#f59e0b'
+                : f.unitId === selectedId
+                  ? '#a06236'
+                  : '#57534e'
           }
           strokeWidth={
-            present ? stroke * 0.35 : f.unitId === selectedId ? stroke * 1.6 : stroke * 0.7
+            present
+              ? stroke * 0.35
+              : (f.unitId && flagged?.has(f.unitId)) || f.unitId === selectedId
+                ? stroke * 1.6
+                : stroke * 0.7
           }
           strokeLinejoin="round"
           data-unit={f.unitId}
@@ -288,7 +305,7 @@ export function WallIso({
           className={f.unitId && !present ? 'cursor-pointer' : undefined}
         />
       )),
-    [faces, present, selectedId, stroke],
+    [faces, present, selectedId, flagged, stroke],
   );
 
   /*

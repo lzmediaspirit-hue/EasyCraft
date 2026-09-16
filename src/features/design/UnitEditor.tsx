@@ -28,6 +28,7 @@ import type {
   PartRole,
   PlacedUnit,
   Project,
+  WallSide,
 } from '../../db/types';
 
 const DOOR_COUNTS = [0, 1, 2, 3, 4, 5, 6];
@@ -45,6 +46,12 @@ const LED_SPOTS: { key: LedSpot; label: string }[] = [
   { key: 'top', label: 'עליון' },
   { key: 'bottom', label: 'תחתון' },
   { key: 'shelf', label: 'מתחת למדף' },
+];
+
+/** לאיזה צד תלויה דלת יחידה. */
+const HINGE_SIDES: { key: WallSide; label: string }[] = [
+  { key: 'start', label: 'ימין' },
+  { key: 'end', label: 'שמאל' },
 ];
 
 const OPENINGS: { key: OpeningMech; label: string }[] = [
@@ -568,6 +575,26 @@ export function UnitEditor({
                     ))}
                   </Row>
 
+                  {/*
+                    צד הצירים. דלת אחת נפתחת לצד אחד, ורק הוא קובע
+                    אם ארון או קיר עומדים בדרכה — לשתי דלתות אין
+                    שאלה. בלי הנתון הזה הבדיקה מדווחת שהוא חסר,
+                    במקום לנחש.
+                  */}
+                  {(unit.doors ?? 0) === 1 && (unit.opening ?? 'hinge') === 'hinge' && (
+                    <Row label="צירים בצד" hint="הדלת נפתחת אל הצד השני">
+                      {HINGE_SIDES.map((h) => (
+                        <Pill
+                          key={h.key}
+                          active={unit.hingeSide === h.key}
+                          onClick={() => onChange({ hingeSide: h.key })}
+                        >
+                          {h.label}
+                        </Pill>
+                      ))}
+                    </Row>
+                  )}
+
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <button
                       onClick={() => onChange({ glassDoors: !unit.glassDoors })}
@@ -739,11 +766,28 @@ export function UnitEditor({
         היו פתוחות גם לו, והתשובות עליהן לא הגיעו לשום מקום.
       */}
       {caps.standalone && (
-        <p className="mt-4 rounded-xl bg-stone-50 px-3 py-2.5 text-xs leading-snug text-stone-500">
-          {glyphDef(unit.glyph).label} הוא מכשיר שנקנה שלם — הוא אינו נחתך
-          מפלטות ואין לו גב, מדפים או קושרות. מה שנקבע לו הוא המידה
-          והמקום.
-        </p>
+        <>
+          <p className="mt-4 rounded-xl bg-stone-50 px-3 py-2.5 text-xs leading-snug text-stone-500">
+            {glyphDef(unit.glyph).label} הוא מכשיר שנקנה שלם — הוא אינו נחתך
+            מפלטות ואין לו גב, מדפים או קושרות. מה שנקבע לו הוא המידה
+            והמקום.
+          </p>
+
+          {/*
+            מרווח הפתיחה, מדף המוצר של היצרן.
+            דלת תנור נופלת קדימה, דלת מקרר מסתובבת ומדיח נפתח
+            כלפי מטה — שלושה מספרים שונים שרק היצרן יודע. בלי
+            המספר הזה הבדיקה אומרת שהוא חסר; היא אינה ממציאה אותו.
+          */}
+          <Row label="מרווח פתיחה" hint="לפי היצרן — כמה הדלת יוצאת קדימה">
+            <MeasureInput
+              value={unit.openClearanceMm ?? 0}
+              onChange={(mm) => onChange({ openClearanceMm: mm > 0 ? mm : undefined })}
+              ariaLabel="מרווח הפתיחה של המכשיר"
+              className="num w-24 rounded-lg bg-stone-100 px-2 py-1.5 text-center text-sm font-medium text-stone-900 focus:bg-white focus:ring-1 focus:ring-oak-400 focus:outline-none"
+            />
+          </Row>
+        </>
       )}
 
       {/*

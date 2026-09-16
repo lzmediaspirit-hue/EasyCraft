@@ -40,7 +40,9 @@ import { history, useHistory } from './history';
 import { preview, usePreview, withPreview } from './preview';
 import type { GesturePhase } from './gesture';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
-import { analyzeWall, fillSpan, nextFreeX } from './analysis';
+import { analyzeWall, fillSpan, nextFreeX, openingWarnings, worstLevel } from './analysis';
+import type { WallWarning } from './analysis';
+import { WarningsSheet, warnLevelTone } from './WarningsSheet';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumptionRepo';
@@ -348,6 +350,29 @@ export function DesignScreen({
     [wall, units, clashing, neighbourUnits],
   );
   /*
+   * בדיקת הפתיחה נעשית על החדר ולא על הקיר: דלת החדר יושבת בקיר
+   * אחד והארון שחוסם אותה עומד על השני. קיר בודד לעולם לא היה
+   * רואה את זה.
+   */
+  const warnings = useMemo(
+    () => [
+      ...(analysis?.warnings ?? []),
+      ...openingWarnings(allUnits ?? NO_UNITS, plan),
+    ],
+    [analysis, allUnits, plan],
+  );
+  const worst = worstLevel(warnings);
+  /*
+   * שני העצמים שהאזהרה מדברת עליהם, מודלקים יחד על הציור.
+   * בחירה מסמנת אחד; אזהרה היא יחס בין שניים, ולכן היא מדליקה
+   * את שניהם — מה שנפתח ומה שעומד בדרך.
+   */
+  const [flagged, setFlagged] = useState<WallWarning | null>(null);
+  const flaggedIds = useMemo(
+    () => new Set([...(flagged?.unitIds ?? []), ...(flagged?.featureIds ?? [])]),
+    [flagged],
+  );
+  /*
    * המקור למחוונים: הקיר שעובדים עליו, או כל הקירות יחד. שניהם
    * נבנים מאותה בדיקה, ולכן אין סיכוי שהמספרים יסתרו זה את זה.
    */
@@ -587,6 +612,8 @@ export function DesignScreen({
         onCenter={centerWall}
         onFit={() => setFitAt(Date.now())}
         onClearSelection={() => setSelectedId(null)}
+        warnCount={warnings.length}
+        warnTone={worst ? warnLevelTone(worst) : null}
         onShowHidden={showHidden}
       />
 
@@ -610,6 +637,7 @@ export function DesignScreen({
               units={allUnits ?? NO_UNITS}
               activeWallId={wall.id}
               selectedId={selectedId}
+              flagged={flaggedIds}
               /* בחירה בתלת־ממד עשויה ליפול על קיר אחר — עוברים אליו */
               onSelect={(id) => {
                 const picked = (allUnits ?? NO_UNITS).find((u) => u.id === id);
@@ -662,6 +690,7 @@ export function DesignScreen({
             allUnits={allUnits ?? NO_UNITS}
             plan={plan}
             selectedId={selectedId}
+            flagged={flaggedIds}
             project={project}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
@@ -929,29 +958,6 @@ export function DesignScreen({
               ונגר שבנה לפיו לא ראו שארגז חורג מהחדר — מי שלא
               רשאי לשנות עדיין צריך לדעת.
             */}
-            {analysis && view.warnings && analysis.warnings.length > 0 && (
-              <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                {/* המפתח כולל את הארגזים: שני ארגזים באותו שם מייצרים
-                    בדיוק את אותו משפט, ובלעדיהם השני נעלם */}
-                {analysis.warnings.map((w) =>
-                  w.unitIds.length > 0 ? (
-                    <li key={`${w.text}|${w.unitIds.join(',')}`}>
-                      <button
-                        onClick={() => setSelectedId(w.unitIds[0])}
-                        className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"
-                      >
-                        {w.text}
-                      </button>
-                    </li>
-                  ) : (
-                    <li key={w.text} className="text-sm leading-snug text-amber-900">
-                      {w.text}
-                    </li>
-                  ),
-                )}
-              </ul>
-            )}
-
             {statsOpen && units.length === 0 && (
               <p className="mt-6 text-center text-[15px] text-stone-500">
                 {project.roomKind === 'kitchen'
@@ -1082,6 +1088,22 @@ export function DesignScreen({
             await history.capture(projectId, `bulk:${Date.now()}`);
             for (const c of changes) await unitsRepo.update(c.id, { work: c.work });
             await syncConsumption(projectId);
+          }}
+          onClose={closeSheet}
+        />
+      )}
+
+      {/*
+        הבדיקה אינה מחוון ואינה העדפת תצוגה, ולכן היא אינה מאחורי
+        מתג ואינה תלויה בתפקיד: תכנת שעובד על הקיר ונגר שבונה
+        לפיו צריכים לדעת שדלת לא תיפתח, גם כשאינם רשאים לשנות.
+      */}
+      {sheet === 'warnings' && (
+        <WarningsSheet
+          warnings={warnings}
+          onPick={(w) => {
+            setFlagged(w);
+            if (w.unitIds.length) setSelectedId(w.unitIds[0]);
           }}
           onClose={closeSheet}
         />

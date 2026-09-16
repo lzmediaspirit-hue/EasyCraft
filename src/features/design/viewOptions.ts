@@ -5,6 +5,10 @@ import { useSyncExternalStore } from 'react';
 /**
  * מה מוצג במסך ההדמיה.
  *
+ * האזהרות אינן כאן, ולא במקרה: הן היו מתג כמו כל מחוון, ומי
+ * שכיבה אותו הפסיק לראות ששקע נחסם או שדלת לא תיפתח. בדיקה אינה
+ * העדפת תצוגה — היא עובדה על התכנון, והיא תמיד על המסך.
+ *
  * לוח המחוונים מתחת לציור התמלא בנתונים שכל אחד צריך משהו אחר
  * ממנו: אחד רוצה לראות מטר רץ, אחר רוצה שטח חזיתות, ומי שרק
  * מסדר ארגזים לא רוצה אף אחד מהם. במקום להחליט בשבילו — הוא בוחר,
@@ -20,8 +24,6 @@ export interface ViewOptions {
   frontArea: boolean;
   /** קו מידה אנכי לגובה הקיר, על הציור */
   heightLine: boolean;
-  /** אזהרות אוטומטיות מתחת למחוונים */
-  warnings: boolean;
   /**
    * סדר המחוונים על המסך.
    *
@@ -62,7 +64,6 @@ export const VIEW_OPTION_LABELS: { key: ToggleKey; label: string; hint?: string 
   { key: 'freeSpace', label: 'נשאר על הקיר' },
   { key: 'frontArea', label: 'שטח חזיתות' },
   { key: 'heightLine', label: 'קו גובה על הציור', hint: 'מידת גובה הקיר לצד הציור' },
-  { key: 'warnings', label: 'אזהרות', hint: 'חריגה, חפיפה, שקע חסום' },
 ];
 
 const DEFAULTS: ViewOptions = {
@@ -73,7 +74,6 @@ const DEFAULTS: ViewOptions = {
   freeSpace: true,
   frontArea: true,
   heightLine: true,
-  warnings: true,
   statOrder: STAT_KEYS,
 };
 

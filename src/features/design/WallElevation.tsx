@@ -51,6 +51,14 @@ type Props = {
   allUnits: PlacedUnit[];
   plan: PlanWall[];
   selectedId: string | null;
+  /**
+   * מה שאזהרה מדברת עליו — ארגזים וסימוני קיר יחד.
+   *
+   * בחירה מסמנת דבר אחד; אזהרה היא יחס בין שניים, ולכן היא
+   * מדליקה את שניהם: מה שנפתח ומה שעומד בדרך. בלי זה הנגר קורא
+   * "דלת הארון לא תיפתח" ומחפש על הציור מי משניהם זה.
+   */
+  flagged?: Set<string>;
   onSelect: (id: string | null) => void;
   /**
    * הזזת ארגז. חסר = תצוגה בלבד, והגרירה אינה מתחילה כלל.
@@ -112,6 +120,7 @@ export function WallElevation({
   allUnits,
   plan,
   selectedId,
+  flagged,
   onSelect,
   onMove,
   inside,
@@ -827,6 +836,36 @@ export function WallElevation({
           </text>
         );
       })}
+
+      {/* מה שהאזהרה מדברת עליו — שני העצמים יחד, מעל הציור */}
+      {flagged && flagged.size > 0 && (
+        <g fill="none" stroke="#f59e0b" strokeWidth={stroke * 3} strokeLinejoin="round">
+          {shown
+            .filter((u) => flagged.has(u.id))
+            .map((u) => (
+              <rect
+                key={`flag-${u.id}`}
+                x={u.xMm}
+                y={flip(u.yMm + u.heightMm)}
+                width={alongWallMm(u)}
+                height={u.heightMm}
+                rx={stroke * 2}
+              />
+            ))}
+          {wall.features
+            .filter((f) => flagged.has(f.id))
+            .map((f) => (
+              <rect
+                key={`flag-${f.id}`}
+                x={f.xMm}
+                y={flip(f.yMm + Math.max(f.heightMm, 90))}
+                width={Math.max(f.widthMm, 90)}
+                height={Math.max(f.heightMm, 90)}
+                rx={stroke * 2}
+              />
+            ))}
+        </g>
+      )}
 
       {/*
         מדידה מוצגת על כל הארגזים בבת אחת: כשמודדים קיר רוצים לראות

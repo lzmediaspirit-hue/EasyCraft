@@ -14,6 +14,7 @@ import {
 } from './wallFeatures';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { TrashIcon } from '../../ui/icons';
+import { FEATURE_SWINGS } from '../../db/types';
 import type { HeightRef, WallFeature, WallSide } from '../../db/types';
 
 /** גרירה חופשית נוחתת על סנטימטרים שלמים, כמו בהדמיית הארגזים. */
@@ -344,6 +345,54 @@ function FeatureSettings({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/*
+        לאן נפתחת, ועל מה היא תלויה.
+        בלי שני אלה אי אפשר לומר אם ארון עומד בדרכה — ולכן זו
+        שאלה ולא ניחוש. מה שלא נענה מדווח כנתון חסר בבדיקה.
+      */}
+      {(f.kind === 'door' || f.kind === 'window') && (
+        <div className="mt-2 space-y-1.5 border-t border-stone-100 pt-2">
+          <div className="flex items-center gap-2">
+            <span className="w-14 shrink-0 text-[10px] text-stone-400">נפתחת</span>
+            <div className="flex flex-wrap gap-0.5 rounded-lg bg-stone-100 p-0.5">
+              {FEATURE_SWINGS.map((sw) => (
+                <button
+                  key={sw.key}
+                  onClick={() => onPatch({ swing: sw.key })}
+                  aria-pressed={f.swing === sw.key}
+                  className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                    f.swing === sw.key ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
+                  }`}
+                >
+                  {sw.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* צד הצירים נשאל רק כשיש סיבוב — נגררת אינה תלויה בצד */}
+          {f.swing !== 'slide' && (
+            <div className="flex items-center gap-2">
+              <span className="w-14 shrink-0 text-[10px] text-stone-400">צירים ב</span>
+              <div className="flex gap-0.5 rounded-lg bg-stone-100 p-0.5">
+                {(['start', 'end'] as const).map((h) => (
+                  <button
+                    key={h}
+                    onClick={() => onPatch({ hingeSide: h })}
+                    aria-pressed={f.hingeSide === h}
+                    className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                      f.hingeSide === h ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
+                    }`}
+                  >
+                    {SIDE_LABEL[h]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

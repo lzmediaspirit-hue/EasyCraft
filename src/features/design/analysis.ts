@@ -5,6 +5,9 @@ import { MAX_BODY_MM, blindSide, blindWidthMm } from '../../catalog/zones';
 import { BLIND_CORNER } from '../../catalog/kitchenRules';
 import { glyphDef } from '../../catalog/glyphList';
 import { cm } from '../../ui/units';
+import { envelopeClashes, envelopeOwnerLabel, roomEnvelopes } from './envelope';
+import type { Envelope } from './envelope';
+import type { PlanWall } from './plan';
 
 /**
  * התראה אחת, ומי היא מדברת עליו.
@@ -12,9 +15,32 @@ import { cm } from '../../ui/units';
  * התראה בלי ארגז היא טקסט שצריך לחפש לפיו על הקיר. `unitIds` הוא
  * מה שהופך אותה לכפתור: לוחצים, והארגז שיש בו הבעיה נבחר.
  */
-interface WallWarning {
+export interface WallWarning {
   text: string;
   unitIds: string[];
+  /**
+   * כמה זה חמור.
+   *
+   * רשימה שטוחה נקראת כאילו הכול שווה: ארגז שחורג מהקיר וארגז
+   * שגבוה מדי להרמה הופיעו זה לצד זה באותו צהוב. `block` הוא מה
+   * שלא ייבנה, `warn` הוא מה שייבנה אבל יעבוד רע, ו-`info` הוא
+   * נתון חסר — אין בעיה, פשוט אין עדיין תשובה.
+   */
+  level: WarnLevel;
+  /** סימוני קיר שהאזהרה מדברת עליהם — דלת, חלון */
+  featureIds?: string[];
+}
+
+/** חומרת האזהרה. */
+export type WarnLevel = 'block' | 'warn' | 'info';
+
+/** מהחמור לקל — לסידור הרשימה ולבחירת צבע האייקון. */
+export const WARN_ORDER: WarnLevel[] = ['block', 'warn', 'info'];
+
+/** החמור מבין כמה אזהרות, או ריק כשאין אף אחת. */
+export function worstLevel(warnings: WallWarning[]): WarnLevel | null {
+  for (const level of WARN_ORDER) if (warnings.some((w) => w.level === level)) return level;
+  return null;
 }
 
 export interface WallAnalysis {
@@ -68,6 +94,7 @@ export function analyzeWall(
     warnings.push({
       text: `${label} חורגים מהקיר ב-${cm(end - wall.lengthMm)} ס"מ`,
       unitIds: over.map((u) => u.id),
+      level: 'block',
     });
   };
   overflow(floor, 'התחתונים');
@@ -86,6 +113,7 @@ export function analyzeWall(
     warnings.push({
       text: `יוצאים מתחילת הקיר ב-${cm(out)} ס"מ`,
       unitIds: before.map((u) => u.id),
+      level: 'block',
     });
   }
 
@@ -95,6 +123,7 @@ export function analyzeWall(
     warnings.push({
       text: `עוברים את גובה הקיר ב-${cm(over)} ס"מ`,
       unitIds: tall.map((u) => u.id),
+      level: 'block',
     });
   }
 
@@ -103,6 +132,7 @@ export function analyzeWall(
     warnings.push({
       text: `יורדים מתחת לרצפה ב-${cm(Math.max(...sunk.map((u) => -u.yMm)))} ס"מ`,
       unitIds: sunk.map((u) => u.id),
+      level: 'block',
     });
   }
 
@@ -112,7 +142,13 @@ export function analyzeWall(
     // שקע או נקודת מים שנבלעים לגמרי מאחורי ארגז
     if (f.kind === 'socket' || f.kind === 'water') {
       const covered = onWall.find((u) => contains(u, f));
-      if (covered) warnings.push({ text: `${label} מוסתר מאחורי ארגז`, unitIds: [covered.id] });
+      if (covered)
+        warnings.push({
+          text: `${label} מוסתר מאחורי ארגז`,
+          unitIds: [covered.id],
+          featureIds: [f.id],
+          level: 'warn',
+        });
       continue;
     }
 
@@ -130,12 +166,19 @@ export function analyzeWall(
       warnings.push({
         text: `ה${label} בולט ${cm(bite)} ס"מ אל תוך ${blocking.name}`,
         unitIds: [blocking.id],
+        featureIds: [f.id],
+        level: 'warn',
       });
       continue;
     }
 
     // חלון, דלת או נישה שארגז נכנס לתוכם — גם חפיפה חלקית היא בעיה
-    warnings.push({ text: `${blocking.name} חוסם את ה${label}`, unitIds: [blocking.id] });
+    warnings.push({
+      text: `${blocking.name} חוסם את ה${label}`,
+      unitIds: [blocking.id],
+      featureIds: [f.id],
+      level: 'block',
+    });
   }
 
   // ארון גבוה מדי — קשה להרים, להוביל ולהתקין
@@ -145,6 +188,7 @@ export function analyzeWall(
       warnings.push({
         text: `${u.name} בגובה ${cm(bodyH)} ס"מ — מעל ${cm(MAX_BODY_MM)} עדיף לפצל`,
         unitIds: [u.id],
+        level: 'warn',
       });
     }
   }
@@ -172,6 +216,7 @@ export function analyzeWall(
         warnings.push({
           text: `${u.name}: הפינה המתה ${cm(blindWidthMm(u))} ס"מ, וצריך ${cm(need)} כדי שהדלת תיפתח`,
           unitIds: [u.id],
+          level: 'warn',
         });
       }
     }
@@ -184,7 +229,7 @@ export function analyzeWall(
    * תחתית — וזה נמדד על התיבות עצמן, במרחב החדר.
    */
   for (const c of clashing) {
-    warnings.push({ text: `${c.name} חודר לתוך ארון אחר`, unitIds: [c.id] });
+    warnings.push({ text: `${c.name} חודר לתוך ארון אחר`, unitIds: [c.id], level: 'block' });
   }
 
   return { floorUsedMm, wallUsedMm, freeMm: wall.lengthMm - floorUsedMm, warnings };
@@ -249,4 +294,49 @@ export function fillSpan(
     .filter((u) => u.xMm >= mid)
     .reduce((n, u) => Math.min(n, u.xMm), wall.lengthMm);
   return { startMm: start, sizeMm: Math.max(end - start, 0) };
+}
+
+/*
+ * אזהרות הפתיחה — מה שלא ייפתח בשטח.
+ *
+ * הן נבנות על החדר כולו ולא על קיר אחד: דלת החדר יושבת בקיר אחד
+ * והארון שחוסם אותה עומד על השני, וקיר בודד לעולם לא היה רואה את
+ * זה. לכן זו פונקציה נפרדת, והמסך מצרף את שתי הרשימות.
+ *
+ * ולכל אזהרה כאן יש שני עצמים: מה שנפתח ומה שעומד בדרך. הנגר
+ * צריך לראות את שניהם על הציור, לא רק את אחד מהם.
+ */
+export function openingWarnings(units: PlacedUnit[], plan: PlanWall[]): WallWarning[] {
+  const envelopes = roomEnvelopes(units, plan);
+  const featureIds = new Set(plan.flatMap((p) => p.wall.features.map((f) => f.id)));
+  const out: WallWarning[] = [];
+
+  /** מזהי הבעלים כשהם ארגז — סימון קיר אינו ארגז ואינו נבחר כך */
+  const ownerUnits = (e: Envelope) => (featureIds.has(e.ownerId) ? [] : [e.ownerId]);
+  const ownerFeatures = (e: Envelope) => (featureIds.has(e.ownerId) ? [e.ownerId] : []);
+
+  for (const c of envelopeClashes(envelopes, units, plan)) {
+    out.push({
+      text: `${envelopeOwnerLabel(c.envelope)} לא תיפתח — ${c.blockerName} עומד בדרך`,
+      unitIds: [...ownerUnits(c.envelope), c.blockerId],
+      featureIds: ownerFeatures(c.envelope),
+      level: 'warn',
+    });
+  }
+
+  /*
+   * ומה שאין עליו נתון. זו אינה תקלה אלא שאלה פתוחה, ולכן היא
+   * `info`: הבדיקה לא נכשלה — היא לא יכלה לרוץ.
+   */
+  for (const e of envelopes) {
+    if (!e.missing) continue;
+    out.push({
+      text: `${envelopeOwnerLabel(e)}: חסר ${e.missing}`,
+      unitIds: ownerUnits(e),
+      featureIds: ownerFeatures(e),
+      level: 'info',
+    });
+  }
+
+  return out;
 }

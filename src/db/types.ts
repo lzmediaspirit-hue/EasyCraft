@@ -239,7 +239,29 @@ export interface WallFeature {
   fromSide?: WallSide;
   /** הגובה נמדד מהרצפה או מהתקרה */
   heightRef?: HeightRef;
+  /**
+   * הצד שהדלת או כנף החלון תלויות בו.
+   *
+   * דלת חדר נפתחת סביב הצירים שלה וסוחפת רבע מעגל אל תוך החדר.
+   * בלי לדעת באיזה צד הם יושבים אין דרך לומר אם ארון עומד בדרכה,
+   * ולכן החוסר מדווח.
+   */
+  hingeSide?: WallSide;
+  /**
+   * לאן היא נפתחת: פנימה אל החדר, החוצה, או נגררת ואינה סוחפת
+   * כלום. רק `in` יוצרת מעטפת תנועה בחדר.
+   */
+  swing?: FeatureSwing;
 }
+
+/** לאן נפתחת דלת חדר או כנף חלון. */
+export type FeatureSwing = 'in' | 'out' | 'slide';
+
+export const FEATURE_SWINGS: { key: FeatureSwing; label: string }[] = [
+  { key: 'in', label: 'נפתחת פנימה' },
+  { key: 'out', label: 'נפתחת החוצה' },
+  { key: 'slide', label: 'נגררת' },
+];
 
 export interface Wall extends Entity {
   projectId: string;
@@ -441,6 +463,23 @@ export interface PlacedUnit extends Entity {
   zones?: Zone[];
   /** מנגנון פתיחת החזית */
   opening?: OpeningMech;
+  /**
+   * הצד שהצירים יושבים בו, כשיש דלת אחת.
+   *
+   * הדלת נפתחת אל הצד הנגדי לצירים, ולכן זה מה שקובע לאן היא
+   * סוחפת. לשתי דלתות אין שאלה — הן נפתחות לשני הצדדים — ולדלת
+   * אחת בלי הנתון הזה אין דרך לדעת, וזה מדווח כנתון חסר ולא
+   * מנוחש.
+   */
+  hingeSide?: WallSide;
+  /**
+   * מרווח הפתיחה שהיצרן נוקב בו, במ"מ.
+   *
+   * מגירה נשלפת כאורך המסילה, ודלת תנור נופלת קדימה כגובהה. אלה
+   * מספרים של היצרן ולא של האפליקציה: בלי הנתון הזה נאמר שהוא
+   * חסר, ולא מומצא מספר במקומו.
+   */
+  openClearanceMm?: number;
   /** סוג פינה, כשהארגז יושב במפגש קירות */
   corner?: CornerKind;
   /** רוחב החלק החסום בפינה מתה */
@@ -675,6 +714,9 @@ export interface CatalogItem extends Entity {
   shelves?: number;
   zones?: Zone[];
   opening?: OpeningMech;
+  /** צד הצירים ומרווח הפתיחה — ראה `PlacedUnit` */
+  hingeSide?: WallSide;
+  openClearanceMm?: number;
   corner?: CornerKind;
   blindMm?: number;
   /** הפרזול שנשמר עם הפריט, כדי שהוא יחזור מוכן בפעם הבאה */
@@ -771,6 +813,8 @@ export const REUSABLE_FIELDS = [
   'shelves',
   'zones',
   'opening',
+  'hingeSide',
+  'openClearanceMm',
   'corner',
   'blindMm',
   'drawerStyle',
