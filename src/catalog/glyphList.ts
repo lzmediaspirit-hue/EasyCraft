@@ -28,6 +28,14 @@ export interface GlyphDef {
    */
   noCarcass?: 'horizontal' | 'vertical';
   /**
+   * לוח דק: המידה הדקה שלו היא עובי, ולכן יש לה תקרה.
+   *
+   * לא כל `noCarcass` הוא כזה. שולחן הוא משטח שעומד בגובה שלו,
+   * והמידה שנשמרת לו היא הגובה מהרצפה — לא עובי הפלטה. אכיפת
+   * תקרת עובי עליו הייתה פוסלת מוצר תקין בספרייה.
+   */
+  thinBoard?: boolean;
+  /**
    * נישה למכשיר. הגוף אמיתי ונבנה מלוחות, אבל החזית היא המכשיר
    * עצמו — ולכן אין כאן דלת לחשב, וגם לא מדפים שנכנסים מאליהם.
    */
@@ -94,12 +102,12 @@ export const GLYPHS: GlyphDef[] = [
   { key: 'blindStart', family: 'corner', label: 'פינה מתה שמאל', doors: true, shelves: true },
   { key: 'blindEnd', family: 'corner', label: 'פינה מתה ימין', doors: true, shelves: true },
   { key: 'lShape', family: 'corner', label: 'פינתי במפגש', doors: true, shelves: true },
-  { noCarcass: 'vertical', key: 'plain', family: 'board', label: 'לוח בודד' },
+  { noCarcass: 'vertical', key: 'plain', family: 'board', thinBoard: true, label: 'לוח בודד' },
   { noCarcass: 'horizontal', key: 'desk', family: 'board', label: 'שולחן' },
   { key: 'tv', label: 'טלוויזיה', doors: true, drawers: true },
-  { noCarcass: 'vertical', key: 'panel', family: 'board', label: 'פאנל', cladding: true },
-  { noCarcass: 'horizontal', key: 'slab', family: 'board', label: 'מדף צף' },
-  { noCarcass: 'vertical', key: 'spacer', family: 'board', label: 'מרווח' },
+  { noCarcass: 'vertical', key: 'panel', family: 'board', thinBoard: true, label: 'פאנל', cladding: true },
+  { noCarcass: 'horizontal', key: 'slab', family: 'board', thinBoard: true, label: 'מדף צף' },
+  { noCarcass: 'vertical', key: 'spacer', family: 'board', thinBoard: true, label: 'מרווח' },
 ];
 
 export function glyphDef(key: string): GlyphDef {

@@ -104,8 +104,9 @@ export function limitsFor(glyph: string): Limits {
     return {
       heightLabel: 'עובי הלוח',
       heightHint: 'מ״מ',
-      minHeightMm: MIN_BOARD_MM,
-      maxHeightMm: MAX_BOARD_MM,
+      minHeightMm: def.thinBoard ? MIN_BOARD_MM : 1,
+      /* לשולחן אין תקרת עובי — המידה שלו היא הגובה מהרצפה */
+      maxHeightMm: def.thinBoard ? MAX_BOARD_MM : undefined,
       minWidthMm: 50,
       minDepthMm: 50,
       heightInMm: true,

@@ -134,7 +134,14 @@ const board = await page.evaluate(async () => {
     standingFat: checkUnit(panel(300)),
     /* ארגז רגיל לא קיבל תקרה חדשה */
     cabinet: checkUnit({ glyph: 'doors', widthMm: 600, heightMm: 2400, depthMm: 580, socleMm: 100 }),
+    /*
+     * שולחן אינו לוח דק: המידה שנשמרת לו היא הגובה מהרצפה ולא
+     * עובי הפלטה, ולכן אין לו תקרת עובי. תקרה עליו הייתה פוסלת
+     * את "שולחן עבודה / איפור" שבספרייה.
+     */
+    desk: checkUnit({ glyph: 'desk', widthMm: 1200, heightMm: 750, depthMm: 500, socleMm: 0 }),
     limits: limitsFor('slab'),
+    deskLimits: limitsFor('desk'),
     boxLimits: limitsFor('doors'),
   };
 });
@@ -146,7 +153,9 @@ ok('a 300 mm "board" is refused', /המקסימום/.test(board.fat ?? ''), Stri
 ok('a standing panel is measured by its depth', board.standingOk === null, String(board.standingOk));
 ok('and refused when that is a body, not a board', /המקסימום/.test(board.standingFat ?? ''), String(board.standingFat));
 ok('a tall cabinet is still allowed', board.cabinet === null, String(board.cabinet));
+ok('a desk is not a thin board and keeps its height', board.desk === null, String(board.desk));
 ok('the form offers the board a ceiling', board.limits.maxHeightMm === 100, String(board.limits.maxHeightMm));
+ok('but offers a desk none', board.deskLimits.maxHeightMm === undefined, String(board.deskLimits.maxHeightMm));
 ok('and a cabinet none', board.boxLimits.maxHeightMm === undefined, String(board.boxLimits.maxHeightMm));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' | '));

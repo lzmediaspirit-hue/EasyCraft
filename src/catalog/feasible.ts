@@ -64,8 +64,9 @@ export function unitProblem(
    * 300 מ״מ נשמר בשקט: הטופס הציע מינימום, והשער לא בדק דבר.
    * `MAX_BOARD_MM` היה קיים כמספר שאיש לא שאל אותו.
    */
-  const flat = glyphDef(u.glyph).noCarcass;
-  if (flat) {
+  const def = glyphDef(u.glyph);
+  const flat = def.noCarcass;
+  if (flat && def.thinBoard) {
     const th = slabThicknessMm(u, flat);
     if (th < MIN_BOARD_MM) {
       return `עובי ${th} מ״מ דק מדי ללוח. המינימום הוא ${MIN_BOARD_MM} מ״מ.`;
