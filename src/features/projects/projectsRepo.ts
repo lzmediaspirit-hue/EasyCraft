@@ -550,12 +550,30 @@ export const unitsRepo = {
   async restoreProject(projectId: string, units: PlacedUnit[]): Promise<void> {
     await db.transaction('rw', db.units, db.tombstones, async () => {
       const keep = new Set(units.map((u) => u.id));
-      const now = await db.units.where('projectId').equals(projectId).toArray();
+      const live = await db.units.where('projectId').equals(projectId).toArray();
       await eraseRows(
         db.units,
-        now.filter((u) => !keep.has(u.id)),
+        live.filter((u) => !keep.has(u.id)),
       );
-      if (units.length) await db.units.bulkPut(units);
+      /*
+       * "בטל" הוא כתיבה חדשה, לא שחזור של מה שהיה.
+       *
+       * התצלום הוחזר כפי שהוא, כולל מספר הגרסה שלו — ולכן ארגז
+       * שהיה בגרסה 2 חזר לגרסה 1, והסנכרון הבא היה רואה כתיבה
+       * שמכריזה על עצמה ישנה יותר ממה שכבר יש בצד השני. המידות
+       * חוזרות אחורה; המונה ממשיך קדימה.
+       */
+      const was = new Map(live.map((u) => [u.id, u.rev ?? 0]));
+      const at = Date.now();
+      if (units.length) {
+        await db.units.bulkPut(
+          units.map((u) => ({
+            ...u,
+            rev: Math.max(was.get(u.id) ?? 0, u.rev ?? 0) + 1,
+            updatedAt: at,
+          })),
+        );
+      }
       await revive(
         'units',
         units.map((u) => u.id),

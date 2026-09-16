@@ -751,3 +751,21 @@ db.version(27)
         });
     }
   });
+
+
+/*
+ * זהות מקור לשורות שהגיעו מחבילה.
+ *
+ * ייבוא של אותו ארגז לשתי נגריות דרס את השורה של הראשונה, כי המפתח
+ * גלובלי והכתיבה נשאה את המזהה המקורי. מי שמייבא מקבל מעכשיו עותק
+ * משלו, והמזהה שממנו הוא בא נשמר ב-`sourceId` — כדי שייבוא חוזר
+ * יעדכן את אותו עותק ולא ייצור שלישי.
+ */
+const TABLES_V28 = {
+  ...TABLES_V27,
+  catalog: 'id, workshopId, sourceId, group, sortOrder',
+  materials: 'id, workshopId, sourceId, sortOrder',
+  finishes: 'id, workshopId, sourceId, sortOrder',
+} as const;
+
+db.version(28).stores(TABLES_V28);

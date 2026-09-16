@@ -1,5 +1,7 @@
 import { db } from './db';
-import { allMine, eraseIds, owned } from './rows';
+import { allMine, eraseIds, mine, owned, revive } from './rows';
+import { workshopId } from './workshop';
+import type { Table } from 'dexie';
 import { normalizeTables } from './legacy';
 import { checkTable, packFingerprint } from './packSchema';
 import type { CatalogItem, Finish, Material } from './types';
@@ -302,6 +304,49 @@ export interface ImportResult {
  * פרויקטים קיימים אינם נפגעים בשום מקרה: ארגז שהונח על קיר שמר את
  * המידות שלו בעצמו ברגע ההנחה, והוא אינו קורא מהספרייה.
  */
+/**
+ * מזהים מקומיים לשורות שמגיעות מחבילה.
+ *
+ * המפתח במסד גלובלי, ולכן ייבוא של אותו ארגז לנגרייה שנייה דרס את
+ * השורה של הראשונה ולקח לה את הבעלות. אותה ספרייה צריכה להתקיים
+ * בשתי נגריות בלי שאף אחת תאבד את מה שערכה בה.
+ *
+ * הפתרון אינו מפתח מורכב — זו הגירה גדולה על נתונים שכבר קיימים —
+ * אלא מיפוי מקומי: שורה שמזההּ תפוס בידי מישהו אחר מקבלת מזהה חדש,
+ * והמזהה שממנו היא באה נשמר ב-`sourceId`. ייבוא חוזר מוצא אותה לפיו
+ * ומעדכן אותה, במקום ליצור עותק שלישי.
+ */
+async function localIds<T extends { id: string; sourceId?: string; workshopId?: string }, I>(
+  table: Table<T, string, I>,
+  incoming: { id: string }[],
+): Promise<{ to: (id: string) => string; fresh: Set<string> }> {
+  const map = new Map<string, string>();
+  const fresh = new Set<string>();
+  const ids = incoming.map((r) => r.id);
+  const [taken, bySource] = await Promise.all([
+    table.bulkGet(ids),
+    table.where('sourceId').anyOf(ids).toArray(),
+  ]);
+  const sourced = new Map(bySource.filter(mine).map((r) => [r.sourceId!, r.id]));
+
+  incoming.forEach((row, i) => {
+    /* כבר יובא לכאן פעם — אותו עותק מקומי */
+    const already = sourced.get(row.id);
+    if (already) return void map.set(row.id, already);
+    const holder = taken[i];
+    /* פנוי, או כבר שלי — המזהה המקורי נשאר */
+    if (!holder || mine(holder)) {
+      fresh.add(row.id);
+      return;
+    }
+    /* תפוס בידי נגרייה אחרת — עותק מקומי עם מזהה חדש */
+    const local = crypto.randomUUID();
+    map.set(row.id, local);
+    fresh.add(row.id);
+  });
+  return { to: (id) => map.get(id) ?? id, fresh };
+}
+
 export async function importCabinets(
   pack: CabinetPack,
   mode: 'merge' | 'replace',
@@ -310,28 +355,32 @@ export async function importCabinets(
   const now = Date.now();
   const out: ImportResult = { added: 0, replaced: 0, removed: 0, deps: 0, unresolved: 0 };
 
-  /*
-   * מה שנכנס נרשם על הנגרייה שמייבאת.
-   *
-   * החבילה נושאת את הבעלות של מי ששלח אותה, וזו אינה בעלות כאן:
-   * ארגז שנכנס הופך לארגז של הנגרייה הזאת, והגרסה שלו מתחילה מ-1
-   * — היא מונה מקומי ולא היסטוריה של המכשיר ששלח.
-   */
-  const asMine = <T,>(rows: T[]): T[] => rows.map((r) => ({ ...r, ...owned() }));
-
   await db.transaction('rw', db.catalog, db.materials, db.finishes, db.tombstones, async () => {
     /*
      * התלויות ראשונות, ובמזהה המקורי שלהן — כך ההפניות שבארגזים
      * נשארות תקפות. מה שכבר קיים באותו מזהה אינו נדרס: המחיר של לוח
      * הוא של העסק הזה, ולא של מי ששלח את הארגזים.
      */
-    const haveMaterials = new Set((await allMine(db.materials)).map((m) => m.id));
-    const newMaterials = materials.filter((m) => !haveMaterials.has(m.id));
-    if (newMaterials.length) await db.materials.bulkAdd(asMine(newMaterials));
+    const mapMaterials = await localIds(db.materials, materials);
+    const newMaterials = materials
+      .filter((m) => mapMaterials.fresh.has(m.id))
+      .map((m) => ({ ...m, id: mapMaterials.to(m.id), sourceId: m.id, ...owned() }));
+    if (newMaterials.length) await db.materials.bulkAdd(newMaterials);
 
-    const haveFinishes = new Set((await allMine(db.finishes)).map((f) => f.id));
-    const newFinishes = finishes.filter((f) => !haveFinishes.has(f.id));
-    if (newFinishes.length) await db.finishes.bulkAdd(asMine(newFinishes));
+    const mapFinishes = await localIds(db.finishes, finishes);
+    const newFinishes = finishes
+      .filter((f) => mapFinishes.fresh.has(f.id))
+      .map((f) => ({
+        ...f,
+        id: mapFinishes.to(f.id),
+        sourceId: f.id,
+        /* מחיר לכל לוח — והלוחות קיבלו מזהים מקומיים */
+        prices: Object.fromEntries(
+          Object.entries(f.prices ?? {}).map(([mid, price]) => [mapMaterials.to(mid), price]),
+        ),
+        ...owned(),
+      }));
+    if (newFinishes.length) await db.finishes.bulkAdd(newFinishes);
     out.deps = newMaterials.length + newFinishes.length;
 
     const rows = await allMine(db.catalog);
@@ -352,9 +401,25 @@ export async function importCabinets(
       mode === 'merge'
         ? new Map(rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i.id]))
         : new Map<string, string>();
+    const mapItems = await localIds(db.catalog, items);
     const landed = items.map((i) => {
       const twin = i.code ? byCode.get(i.code.toUpperCase()) : undefined;
-      return twin && twin !== i.id ? { ...i, id: twin } : i;
+      const id = twin ?? mapItems.to(i.id);
+      /* ההפניות לתלויות עוברות למזהים המקומיים שלהן */
+      const ref = (v?: string) => (v ? mapMaterials.to(mapFinishes.to(v)) : v);
+      return {
+        ...i,
+        id,
+        ...(id === i.id ? {} : { sourceId: i.id }),
+        carcassFinishId: ref(i.carcassFinishId),
+        frontFinishId: ref(i.frontFinishId),
+        exposedFinishId: ref(i.exposedFinishId),
+        backFinishId: ref(i.backFinishId),
+        carcassMaterialId: ref(i.carcassMaterialId),
+        frontMaterialId: ref(i.frontMaterialId),
+        exposedMaterialId: ref(i.exposedMaterialId),
+        backMaterialId: ref(i.backMaterialId),
+      };
     });
 
     if (mode === 'replace') {
@@ -367,7 +432,27 @@ export async function importCabinets(
       if (existing.has(item.id)) out.replaced++;
       else out.added++;
     }
-    await db.catalog.bulkPut(asMine(landed).map((i) => ({ ...i, updatedAt: now })));
+    /*
+     * שורה שכבר קיימת מקבלת גרסה מתקדמת ולא גרסה 1.
+     *
+     * הייבוא הטביע `owned()` על הכול, ולכן עדכון של ארגז קיים החזיר
+     * את המונה שלו אחורה: הסנכרון הבא היה רואה כתיבה שמכריזה על
+     * עצמה ישנה יותר ממה שכבר יש בצד השני.
+     */
+    await db.catalog.bulkPut(
+      landed.map((i) => {
+        const had = existing.get(i.id);
+        return {
+          ...i,
+          workshopId: workshopId(),
+          rev: had ? (had.rev ?? 0) + 1 : 1,
+          createdAt: had?.createdAt ?? i.createdAt ?? now,
+          updatedAt: now,
+        };
+      }),
+    );
+    /* מה שחוזר במכוון מבטל את סימון המחיקה שלו, באותה עסקה */
+    await revive('catalog', landed.map((i) => i.id));
 
 
     /* מה שנשאר בלי כיסוי — נאמר במספר ולא מתגלה אחר כך בהדמיה */
