@@ -791,27 +791,37 @@ export function UnitEditor({
             ))}
           </Row>
 
+          {/*
+            קושרות במקום לוח: שתי רצועות של 10 ס"מ שמחזיקות את הארון
+            מרובע. זה מה שנגר בונה כשאין מה לכסות — ומה שיורד כאן
+            יורד גם מהפלטה ומהמחיר.
+
+            קושרת תקרה אינה תלויה בגב. בחירת "בלי גב" הסתירה גם
+            אותה, ולכן ארון בלי גב לא יכול היה לקבל קושרת תקרה
+            בכלל — והיא אף נעלמה מהמסך כשהיא כבר הייתה פעילה. הגב
+            מסתיר רק את קושרת הגב, שהיא אכן חלק ממנו.
+          */}
+          <Row label="קושרות" hint={`רצועות ${cm(RAIL_WIDTH_MM)} ${unitLabel()} במקום לוח`}>
+            <Pill
+              active={!!rails.top}
+              /* תקרה שבוטלה אינה יכולה לשאת קושרת — אין מה להחליף */
+              disabled={!!unit.omit?.top}
+              onClick={() => onChange({ rails: { ...rails, top: !rails.top } })}
+            >
+              תקרה
+            </Pill>
+            {backKind !== 'none' && (
+              <Pill
+                active={!!rails.back}
+                onClick={() => onChange({ rails: { ...rails, back: !rails.back } })}
+              >
+                גב
+              </Pill>
+            )}
+          </Row>
+
           {backKind !== 'none' && (
             <>
-              {/*
-                קושרות במקום לוח: שתי רצועות של 10 ס"מ שמחזיקות את
-                הארון מרובע. זה מה שנגר בונה כשאין מה לכסות — ומה
-                שיורד כאן יורד גם מהפלטה ומהמחיר.
-              */}
-              <Row label="קושרות" hint={`רצועות ${cm(RAIL_WIDTH_MM)} ${unitLabel()} במקום לוח`}>
-                <Pill
-                  active={!!rails.top}
-                  onClick={() => onChange({ rails: { ...rails, top: !rails.top } })}
-                >
-                  תקרה
-                </Pill>
-                <Pill
-                  active={!!rails.back}
-                  onClick={() => onChange({ rails: { ...rails, back: !rails.back } })}
-                >
-                  גב
-                </Pill>
-              </Row>
 
               {/*
                 גובה הגב, כשהוא אינו מכסה את כל הגוף. ריק = הגב
@@ -965,7 +975,11 @@ export function UnitEditor({
     {addingFinish && <FinishSheet finish={null} onClose={() => setAddingFinish(false)} />}
 
     {savingToLibrary && (
-      <SaveToLibrarySheet unit={unit} onClose={() => setSavingToLibrary(false)} />
+      <SaveToLibrarySheet
+        unit={unit}
+        projectRoom={project?.roomKind}
+        onClose={() => setSavingToLibrary(false)}
+      />
     )}
     </>
   );

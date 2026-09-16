@@ -1,5 +1,5 @@
 import { checkItem } from '../catalog/saveGate';
-import type { CatalogItem, Finish, Material } from './types';
+import type { CatalogItem, Finish, Material, Room } from './types';
 
 /**
  * מה נחשב שורה תקינה בחבילת ארגזים.
@@ -142,6 +142,10 @@ export const SCHEMA: Record<string, TableSpec> = {
       edgeFactoryPerM: num,
       edgeConsumerPerM: num,
     },
+  },
+  rooms: {
+    need: { ...ENTITY, label: str, groups: listOf(str), sortOrder: order },
+    may: { hint: str, icon: str, isBuiltin: bool, hiddenAt: time },
   },
   catalog: {
     /*
@@ -359,6 +363,7 @@ export function packFingerprint(pack: {
   catalog: CatalogItem[];
   materials: Material[];
   finishes: Finish[];
+  rooms?: Room[];
 }): string {
   const by = <T extends { id: string }>(rows: T[]) => [...rows].sort((x, y) => (x.id < y.id ? -1 : 1));
   return fingerprint(
@@ -366,6 +371,8 @@ export function packFingerprint(pack: {
       catalog: by(pack.catalog),
       materials: by(pack.materials),
       finishes: by(pack.finishes),
+      /* חדרים נוספו בפורמט 5; חבילה בלעדיהם נותנת את אותה חתימה */
+      ...(pack.rooms?.length ? { rooms: by(pack.rooms) } : {}),
     }),
   );
 }

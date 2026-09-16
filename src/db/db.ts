@@ -769,3 +769,17 @@ const TABLES_V28 = {
 } as const;
 
 db.version(28).stores(TABLES_V28);
+
+/*
+ * גם החדר נוסע בחבילה.
+ *
+ * ארגז מצביע על חדרים, ולכן החבילה נושאת מעכשיו גם את הגדרות
+ * החדרים — וכל שורה שנוסעת צריכה את אותה זהות מקור. בלי האינדקס
+ * הזה הייבוא נפל על `SchemaError` ברגע שהחבילה כללה חדר.
+ */
+const TABLES_V29 = {
+  ...TABLES_V28,
+  rooms: 'id, workshopId, sourceId, sortOrder',
+} as const;
+
+db.version(29).stores(TABLES_V29);

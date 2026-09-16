@@ -431,8 +431,16 @@ export const unitsRepo = {
       catalogItemId: item.id,
       name: item.name,
       glyph: item.glyph,
-      // תיבת המגירה היא דרך העבודה של הנגרייה, ולא מאפיין של הפריט
-      drawerBox: defaults.drawerBox,
+      /*
+       * תיבת המגירה שהתבנית נשמרה איתה, ואם אין — דרך העבודה
+       * של הנגרייה.
+       *
+       * הכלל היה הפוך: ברירת המחדל דרסה את מה שנשמר, ולכן ארגז
+       * שנבנה במכוון עם תיבת עץ חזר מהספרייה עם תיבת ברזל. מי
+       * שטרח לשמור תבנית מצפה לקבל אותה כפי ששמר; ברירת המחדל
+       * היא תשובה לשאלה שלא נענתה, לא דריסה של תשובה שכן.
+       */
+      drawerBox: item.drawerBox ?? defaults.drawerBox,
       // הגב שהפריט הגיע איתו, ואם אין — דרך העבודה של הנגרייה
       backKind: item.backKind ?? defaults.backKind,
       level: item.level,

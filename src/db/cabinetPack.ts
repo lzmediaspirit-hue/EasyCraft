@@ -4,7 +4,7 @@ import { workshopId } from './workshop';
 import type { Table } from 'dexie';
 import { normalizeTables } from './legacy';
 import { checkTable, packFingerprint } from './packSchema';
-import type { CatalogItem, Finish, Material } from './types';
+import type { CatalogItem, Finish, Material, Room } from './types';
 
 
 /**
@@ -29,7 +29,7 @@ import type { CatalogItem, Finish, Material } from './types';
  *     אליהם. ב-1 היא נשאה רק את הארגזים, והמקבל קיבל הפניות
  *     למזהים שאין אצלו: הגוון שנבחר לחזית פשוט לא היה קיים.
  */
-export const PACK_FORMAT = 4;
+export const PACK_FORMAT = 5;
 
 /**
  * מה יש בחבילה, בלי לפתוח את הטבלאות.
@@ -52,12 +52,20 @@ export interface PackManifest {
   /** המק״טים שבחבילה, ממוינים — הזהות שעוברת בין מכשירים */
   codes: string[];
   revision: number;
+  /** כמה חדרים נוסעים עם הארגזים — מגרסה 5 ואילך */
+  rooms?: number;
   /** גיבוב התוכן — מה יש בחבילה, ולא מתי נארזה */
   fingerprint: string;
 }
 
-/** הטבלאות שנוסעות בחבילה: הארגזים, ומה שהם מפנים אליו. */
-const TABLES = ['catalog', 'materials', 'finishes'] as const;
+/**
+ * הטבלאות שנוסעות בחבילה: הארגזים, ומה שהם מפנים אליו.
+ *
+ * החדרים נוספו בפורמט 5. ארגז שומר מזהי חדרים, ולכן חבילה שנשלחה
+ * בלעדיהם הגיעה ליעד עם הפניה לחדר שאינו קיים שם — והייבוא דיווח
+ * "0 חסרים", כי הוא בכלל לא הסתכל על חדרים.
+ */
+const TABLES = ['catalog', 'materials', 'finishes', 'rooms'] as const;
 
 type TableName = (typeof TABLES)[number];
 
@@ -66,6 +74,7 @@ const TABLE_LABEL: Record<TableName, string> = {
   catalog: 'הארגזים',
   materials: 'הלוחות',
   finishes: 'הגוונים',
+  rooms: 'החדרים',
 };
 
 /** שלוש הטבלאות, כערכים ולא כשמות. */
@@ -73,6 +82,7 @@ export interface PackTables {
   catalog: CatalogItem[];
   materials: Material[];
   finishes: Finish[];
+  rooms: Room[];
 }
 
 export interface CabinetPack {
@@ -133,7 +143,22 @@ export async function exportCabinets(): Promise<CabinetPack> {
       const { workshopId: _w, rev: _r, ...rest } = r as T & { workshopId?: string; rev?: number };
       return rest as T;
     });
-  const tables = { catalog: bare(catalog), materials: bare(materials), finishes: bare(finishes) };
+  /*
+   * גם החדרים שהארגזים משויכים אליהם.
+   *
+   * חדר מותאם שנוצר כאן הוא שורה במסד, והארגז שומר את מזההּ. קובץ
+   * בלעדיו הגיע ליעד עם הפניה לשום דבר — והייבוא דיווח "0 חסרים",
+   * כי חדרים לא נספרו בכלל. חדרי הזרע נוסעים גם הם: המקבל כבר
+   * מכיר אותם באותו מזהה, והייבוא לא ידרוס אותם.
+   */
+  const rooms = (await allMine(db.rooms)).filter((r) => need.rooms.has(r.id));
+
+  const tables = {
+    catalog: bare(catalog),
+    materials: bare(materials),
+    finishes: bare(finishes),
+    rooms: bare(rooms),
+  };
   return {
     app: 'easycraft',
     format: PACK_FORMAT,
@@ -150,6 +175,7 @@ function describe(tables: PackTables): Omit<PackManifest, 'revision'> {
     items: tables.catalog.length,
     materials: tables.materials.length,
     finishes: tables.finishes.length,
+    rooms: tables.rooms.length,
     codes: tables.catalog
       .map((i) => i.code)
       .filter((c): c is string => !!c)
@@ -170,20 +196,27 @@ export function packManifest(pack: CabinetPack): PackManifest {
   return { ...describe(tablesOf(pack)), revision: pack.manifest?.revision ?? pack.at ?? 0 };
 }
 
-/** שלוש הטבלאות של החבילה, גם כשהקובץ חסר אחת מהן. */
+/** הטבלאות של החבילה, גם כשהקובץ חסר אחת מהן. */
 function tablesOf(pack: CabinetPack): PackTables {
   return {
     catalog: (pack.tables.catalog ?? []) as CatalogItem[],
     materials: (pack.tables.materials ?? []) as Material[],
     finishes: (pack.tables.finishes ?? []) as Finish[],
+    rooms: (pack.tables.rooms ?? []) as Room[],
   };
 }
 
 /** הגוונים והלוחות שהארגזים מפנים אליהם. */
-function referenced(items: CatalogItem[]): { finishes: Set<string>; materials: Set<string> } {
+function referenced(items: CatalogItem[]): {
+  finishes: Set<string>;
+  materials: Set<string>;
+  rooms: Set<string>;
+} {
   const finishes = new Set<string>();
   const materials = new Set<string>();
+  const rooms = new Set<string>();
   for (const i of items) {
+    for (const id of i.rooms ?? []) rooms.add(id);
     for (const id of [i.carcassFinishId, i.frontFinishId, i.exposedFinishId, i.backFinishId]) {
       if (id) finishes.add(id);
     }
@@ -196,7 +229,7 @@ function referenced(items: CatalogItem[]): { finishes: Set<string>; materials: S
       if (id) materials.add(id);
     }
   }
-  return { finishes, materials };
+  return { finishes, materials, rooms };
 }
 
 
@@ -334,11 +367,19 @@ async function localIds<T extends { id: string; sourceId?: string; workshopId?: 
     const already = sourced.get(row.id);
     if (already) return void map.set(row.id, already);
     const holder = taken[i];
-    /* פנוי, או כבר שלי — המזהה המקורי נשאר */
-    if (!holder || mine(holder)) {
+    /* פנוי — המזהה המקורי נשאר, והשורה נכנסת */
+    if (!holder) {
       fresh.add(row.id);
       return;
     }
+    /*
+     * כבר שלי באותו מזהה — השורה קיימת, ולכן היא אינה חדשה.
+     *
+     * `fresh` סימן גם אותה, והייבוא ניסה להוסיף שורה שכבר יושבת
+     * במסד: חבילה שנוצרה כאן וחזרה לכאן נפלה על מפתח כפול. מה
+     * שקיים נשאר כפי שהוא — השם והמחיר הם של העסק הזה.
+     */
+    if (mine(holder)) return;
     /* תפוס בידי נגרייה אחרת — עותק מקומי עם מזהה חדש */
     const local = crypto.randomUUID();
     map.set(row.id, local);
@@ -351,11 +392,18 @@ export async function importCabinets(
   pack: CabinetPack,
   mode: 'merge' | 'replace',
 ): Promise<ImportResult> {
-  const { catalog: items, materials, finishes } = tablesOf(pack);
+  const { catalog: items, materials, finishes, rooms } = tablesOf(pack);
   const now = Date.now();
   const out: ImportResult = { added: 0, replaced: 0, removed: 0, deps: 0, unresolved: 0 };
 
-  await db.transaction('rw', db.catalog, db.materials, db.finishes, db.tombstones, async () => {
+  await db.transaction(
+    'rw',
+    db.catalog,
+    db.materials,
+    db.finishes,
+    db.rooms,
+    db.tombstones,
+    async () => {
     /*
      * התלויות ראשונות, ובמזהה המקורי שלהן — כך ההפניות שבארגזים
      * נשארות תקפות. מה שכבר קיים באותו מזהה אינו נדרס: המחיר של לוח
@@ -401,6 +449,18 @@ export async function importCabinets(
       mode === 'merge'
         ? new Map(rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i.id]))
         : new Map<string, string>();
+    /*
+     * החדרים לפני הארגזים: ארגז מצביע על חדר, ולא להפך.
+     *
+     * חדר שכבר קיים אצל המקבל אינו נדרס — השם והסדר שלו הם שלו —
+     * וחדר חדש נכנס כמו שהוא, כדי שהשיוך של הארגז יימצא.
+     */
+    const mapRooms = await localIds(db.rooms, rooms);
+    const newRooms = rooms
+      .filter((r) => mapRooms.fresh.has(r.id))
+      .map((r) => ({ ...r, id: mapRooms.to(r.id), sourceId: r.id, ...owned() }));
+    if (newRooms.length) await db.rooms.bulkAdd(newRooms);
+
     const mapItems = await localIds(db.catalog, items);
     const landed = items.map((i) => {
       const twin = i.code ? byCode.get(i.code.toUpperCase()) : undefined;
@@ -411,6 +471,7 @@ export async function importCabinets(
         ...i,
         id,
         ...(id === i.id ? {} : { sourceId: i.id }),
+        rooms: (i.rooms ?? []).map((r) => mapRooms.to(r)),
         carcassFinishId: ref(i.carcassFinishId),
         frontFinishId: ref(i.frontFinishId),
         exposedFinishId: ref(i.exposedFinishId),
@@ -459,15 +520,24 @@ export async function importCabinets(
     const finishIds = new Set((await allMine(db.finishes)).map((f) => f.id));
 
     const materialIds = new Set((await allMine(db.materials)).map((m) => m.id));
+    /*
+     * חדר חסר נספר גם הוא.
+     *
+     * הספירה דילגה עליו, ולכן קובץ שהגיע עם ארגז שמשויך לחדר שאין
+     * אצל המקבל דיווח "0 חסרים" — והארגז פשוט לא הופיע בשום רשימה.
+     */
+    const roomIds = new Set((await allMine(db.rooms)).map((r) => r.id));
     out.unresolved = landed.filter((i) => {
-
       const f = [i.carcassFinishId, i.frontFinishId, i.exposedFinishId, i.backFinishId];
       const m = [i.carcassMaterialId, i.frontMaterialId, i.exposedMaterialId, i.backMaterialId];
       return (
-        f.some((id) => id && !finishIds.has(id)) || m.some((id) => id && !materialIds.has(id))
+        f.some((id) => id && !finishIds.has(id)) ||
+        m.some((id) => id && !materialIds.has(id)) ||
+        (i.rooms ?? []).some((id) => !roomIds.has(id))
       );
-    }).length;
-  });
+      }).length;
+    },
+  );
 
   return out;
 }
