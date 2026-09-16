@@ -12,6 +12,7 @@
 import { chromium } from 'playwright';
 import { setup } from './mk.mjs';
 import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -38,14 +39,20 @@ const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`],
   );
-const sources = walk('src').filter((f) => /\.tsx?$/.test(f));
+/* הנתיב נגזר מהקובץ ולא מתיקיית ההרצה: הבדיקות רצות מ-`tests/` */
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const sources = walk(`${ROOT}src`).filter((f) => /\.tsx?$/.test(f));
 const outside = sources.filter(
   (f) =>
-    !f.startsWith('src/db/') &&
+    !f.startsWith(`${ROOT}src/db/`) &&
     !/Repo\.ts$/.test(f) &&
     /from '[^']*db\/db'/.test(readFileSync(f, 'utf8')),
 );
-ok('only the data layer talks to the database', outside.length === 0, outside.join(', '));
+ok(
+  'only the data layer talks to the database',
+  outside.length === 0,
+  outside.map((f) => f.slice(ROOT.length)).join(', '),
+);
 
 await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
 

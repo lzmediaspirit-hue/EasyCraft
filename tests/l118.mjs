@@ -27,10 +27,13 @@ const r = await page.evaluate(async () => {
   const H = await import('/src/features/design/history.ts' + v);
   const { db } = await import('/src/db/db.ts' + v);
 
+  /* שורה נושאת בעלות וגרסה — בלעדיהן המאגר אינו רואה אותה */
+  const W = await import('/src/db/workshop.ts');
   const unit = (over) => ({
     id: 'u', projectId: 'p-118', wallId: 'w1', catalogItemId: 'c1',
     name: 'ארגז', glyph: 'doors', level: 'wall',
     xMm: 0, yMm: 0, widthMm: 600, heightMm: 700, depthMm: 320,
+    workshopId: W.workshopId(), rev: 1,
     createdAt: 0, updatedAt: 0, ...over,
   });
 
