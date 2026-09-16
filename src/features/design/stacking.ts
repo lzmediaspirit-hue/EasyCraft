@@ -47,6 +47,12 @@ export interface StackSnap {
  * `holdId` הוא היעד שכבר נבחר בגרירה הזאת. הוא מקבל יתרון קטן, כדי
  * שהיעד לא יקפוץ בין שני שכנים כשהאצבע עומדת בדיוק ביניהם.
  *
+ * `wallLengthMm` הוא הקיר שהפינה חייבת להיכנס בו. פינה שאינה
+ * נכנסת אינה מועמדת: יישור לסוף של תחתון רחב יותר נתן לעליון
+ * מקום שלילי — ארגז שיושב מחוץ לקיר, בעודו מדווח על "פינה
+ * מדויקת". הוא אינו נדחק פנימה בשקט, כי אז היישור שהובטח כבר
+ * אינו קיים; הוא פשוט אינו נבחר, והגרירה ממשיכה בהצמדה הרגילה.
+ *
  * `null` = אין על מה להניח כאן, והגרירה ממשיכה בהצמדה הרגילה.
  */
 export function stackSnap(
@@ -56,6 +62,7 @@ export function stackSnap(
   mates: PlacedUnit[],
   tol: number,
   holdId?: string,
+  wallLengthMm?: number,
 ): StackSnap | null {
   /*
    * אי נמדד ברצפת החדר ואין לו "לאורך הקיר", ולכן פינה על קיר אינה
@@ -85,6 +92,9 @@ export function stackSnap(
     for (const c of corners) {
       const dx = Math.abs(xMm - c.x);
       if (dx > tol) continue;
+      /* פינה שמוציאה את הארגז מהקיר אינה פינה */
+      if (c.x < 0) continue;
+      if (wallLengthMm !== undefined && c.x + w > wallLengthMm) continue;
       /*
        * המרחק נמדד בשני הצירים יחד: פינה היא נקודה, ולא שני
        * יעדים שבמקרה נפגשו.

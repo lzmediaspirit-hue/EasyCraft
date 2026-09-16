@@ -74,6 +74,8 @@ type Props = {
   project?: Project;
   /** ההגדרות שמהן נגזר עובי הלוח, כדי שהחזית תסומן בעוביה שלה */
   parts?: PartSettings;
+  /** תחילת גרירה וסופה — כדי שתנועה אחת תהיה צעד אחד לביטול */
+  onGesture?: (open: boolean) => void;
   /**
    * ההצמדה פעילה.
    *
@@ -107,6 +109,7 @@ export function WallElevation({
   work,
   project,
   parts,
+  onGesture,
   snap = true,
 }: Props) {
 
@@ -206,6 +209,7 @@ export function WallElevation({
     } catch {
       // אין תפיסה — ה-SVG עדיין מקבל את התנועה
     }
+    onGesture?.(true);
     drag.current = {
       id: unit.id,
       startX: e.clientX,
@@ -267,7 +271,7 @@ export function WallElevation({
      * שלא מצא פינה ממשיך להצמדה שפותרת כל ציר לבדו.
      */
     const stack = snap && !d.locked
-      ? stackSnap(unit, rawX, rawY, units, tol, d.onId)
+      ? stackSnap(unit, rawX, rawY, units, tol, d.onId, wall.lengthMm)
       : null;
     d.onId = stack?.onId;
 
@@ -336,6 +340,7 @@ export function WallElevation({
      * להינעל אליה — נעילה חוזרת שם הפכה את המתג לחסר משמעות.
      */
     if (drag.current) {
+      onGesture?.(false);
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
       } catch {

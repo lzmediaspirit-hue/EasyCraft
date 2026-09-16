@@ -17,7 +17,14 @@ import type { PlacedUnit } from '../../db/types';
  */
 
 const LIMIT = 40;
-/** שינויים רצופים על אותו דבר בתוך החלון הזה נחשבים פעולה אחת */
+/**
+ * רצף שינויים על אותו דבר בתוך החלון הזה נחשב פעולה אחת.
+ *
+ * זו רשת ביטחון לכפתור שנלחץ פעמיים, ולא הגדרת גבול הפעולה:
+ * גבול אמיתי מוכרז ב-`begin`/`end`. חלון זמן לבדו לא הספיק —
+ * גרירת קבוצה כותבת לכל ארגז בתורו, התגיות התחלפו זו בזו, וכל
+ * חילוף פתח צעד חדש. תנועה אחת של היד הפכה לעשרות "בטל".
+ */
 const COALESCE_MS = 900;
 
 interface Stack {
@@ -25,6 +32,8 @@ interface Stack {
   future: PlacedUnit[][];
   lastTag: string;
   lastAt: number;
+  /** מחווה פתוחה: כל מה שנכתב בתוכה הוא צעד אחד */
+  gesture: string | null;
 }
 
 const stacks = new Map<string, Stack>();
@@ -33,7 +42,7 @@ const bus = subscribers();
 function stackOf(projectId: string): Stack {
   let s = stacks.get(projectId);
   if (!s) {
-    s = { past: [], future: [], lastTag: '', lastAt: 0 };
+    s = { past: [], future: [], lastTag: '', lastAt: 0, gesture: null };
     stacks.set(projectId, s);
   }
   return s;
@@ -60,12 +69,40 @@ async function restore(projectId: string, units: PlacedUnit[]): Promise<void> {
 
 export const history = {
   /**
+   * פתיחת מחווה: מכאן ועד `end` הכול צעד אחד.
+   *
+   * זה הגבול האמיתי של פעולה — תנועה אחת של היד, ולא חלון זמן.
+   * גרירה שנוגעת בכמה ארגזים כותבת לכל אחד בתורו, ובלי הכרזה
+   * כזאת כל מעבר בין ארגז לארגז נראה כפעולה חדשה.
+   */
+  async begin(projectId: string, tag: string): Promise<void> {
+    const s = stackOf(projectId);
+    if (s.gesture) return;
+    s.gesture = tag;
+    s.lastTag = tag;
+    s.lastAt = Date.now();
+    s.past.push(await snapshot(projectId));
+    if (s.past.length > LIMIT) s.past.shift();
+    s.future = [];
+    emit();
+  },
+
+  /** סגירת המחווה. מה שייכתב מכאן והלאה הוא פעולה חדשה. */
+  end(projectId: string): void {
+    const s = stackOf(projectId);
+    s.gesture = null;
+    s.lastTag = '';
+  },
+
+  /**
    * מצלם את המצב לפני שינוי.
-   * `tag` מאחד רצף שינויים לפעולה אחת — גרירה אחת היא צעד אחד
-   * ולא ארבעים, ושינוי מידה מחוזק בקרוסלה הוא צעד לכל מידה.
+   * `tag` מאחד רצף שינויים לפעולה אחת — שינוי מידה מחוזק בקרוסלה
+   * הוא צעד לכל מידה.
    */
   async capture(projectId: string, tag: string): Promise<void> {
     const s = stackOf(projectId);
+    /* בתוך מחווה פתוחה כבר צולם, והשאר הוא אותה פעולה */
+    if (s.gesture) return;
     const now = Date.now();
     if (s.lastTag === tag && now - s.lastAt < COALESCE_MS) {
       s.lastAt = now;
@@ -86,6 +123,7 @@ export const history = {
     if (!prev) return;
     s.future.push(await snapshot(projectId));
     s.lastTag = '';
+    s.gesture = null;
     await restore(projectId, prev);
     emit();
   },
@@ -96,6 +134,7 @@ export const history = {
     if (!next) return;
     s.past.push(await snapshot(projectId));
     s.lastTag = '';
+    s.gesture = null;
     await restore(projectId, next);
     emit();
   },

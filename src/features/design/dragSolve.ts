@@ -100,7 +100,7 @@ export function solveDrag(input: DragInput): DragResult | null {
   const rawY = from.yMm + upMm;
   const stack =
     snap && !from.floorLocked
-      ? stackSnap({ ...from, wallId: target.id }, x, rawY, mates, tol, input.onId)
+      ? stackSnap({ ...from, wallId: target.id }, x, rawY, mates, tol, input.onId, target.lengthMm)
       : null;
 
   const nx = stack

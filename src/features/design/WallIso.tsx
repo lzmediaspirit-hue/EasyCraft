@@ -35,6 +35,7 @@ export function WallIso({
   selectedId,
   onSelect,
   onMoveTo,
+  onGesture,
   onRotate,
   onEdit,
   onBulk,
@@ -66,6 +67,14 @@ export function WallIso({
    * בפינה ומתחיל מחדש.
    */
   onMoveTo?: (id: string, patch: Partial<PlacedUnit>) => void;
+  /**
+   * תחילת מחווה וסופה.
+   *
+   * גרירה אחת היא צעד אחד לביטול, גם כשהיא כותבת לכמה ארגזים.
+   * בלי הכרזה מפורשת הגבול נגזר מתגיות ומחלון זמן, וגרירת קבוצה
+   * התפרקה לעשרות צעדים שתלויים בקצב האירועים.
+   */
+  onGesture?: (open: boolean) => void;
   /**
    * סיבוב הארגז הנבחר ברבע סיבוב.
    *
@@ -363,7 +372,7 @@ export function WallIso({
     });
     if (!next) return;
     d.onId = next.onId;
-    onMoveTo(d.from.id, next.patch);
+
     /*
      * על מי הוא נוחת — כתוב, ולא נרמז בצבע.
      * בציור החזית מצוירים גם קווי היישור עצמם; כאן יש שם היעד
@@ -371,33 +380,44 @@ export function WallIso({
      */
     setLanding(next.onId ? (units.find((u) => u.id === next.onId)?.name ?? null) : null);
 
-    /*
-     * קבוצה זזה יחד, באותו הפרש בדיוק. מה שנשמר הוא היחס בין
-     * הארגזים — פינה שנבנתה נכון נשארת נכונה גם אחרי שהוזזה.
-     */
     const dx = (next.patch.xMm ?? d.from.xMm) - d.from.xMm;
     const dy = (next.patch.yMm ?? d.from.yMm) - d.from.yMm;
-    if (!d.mates.length || (!dx && !dy)) return;
+
+    /* ארגז בודד: כל מה שהפתרון מצא — מעבר קיר, הצמדה, הנחה על אחר */
+    if (!d.mates.length) return onMoveTo(d.from.id, next.patch);
+    if (!dx && !dy) return;
 
     /*
-     * הקבוצה כולה נבדקת לפני שהיא זזה. שכן שהיה יוצא מקצה הקיר עוצר
-     * את כל התנועה בגבול שלו, ולכן המרווחים בין הארגזים נשמרים —
-     * במקום שאחד ייעצר והשאר ימשיכו.
+     * קבוצה זזה כגוף אחד.
+     *
+     * הגבול נבדק על כל חברי הקבוצה — כולל זה שהאצבע אוחזת בו.
+     * קודם הוא זז במלוא ההפרש והשאר קוצצו לגבול שלהם, ולכן קבוצה
+     * שנגררה אל קצה הקיר נדחסה: שני ארגזים שהמרחק ביניהם היה
+     * 1,700 מ״מ מצאו את עצמם ב-600.
      */
+    const group = [d.from, ...d.mates];
     let limX = dx;
     let limY = dy;
-    for (const mate of d.mates) {
-      const wall = walls.find((w) => w.id === mate.wallId);
-      if (wall) {
-        const room = Math.max(wall.lengthMm - alongWallMm(mate), 0);
-        limX = Math.min(Math.max(limX, -mate.xMm), room - mate.xMm);
+    for (const m of group) {
+      /* אי אינו נמדד על קיר, ולכן אין לו גבול לאורכו */
+      if (!m.free) {
+        const wall = walls.find((w) => w.id === m.wallId);
+        if (wall) {
+          const room = Math.max(wall.lengthMm - alongWallMm(m), 0);
+          limX = Math.min(Math.max(limX, -m.xMm), room - m.xMm);
+        }
+        limY = Math.max(limY, -m.yMm);
       }
-      limY = Math.max(limY, -mate.yMm);
     }
-    for (const mate of d.mates) {
-      onMoveTo(mate.id, { xMm: mate.xMm + limX, yMm: mate.yMm + limY });
+    if (!limX && !limY) return;
+    for (const m of group) {
+      onMoveTo(
+        m.id,
+        m.free
+          ? { free: { ...m.free, xMm: m.free.xMm + limX } }
+          : { xMm: m.xMm + limX, yMm: m.yMm + limY },
+      );
     }
-
   }
 
   return (
@@ -423,6 +443,7 @@ export function WallIso({
         if (placing && onMoveTo) {
           const anchor = units.find((u) => u.id === placing.ids[0]);
           if (anchor) {
+            onGesture?.(true);
             drag.current = {
               from: anchor,
               mates: placing.ids
@@ -444,6 +465,7 @@ export function WallIso({
          */
         if (locked && !present) {
           if (held && onMoveTo) {
+            onGesture?.(true);
             drag.current = {
               from: held,
               mates: [],
@@ -493,6 +515,7 @@ export function WallIso({
         const d = drag.current;
         orbit.current = null;
         drag.current = null;
+        if (d) onGesture?.(false);
         setLanding(null);
         e.currentTarget.releasePointerCapture(e.pointerId);
         /*
@@ -510,6 +533,7 @@ export function WallIso({
       }}
       onPointerCancel={() => {
         orbit.current = null;
+        if (drag.current) onGesture?.(false);
         drag.current = null;
         setLanding(null);
       }}

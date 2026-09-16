@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { unitsRepo } from '../projects/projectsRepo';
+import { history } from './history';
 import { glyphDef } from '../../catalog/glyphList';
 import { autoShelves } from '../../catalog/CabinetGlyph';
 import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog/zones';
@@ -7,6 +8,7 @@ import { Sheet } from '../../ui/Sheet';
 import { NumField, PrimaryButton } from '../../ui/Field';
 import { BoxForm, type BoxSpec } from '../../ui/BoxForm';
 import { cm } from '../../ui/units';
+import { alongWallMm } from '../../db/types';
 import type { PlacedUnit } from '../../db/types';
 
 /**
@@ -51,10 +53,23 @@ export function UnitEditSheet({
 
   const canSave = spec.name.trim().length > 0 && spec.widthMm > 0 && spec.heightMm > 0;
 
+  /*
+   * הגבול של המיקום המספרי — לפי המידות שנערכות עכשיו.
+   *
+   * השמירה קצצה עד כאן לאפס בלבד, וההצעה שמתחת לשדה חושבה לפי
+   * הרוחב הישן: מי שהקליד 500 ס״מ על קיר של 300 קיבל ארגז מחוץ
+   * לקיר, מתחת לשורה שהבטיחה "עד 240". `alongWallMm` הוא מה
+   * שהארגז תופס באמת, ולכן הוא יודע גם על סיבוב.
+   */
+  const footprint = alongWallMm({ ...unit, widthMm: spec.widthMm, depthMm: spec.depthMm });
+  const maxX = wallLengthMm === undefined ? null : Math.max(wallLengthMm - footprint, 0);
+  const outOfWall = maxX !== null && (xMm < 0 || xMm > maxX);
+
   /* ארון שפנימו מתואר באזורים מורכבים אינו מקבל מספר מגירות יחיד */
   const composed = !drawersAreSimple(unit);
 
   async function save() {
+    if (outOfWall) return;
     const caps = glyphDef(spec.glyph);
     /*
      * שינוי מספר השורות חייב להגיע גם אל האזור עצמו.
@@ -64,6 +79,14 @@ export function UnitEditSheet({
      */
     const zones =
       caps.drawers && !composed ? zonesWithDrawerRows(unit, spec.drawers) : undefined;
+    /*
+     * צעד אחד לביטול.
+     *
+     * השמירה כתבה ישירות, בלי לצלם, ולכן "בטל" אחריה דילג אל מה
+     * שהיה לפני הגרירה הקודמת — והמצב שרגע לפני העריכה לא היה
+     * קיים כלל בהיסטוריה.
+     */
+    await history.capture(unit.projectId, `sheet:${unit.id}:${Date.now()}`);
     await unitsRepo.update(unit.id, {
       name: spec.name.trim(),
       glyph: spec.glyph,
@@ -91,7 +114,7 @@ export function UnitEditSheet({
       onClose={onClose}
       tall
       footer={
-        <PrimaryButton disabled={!canSave} onClick={save}>
+        <PrimaryButton disabled={!canSave || outOfWall} onClick={save}>
           עדכון הארגז
         </PrimaryButton>
       }
@@ -112,9 +135,15 @@ export function UnitEditSheet({
             label="מתחילת הקיר"
             value={xMm}
             onChange={setXMm}
-            hint={wallLengthMm ? `עד ${cm(Math.max(wallLengthMm - unit.widthMm, 0))}` : undefined}
+            hint={maxX === null ? undefined : `עד ${cm(maxX)}`}
           />
         </div>
+      )}
+      {outOfWall && maxX !== null && (
+        <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs leading-snug text-red-900">
+          הארגז אינו נכנס בקיר במקום הזה. במידות האלה הוא יכול להתחיל עד{' '}
+          {cm(maxX)}.
+        </p>
       )}
       <p className="mt-5 border-t border-stone-100 pt-4 text-xs leading-snug text-stone-500">
         השינוי חל על הארגז הזה בפרויקט בלבד. כדי לשנות את הארגז לכל הפרויקטים

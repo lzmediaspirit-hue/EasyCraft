@@ -432,6 +432,19 @@ export function DesignScreen({
    * סימון עבודה אינו עריכה: הוא עובר דרך `canAdvance`, ולכן הוא
    * מותר לנגר דווקא כשההדמיה נעולה בפניו.
    */
+  /**
+   * תחילת גרירה וסופה.
+   *
+   * תנועה אחת של היד היא צעד אחד לביטול — גם כשהיא מזיזה חמישה
+   * ארגזים, וגם כשהיא נמשכת שתי שניות. הגבול מוכרז כאן ואינו
+   * נגזר מקצב האירועים.
+   */
+  function gesture(open: boolean) {
+    if (!editable) return;
+    if (open) void history.begin(projectId, `drag:${Date.now()}`);
+    else history.end(projectId);
+  }
+
   async function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
     const workOnly = Object.keys(patch).every((k) => k === 'work');
     if (!editable && !workOnly) return;
@@ -511,6 +524,7 @@ export function DesignScreen({
               finishHex={finishHex ?? NO_HEX}
               project={project}
               parts={parts ?? undefined}
+              onGesture={gesture}
               snap={design.view.snap}
               fitAt={fitAt}
             />
@@ -539,6 +553,7 @@ export function DesignScreen({
             corners={corners}
             finishHex={finishHex ?? NO_HEX}
             parts={parts ?? undefined}
+            onGesture={gesture}
             snap={design.view.snap}
             /*
              * גרירה היא עריכה, ולכן היא עוברת באותו שער כמו
