@@ -3,6 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { WallElevation } from './WallElevation';
 import { blocked } from './collision';
+import { nudge } from './dragSolve';
+import { axisLabel } from './axisLock';
+import type { Axis } from './axisLock';
 import { unitBox } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
@@ -103,6 +106,8 @@ export function DesignScreen({
    */
   const [fitAt, setFitAt] = useState<number | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** מה שהמקלדת הזיזה כרגע — נאמר ונעלם, כמו מחוון הגרירה */
+  const [keyAxis, setKeyAxis] = useState<string | null>(null);
   /* קבוצת ארגזים שממתינה לשמירה בספרייה כפריט אחד */
   /* הארגזים שעומדים להימחק, עד שהשאלה נענית */
   const [deleting, setDeleting] = useState<PlacedUnit[] | null>(null);
@@ -253,6 +258,55 @@ export function DesignScreen({
   );
   /* גיאומטריית החדר, פעם אחת — ממנה נגזרים המבטים וההתנגשות */
   const plan = useMemo(() => buildPlan(walls ?? [], allUnits ?? NO_UNITS), [walls, allUnits]);
+  /*
+   * המקלדת: אותה תנועה בציר אחד, בלי לגרור.
+   *
+   * לחיצה ארוכה נועלת ציר באצבע, וזו הדרך השנייה אל אותו דבר — מי
+   * שעובד בעכבר ומקלדת, מי שידו אינה יציבה, ומי שפשוט יודע את
+   * המספר. חץ אחד = סנטימטר, עם Shift = עשרה. הצירים קבועים:
+   * ימינה־שמאלה לאורך הקיר (באי: ציר X), מעלה־מטה לגובה (ציר Y),
+   * ועם Alt באי גם ציר Z אל תוך החדר.
+   *
+   * רצף לחיצות באותו ציר הוא צעד אחד לביטול — התג נושא את הציר,
+   * ולכן מעבר לציר אחר פותח צעד חדש.
+   */
+  useEffect(() => {
+    if (!editable || !selected || !walls) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      /* הקלדה בשדה היא הקלדה, לא הזזה */
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      const flat: Axis = selected.free ? (e.altKey ? 'z' : 'x') : 'along';
+      const map: Record<string, [Axis, number]> = {
+        ArrowRight: [flat, 1],
+        ArrowLeft: [flat, -1],
+        ArrowUp: ['y', 1],
+        ArrowDown: ['y', -1],
+      };
+      const move = map[e.key];
+      if (!move) return;
+      const [axis, dir] = move;
+      e.preventDefault();
+      const patch = nudge(selected, axis, dir * (e.shiftKey ? 100 : 10), {
+        plan,
+        walls,
+        units: allUnits ?? NO_UNITS,
+      });
+      if (!patch) return setKeyAxis(`${axisLabel(axis)} — אין לאן לזוז`);
+      setKeyAxis(axisLabel(axis));
+      void patchUnit(selected.id, patch, `nudge:${selected.id}:${axis}`);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editable, selected, walls, plan, allUnits]);
+
+  /* המחוון נעלם מעצמו: הוא אומר מה קרה עכשיו, לא מה קרה פעם */
+  useEffect(() => {
+    if (!keyAxis) return;
+    const t = setTimeout(() => setKeyAxis(null), 1400);
+    return () => clearTimeout(t);
+  }, [keyAxis]);
+
   /*
    * ההתנגשות נמדדת על התיבות במרחב החדר ולא על סימון אזור הפינה:
    * הפינה פתוחה לכל ארגז, והשאלה היחידה היא אם שני ארונות באמת
@@ -517,6 +571,12 @@ export function DesignScreen({
       */}
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
         <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
+          {/* מה שהמקלדת הזיזה עכשיו, ובאיזה ציר */}
+          {keyAxis && (
+            <span className="pointer-events-none absolute inset-x-0 top-1 z-10 mx-auto w-fit rounded-full bg-violet-700 px-3 py-1 text-[11px] font-medium text-white">
+              {keyAxis}
+            </span>
+          )}
           {iso ? (
             /* התלת־ממד מראה את החדר כולו, ולא רק את הקיר שעובדים עליו */
             <WallIso

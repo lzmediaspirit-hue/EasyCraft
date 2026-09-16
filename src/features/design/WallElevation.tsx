@@ -9,8 +9,10 @@ import { cm } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
 import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
 import { stackSnap } from './stacking';
-import { DragGuide } from './dragGuide';
+import { AxisGuide, DragGuide } from './dragGuide';
 import type { Guide } from './dragGuide';
+import { axesFor, longPress, pickAxis } from './axisLock';
+import type { Axis } from './axisLock';
 import { blocked } from './collision';
 import { unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
@@ -25,6 +27,15 @@ import type { PlacedUnit, Project, RailSides, Wall } from '../../db/types';
 
 
 export type MeasureAxis = 'w' | 'h' | 'd';
+
+/**
+ * "זווית המבט" של ציור החזית.
+ *
+ * אין בו זווית: הוא מישור. הקבוע הזה קיים כדי שבחירת הציר תשתמש
+ * באותו חשבון שמשמש את התלת־ממד — לאורך הקיר יוצא אופקי, הגובה
+ * יוצא אנכי — ולא בהשוואה נפרדת שיכולה להסכים איתו או לא.
+ */
+const FLAT = { yawDeg: 0, rise: 0 };
 
 type Props = {
   wall: Wall;
@@ -169,8 +180,26 @@ export function WallElevation({
     free?: { xMm: number; zMm: number };
     /* היעד שכבר נבחר להנחה — כדי שהוא לא יקפוץ בין שני שכנים */
     onId?: string;
+    /* לחיצה ארוכה נדלקה: הגרירה הזו מוגבלת לציר אחד */
+    armed?: boolean;
+    /* הציר שנעול. ריק אחרי הנעילה ולפני שהכיוון התברר */
+    axis?: Axis | null;
   } | null>(null);
 
+  /*
+   * לחיצה ארוכה נועלת ציר.
+   *
+   * המדידה יושבת ב-`axisLock` ולא כאן, כי ציור החזית והתלת־ממד
+   * צריכים בדיוק את אותו סף ואת אותה סבילות: שתי מחוות שמרגישות
+   * שונה באותה אפליקציה הן שתי אפליקציות.
+   */
+  const press = useRef(longPress());
+  /** מה שמוצג על נעילת הציר. `null` = אין נעילה */
+  const [lock, setLock] = useState<{ axis: Axis | null } | null>(null);
+
+
+  /* הארגז שביד — דרכו עובר קו הציר הנעול */
+  const held = lock ? (units.find((u) => u.id === drag.current?.id) ?? null) : null;
 
   // כשקו הגובה מוצג צריך מקום לצידו, אחרת המידה נחתכת
   const padX = showHeight ? 420 : 120;
@@ -220,7 +249,17 @@ export function WallElevation({
       locked: !!unit.floorLocked,
       free: unit.free ? { xMm: unit.free.xMm, zMm: unit.free.zMm } : undefined,
     };
-
+    /*
+     * אצבע שנשארת במקום מבקשת דיוק, לא מקום חדש. אחרי חצי שנייה
+     * הגרירה הופכת לתנועה בציר אחד, והציר עצמו נבחר מהכיוון
+     * הראשון שגוררים בו.
+     */
+    press.current.start(e.clientX, e.clientY, () => {
+      if (!drag.current) return;
+      drag.current.armed = true;
+      drag.current.axis = null;
+      setLock({ axis: null });
+    });
   }
 
   function moveDrag(e: React.PointerEvent) {
@@ -229,6 +268,26 @@ export function WallElevation({
     if (!d || !onMove) return;
     const unit = units.find((u) => u.id === d.id);
     if (!unit) return;
+    /* אצבע שזזה ביטלה את הלחיצה הארוכה — זו גרירה רגילה */
+    press.current.move(e.clientX, e.clientY);
+
+    /*
+     * הציר נבחר מהכיוון הראשון שגוררים בו אחרי הנעילה, ועד שהוא
+     * מתברר הארגז אינו זז: תנועה של שלושה פיקסלים אינה אומרת
+     * "לגובה" יותר מ"לרוחב", וניחוש כאן נועל את הציר הלא נכון.
+     */
+    if (d.armed && !d.axis) {
+      const pick = pickAxis(
+        e.clientX - d.startX,
+        e.clientY - d.startY,
+        axesFor(unit, false),
+        FLAT,
+      );
+      if (!pick) return;
+      d.axis = pick;
+      setLock({ axis: pick });
+    }
+    const axis = d.armed ? (d.axis ?? null) : null;
 
     const alongMm = (e.clientX - d.startX) * d.scale;
     const rawX = d.originX + alongMm;
@@ -242,12 +301,17 @@ export function WallElevation({
      */
     if (d.free && unit.free && here) {
       const a = (here.headingDeg * Math.PI) / 180;
-      const next = {
-        ...unit.free,
-        xMm: Math.round(d.free.xMm + alongMm * Math.cos(a)),
-        zMm: Math.round(d.free.zMm + alongMm * Math.sin(a)),
-      };
-      const y = d.locked ? d.originY : Math.max(Math.round(rawY), 0);
+      /* נעילה לגובה: המקום ברצפה הוא בדיוק מה שהיה, עד המ"מ */
+      const next =
+        axis === 'y'
+          ? { ...unit.free, xMm: d.free.xMm, zMm: d.free.zMm }
+          : {
+              ...unit.free,
+              xMm: Math.round(d.free.xMm + alongMm * Math.cos(a)),
+              zMm: Math.round(d.free.zMm + alongMm * Math.sin(a)),
+            };
+      const y =
+        d.locked || axis === 'along' ? d.originY : Math.max(Math.round(rawY), 0);
       const probe = { ...unit, free: next, yMm: y };
       const box = unitBox(probe, plan);
       if (box && !blocked(probe, box, allUnits, plan)) onMove(d.id, { free: next, yMm: y });
@@ -270,16 +334,25 @@ export function WallElevation({
      * לתחילתו או לסופו. לכן שני הצירים נפתרים כאן יחד, ורק מי
      * שלא מצא פינה ממשיך להצמדה שפותרת כל ציר לבדו.
      */
-    const stack = snap && !d.locked
+    /*
+     * הנחה על ארגז פותרת שני צירים יחד, ולכן היא אינה קיימת
+     * כשנעולים לאחד: פינה שמיישרת גם את הגובה היא בדיוק מה שנעילת
+     * "לאורך הקיר" באה למנוע.
+     */
+    const stack = snap && !d.locked && !axis
       ? stackSnap(unit, rawX, rawY, units, tol, d.onId, wall.lengthMm)
       : null;
     d.onId = stack?.onId;
 
-    const x = stack ? stack.xMm : snapX(rawX, unit, units, wall.lengthMm, corners, tol);
+    const x = stack
+      ? stack.xMm
+      : axis === 'y'
+        ? d.originX
+        : snapX(rawX, unit, units, wall.lengthMm, corners, tol);
     // הגובה נמדד ביחס למקום שאליו הארגז הולך, ולא למקום שממנו יצא
     const y = stack
       ? stack.yMm
-      : d.locked
+      : d.locked || axis === 'along'
         ? d.originY
         : snapY(rawY, unit, units, wall.heightMm, tol, x);
     /*
@@ -298,13 +371,22 @@ export function WallElevation({
       return !!b && (stuck || !blocked(probe, b, allUnits, plan));
     };
     const landed = at(x, y);
+    /*
+     * כשנעולים לציר אחד אין נפילה לציר השני.
+     *
+     * שרשרת המילוט הרגילה מזיזה את מה שלא ביקשו להזיז כשהיעד תפוס
+     * — וזו בדיוק ההפתעה שהנעילה מונעת. ארגז שאין לו לאן ללכת
+     * בציר שלו פשוט נשאר.
+     */
     const [fx, fy] = landed
       ? [x, y]
-      : at(x, unit.yMm)
-        ? [x, unit.yMm]
-        : at(unit.xMm, y)
-          ? [unit.xMm, y]
-          : [unit.xMm, unit.yMm];
+      : axis
+        ? [d.axis === 'y' ? d.originX : unit.xMm, d.axis === 'y' ? unit.yMm : d.originY]
+        : at(x, unit.yMm)
+          ? [x, unit.yMm]
+          : at(unit.xMm, y)
+            ? [unit.xMm, y]
+            : [unit.xMm, unit.yMm];
     onMove(d.id, { xMm: fx, yMm: fy });
 
     /*
@@ -347,8 +429,10 @@ export function WallElevation({
         // לא נתפס מלכתחילה
       }
     }
+    press.current.cancel();
     drag.current = null;
     setGuide(null);
+    setLock(null);
   }
 
   return (
@@ -807,6 +891,20 @@ export function WallElevation({
       {/* מה שמוצג בזמן הגרירה: על מי נוחתים, או למה לא עולים */}
       {guide && (
         <DragGuide guide={guide} wall={wall} stroke={stroke} flip={flip} />
+      )}
+      {/* נעילת ציר — הציר עצמו, ולא רק התוצאה שלו */}
+      {lock && held && (
+        <AxisGuide
+          axis={lock.axis}
+          headingDeg={here?.headingDeg ?? 0}
+          wall={wall}
+          stroke={stroke}
+          flip={flip}
+          at={{
+            xMm: held.free ? wall.lengthMm / 2 : held.xMm + alongWallMm(held) / 2,
+            yMm: held.yMm + bodyHeightMm(held) / 2,
+          }}
+        />
       )}
     </svg>
   );

@@ -6,6 +6,8 @@ import { buildPlan } from './plan';
 import { outOfSight } from './designView';
 import { LockIcon, UnlockIcon } from '../../ui/icons';
 import { solveDrag } from './dragSolve';
+import { axesFor, axisLabel, longPress, pickAxis } from './axisLock';
+import type { Axis } from './axisLock';
 import { alongWallMm } from '../../db/types';
 import type { PartSettings } from '../../costing/boards';
 
@@ -158,7 +160,21 @@ export function WallIso({
     startX: number;
     startY: number;
     moved: boolean;
+    /* לחיצה ארוכה נדלקה: הגרירה הזו מוגבלת לציר אחד */
+    armed?: boolean;
+    /* הציר שנעול. ריק אחרי הנעילה ולפני שהכיוון התברר */
+    axis?: Axis | null;
   } | null>(null);
+
+  /*
+   * לחיצה ארוכה נועלת ציר.
+   *
+   * אותו סף ואותה סבילות של ציור החזית — הם יושבים ב-`axisLock`
+   * ולא כאן, כי מחווה שמרגישה שונה בשני המסכים היא שתי מחוות.
+   */
+  const press = useRef(longPress());
+  /** הציר שננעל, למחוון. `null` בשדה = ננעל ועוד לא נבחר כיוון */
+  const [lock, setLock] = useState<{ axis: Axis | null } | null>(null);
 
   const orbit = useRef<{
     x: number;
@@ -380,11 +396,58 @@ export function WallIso({
    * נשאר רק מה ששייך למגע — מאיפה התחילה התנועה, ומתי היא נחשבת
    * גרירה ולא נגיעה — ושליחת התוצאה החוצה.
    */
+  /**
+   * לחיצה ארוכה על ארגז — נעילת ציר.
+   *
+   * היא עובדת משלושה מצבים, וזו הנקודה: כשהחדר חופשי אצבע על ארון
+   * מסובבת את המבט, ומי שרצה להזיז ארון בדיוק אחד היה צריך קודם
+   * לנעול את החדר. אחרי חצי שנייה במקום הכוונה ברורה, והאצבע
+   * עוברת מהמבט אל הארון — בציר אחד בלבד.
+   */
+  function armAxis(clientX: number, clientY: number, held: PlacedUnit) {
+    if (!onMoveTo || present) return;
+    press.current.start(clientX, clientY, () => {
+      if (!drag.current) {
+        if (!orbit.current) return;
+        orbit.current = null;
+        onGesture?.(true);
+        drag.current = { from: held, mates: [], startX: clientX, startY: clientY, moved: true };
+        onSelect(held.id);
+      }
+      drag.current.armed = true;
+      drag.current.axis = null;
+      setLock({ axis: null });
+    });
+  }
+
   function moveDrag(e: React.PointerEvent) {
     const d = drag.current;
     if (!d || !onMoveTo) return;
+    /* אצבע שזזה ביטלה את הלחיצה הארוכה — זו גרירה רגילה */
+    press.current.move(e.clientX, e.clientY);
     if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < ORBIT_SLOP) return;
     d.moved = true;
+
+    /*
+     * הציר נבחר מהכיוון הראשון שגוררים בו אחרי הנעילה.
+     *
+     * ההשוואה היא מול הכיוון שבו כל ציר באמת נראה על המסך בזווית
+     * הזו, ולא מול "אופקי או אנכי": בתלת־ממד ציר X וציר Z שניהם
+     * נראים אלכסוניים, ובחצי מהזוויות הם מתחלפים.
+     */
+    if (d.armed && !d.axis) {
+      const heldWall = plan.find((q) => q.wall.id === d.from.wallId);
+      const pick = pickAxis(
+        e.clientX - d.startX,
+        e.clientY - d.startY,
+        axesFor(d.from, true),
+        shown,
+        heldWall?.headingDeg ?? 0,
+      );
+      if (!pick) return;
+      d.axis = pick;
+      setLock({ axis: pick });
+    }
 
     const next = solveDrag({
       from: d.from,
@@ -397,6 +460,8 @@ export function WallIso({
       pxPerUnit,
       snap,
       onId: d.onId,
+      /* נעילה בגרירה קבוצתית תחול על כל הקבוצה, כי היא זזה כגוף אחד */
+      axis: d.axis ?? undefined,
     });
     if (!next) return;
     d.onId = next.onId;
@@ -482,6 +547,7 @@ export function WallIso({
               startY: e.clientY,
               moved: false,
             };
+            armAxis(e.clientX, e.clientY, anchor);
             return;
           }
 
@@ -501,7 +567,7 @@ export function WallIso({
               startY: e.clientY,
               moved: false,
             };
-
+            armAxis(e.clientX, e.clientY, held);
           } else {
             orbit.current = { x: e.clientX, y: e.clientY, from: view, moved: false, hit };
           }
@@ -514,6 +580,8 @@ export function WallIso({
           moved: false,
           hit,
         };
+        /* חדר חופשי: אצבע שנשארת על ארון עוברת ממנו אל הארון עצמו */
+        if (held) armAxis(e.clientX, e.clientY, held);
       }}
       onPointerMove={(e) => {
         if (drag.current) return moveDrag(e);
@@ -541,10 +609,12 @@ export function WallIso({
       onPointerUp={(e) => {
         const o = orbit.current;
         const d = drag.current;
+        press.current.cancel();
         orbit.current = null;
         drag.current = null;
         if (d) onGesture?.(false);
         setLanding(null);
+        setLock(null);
         e.currentTarget.releasePointerCapture(e.pointerId);
         /*
          * גם גרירה מסתיימת בבחירה: ארון שהועבר לקיר אחר צריך שהמסך
@@ -560,10 +630,12 @@ export function WallIso({
         onSelect(o.hit);
       }}
       onPointerCancel={() => {
+        press.current.cancel();
         orbit.current = null;
         if (drag.current) onGesture?.(false);
         drag.current = null;
         setLanding(null);
+        setLock(null);
       }}
     >
       {/*
@@ -947,7 +1019,18 @@ export function WallIso({
       על מי הארגז נוחת.
       זה גובר על ההנחיה הכללית: ברגע שיש יעד, הוא מה שצריך לדעת.
     */}
-    {landing && !present ? (
+    {lock && !present ? (
+      /*
+        נעילת ציר גוברת על הכול: כשהיא פעילה זה מה שקובע לאן הארגז
+        זז, ובלי שהיא כתובה מי שגרר וראה מידה אחת בלבד משתנה חשב
+        שהמסך נתקע.
+      */
+      <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-violet-700 px-3 py-1 text-[11px] font-medium text-white">
+        {lock.axis
+          ? `נעול ל${axisLabel(lock.axis, plan.find((q) => q.wall.id === drag.current?.from.wallId)?.headingDeg ?? 0)}`
+          : 'נעילת ציר — גררו לכיוון שבו להזיז'}
+      </span>
+    ) : landing && !present ? (
       <span className="pointer-events-none absolute inset-x-0 top-1 mx-auto w-fit rounded-full bg-teal-700 px-3 py-1 text-[11px] font-medium text-white">
         נוחת על {landing}
       </span>

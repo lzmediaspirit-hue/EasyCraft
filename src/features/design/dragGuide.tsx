@@ -1,3 +1,5 @@
+import { axisLabel } from './axisLock';
+import type { Axis } from './axisLock';
 import type { Wall } from '../../db/types';
 
 /*
@@ -109,3 +111,56 @@ export function DragGuide({
   );
 }
 
+
+/**
+ * הציר שננעל — קו ושם.
+ *
+ * נעילה שאי אפשר לראות היא תקלה: מי שגרר ולא הבין למה רק מידה אחת
+ * זזה חשב שהאפליקציה נתקעה. הקו עובר דרך הארגז בכיוון שבו הוא
+ * רשאי לזוז, והשם כתוב מעליו — כולל ציר העולם, כשהקיר מיושר לאחד
+ * מהם. מוסכמת הצירים: X ו-Z הם הרצפה, Y הוא הגובה.
+ */
+export function AxisGuide({
+  axis,
+  headingDeg,
+  wall,
+  stroke,
+  flip,
+  at,
+}: {
+  axis: Axis | null;
+  headingDeg: number;
+  wall: Wall;
+  stroke: number;
+  flip: (y: number) => number;
+  /** מרכז הארגז שנגרר — דרכו עובר הקו */
+  at: { xMm: number; yMm: number };
+}) {
+  const fontSize = Math.max(wall.lengthMm / 44, 62);
+  const label = axis ? `נעול ל${axisLabel(axis, headingDeg)}` : 'נעילת ציר — גררו לכיוון שבו להזיז';
+  const flat = axis === 'along' || axis === 'x' || axis === 'z';
+  return (
+    <g pointerEvents="none">
+      {axis && (
+        <line
+          x1={flat ? -wall.lengthMm : at.xMm}
+          y1={flat ? flip(at.yMm) : flip(0)}
+          x2={flat ? wall.lengthMm * 2 : at.xMm}
+          y2={flat ? flip(at.yMm) : flip(wall.heightMm)}
+          stroke="#7c3aed"
+          strokeWidth={stroke * 1.4}
+          strokeDasharray={`${stroke * 4} ${stroke * 3}`}
+        />
+      )}
+      <text
+        x={wall.lengthMm / 2}
+        y={flip(wall.heightMm) - fontSize * 0.6}
+        textAnchor="middle"
+        fontSize={fontSize}
+        fill="#6d28d9"
+      >
+        {label}
+      </text>
+    </g>
+  );
+}

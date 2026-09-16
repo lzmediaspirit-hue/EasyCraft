@@ -34,6 +34,12 @@ export function UnitEditSheet({
    * השכן. הגובה כבר היה כאן, ובלי הרוחב הוא היה חצי תשובה.
    */
   const [xMm, setXMm] = useState(unit.xMm);
+  /*
+   * אי אינו נמדד מקיר, ולכן "מתחילת הקיר" אינו שלו. המקום שלו הוא
+   * שתי מידות ברצפת החדר — וכאן הן נכתבות, כמו שנמדדו בשטח.
+   */
+  const [freeX, setFreeX] = useState(unit.free?.xMm ?? 0);
+  const [freeZ, setFreeZ] = useState(unit.free?.zMm ?? 0);
   const [spec, setSpec] = useState<BoxSpec>({
     name: unit.name,
     glyph: unit.glyph,
@@ -103,7 +109,9 @@ export function UnitEditSheet({
       socleMm: spec.socleMm || undefined,
       counterMm: spec.counterMm || undefined,
       /* אי נמדד ברצפת החדר, ולכן המיקום על הקיר אינו שלו */
-      ...(unit.free ? {} : { xMm: Math.max(Math.round(xMm), 0) }),
+      ...(unit.free
+        ? { free: { ...unit.free, xMm: Math.round(freeX), zMm: Math.round(freeZ) } }
+        : { xMm: Math.max(Math.round(xMm), 0) }),
     });
     onClose();
   }
@@ -129,7 +137,7 @@ export function UnitEditSheet({
         מיקום מספרי. הגובה יושב ב-`BoxForm` כי הוא חלק מהארגז גם
         בספרייה; המרחק מתחילת הקיר שייך להנחה הזאת בלבד.
       */}
-      {!unit.free && (
+      {!unit.free ? (
         <div className="mt-4 grid grid-cols-2 gap-3 border-t border-stone-100 pt-4">
           <NumField
             label="מתחילת הקיר"
@@ -138,6 +146,11 @@ export function UnitEditSheet({
             hint={maxX === null ? undefined : `עד ${cm(maxX)}`}
           />
         </div>
+      ) : (
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-stone-100 pt-4">
+          <NumField label="ציר X — לרוחב החדר" value={freeX} onChange={setFreeX} />
+          <NumField label="ציר Z — לעומק החדר" value={freeZ} onChange={setFreeZ} />
+        </div>
       )}
       {outOfWall && maxX !== null && (
         <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs leading-snug text-red-900">
@@ -145,6 +158,11 @@ export function UnitEditSheet({
           {cm(maxX)}.
         </p>
       )}
+      <p className="mt-4 text-xs leading-snug text-stone-500">
+        בהדמיה: לחיצה ארוכה על הארגז נועלת ציר אחד, וגרירה אחריה מזיזה
+        רק בו. מקשי החצים מזיזים את הארגז הנבחר בסנטימטר — עם Shift
+        בעשרה — ימינה ושמאלה לרוחב, מעלה ומטה לגובה.
+      </p>
       <p className="mt-5 border-t border-stone-100 pt-4 text-xs leading-snug text-stone-500">
         השינוי חל על הארגז הזה בפרויקט בלבד. כדי לשנות את הארגז לכל הפרויקטים
         הבאים, ערוך אותו בספריית הארגזים.

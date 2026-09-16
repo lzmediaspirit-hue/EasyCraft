@@ -7,6 +7,7 @@ import { cornerZones } from './plan';
 import { alongWallMm } from '../../db/types';
 import { clamp } from '../../ui/units';
 import type { IsoView } from './isoMath';
+import type { Axis } from './axisLock';
 import type { PlanWall } from './plan';
 import type { PlacedUnit, Wall } from '../../db/types';
 
@@ -38,6 +39,15 @@ export interface DragInput {
   snap?: boolean;
   /** היעד שכבר נבחר להנחה, כדי שהוא לא יקפוץ בין שני שכנים */
   onId?: string;
+  /**
+   * ציר נעול — התנועה מוגבלת אליו בלבד.
+   *
+   * זה לא קיצוץ של התוצאה אלא של הקלט: התנועה בצירים האחרים
+   * מאופסת לפני ההצמדה, ולכן גם ההצמדה אינה יכולה להזיז אותם.
+   * קיצוץ בסוף היה נותן להצמדה לשנות גובה ואז מחזיר אותו — קפיצה
+   * שנראית כמו תקלה.
+   */
+  axis?: Axis;
 }
 
 /** מה יצא מהגרירה: המקום, ועל מי הוא נוחת אם הוא נוחת על מישהו. */
@@ -49,7 +59,7 @@ export interface DragResult {
 
 /** `null` = אין תשובה, והארגז נשאר איפה שהוא */
 export function solveDrag(input: DragInput): DragResult | null {
-  const { from, dxMm, dyMm, view, plan, walls, units, pxPerUnit, snap = true } = input;
+  const { from, dxMm, dyMm, view, plan, walls, units, pxPerUnit, snap = true, axis } = input;
   const yaw = (view.yawDeg * Math.PI) / 180;
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
@@ -60,8 +70,17 @@ export function solveDrag(input: DragInput): DragResult | null {
   /* אי: התנועה על הרצפה נפתרת בשני הצירים */
   if (from.free) {
     const det = 2 * COS30 * view.rise;
-    const dx = ((c - s) * view.rise * dxMm + (s + c) * COS30 * dyMm) / det;
-    const dz = (-(c + s) * view.rise * dxMm + (c - s) * COS30 * dyMm) / det;
+    /*
+     * נעילה לגובה: האי עולה ויורד ואינו נודד ברצפה. בלי הענף הזה
+     * ציר Y לא היה קיים לאי בכלל — התנועה שלו נפתרה תמיד ברצפה.
+     */
+    if (axis === 'y') {
+      const yMm = from.floorLocked ? from.yMm : Math.max(step(from.yMm - dyMm), 0);
+      const box = unitBox({ ...from, yMm }, plan);
+      return box && !blocked({ ...from, yMm }, box, units, plan) ? { patch: { yMm } } : null;
+    }
+    const dx = axis === 'z' ? 0 : ((c - s) * view.rise * dxMm + (s + c) * COS30 * dyMm) / det;
+    const dz = axis === 'x' ? 0 : (-(c + s) * view.rise * dxMm + (c - s) * COS30 * dyMm) / det;
     const free = { ...from.free, xMm: step(from.free.xMm + dx), zMm: step(from.free.zMm + dz) };
     const box = unitBox({ ...from, free }, plan);
     return box && !blocked(from, box, units, plan) ? { patch: { free } } : null;
@@ -74,8 +93,8 @@ export function solveDrag(input: DragInput): DragResult | null {
   const ax = (Math.cos(theta) - Math.sin(theta)) * COS30;
   const ay = (Math.cos(theta) + Math.sin(theta)) * view.rise;
   // קיר שנראה כמעט מקצהו אינו נותן תשובה לאורך — עדיף לא לנחש
-  const alongMm = Math.abs(ax) < 0.05 ? 0 : dxMm / ax;
-  const upMm = ay * alongMm - dyMm;
+  const alongMm = axis === 'y' || Math.abs(ax) < 0.05 ? 0 : dxMm / ax;
+  const upMm = axis === 'along' ? 0 : ay * alongMm - dyMm;
 
   /*
    * מעבר לקיר השכן: הגרירה נמדדת תמיד מנקודת המוצא, ולכן היא
@@ -84,10 +103,15 @@ export function solveDrag(input: DragInput): DragResult | null {
   let target = here.wall;
   let x = from.xMm + alongMm;
   const i = walls.findIndex((w) => w.id === from.wallId);
-  if (x < -80 && i > 0) {
+  /*
+   * ציר נעול אינו עובר קיר. מעבר לשכן מחליף את הכיוון שבו הארגז
+   * זז, וזו בדיוק ההפתעה שהנעילה באה למנוע — מי שנעל "לאורך הקיר
+   * הזה" לא ביקש קיר אחר.
+   */
+  if (!axis && x < -80 && i > 0) {
     target = walls[i - 1];
     x += target.lengthMm;
-  } else if (x > here.wall.lengthMm + 80 && i < walls.length - 1) {
+  } else if (!axis && x > here.wall.lengthMm + 80 && i < walls.length - 1) {
     target = walls[i + 1];
     x -= here.wall.lengthMm;
   }
@@ -98,15 +122,22 @@ export function solveDrag(input: DragInput): DragResult | null {
    * צירים שנפתרו בנפרד. אותו חשבון בדיוק שעובד בציור החזית.
    */
   const rawY = from.yMm + upMm;
+  /* הנחה על ארגז פותרת שני צירים יחד — ולכן היא אינה קיימת בנעילה */
   const stack =
-    snap && !from.floorLocked
+    snap && !from.floorLocked && !axis
       ? stackSnap({ ...from, wallId: target.id }, x, rawY, mates, tol, input.onId, target.lengthMm)
       : null;
 
   const nx = stack
     ? stack.xMm
-    : snapX(x, from, mates, target.lengthMm, cornerZones(walls, target, units), tol);
-  const ny = stack ? stack.yMm : from.floorLocked ? from.yMm : snapY(rawY, from, mates, target.heightMm, tol, nx);
+    : axis === 'y'
+      ? from.xMm
+      : snapX(x, from, mates, target.lengthMm, cornerZones(walls, target, units), tol);
+  const ny = stack
+    ? stack.yMm
+    : from.floorLocked || axis === 'along'
+      ? from.yMm
+      : snapY(rawY, from, mates, target.heightMm, tol, nx);
 
   /*
    * חוקי הפיזיקה של החדר: נגיעה והכלה מותרות, חדירה חלקית לא.
@@ -120,6 +151,15 @@ export function solveDrag(input: DragInput): DragResult | null {
     const b = unitBox(probe, plan);
     return !!b && (stuck || !blocked(probe, b, units, plan));
   };
+
+  /*
+   * בנעילה אין החלקה על שכן ואין נפילה לציר השני: יעד תפוס פירושו
+   * שהארגז נשאר, ולא שמשהו אחר בו זז במקומו.
+   */
+  if (axis) {
+    const [lx, ly] = ok(nx, ny) ? [nx, ny] : [from.xMm, from.yMm];
+    return { patch: { xMm: lx, yMm: ly, wallId: target.id } };
+  }
 
   /*
    * ארגז שנתקל בשכן נעצר עליו, ולא נשאר במקום.
@@ -152,4 +192,54 @@ export function solveDrag(input: DragInput): DragResult | null {
   /* היעד מדווח רק כשבאמת נחתו עליו, ולא כשהתנגשות דחפה הצידה */
   const landed = stack && fx === stack.xMm && fy === stack.yMm ? stack.onId : undefined;
   return { patch: { xMm: fx, yMm: fy, wallId: target.id }, onId: landed };
+}
+
+/**
+ * הזזה במידה ידועה, בציר אחד.
+ *
+ * זו הדרך שאינה גרירה: מקשי החצים, ובהמשך גם שדה מספרי. היא קיימת
+ * כי יש מי שאינו יכול לגרור — עכבר בלי יד יציבה, מקלדת בלבד — ויש
+ * מי שפשוט יודע את המספר ורוצה אותו בדיוק, בלי לכוון באצבע.
+ *
+ * אין כאן הצמדה: מי שנוקב במידה ביקש אותה, ולא את מה שקרוב אליה.
+ * ההתנגשות כן נבדקת — היא חוק של החדר ולא עזרה לעין — ומקום תפוס
+ * מחזיר `null`, כלומר "לא זז", ולא מקום אחר שלא ביקשו.
+ */
+export function nudge(
+  unit: PlacedUnit,
+  axis: Axis,
+  deltaMm: number,
+  ctx: { plan: PlanWall[]; walls: Wall[]; units: PlacedUnit[] },
+): Partial<PlacedUnit> | null {
+  const { plan, walls, units } = ctx;
+  const fits = (probe: PlacedUnit): boolean => {
+    const b = unitBox(probe, plan);
+    return !!b && !blocked(probe, b, units, plan);
+  };
+
+  if (axis === 'y') {
+    /* נעול לרצפה לא עולה — כאן זה נאמר בכך שלא קורה כלום */
+    if (unit.floorLocked) return null;
+    const yMm = Math.max(Math.round(unit.yMm + deltaMm), 0);
+    if (yMm === unit.yMm) return null;
+    return fits({ ...unit, yMm }) ? { yMm } : null;
+  }
+
+  if (unit.free) {
+    /* אי: הצירים שלו הם רצפת החדר, ו"לאורך" אינו קיים לו */
+    const free = {
+      ...unit.free,
+      xMm: Math.round(unit.free.xMm + (axis === 'z' ? 0 : deltaMm)),
+      zMm: Math.round(unit.free.zMm + (axis === 'z' ? deltaMm : 0)),
+    };
+    return fits({ ...unit, free }) ? { free } : null;
+  }
+
+  /* ארגז על קיר זז לאורכו בלבד, ובתוך גבולות הקיר */
+  const wall = walls.find((w) => w.id === unit.wallId);
+  if (!wall) return null;
+  const reach = Math.max(wall.lengthMm - alongWallMm(unit), 0);
+  const xMm = Math.round(clamp(unit.xMm + deltaMm, 0, reach));
+  if (xMm === unit.xMm) return null;
+  return fits({ ...unit, xMm }) ? { xMm } : null;
 }
