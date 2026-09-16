@@ -408,7 +408,14 @@ export function WallIso({
     if (!onMoveTo || present) return;
     press.current.start(clientX, clientY, () => {
       if (!drag.current) {
-        if (!orbit.current) return;
+        /*
+         * מחווה שכבר הוכרזה כסיבוב נשארת סיבוב עד ההרפיה.
+         *
+         * הביטול בתנועה אמור היה לכבות את המדידה הרבה לפני כאן;
+         * זו השורה שאומרת את הכלל עצמו, ולא רק מסתמכת על העיתוי.
+         * החלפת סוג מחווה באמצע היא ההפתעה שאין ממנה דרך חזרה.
+         */
+        if (!orbit.current || orbit.current.moved) return;
         orbit.current = null;
         onGesture?.(true);
         drag.current = { from: held, mates: [], startX: clientX, startY: clientY, moved: true };
@@ -584,6 +591,15 @@ export function WallIso({
         if (held) armAxis(e.clientX, e.clientY, held);
       }}
       onPointerMove={(e) => {
+        /*
+         * האצבע זזה — וזה נוגע גם למחווה שאינה גרירה.
+         *
+         * המדידה של הלחיצה הארוכה בוטלה עד כה רק במסלול הגרירה,
+         * ולכן סיבוב מצלמה המשיך להריץ אותה: מי שזז 25 פיקסלים
+         * והמשיך להחזיק חצי שנייה קיבל את הארון נגרר מתחת לידו,
+         * באמצע סיבוב. הביטול שייך לתנועה עצמה ולא למסלול שבחר בה.
+         */
+        press.current.move(e.clientX, e.clientY);
         if (drag.current) return moveDrag(e);
         const o = orbit.current;
         if (!o) return;
