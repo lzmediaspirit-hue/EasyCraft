@@ -8,6 +8,7 @@ import { LockIcon, UnlockIcon } from '../../ui/icons';
 import { solveDrag } from './dragSolve';
 import { axesFor, axisLabel, longPress, pickAxis } from './axisLock';
 import type { Axis } from './axisLock';
+import type { GesturePhase } from './gesture';
 import { alongWallMm } from '../../db/types';
 import type { PartSettings } from '../../costing/boards';
 
@@ -77,7 +78,7 @@ export function WallIso({
    * בלי הכרזה מפורשת הגבול נגזר מתגיות ומחלון זמן, וגרירת קבוצה
    * התפרקה לעשרות צעדים שתלויים בקצב האירועים.
    */
-  onGesture?: (open: boolean) => void;
+  onGesture?: (phase: GesturePhase) => void;
   /** מצב תהליך עבודה: הארגזים נצבעים לפי מה שנעשה בהם */
   work?: boolean;
   /**
@@ -417,7 +418,7 @@ export function WallIso({
          */
         if (!orbit.current || orbit.current.moved) return;
         orbit.current = null;
-        onGesture?.(true);
+        onGesture?.('start');
         drag.current = { from: held, mates: [], startX: clientX, startY: clientY, moved: true };
         onSelect(held.id);
       }
@@ -543,7 +544,7 @@ export function WallIso({
         if (placing && onMoveTo) {
           const anchor = units.find((u) => u.id === placing.ids[0]);
           if (anchor) {
-            onGesture?.(true);
+            onGesture?.('start');
             drag.current = {
               from: anchor,
               mates: placing.ids
@@ -566,7 +567,7 @@ export function WallIso({
          */
         if (locked && !present) {
           if (held && onMoveTo) {
-            onGesture?.(true);
+            onGesture?.('start');
             drag.current = {
               from: held,
               mates: [],
@@ -628,7 +629,7 @@ export function WallIso({
         press.current.cancel();
         orbit.current = null;
         drag.current = null;
-        if (d) onGesture?.(false);
+        if (d) onGesture?.('commit');
         setLanding(null);
         setLock(null);
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -645,10 +646,16 @@ export function WallIso({
         }
         onSelect(o.hit);
       }}
+      /*
+       * ביטול של המערכת אינו סיום של המשתמש.
+       *
+       * שני המסלולים נכנסו עד כה לאותה שורה, ולכן תנועה שבוטלה
+       * נשמרה: בתלת־ממד מ-(970,1270) ל-(2200,1900). מה שביד יורד.
+       */
       onPointerCancel={() => {
         press.current.cancel();
         orbit.current = null;
-        if (drag.current) onGesture?.(false);
+        if (drag.current) onGesture?.('cancel');
         drag.current = null;
         setLanding(null);
         setLock(null);

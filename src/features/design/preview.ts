@@ -39,6 +39,21 @@ export const preview = {
     return all;
   },
 
+  /**
+   * מה שהצטבר יורד, בלי להיכתב.
+   *
+   * ביטול מחווה אינו סוף שלה: `pointercancel` — שיחה נכנסת, מחווה
+   * של המערכת, אצבע שנייה על המסך — הפעיל עד כה בדיוק את אותו
+   * סיום כמו הרפיה, והתנועה שהמשתמש ביטל נשמרה. השלכה וכתיבה הן
+   * שתי פעולות, ולכן יש להן שני שמות.
+   */
+  discard(): void {
+    if (!patches.size) return;
+    patches.clear();
+    version++;
+    bus.notify();
+  },
+
   active(): boolean {
     return patches.size > 0;
   },

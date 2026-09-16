@@ -38,6 +38,7 @@ import { clamp, cm } from '../../ui/units';
 import { ConfirmSheet } from '../../ui/ConfirmSheet';
 import { history, useHistory } from './history';
 import { preview, usePreview, withPreview } from './preview';
+import type { GesturePhase } from './gesture';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
 import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
@@ -295,6 +296,23 @@ export function DesignScreen({
     return () => window.removeEventListener('keydown', onKey);
   }, [editable, selected, walls, plan, allUnits]);
 
+  /*
+   * יציאה מהמסך באמצע מחווה היא ביטול.
+   *
+   * התצוגה המקדימה חיה במודול ולא ברכיב, ולכן היא שרדה ניווט: מי
+   * שיצא מהמסך באמצע גרירה השאיר אחריו מפה של תנועות שלא נכתבו,
+   * והן היו נכתבות במחווה הבאה — על ארגזים של פרויקט אחר.
+   */
+  useEffect(
+    () => () => {
+      if (preview.active() || history.inGesture(projectId)) {
+        preview.discard();
+        history.abort(projectId);
+      }
+    },
+    [projectId],
+  );
+
   /* המחוון נעלם מעצמו: הוא אומר מה קרה עכשיו, לא מה קרה פעם */
   useEffect(() => {
     if (!keyAxis) return;
@@ -507,9 +525,22 @@ export function DesignScreen({
    * ארגזים, וגם כשהיא נמשכת שתי שניות. הגבול מוכרז כאן ואינו
    * נגזר מקצב האירועים.
    */
-  function gesture(open: boolean) {
+  function gesture(phase: GesturePhase) {
     if (!editable) return;
-    if (open) return void history.begin(projectId, `drag:${Date.now()}`);
+    if (phase === 'start') return void history.begin(projectId, `drag:${Date.now()}`);
+    /*
+     * ביטול אינו סיום.
+     *
+     * `pointercancel` הפעיל עד כה בדיוק את אותו מסלול כמו הרפיה,
+     * ולכן תנועה שהמשתמש ביטל נשמרה — ב-2D מ-(500,1000) ל-(970,1270).
+     * כאן מה שביד יורד בלי להיכתב, והתצלום שנלקח בפתיחת המחווה יורד
+     * איתו: מחווה שלא שינתה דבר לא משאירה צעד ב"בטל".
+     */
+    if (phase === 'cancel') {
+      preview.discard();
+      history.abort(projectId);
+      return;
+    }
     /*
      * סוף התנועה: מה שהצטבר נכתב פעם אחת, ורק אז התצוגה המקדימה
      * מתרוקנת — סדר הפוך היה מחזיר את הארגז למקומו הישן לרגע.

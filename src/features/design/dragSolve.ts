@@ -81,7 +81,18 @@ export function solveDrag(input: DragInput): DragResult | null {
     }
     const dx = axis === 'z' ? 0 : ((c - s) * view.rise * dxMm + (s + c) * COS30 * dyMm) / det;
     const dz = axis === 'x' ? 0 : (-(c + s) * view.rise * dxMm + (c - s) * COS30 * dyMm) / det;
-    const free = { ...from.free, xMm: step(from.free.xMm + dx), zMm: step(from.free.zMm + dz) };
+    /*
+     * העיגול שייך לציר שזז, ולציר שזז בלבד.
+     *
+     * אי שעמד ב-Z=1707 קיבל Z=1710 בגרירת X: הציר הנעול לא זז, אבל
+     * הוא עבר את אותו עיגול לסנטימטר שלם — והמידה שהנגר מדד בשטח
+     * השתנתה בדרך. מה שלא נגררים בו נשאר בדיוק כפי שהיה.
+     */
+    const free = {
+      ...from.free,
+      xMm: axis === 'z' ? from.free.xMm : step(from.free.xMm + dx),
+      zMm: axis === 'x' ? from.free.zMm : step(from.free.zMm + dz),
+    };
     const box = unitBox({ ...from, free }, plan);
     return box && !blocked(from, box, units, plan) ? { patch: { free } } : null;
   }
@@ -227,10 +238,11 @@ export function nudge(
 
   if (unit.free) {
     /* אי: הצירים שלו הם רצפת החדר, ו"לאורך" אינו קיים לו */
+    /* גם כאן: רק הציר שזז מעוגל, והאחר מועתק כפי שהוא */
     const free = {
       ...unit.free,
-      xMm: Math.round(unit.free.xMm + (axis === 'z' ? 0 : deltaMm)),
-      zMm: Math.round(unit.free.zMm + (axis === 'z' ? deltaMm : 0)),
+      xMm: axis === 'z' ? unit.free.xMm : Math.round(unit.free.xMm + deltaMm),
+      zMm: axis === 'z' ? Math.round(unit.free.zMm + deltaMm) : unit.free.zMm,
     };
     return fits({ ...unit, free }) ? { free } : null;
   }

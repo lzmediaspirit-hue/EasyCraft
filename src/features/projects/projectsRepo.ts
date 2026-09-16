@@ -315,6 +315,19 @@ export const wallsRepo = {
   },
 };
 
+/**
+ * כמה אי משוכפל נדחף הצידה.
+ *
+ * רוחב הארגז ועוד מרווח אצבע: מספיק כדי ששני הגופים לא ייגעו, וקרוב
+ * מספיק כדי שברור שזה העותק של מה שעמד כאן. הכיוון הוא ציר X של
+ * החדר — כיוון אחד וקבוע עדיף על ניחוש שתלוי בזווית המבט.
+ */
+const ISLAND_GAP_MM = 100;
+
+function islandStepMm(u: { widthMm: number }): number {
+  return u.widthMm + ISLAND_GAP_MM;
+}
+
 /** השדות שמשנים את מה שאפשר לבנות — ורק הם מפעילים את השער */
 const BUILD_FIELDS = ['glyph', 'heightMm', 'widthMm', 'depthMm', 'socleMm'] as const;
 
@@ -568,6 +581,17 @@ export const unitsRepo = {
       ...rest,
       id: crypto.randomUUID(),
       xMm,
+      /*
+       * אי משוכפל אינו יכול לנחות על עצמו.
+       *
+       * `xMm` הוא המיקום על הקיר, ולאי אין קיר — ולכן העותק קיבל
+       * מיקום חדש בשדה שאינו בשימוש, ואת אותו מקום ברצפה בשדה שכן.
+       * שני גופים עמדו בדיוק זה בתוך זה: מנוע ההתנגשות ידע לומר
+       * את זה, ואיש לא שאל אותו. העותק נדחף לצד לאורך הרוחב שלו.
+       */
+      ...(source.free
+        ? { free: { ...source.free, xMm: source.free.xMm + islandStepMm(source) } }
+        : {}),
       ...owned(),
       createdAt: now,
       updatedAt: now,
