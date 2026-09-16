@@ -135,9 +135,9 @@ const board = await page.evaluate(async () => {
     /* ארגז רגיל לא קיבל תקרה חדשה */
     cabinet: checkUnit({ glyph: 'doors', widthMm: 600, heightMm: 2400, depthMm: 580, socleMm: 100 }),
     /*
-     * שולחן אינו לוח דק: המידה שנשמרת לו היא הגובה מהרצפה ולא
-     * עובי הפלטה, ולכן אין לו תקרת עובי. תקרה עליו הייתה פוסלת
-     * את "שולחן עבודה / איפור" שבספרייה.
+     * שולחן שנשמר בגרסה ישנה — 750 מ״מ בשדה העובי — עדיין עובר.
+     * התיקון בספרייה חל על התקנה חדשה, ומי שמחזיק את השורה הישנה
+     * אינו אמור לגלות שהספרייה שלו פסולה.
      */
     desk: checkUnit({ glyph: 'desk', widthMm: 1200, heightMm: 750, depthMm: 500, socleMm: 0 }),
     limits: limitsFor('slab'),
@@ -153,7 +153,17 @@ ok('a 300 mm "board" is refused', /המקסימום/.test(board.fat ?? ''), Stri
 ok('a standing panel is measured by its depth', board.standingOk === null, String(board.standingOk));
 ok('and refused when that is a body, not a board', /המקסימום/.test(board.standingFat ?? ''), String(board.standingFat));
 ok('a tall cabinet is still allowed', board.cabinet === null, String(board.cabinet));
-ok('a desk is not a thin board and keeps its height', board.desk === null, String(board.desk));
+ok('an old desk row is still accepted', board.desk === null, String(board.desk));
+
+/* והמוצר שנזרע עכשיו הוא פלטה אמיתית ולא גוף בעובי 75 ס״מ */
+const seeded = await page.evaluate(async () => {
+  const { SEED_CATALOG } = await import('/src/catalog/builtins.ts');
+  const desk = SEED_CATALOG.find((b) => b.key === 'b-desk');
+  return { h: desk?.h, y: desk?.y };
+});
+ok('the seeded desk is a thin top', seeded.h === 30, String(seeded.h));
+ok('standing at desk height', seeded.y === 720, String(seeded.y));
+
 ok('the form offers the board a ceiling', board.limits.maxHeightMm === 100, String(board.limits.maxHeightMm));
 ok('but offers a desk none', board.deskLimits.maxHeightMm === undefined, String(board.deskLimits.maxHeightMm));
 ok('and a cabinet none', board.boxLimits.maxHeightMm === undefined, String(board.boxLimits.maxHeightMm));
