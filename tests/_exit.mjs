@@ -9,15 +9,38 @@
  * כאן זה נסגר במקום אחד: הדפסה של שורת כישלון, בכל אחת מהצורות
  * שהחבילות משתמשות בהן, מסמנת את התהליך ככושל. מייבאים שורה אחת
  * ואין מה לזכור.
+ *
+ * שתי מלכודות שנפלנו בהן כאן, ולכן הן כתובות:
+ *
+ * כל שורה נבדקת, ולא רק הראשונה. שבע־עשרה חבילות אוגרות את
+ * התוצאות ומדפיסות אותן בקריאה אחת — `console.log(out.join('\n'))`
+ * — וכשרק תחילת המחרוזת נבדקה, חבילה שהתחילה ב-PASS ונפלה בהמשך
+ * סיימה ב-0.
+ *
+ * ובעברית אין גבול מילה. `\b` ב-JS מוגדר על [A-Za-z0-9_] בלבד,
+ * ולכן "2 נפלו" לא נתפס: אחרי אות עברית אין boundary. הביטויים
+ * העבריים נגמרים במילה עצמה.
  */
 
 /** הצורות שבהן חבילה מדווחת על כישלון. "0 fail" אינו כישלון. */
-const BAD = [/^FAIL\b/, /^PAGEERROR\b/, /\b[1-9]\d* fail\b/, /\b[1-9]\d* wrong of\b/, /\b[1-9]\d* בעיות\b/, /\b[1-9]\d* נפלו\b/];
+const BAD = [
+  /^FAIL\b/,
+  /^PAGEERROR\b/,
+  /\b[1-9]\d* fail\b/,
+  /\b[1-9]\d* wrong of\b/,
+  /[1-9]\d* בעיות/,
+  /[1-9]\d* נפלו/,
+];
 
 const say = console.log;
 console.log = (...args) => {
-  const line = args.map((a) => (typeof a === 'string' ? a : '')).join(' ').trimStart();
-  if (BAD.some((re) => re.test(line))) process.exitCode = 1;
+  const text = args.map((a) => (typeof a === 'string' ? a : '')).join(' ');
+  for (const line of text.split('\n')) {
+    if (BAD.some((re) => re.test(line.trimStart()))) {
+      process.exitCode = 1;
+      break;
+    }
+  }
   say(...args);
 };
 

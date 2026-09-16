@@ -54,7 +54,9 @@ ok(moved.xMm >= 0 && moved.xMm + moved.widthMm <= w.len, 'הסימון נשאר 
 await page.screenshot({ path: SP + '/L36-2-dragged.png' });
 
 /* שמאל/ימין ומהרצפה/מהתקרה */
-await dlg().getByRole('button', { name: 'מימין' }).click(); await page.waitForTimeout(500);
+/* התאמה מדויקת: "צירים מימין" מכיל את "מימין", ובלעדיה שניהם נתפסים */
+await dlg().getByRole('button', { name: 'מימין', exact: true }).click();
+await page.waitForTimeout(500);
 ok((await walls())[0].f[0].fromSide === 'end', 'אפשר למדוד מהקצה השני');
 await dlg().getByRole('button', { name: 'מהתקרה' }).click(); await page.waitForTimeout(500);
 ok((await walls())[0].f[0].heightRef === 'ceiling', 'אפשר למדוד גובה מהתקרה');

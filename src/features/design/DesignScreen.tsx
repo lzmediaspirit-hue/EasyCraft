@@ -40,7 +40,14 @@ import { history, useHistory } from './history';
 import { preview, usePreview, withPreview } from './preview';
 import type { GesturePhase } from './gesture';
 import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
-import { analyzeWall, fillSpan, nextFreeX, openingWarnings, worstLevel } from './analysis';
+import {
+  WARN_ORDER,
+  analyzeWall,
+  fillSpan,
+  nextFreeX,
+  openingWarnings,
+  worstLevel,
+} from './analysis';
 import type { WallWarning } from './analysis';
 import { WarningsSheet, warnLevelTone } from './WarningsSheet';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
@@ -949,15 +956,54 @@ export function DesignScreen({
               שנחסם — לא.
 
               התראה מצביעה על ארגז, ולכן היא כפתור: לוחצים, והארגז
-              נבחר, מסומן על הקיר ונפתח לעריכה — במקום לחפש לפי השם
-              מי מבין הארגזים הוא זה.
+              נבחר ומודלק על הציור יחד עם מה שהאזהרה מדברת עליו —
+              במקום לחפש לפי השם מי מבין הארגזים הוא זה.
+
+              התראה היא עובדה על התכנון, ולא מידע של המנהל. היא
+              הייתה מוצגת למנהל בלבד, וכך תכנת שעבד על הקיר ונגר
+              שבנה לפיו לא ראו שארגז חורג מהחדר — מי שלא רשאי
+              לשנות עדיין צריך לדעת.
+
+              והיא נשארת כאן, ככתב, ולא רק כאייקון בכותרת. האייקון
+              הוא מה שנשאר על המסך גם כשלוח העריכה פתוח ומכסה את
+              הרשימה; הרשימה היא מה שנקרא בלי ללחוץ. נגר שצריך
+              ללחוץ כדי לדעת ששקע נחסם יגלה את זה בהתקנה.
             */}
-            {/*
-              התראה היא עובדה על התכנון, ולא מידע של המנהל.
-              היא הייתה מוצגת למנהל בלבד, וכך תכנת שעבד על הקיר
-              ונגר שבנה לפיו לא ראו שארגז חורג מהחדר — מי שלא
-              רשאי לשנות עדיין צריך לדעת.
-            */}
+            {warnings.length > 0 && (
+              <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                {/* מהחמור לקל: מה שלא ייבנה קודם למה שחסר בו נתון */}
+                {[...warnings]
+                  .sort((a, b) => WARN_ORDER.indexOf(a.level) - WARN_ORDER.indexOf(b.level))
+                  .map((w) => {
+                    /* המפתח כולל את העצמים: שני ארגזים באותו שם מייצרים
+                       בדיוק את אותו משפט, ובלעדיהם השני נעלם */
+                    const key = `${w.text}|${w.unitIds.join(',')}|${(w.featureIds ?? []).join(',')}`;
+                    const dot = (
+                      <span className={`mt-1.5 size-2 shrink-0 rounded-full ${warnLevelTone(w.level)}`} />
+                    );
+                    return w.unitIds.length > 0 || (w.featureIds ?? []).length > 0 ? (
+                      <li key={key}>
+                        <button
+                          onClick={() => {
+                            setFlagged(w);
+                            if (w.unitIds.length) setSelectedId(w.unitIds[0]);
+                          }}
+                          className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"
+                        >
+                          {dot}
+                          {w.text}
+                        </button>
+                      </li>
+                    ) : (
+                      <li key={key} className="flex items-start gap-1.5 px-1 text-sm leading-snug text-amber-900">
+                        {dot}
+                        {w.text}
+                      </li>
+                    );
+                  })}
+              </ul>
+            )}
+
             {statsOpen && units.length === 0 && (
               <p className="mt-6 text-center text-[15px] text-stone-500">
                 {project.roomKind === 'kitchen'

@@ -382,6 +382,13 @@ function FeatureSettings({
                   <button
                     key={h}
                     onClick={() => onPatch({ hingeSide: h })}
+                    /*
+                     * שם נגיש מפורש: "מימין" כבר קיים בלוח הזה, על
+                     * הכפתור שקובע מאיזה קצה מודדים. שני כפתורים
+                     * באותו שם בדיוק הם שני כפתורים שאי אפשר לבחור
+                     * ביניהם — לא בקורא מסך, ולא בבדיקה.
+                     */
+                    aria-label={`צירים ${SIDE_LABEL[h]}`}
                     aria-pressed={f.hingeSide === h}
                     className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
                       f.hingeSide === h ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
