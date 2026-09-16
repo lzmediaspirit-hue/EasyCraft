@@ -73,6 +73,39 @@ export function analyzeWall(
   overflow(floor, 'התחתונים');
   overflow(upper, 'העליונים');
 
+  /*
+   * הקצה השני של אותה שאלה.
+   *
+   * חריגה נבדקה רק בסוף הקיר, ולכן ארגז שהתחיל ב-מינוס 50 לא
+   * הוציא מילה: הוא יצא מהחדר בצד שאיש לא הסתכל בו. וגבול
+   * הגובה לא נבדק כלל — ארגז שראשו מעל התקרה עבר בשקט.
+   */
+  const before = onWall.filter((u) => u.xMm < -1);
+  if (before.length) {
+    const out = Math.max(...before.map((u) => -u.xMm));
+    warnings.push({
+      text: `יוצאים מתחילת הקיר ב-${cm(out)} ס"מ`,
+      unitIds: before.map((u) => u.id),
+    });
+  }
+
+  const tall = onWall.filter((u) => u.yMm + u.heightMm > wall.heightMm + 1);
+  if (tall.length) {
+    const over = Math.max(...tall.map((u) => u.yMm + u.heightMm - wall.heightMm));
+    warnings.push({
+      text: `עוברים את גובה הקיר ב-${cm(over)} ס"מ`,
+      unitIds: tall.map((u) => u.id),
+    });
+  }
+
+  const sunk = onWall.filter((u) => u.yMm < -1);
+  if (sunk.length) {
+    warnings.push({
+      text: `יורדים מתחת לרצפה ב-${cm(Math.max(...sunk.map((u) => -u.yMm)))} ס"מ`,
+      unitIds: sunk.map((u) => u.id),
+    });
+  }
+
   for (const f of wall.features) {
     const label = featureDef(f.kind).label;
 

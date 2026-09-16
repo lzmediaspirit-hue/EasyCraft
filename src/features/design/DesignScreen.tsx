@@ -797,7 +797,13 @@ export function DesignScreen({
               נבחר, מסומן על הקיר ונפתח לעריכה — במקום לחפש לפי השם
               מי מבין הארגזים הוא זה.
             */}
-            {analysis && role === 'manager' && view.warnings && analysis.warnings.length > 0 && (
+            {/*
+              התראה היא עובדה על התכנון, ולא מידע של המנהל.
+              היא הייתה מוצגת למנהל בלבד, וכך תכנת שעבד על הקיר
+              ונגר שבנה לפיו לא ראו שארגז חורג מהחדר — מי שלא
+              רשאי לשנות עדיין צריך לדעת.
+            */}
+            {analysis && view.warnings && analysis.warnings.length > 0 && (
               <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
                 {/* המפתח כולל את הארגזים: שני ארגזים באותו שם מייצרים
                     בדיוק את אותו משפט, ובלעדיהם השני נעלם */}
