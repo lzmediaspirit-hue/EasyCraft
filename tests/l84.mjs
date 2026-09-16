@@ -212,21 +212,26 @@ ok('שני סימונים נבחרו כקצוות מדידה', picked === 2, Str
 await btn(/^סרגל — /).click();
 await page.waitForTimeout(400);
 
-/* ---------- 91: מחיקה מהספרייה והחזרה ---------- */
+/* ---------- 91: מחיקה מהספרייה, עם שאלה ובלי החזרה ---------- */
 await esc();
 await btn(/הוספת ארגז/).click();
 await page.waitForTimeout(700);
-const before = await dlg().locator('button[aria-label^="הסרת"]').count();
-ok('יש כפתור הסרה לכל ארגז', before > 0, String(before));
-const firstName = await dlg().locator('button[aria-label^="הסרת"]').first().getAttribute('aria-label');
-await dlg().locator('button[aria-label^="הסרת"]').first().click();
-await page.waitForTimeout(800);
-const after = await dlg().locator('button[aria-label^="הסרת"]').count();
+const before = await dlg().locator('button[aria-label^="מחיקת"]').count();
+ok('יש כפתור מחיקה לכל ארגז', before > 0, String(before));
+const firstName = await dlg().locator('button[aria-label^="מחיקת"]').first().getAttribute('aria-label');
+await dlg().locator('button[aria-label^="מחיקת"]').first().click();
+await page.waitForTimeout(700);
+/* מחיקה נשאלת: הביטול משאיר את הספרייה כמו שהייתה */
+await page.getByRole('button', { name: 'ביטול' }).first().click();
+await page.waitForTimeout(700);
+ok('ביטול אינו מוחק', (await dlg().locator('button[aria-label^="מחיקת"]').count()) === before);
+await dlg().locator('button[aria-label^="מחיקת"]').first().click();
+await page.waitForTimeout(700);
+await page.getByRole('button', { name: 'כן, למחוק' }).first().click();
+await page.waitForTimeout(900);
+const after = await dlg().locator('button[aria-label^="מחיקת"]').count();
 ok('הארגז ירד מהספרייה', after === before - 1, `${before} → ${after} (${firstName})`);
-ok('שורת ההחזרה הופיעה', await dlg().getByText(/הוסרו מהספרייה/).isVisible());
-await dlg().getByRole('button', { name: 'החזרה' }).click();
-await page.waitForTimeout(800);
-ok('ההחזרה עובדת', (await dlg().locator('button[aria-label^="הסרת"]').count()) === before);
+ok('ואין שורת החזרה', !(await dlg().getByText(/הוסרו מהספרייה/).count()));
 await page.screenshot({ path: SP + 'L91-library.png' });
 await esc();
 

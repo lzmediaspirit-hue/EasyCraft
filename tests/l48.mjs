@@ -19,7 +19,7 @@ ok('no buttons without a selection', (await page.getByRole('button', { name: 'ש
 
 await page.locator('g[data-unit-id]').first().click(); await page.waitForTimeout(600);
 ok('duplicate button shown', (await page.getByRole('button', { name: 'שכפול הארגז' }).count()) === 1);
-ok('delete button shown', (await page.getByRole('button', { name: 'הסרת הארגז' }).count()) === 1);
+ok('delete button shown', (await page.getByRole('button', { name: 'מחיקת הארגז' }).count()) === 1);
 ok('one duplicate button in total', (await page.getByRole('button', { name: 'שכפול הארגז' }).count()) === 1);
 await full('1-selected');
 
@@ -30,7 +30,7 @@ await full('1-selected');
 const svg = page.locator('svg').filter({ has: page.locator('g[data-unit-id]') }).first();
 const box = await svg.boundingBox();
 const panel = await page.getByRole('button', { name: 'סיום עריכה' }).first().boundingBox();
-for (const t of ['שכפול הארגז', 'הסרת הארגז']) {
+for (const t of ['שכפול הארגז', 'מחיקת הארגז']) {
   const r = await page.getByRole('button', { name: t }).boundingBox();
   ok(`${t} below the drawing`, r.y >= box.y + box.height - 2, `${Math.round(r.y)} vs ${Math.round(box.y + box.height)}`);
   ok(`${t} above the panel`, r.y < panel.y, `${Math.round(r.y)} vs ${Math.round(panel.y)}`);
@@ -42,10 +42,11 @@ await page.getByRole('button', { name: 'שכפול הארגז' }).click(); await
 ok('duplicate adds a cabinet', (await units()) === n + 1, `${n} → ${await units()}`);
 await full('2-duplicated');
 
-/* המחיקה מוחקת את הנבחר, וסוגרת את לוח העריכה */
-await page.getByRole('button', { name: 'הסרת הארגז' }).click(); await page.waitForTimeout(900);
+/* המחיקה נשאלת, מוחקת את הנבחר, וסוגרת את לוח העריכה */
+await page.getByRole('button', { name: 'מחיקת הארגז' }).click(); await page.waitForTimeout(700);
+await page.getByRole('button', { name: 'כן, למחוק' }).first().click(); await page.waitForTimeout(900);
 ok('delete removes it', (await units()) === n, `${await units()}`);
-ok('selection cleared', (await page.getByRole('button', { name: 'הסרת הארגז' }).count()) === 0);
+ok('selection cleared', (await page.getByRole('button', { name: 'מחיקת הארגז' }).count()) === 0);
 ok('editor closed', (await page.getByRole('button', { name: 'סיום עריכה' }).count()) === 0);
 await full('3-deleted');
 

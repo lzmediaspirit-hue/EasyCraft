@@ -290,27 +290,31 @@ export function LibrarySheet({
 
               {/*
                 סדר ידני, בשני כפתורים.
+
                 גרירה של ריבוע בתוך רשת עובדת באצבע בלבד; כפתור
                 מעלה וכפתור מטה עובדים גם בעכבר, גם במקלדת וגם
                 בקורא מסך — וזו החלופה הנגישה, לא תוספת לצדה.
+
+                הם יושבים מתחת לכרטיס ולא עליו: כפתור קטן שמרחף על
+                כרטיס גונב ממנו את הלחיצה, וזה בדיוק מה שקרה.
               */}
               {manage && !needle && (
-                <span className="absolute bottom-1 start-1 flex gap-0.5">
+                <div className="mt-1 flex justify-center gap-1">
                   <button
                     onClick={() => void catalogRepo.move(item.id, -1)}
                     aria-label={`הקדמת ${item.name} בסדר הספרייה`}
-                    className="rounded-md bg-white/90 px-1 text-stone-400 ring-1 ring-stone-200 transition-colors hover:text-oak-700"
+                    className="rounded-md bg-stone-100 px-2 text-xs text-stone-500 transition-colors hover:bg-stone-200 hover:text-oak-700"
                   >
                     ▲
                   </button>
                   <button
                     onClick={() => void catalogRepo.move(item.id, 1)}
                     aria-label={`איחור ${item.name} בסדר הספרייה`}
-                    className="rounded-md bg-white/90 px-1 text-stone-400 ring-1 ring-stone-200 transition-colors hover:text-oak-700"
+                    className="rounded-md bg-stone-100 px-2 text-xs text-stone-500 transition-colors hover:bg-stone-200 hover:text-oak-700"
                   >
                     ▼
                   </button>
-                </span>
+                </div>
               )}
             </div>
           ))}
