@@ -707,6 +707,7 @@ export function DesignScreen({
           onChange={(patch) => patchUnit(selected.id, patch)}
           project={project}
           parts={parts ?? undefined}
+          canPrice={can.sell(me?.role)}
           /* ארגז מסובב תופס על הקיר את עומקו, ולכן ההשלמה לרוחב
              לא תמלא את הרווח שנמדד — עדיף בלי הצעה מאשר הצעה שקרית */
           fillWidth={turned(selected) ? undefined : fillSpan(selected, units, wall, 'w')}

@@ -395,6 +395,11 @@ export interface PlacedUnit extends Entity {
   /** רוחב החלק החסום בפינה מתה */
   blindMm?: number;
   /**
+   * הפרזול של הארגז הזה: מנגנונים, מסילות ומה שהנגר מוסיף בעצמו.
+   * כל שורה נושאת את המחיר שהיה כשהיא נבחרה.
+   */
+  hardware?: Hardware[];
+  /**
    * צדדים שלא נבנים כלל.
    *
    * ארגז שנצמד לשכן יכול לוותר על הדופן שביניהם ולהישען עליו;
@@ -621,6 +626,8 @@ export interface CatalogItem extends Entity {
   opening?: OpeningMech;
   corner?: CornerKind;
   blindMm?: number;
+  /** הפרזול שנשמר עם הפריט, כדי שהוא יחזור מוכן בפעם הבאה */
+  hardware?: Hardware[];
   /*
    * מאפייני גימור שנשמרים עם הפריט, כדי שארגז שהנגר כבר כיוונן פעם
    * אחת יחזור מוכן בפעם הבאה ולא ידרוש את אותה עריכה מחדש.
@@ -721,6 +728,7 @@ export const REUSABLE_FIELDS = [
   'backKind',
   'backHeightMm',
   'rails',
+  'hardware',
   'drawerBox',
   'doorCells',
   'doubleDividers',
@@ -1139,6 +1147,11 @@ export interface Settings {
   accessories: AccessoryPrices;
   /** תוספות שהעסק הגדיר בעצמו */
   extras: ExtraItem[];
+  /**
+   * רשימת הפרזול של העסק — התבניות שמהן בוחרים לארגז.
+   * ריק = עוד לא הוגדרה, והרשימה שמגיעה עם האפליקציה משמשת.
+   */
+  hardware?: HardwareSpec[];
   /** מחיר דלת זכוכית למ"ר — נספרת בנפרד ולא מתוך הפלטות */
   glassFactoryPerM2: number;
   glassConsumerPerM2: number;
@@ -1199,6 +1212,72 @@ export interface ExtraItem {
   qty?: number;
   factoryPrice: number;
   consumerPrice: number;
+}
+
+/**
+ * פרזול שנבחר לארגז אחד.
+ *
+ * זו שורה של הזמנה, לא של קטלוג: היא נושאת את המחיר שהיה בזמן
+ * שהיא נבחרה, ולא הפניה למחיר שמשתנה. עדכון מחיר ברשימת הפרזול
+ * של העסק אינו נוגע בהצעה שכבר יצאה — בדיוק כמו ארגז שהונח על
+ * קיר ושומר את מידותיו בעצמו.
+ *
+ * מה שאינו ידוע נשאר ריק ונאמר במפורש ("חסרים נתוני התאמה"), ולא
+ * מומצא: ספק, דגם, מידת התקנה ומרווח פתיחה הם נתוני יצרן.
+ */
+export interface Hardware {
+  id: string;
+  /** מאיזו שורה ברשימת העסק הוא נבחר, אם נבחר ממנה */
+  specId?: string;
+  name: string;
+  supplier?: string;
+  model?: string;
+  qty: number;
+  /** יחידת המידה, כפי שמזמינים בה */
+  unit: HardwareUnit;
+  /** עלות לנגרייה. `undefined` = מחיר חסר, ואינו אפס */
+  factoryPrice?: number;
+  /** מחיר ללקוח */
+  consumerPrice?: number;
+  /** מטבע. ריק = שקל */
+  currency?: string;
+  /**
+   * הפרזול הזה בא במקום ספירה אוטומטית.
+   *
+   * בלי זה מנגנון שנבחר ביד נספר פעמיים: פעם בשורה האוטומטית
+   * ("מנגנוני קלאפה") ופעם בשורה שלו. הארגז שיש בו פרזול כזה
+   * יורד מהספירה האוטומטית של אותו סוג.
+   */
+  replaces?: ExtraBasis;
+  note?: string;
+}
+
+/** יחידות שבהן מזמינים פרזול. */
+export type HardwareUnit = 'יח׳' | 'זוג' | 'מ׳' | 'סט';
+
+/**
+ * שורה ברשימת הפרזול של העסק — התבנית שממנה בוחרים.
+ *
+ * המחיר כאן הוא המחיר הנוכחי; מה שנבחר לארגז מעתיק אותו אליו
+ * ומנתק את הקשר.
+ */
+export interface HardwareSpec {
+  id: string;
+  name: string;
+  supplier?: string;
+  model?: string;
+  unit: HardwareUnit;
+  factoryPrice?: number;
+  consumerPrice?: number;
+  currency?: string;
+  replaces?: ExtraBasis;
+  /** לאיזה סוג ארגז הוא מתאים, כשידוע */
+  fits?: string;
+  /** מידת התקנה, כשידועה */
+  installMm?: number;
+  /** מרווח פתיחה שהיצרן דורש, כשידוע */
+  clearanceMm?: number;
+  note?: string;
 }
 
 /** לפי מה נספרת התוספת. */

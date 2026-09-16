@@ -115,6 +115,14 @@ export const SCHEMA: Record<string, TableSpec> = {
       code: str,
       group: str,
       island: bool,
+      /* פרזול שנשמר עם הפריט — שם וכמות הם המינימום שניתן להזמין לפיו */
+      hardware: listOf(
+        (h) =>
+          !!h &&
+          typeof h === 'object' &&
+          str((h as { name?: unknown }).name) &&
+          num((h as { qty?: unknown }).qty),
+      ),
       doors: count,
       drawers: count,
       shelves: count,

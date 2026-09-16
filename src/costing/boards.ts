@@ -90,6 +90,12 @@ interface AccessoryLine {
   consumerPrice: number;
   factoryTotal: number;
   consumerTotal: number;
+  /**
+   * לשורה אין מחיר כלל — להבדיל ממחיר אפס שנקבע בכוונה.
+   * פרזול שמגיע בחינם מהספק הוא אפס אמיתי; פרזול שאיש לא תמחר
+   * הוא חוסר, והוא נאמר ולא נבלע בסכום.
+   */
+  noPrice?: boolean;
 }
 
 /** דלת זכוכית בגודל מסוים, וכמה כאלה יש בפרויקט. */
@@ -719,6 +725,11 @@ export function projectCosting(
   let ledMeters = 0;
 
   let lifts = 0;
+  /* שורות הפרזול, מקובצות לפי שם ומחיר — ככה נראית הזמנה מהספק */
+  const hardwareMap = new Map<
+    string,
+    { label: string; unit: string; qty: number; factoryPrice: number; consumerPrice: number; noPrice: boolean }
+  >();
   let handles = 0;
   let edgeMeters = 0;
   /** מטרי קנט לפי גוון, כדי לתמחר כל אחד במחיר שלו */
@@ -764,10 +775,33 @@ export function projectCosting(
      */
     if (glyphDef(u.glyph).standalone) continue;
 
-    drawers += countDrawers(u);
+    /*
+     * פרזול שנבחר ביד יכול לבוא במקום ספירה אוטומטית.
+     *
+     * בלי זה מנגנון שנבחר לארגז נספר פעמיים: פעם בשורה
+     * האוטומטית ("מנגנוני קלאפה") ופעם בשורה שלו. הארגז שיש בו
+     * פרזול כזה יורד מהספירה האוטומטית של אותו סוג בלבד.
+     */
+    const instead = new Set((u.hardware ?? []).map((h) => h.replaces).filter(Boolean));
+    for (const h of u.hardware ?? []) {
+      const key = `${h.name}|${h.consumerPrice ?? ''}|${h.factoryPrice ?? ''}`;
+      const row = hardwareMap.get(key) ?? {
+        label: h.name,
+        unit: h.unit,
+        qty: 0,
+        factoryPrice: h.factoryPrice ?? 0,
+        consumerPrice: h.consumerPrice ?? 0,
+        /* מחיר חסר אינו אפס — הוא נאמר, ולא מתחזה למחיר */
+        noPrice: h.consumerPrice === undefined && h.factoryPrice === undefined,
+      };
+      row.qty += h.qty;
+      hardwareMap.set(key, row);
+    }
+
+    drawers += instead.has('drawer') ? 0 : countDrawers(u);
     doors += effectiveDoors(u);
-    lifts += liftCount(u);
-    handles += unitHandles(u);
+    lifts += instead.has('lift') ? 0 : liftCount(u);
+    handles += instead.has('handle') ? 0 : unitHandles(u);
     for (const g of unitGlassDoors(u, parts, project)) {
       const key = `${g.label} ${g.widthMm}x${g.heightMm}`;
       const line = glassMap.get(key) ?? {
@@ -875,6 +909,11 @@ export function projectCosting(
   };
 
   const accessories: AccessoryLine[] = [
+    /* הפרזול שנבחר לארגזים, לפני האביזרים שנספרים מאליהם */
+    ...[...hardwareMap.values()].map((h) => ({
+      ...accessory(h.label, h.qty, h.unit, h.factoryPrice, h.consumerPrice),
+      noPrice: h.noPrice,
+    })),
     accessory('מגירות', drawers, 'יח׳', a.drawerFactory, a.drawerConsumer),
     accessory('פס לד', ledMeters, 'מ׳', a.ledFactory, a.ledConsumer),
     accessory('מנגנוני קלאפה', lifts, 'יח׳', a.liftFactory, a.liftConsumer),

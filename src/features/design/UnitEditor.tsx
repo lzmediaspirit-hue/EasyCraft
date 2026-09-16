@@ -13,6 +13,7 @@ import type { PartSettings } from '../../costing/boards';
 import { InteriorEditor } from './InteriorEditor';
 import { PartChoiceRow } from './PartChoiceRow';
 import { FinishSheet } from '../settings/FinishSheet';
+import { HardwareRows } from './HardwareRows';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
@@ -20,6 +21,7 @@ import { BookmarkIcon, CloseIcon, PencilIcon } from '../../ui/icons';
 import { BACK_KINDS, DRAWER_BOXES, RAIL_WIDTH_MM, bodyHeightMm, slabThicknessMm } from '../../db/types';
 import type {
   ExposedSides,
+  HardwareSpec,
   LedSpot,
   OpeningMech,
   PartChoice,
@@ -78,6 +80,7 @@ export function UnitEditor({
   inside,
   project,
   parts,
+  canPrice = false,
   fillWidth,
   fillHeight,
   defaultSocleMm = 0,
@@ -91,8 +94,10 @@ export function UnitEditor({
   inside: boolean;
   /** הפרויקט, לברירות המחדל של הגוון והחומר */
   project?: Project;
-  /** ההגדרות שמהן נגזר עובי הלוח של החזית */
-  parts?: PartSettings;
+  /** ההגדרות שמהן נגזר עובי הלוח של החזית, ורשימת הפרזול של העסק */
+  parts?: PartSettings & { hardware?: HardwareSpec[] };
+  /** מי שרואה כסף רואה גם את מחירי הפרזול ועורך אותם */
+  canPrice?: boolean;
   /**
    * הרווח שהארגז יושב בתוכו — איפה הוא מתחיל וכמה הוא גדול.
    * גם הוא נמדד בהדמיה, מאותה סיבה.
@@ -880,6 +885,21 @@ export function UnitEditor({
               </Pill>
             ))}
           </Row>
+
+          {/*
+            הפרזול של הארגז. זו רשימת הזמנה: כל שורה נושאת את
+            המחיר שהיה כשנבחרה, ולכן עדכון מחיר ברשימת העסק אינו
+            משנה הצעה שכבר יצאה.
+          */}
+          <div className="mt-3">
+            <span className="text-xs font-medium text-stone-600">פרזול</span>
+            <HardwareRows
+              rows={unit.hardware ?? []}
+              settings={parts}
+              canPrice={canPrice}
+              onChange={(hardware) => onChange({ hardware })}
+            />
+          </div>
 
         </>
       )}
