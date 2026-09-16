@@ -394,8 +394,6 @@ export interface PlacedUnit extends Entity {
   corner?: CornerKind;
   /** רוחב החלק החסום בפינה מתה */
   blindMm?: number;
-  /** עובי הלוח — רלוונטי לדופן בודדת שנקנית בעובי משלה */
-  panelThicknessMm?: number;
   /**
    * צדדים שלא נבנים כלל.
    *
@@ -618,7 +616,6 @@ export interface CatalogItem extends Entity {
   opening?: OpeningMech;
   corner?: CornerKind;
   blindMm?: number;
-  panelThicknessMm?: number;
   /*
    * מאפייני גימור שנשמרים עם הפריט, כדי שארגז שהנגר כבר כיוונן פעם
    * אחת יחזור מוכן בפעם הבאה ולא ידרוש את אותה עריכה מחדש.
@@ -706,7 +703,6 @@ export const REUSABLE_FIELDS = [
   'opening',
   'corner',
   'blindMm',
-  'panelThicknessMm',
   'drawerStyle',
   'exposed',
   'exposedDepthMm',
@@ -879,6 +875,26 @@ export function alongWallMm(u: Pick<PlacedUnit, 'widthMm' | 'depthMm' | 'rotatio
  */
 export function bodyHeightMm(u: Pick<PlacedUnit, 'heightMm' | 'socleMm'>): number {
   return Math.max(u.heightMm - (u.socleMm ?? 0), 0);
+}
+
+/**
+ * עוביו של לוח בודד.
+ *
+ * ללוח אין גוף, ולכן אחת משלוש מידותיו היא העובי עצמו: לוח מונח
+ * (מדף צף, משטח שולחן) עוביו הוא גובהו, ולוח עומד (פאנל, דופן)
+ * עוביו הוא עומקו. אלה בדיוק המידות שלפיהן הוא נחתך — הפאה היא
+ * שתי האחרות.
+ *
+ * עד כאן היה לצדן שדה נפרד, `panelThicknessMm`, ושני המספרים
+ * נפרדו זה מזה: מדף בגובה 300 שעוביו הוגדר 30 צויר בעובי 30
+ * ונבדק להתנגשות בגובה 300 — ארגז שהתחיל 20 מ״מ מעליו נחסם על
+ * ידי לוח שאינו שם.
+ */
+export function slabThicknessMm(
+  u: Pick<PlacedUnit, 'heightMm' | 'depthMm'>,
+  flat: 'horizontal' | 'vertical',
+): number {
+  return flat === 'horizontal' ? u.heightMm : u.depthMm;
 }
 
 /** כמה הארגז נכנס לתוך החדר. */

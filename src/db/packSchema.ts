@@ -137,6 +137,20 @@ export const SCHEMA: Record<string, TableSpec> = {
   },
 };
 
+/**
+ * יחס בין מידות, ולא מידה לחוד.
+ *
+ * רגליים גבוהות מהארגז כולו עוברות כל בדיקה של "מספר חיובי"
+ * ונופלות רק ברשימת החיתוך, בדופן שאורכה שלילי. העובי אינו ידוע
+ * כאן — הוא של הנגרייה המקבלת — ולכן נבדק מה שאינו תלוי בו.
+ */
+function related(row: Record<string, unknown>): string | null {
+  const h = row.defaultHeightMm as number;
+  const socle = (row.socleMm as number) ?? 0;
+  if (socle >= h) return `הרגליים (${socle} מ״מ) גבוהות מהארגז כולו (${h} מ״מ)`;
+  return null;
+}
+
 /** תיאור של שורה אחת, כדי שההודעה תצביע על מה שנפל ולא על "משהו". */
 function rowLabel(row: unknown, index: number): string {
   const r = row as { name?: unknown; code?: unknown; id?: unknown };
@@ -183,6 +197,10 @@ export function checkTable(
       if (r[field] !== undefined && !ok(r[field])) {
         return `ב-${rowLabel(row, i)} השדה ${field} אינו תקין`;
       }
+    }
+    if (name === 'catalog') {
+      const bad = related(r);
+      if (bad) return `ב-${rowLabel(row, i)} ${bad}`;
     }
     const id = r.id as string;
     if (seen.has(id)) return `המזהה ${id} מופיע יותר מפעם אחת`;

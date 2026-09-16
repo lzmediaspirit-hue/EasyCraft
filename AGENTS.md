@@ -13,7 +13,7 @@ npm install         # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 אם אין צורך ב
 npm run dev         # שרת פיתוח על 5173
 npm run typecheck   # חייב לעבור לפני כל קומיט
 npm run build:single  # קובץ HTML יחיד, ASCII בלבד
-npm test            # 88 חבילות Playwright — דורש שרת פיתוח פעיל
+npm test            # 89 חבילות Playwright — דורש שרת פיתוח פעיל
 ```
 
 `npm test` דורש דפדפן Chromium ושרת על 5173. בסביבה בלי דפדפן הוא

@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
 
 import { fillCodes, type CodeRow } from '../catalog/codes';
+import { glyphDef } from '../catalog/glyphList';
 import type {
   Attachment,
   CatalogItem,
@@ -613,4 +614,36 @@ db.version(23)
       else keep.set(code, row.id);
     }
     if (drop.length) await tx.table('catalog').bulkDelete(drop);
+  });
+
+/*
+ * עובי הלוח הוא מידה ולא שדה.
+ *
+ * ללוח בודד היה `panelThicknessMm` לצד הגובה והעומק, ושני
+ * המספרים יכלו לסתור זה את זה: הציור לקח את השדה, והחיתוך ובדיקת
+ * ההתנגשות לקחו את המידה. כאן השדה נכנס אל המידה שהוא תיאר — לוח
+ * מונח אל גובהו, לוח עומד אל עומקו — ויורד.
+ */
+db.version(24)
+  .stores(TABLES_V22)
+  .upgrade(async (tx) => {
+    for (const table of ['catalog', 'units']) {
+      const rows = (await tx.table(table).toArray()) as {
+        id: string;
+        glyph: string;
+        panelThicknessMm?: number;
+      }[];
+      for (const row of rows) {
+        const th = row.panelThicknessMm;
+        if (th === undefined) continue;
+        const flat = glyphDef(row.glyph).noCarcass;
+        const size =
+          flat === 'horizontal'
+            ? { [table === 'catalog' ? 'defaultHeightMm' : 'heightMm']: th }
+            : flat === 'vertical'
+              ? { [table === 'catalog' ? 'defaultDepthMm' : 'depthMm']: th }
+              : {};
+        await tx.table(table).update(row.id, { ...size, panelThicknessMm: undefined });
+      }
+    }
   });

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { unitsRepo } from '../projects/projectsRepo';
 import { glyphDef } from '../../catalog/glyphList';
 import { autoShelves } from '../../catalog/CabinetGlyph';
+import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog/zones';
 import { Sheet } from '../../ui/Sheet';
 import { NumField, PrimaryButton } from '../../ui/Field';
 import { BoxForm, type BoxSpec } from '../../ui/BoxForm';
@@ -35,7 +36,8 @@ export function UnitEditSheet({
     name: unit.name,
     glyph: unit.glyph,
     doors: unit.doors ?? 2,
-    drawers: unit.drawers ?? 0,
+    /* מה שבארון בפועל: אזורים מפורשים גוברים על השדה הישן */
+    drawers: drawerRows(unit),
     drawerCols: unit.drawerCols ?? 1,
     shelves: unit.shelves ?? autoShelves(unit.heightMm),
     drawerStyle: unit.drawerStyle ?? 'outer',
@@ -49,11 +51,23 @@ export function UnitEditSheet({
 
   const canSave = spec.name.trim().length > 0 && spec.widthMm > 0 && spec.heightMm > 0;
 
+  /* ארון שפנימו מתואר באזורים מורכבים אינו מקבל מספר מגירות יחיד */
+  const composed = !drawersAreSimple(unit);
+
   async function save() {
     const caps = glyphDef(spec.glyph);
+    /*
+     * שינוי מספר השורות חייב להגיע גם אל האזור עצמו.
+     *
+     * האזורים גוברים על השדה הישן, ולכן כתיבה לשדה בלבד דיווחה
+     * על שינוי שלא קרה: הטופס הראה שש, והארון נשאר שלוש.
+     */
+    const zones =
+      caps.drawers && !composed ? zonesWithDrawerRows(unit, spec.drawers) : undefined;
     await unitsRepo.update(unit.id, {
       name: spec.name.trim(),
       glyph: spec.glyph,
+      ...(zones ? { zones } : {}),
       doors: caps.doors ? spec.doors : undefined,
       drawers: caps.drawers ? spec.drawers : undefined,
       drawerCols: caps.drawers ? spec.drawerCols : undefined,
@@ -82,7 +96,11 @@ export function UnitEditSheet({
         </PrimaryButton>
       }
     >
-      <BoxForm value={spec} onChange={(patch) => setSpec((s) => ({ ...s, ...patch }))} />
+      <BoxForm
+        value={spec}
+        composed={composed}
+        onChange={(patch) => setSpec((s) => ({ ...s, ...patch }))}
+      />
 
       {/*
         מיקום מספרי. הגובה יושב ב-`BoxForm` כי הוא חלק מהארגז גם

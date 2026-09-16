@@ -538,6 +538,7 @@ export function DesignScreen({
             measure={measure}
             corners={corners}
             finishHex={finishHex ?? NO_HEX}
+            parts={parts ?? undefined}
             snap={design.view.snap}
             /*
              * גרירה היא עריכה, ולכן היא עוברת באותו שער כמו
@@ -650,6 +651,7 @@ export function DesignScreen({
           inside={inside}
           onChange={(patch) => patchUnit(selected.id, patch)}
           project={project}
+          parts={parts ?? undefined}
           /* ארגז מסובב תופס על הקיר את עומקו, ולכן ההשלמה לרוחב
              לא תמלא את הרווח שנמדד — עדיף בלי הצעה מאשר הצעה שקרית */
           fillWidth={turned(selected) ? undefined : fillSpan(selected, units, wall, 'w')}

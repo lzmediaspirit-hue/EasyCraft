@@ -18,7 +18,8 @@ import { outOfSight } from './designView';
 import { RulerMeasure, RulerTargets, rulerSpan } from './wallRuler';
 import type { RulerAxis } from './wallRuler';
 import { RAIL_WIDTH_MM, alongWallMm, bodyHeightMm, intoRoomMm } from '../../db/types';
-import { partChoice } from '../../costing/boards';
+import { partChoice, partThicknessMm } from '../../costing/boards';
+import type { PartSettings } from '../../costing/boards';
 import type { PlacedUnit, Project, RailSides, Wall } from '../../db/types';
 
 
@@ -71,6 +72,8 @@ type Props = {
   work?: boolean;
   /** הפרויקט — ממנו נגזר הגוון של חלק שלא נבחר לו גוון משלו */
   project?: Project;
+  /** ההגדרות שמהן נגזר עובי הלוח, כדי שהחזית תסומן בעוביה שלה */
+  parts?: PartSettings;
   /**
    * ההצמדה פעילה.
    *
@@ -103,6 +106,7 @@ export function WallElevation({
   rulerAxis = 'w',
   work,
   project,
+  parts,
   snap = true,
 }: Props) {
 
@@ -110,6 +114,14 @@ export function WallElevation({
    * חיפוי קיר מצויר ראשון: הוא מכסה את הקיר, והארגזים עומדים לפניו.
    * בלי הסדר הזה לוח שנוסף אחרון היה מסתיר את מה שהוא אמור לגבות.
    */
+  /*
+   * עובי החזית שנבחר לארגז הזה — אותו מספר שלפיו הוא נחתך ושלפיו
+   * הוא מצויר בתלת־ממד. דופן זרה היא לוח חזית, וסימון שלה בעובי
+   * קבוע הראה 18 מ״מ על ארגז שנחתך מ-30.
+   */
+  const frontMm = (u: PlacedUnit) =>
+    parts ? partThicknessMm(u, 'front', parts, project) : MATERIAL.frontMm;
+
   const layer = (u: PlacedUnit) => (glyphDef(u.glyph).cladding ? 0 : 1);
   const units = [...wallUnits].sort((a, b) => layer(a) - layer(b));
   /*
@@ -647,7 +659,7 @@ export function WallElevation({
               </g>
             )}
             {!sideOn && ledStrips(u, stroke, carcassH)}
-            {!sideOn && sideMarks(u, stroke, carcassH)}
+            {!sideOn && sideMarks(u, stroke, carcassH, frontMm(u))}
             {awayMm > 0 && (
               <g pointerEvents="none">
                 <rect
@@ -869,8 +881,7 @@ function ledStrips(u: PlacedUnit, stroke: number, bodyH: number) {
  * ובקו, ולכן הם מצוירים יחד. בלי הסימון הזה שלושת המצבים נראים
  * בחזית בדיוק כמו ארגז רגיל.
  */
-function sideMarks(u: PlacedUnit, stroke: number, bodyH: number) {
-  const t = MATERIAL.frontMm;
+function sideMarks(u: PlacedUnit, stroke: number, bodyH: number, t: number) {
   const e = u.exposed ?? {};
   const g = u.glassSides ?? {};
   const off = u.omit ?? {};

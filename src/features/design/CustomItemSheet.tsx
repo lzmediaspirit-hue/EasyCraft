@@ -6,6 +6,7 @@ import { catalogRepo } from '../../catalog/catalogRepo';
 import { roomsRepo } from '../../catalog/roomsRepo';
 import { glyphDef } from '../../catalog/glyphList';
 import { autoShelves } from '../../catalog/CabinetGlyph';
+import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog/zones';
 import { GROUP_LABELS } from '../../catalog/rooms';
 import { KITCHEN } from '../../catalog/standards';
 import { Sheet } from '../../ui/Sheet';
@@ -83,7 +84,8 @@ export function CustomItemSheet({
     name: item?.name ?? '',
     glyph: item?.glyph ?? 'doors',
     doors: item?.doors ?? 2,
-    drawers: item?.drawers ?? 3,
+    /* מה שבארון בפועל: אזורים מפורשים גוברים על השדה הישן */
+    drawers: item ? drawerRows(asUnit(item)) : 3,
     drawerCols: item?.drawerCols ?? 1,
     shelves: item?.shelves ?? autoShelves(item?.defaultHeightMm ?? 720),
     /* מהארגז השמור, לא מקבוע: מגירה פנימית חזרה להיות חזית בולטת */
@@ -104,14 +106,23 @@ export function CustomItemSheet({
     if (!item) setSpec((s) => ({ ...s, yMm: Y_BY_GROUP[g] }));
   }
 
+  /* פריט שפנימו מתואר באזורים מורכבים אינו מקבל מספר מגירות יחיד */
+  const composed = !!item && !drawersAreSimple(asUnit(item));
+
   async function save() {
     const caps = glyphDef(spec.glyph);
+    /* שינוי המספר מגיע גם אל האזור עצמו, שאחרת גובר עליו */
+    const zones =
+      item && caps.drawers && !composed
+        ? zonesWithDrawerRows(asUnit(item), spec.drawers)
+        : undefined;
     await catalogRepo.saveCustom({
       id: item?.id,
       rooms,
       group,
       name: spec.name.trim(),
       glyph: spec.glyph,
+      ...(zones ? { zones } : {}),
       doors: caps.doors ? spec.doors : undefined,
       drawers: caps.drawers ? spec.drawers : undefined,
       drawerCols: caps.drawers ? spec.drawerCols : undefined,
@@ -176,6 +187,7 @@ export function CustomItemSheet({
       <div className="space-y-5">
         <BoxForm
           value={spec}
+          composed={composed}
           onChange={(patch) => setSpec((s) => ({ ...s, ...patch }))}
           namePlaceholder="למשל: שידה עם שש מגירות"
         />
@@ -235,4 +247,13 @@ function widthLadder(w: number): number[] {
   const raw = [w * 0.5, w * 0.75, w, w * 1.25, w * 1.5];
   const rounded = raw.map((v) => Math.max(50, Math.round(v / 50) * 50));
   return [...new Set(rounded)].sort((a, b) => a - b);
+}
+
+/**
+ * פריט ספרייה בלשון של ארגז מונח.
+ * חישוב האזורים מדבר על `heightMm`, ולפריט יש `defaultHeightMm` —
+ * אותה מידה, שני שמות.
+ */
+function asUnit(item: CatalogItem) {
+  return { ...item, heightMm: item.defaultHeightMm };
 }

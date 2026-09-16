@@ -7,7 +7,9 @@ import { glyphDef } from '../../catalog/glyphList';
 import { MAX_BODY_MM, doorCells, isContainer, unitCells } from '../../catalog/zones';
 import { MATERIAL, drawerDepth } from '../../catalog/standards';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
-import { partChoice } from '../../costing/boards';
+import { partChoice, partThicknessMm } from '../../costing/boards';
+import { unitProblem } from '../../catalog/feasible';
+import type { PartSettings } from '../../costing/boards';
 import { InteriorEditor } from './InteriorEditor';
 import { PartChoiceRow } from './PartChoiceRow';
 import { FinishSheet } from '../settings/FinishSheet';
@@ -15,7 +17,7 @@ import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { BookmarkIcon, CloseIcon, PencilIcon } from '../../ui/icons';
-import { BACK_KINDS, DRAWER_BOXES, RAIL_WIDTH_MM, bodyHeightMm } from '../../db/types';
+import { BACK_KINDS, DRAWER_BOXES, RAIL_WIDTH_MM, bodyHeightMm, slabThicknessMm } from '../../db/types';
 import type {
   ExposedSides,
   LedSpot,
@@ -75,6 +77,7 @@ export function UnitEditor({
   unit,
   inside,
   project,
+  parts,
   fillWidth,
   fillHeight,
   defaultSocleMm = 0,
@@ -89,6 +92,8 @@ export function UnitEditor({
   inside: boolean;
   /** הפרויקט, לברירות המחדל של הגוון והחומר */
   project?: Project;
+  /** ההגדרות שמהן נגזר עובי הלוח של החזית */
+  parts?: PartSettings;
   /**
    * הרווח שהארגז יושב בתוכו — איפה הוא מתחיל וכמה הוא גדול.
    * גם הוא נמדד בהדמיה, מאותה סיבה.
@@ -111,6 +116,8 @@ export function UnitEditor({
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
   const [addingFinish, setAddingFinish] = useState(false);
+  /* מידה שנדחתה, והסיבה — כדי שהמסך יגיד למה ולא רק יתעלם */
+  const [blocked, setBlocked] = useState<string | null>(null);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   /* מגירת העריכה המתקדמת נפתחת לבד לארגז שכבר משתמש במה שיש בה */
   const [advanced, setAdvanced] = useState(() => !!unit.free || !!unit.omit);
@@ -131,7 +138,28 @@ export function UnitEditor({
   /** מה שבאמת חל על חלק — הארגז, ואם לא נקבע בו, הפרויקט */
   const choiceOf = (role: PartRole) => partChoice(unit, role, project);
 
+  /* עובי הגוף שלפיו הארגז נחתך — ולפיו גם נמדד מה אפשר לבנות */
+  const carcassMm = parts
+    ? partThicknessMm(unit, 'carcass', parts, project)
+    : MATERIAL.carcassMm;
+
+  /**
+   * שינוי מידה עובר דרך שער אחד.
+   *
+   * גובה 50 עם רגליים 100 נשמר עד כאן בשקט, ורשימת החיתוך שיצאה
+   * ממנו הכילה דפנות באורך שלילי. מה שאי אפשר לבנות אינו נשמר,
+   * והמסך אומר מהו המינימום — לא "שגיאה".
+   */
+  function resize(patch: Partial<PlacedUnit>) {
+    const why = unitProblem({ ...unit, ...patch }, carcassMm);
+    if (why) return setBlocked(why);
+    setBlocked(null);
+    onChange(patch);
+  }
+
   const caps = glyphDef(unit.glyph);
+  /* לוח בודד: מונח או עומד. ריק = ארגז אמיתי עם גוף */
+  const flat = caps.noCarcass;
   const locked = unit.floorLocked ?? false;
   const exposed = unit.exposed ?? {};
   const glassSides = unit.glassSides ?? {};
@@ -169,7 +197,12 @@ export function UnitEditor({
    * החזית; בתצוגת פנים זה עומק הגוף בלבד. מה שנשמר הוא תמיד עומק
    * הגוף, כי זו המידה שממנה נחתכים הצדדים.
    */
-  const depthShift = !inside && hasFronts ? MATERIAL.frontMm : 0;
+  const depthShift =
+    !inside && hasFronts
+      ? parts
+        ? partThicknessMm(unit, 'front', parts, project)
+        : MATERIAL.frontMm
+      : 0;
   const currentValue =
     axis === 'w' ? unit.widthMm : axis === 'h' ? unit.heightMm : unit.depthMm + depthShift;
   /*
@@ -202,7 +235,7 @@ export function UnitEditor({
   const axisLabel = axis === 'w' ? 'רוחב' : axis === 'h' ? 'גובה' : 'עומק';
 
   const applyStandard = (mm: number) =>
-    onChange(
+    resize(
       axis === 'w'
         ? { widthMm: mm }
         : axis === 'h'
@@ -344,6 +377,13 @@ export function UnitEditor({
         </button>
       </div>
 
+      {/* מה שנדחה, ולמה — מתחת לשורת המידות, במקום שבו נגעו */}
+      {blocked && (
+        <p className="mt-1.5 rounded-xl bg-red-50 px-3 py-2 text-[11px] leading-snug text-red-900">
+          {blocked}
+        </p>
+      )}
+
       {typing && (
         <label className="mt-1.5 flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-2">
           <span className="text-[11px] text-stone-500">{axisLabel}</span>
@@ -359,13 +399,21 @@ export function UnitEditor({
         </label>
       )}
 
-      {unit.panelThicknessMm !== undefined && (
+      {/*
+        עובי הלוח הוא אחת ממידותיו: לוח מונח עוביו הוא גובהו, ולוח
+        עומד עוביו הוא עומקו. השדה כאן כותב לאותה מידה בדיוק ולא
+        למספר שני לצדה — שני מספרים לאותו דבר נפרדו זה מזה, והלוח
+        צויר בעובי אחד ונבדק להתנגשות בעובי אחר.
+      */}
+      {flat && (
         <div className="mt-2">
           <NumBox
             label="עובי הלוח"
-            value={unit.panelThicknessMm}
+            value={slabThicknessMm(unit, flat)}
             inMm
-            onChange={(mm) => onChange({ panelThicknessMm: mm })}
+            onChange={(mm) =>
+              resize(flat === 'horizontal' ? { heightMm: mm } : { depthMm: mm })
+            }
           />
         </div>
       )}
@@ -888,9 +936,10 @@ export function UnitEditor({
               value={unit.socleMm ?? 0}
               /* הרגליים מרימות את גוף הארון, ולכן הגובה הכולל גדל איתן */
               onChange={(mm) =>
-                onChange({
+                resize({
                   socleMm: mm || undefined,
-                  heightMm: Math.max(unit.heightMm + mm - (unit.socleMm ?? 0), 50),
+                  /* הרגליים מרימות את הגוף, ולכן הגובה הכולל גדל איתן */
+                  heightMm: unit.heightMm + mm - (unit.socleMm ?? 0),
                   yMm: 0,
                 })
               }

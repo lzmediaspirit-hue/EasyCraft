@@ -71,7 +71,6 @@ function toShipped(s: SeedItem, order: number): ShippedItem {
     counterMm: s.counter,
     corner: s.corner,
     blindMm: s.blind,
-    panelThicknessMm: s.panelThickness,
     common: s.common,
     isBuiltin: true,
     sortOrder: order,

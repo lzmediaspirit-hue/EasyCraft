@@ -23,7 +23,7 @@ import { unitBox, unitFrame } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import type { Face, IsoView, Solid, Tf } from './isoMath';
-import { RAIL_WIDTH_MM } from '../../db/types';
+import { RAIL_WIDTH_MM, slabThicknessMm } from '../../db/types';
 import { partChoice, partThicknessMm } from '../../costing/boards';
 import type { PartSettings } from '../../costing/boards';
 import type { PartRole, PlacedUnit, Project, Wall } from '../../db/types';
@@ -291,8 +291,12 @@ function unitSolids(
     return out;
   }
 
+  /*
+   * לוח בודד: העובי הוא אחת ממידותיו ולא מספר שני לצדן, ולכן
+   * הציור, החיתוך ובדיקת ההתנגשות מדברים על אותו גוף.
+   */
   if (def.noCarcass) {
-    const th = u.panelThicknessMm ?? MATERIAL.frontMm;
+    const th = slabThicknessMm(u, def.noCarcass);
     if (def.noCarcass === 'horizontal') {
       add(slab(frame, x, u.yMm, 0, w, th, d, tone, `${u.id}-slab`));
     } else {
@@ -454,7 +458,7 @@ function unitSolids(
                 hidden ? zd - 60 : zd,
                 dw - 12,
                 dh - 12,
-                hidden ? 20 : MATERIAL.frontMm,
+                hidden ? 20 : ft,
                 shade(tone, hidden ? 0.94 : 1),
                 `${zk}-dr-${i}-${r}-${col}`,
               ),
@@ -508,7 +512,7 @@ function unitSolids(
             d,
             blind,
             fh - 4,
-            MATERIAL.frontMm,
+            ft,
             tone,
             `${u.id}-blind-${fi}`,
           ),
@@ -525,7 +529,7 @@ function unitSolids(
             d,
             dw - 4,
             fh - 4,
-            MATERIAL.frontMm,
+            ft,
             u.glassDoors ? GLASS_TONE : tone,
             `${u.id}-door-${fi}-${k}`,
           ),
@@ -543,7 +547,7 @@ function unitSolids(
               frame,
               hx - HANDLE_MM / 2,
               y + f.fromMm + fh * 0.36,
-              d + MATERIAL.frontMm,
+              d + ft,
               HANDLE_MM,
               fh * 0.28,
               HANDLE_MM,
@@ -562,6 +566,11 @@ function unitSolids(
    * לא חושב "מקרר".
    */
   if (def.appliance && !(u.doors ?? 0)) {
+    /*
+     * החזית הזאת אינה לוח שנחתך אלא פני המכשיר עצמו, ולכן היא
+     * אינה נגזרת מעובי החזית שנבחר לארגז — מקרר אינו נעשה עבה
+     * יותר כשבוחרים לחזיתות לוח של 30 מ״מ.
+     */
     add(
       slab(frame, x + 2, y + 2, d, w - 4, h - 4, MATERIAL.frontMm, '#d6d3d1', `${u.id}-app`),
     );

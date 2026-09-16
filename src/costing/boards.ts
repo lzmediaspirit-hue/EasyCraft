@@ -10,7 +10,7 @@ import {
   unitZones,
   zoneCells,
 } from '../catalog/zones';
-import { RAIL_WIDTH_MM, bodyHeightMm, materialForRole } from '../db/types';
+import { RAIL_WIDTH_MM, bodyHeightMm, materialForRole, slabThicknessMm } from '../db/types';
 import type {
   Material,
   PartChoice,
@@ -208,7 +208,8 @@ export function unitParts(u: PlacedUnit, s: PartSettings, project?: Project): Pa
   if (flat) {
     return [
       {
-        role: u.panelThicknessMm && u.panelThicknessMm < 10 ? 'back' : 'front',
+        /* לוח דק הוא לוח גב — אותו מספר שלפיו הוא נחתך ומצויר */
+        role: slabThicknessMm(u, flat) < 10 ? 'back' : 'front',
         // לוח מונח לרוחב — הסיבים רצים לאורכו, לא לעומקו
         grain: flat === 'horizontal' ? 'width' : 'height',
         label: u.name,

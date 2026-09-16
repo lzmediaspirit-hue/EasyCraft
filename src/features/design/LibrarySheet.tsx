@@ -4,6 +4,7 @@ import { catalogRepo } from '../../catalog/catalogRepo';
 import { GLYPH_GROUPS_FALLBACK, GROUP_LABELS } from '../../catalog/rooms';
 import { roomDef, roomsRepo } from '../../catalog/roomsRepo';
 import { GlyphPreview } from '../../catalog/GlyphPreview';
+import { glyphDef } from '../../catalog/glyphList';
 import { CustomItemSheet } from './CustomItemSheet';
 import { RoomSheet } from './RoomSheet';
 import { Sheet } from '../../ui/Sheet';
@@ -226,7 +227,8 @@ export function LibrarySheet({
                 </span>
                 <span className="num text-[10px] text-stone-400">
                   {cm(item.defaultWidthMm)}
-                  {item.panelThicknessMm && <> · {item.panelThicknessMm} מ״מ</>}
+                  {/* ללוח בודד העובי הוא המידה עצמה, ולכן הוא נגזר ולא נשמר */}
+                  {thicknessOf(item) && <> · {thicknessOf(item)} מ״מ</>}
                 </span>
               </button>
               {/*
@@ -456,6 +458,16 @@ export function LibrarySheet({
  * ישר במקום גרשיים עבריים. חיפוש שנכשל על רווח כפול הוא חיפוש
  * שהנגר מפסיק להשתמש בו.
  */
+/**
+ * עובי הלוח של פריט ספרייה, לפריט שהוא לוח בודד בלבד.
+ * לוח מונח עוביו הוא גובהו, ולוח עומד עוביו הוא עומקו.
+ */
+function thicknessOf(item: CatalogItem): number | null {
+  const flat = glyphDef(item.glyph).noCarcass;
+  if (!flat) return null;
+  return flat === 'horizontal' ? item.defaultHeightMm : item.defaultDepthMm;
+}
+
 function normalize(value: string): string {
   return value
     .trim()

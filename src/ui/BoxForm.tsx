@@ -34,10 +34,17 @@ export function BoxForm({
   value,
   onChange,
   namePlaceholder,
+  composed,
 }: {
   value: BoxSpec;
   onChange: (patch: Partial<BoxSpec>) => void;
   namePlaceholder?: string;
+  /**
+   * פנים הארון מתואר באזורים שאי אפשר לסכם במספר אחד — שני אזורי
+   * מגירות, או קושרת שמחלקת אותם לעמודות. מספר יחיד כאן היה
+   * הבטחה שאינה מתקיימת: הוא נשמר, והארון נשאר כפי שהיה.
+   */
+  composed?: boolean;
 }) {
   const caps = glyphDef(value.glyph);
   /*
@@ -132,7 +139,15 @@ export function BoxForm({
         </Field>
       )}
 
-      {!bought && caps.drawers && (
+      {!bought && caps.drawers && composed && (
+        <Field group label="שורות מגירות">
+          <p className="text-[11px] leading-snug text-stone-500">
+            פנים הארון מתואר באזורים — שנה אותו בעריכה המתקדמת, בהדמיה.
+          </p>
+        </Field>
+      )}
+
+      {!bought && caps.drawers && !composed && (
         <>
           <Field group label="שורות מגירות">
             <div className="flex flex-wrap gap-1.5">
