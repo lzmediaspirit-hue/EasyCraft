@@ -130,9 +130,15 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
      */
     const m = libraryManifest(res.backup);
     const when = new Date(m.revision || res.backup.at).toLocaleDateString('he-IL');
+    /*
+     * החתימה היא מה שמאפשר לומר "זו אותה ספרייה". שתי חבילות
+     * שיצאו בשני ימים ממכשיר אחד נבדלות בתאריך אבל לא בחתימה,
+     * ולכן אפשר לדעת שאין מה לייבא — במקום לייבא ולראות "0 נוספו".
+     */
     setNote(
       `${f.name} — ${m.items} ארגזים, ${m.finishes} גוונים ו-${m.materials} לוחות. ` +
-        `מהדורה ${when}. בחר מיזוג או החלפה, ולחץ "ייבוא ספרייה".`,
+        `מהדורה ${when}, חתימה ${m.fingerprint.slice(0, 8)}. ` +
+        `בחר מיזוג או החלפה, ולחץ "ייבוא ספרייה".`,
     );
   }
 

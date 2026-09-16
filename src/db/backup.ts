@@ -1,4 +1,5 @@
 import { db } from './db';
+import { checkTable, libraryFingerprint } from './backupSchema';
 import type { CatalogItem, Finish, Material } from './types';
 
 
@@ -17,6 +18,9 @@ import type { CatalogItem, Finish, Material } from './types';
 /**
  * גרסת הפורמט. מי שקורא קובץ ישן צריך לדעת מה הוא מקבל.
  *
+ * 4 — החדרים נכנסים לגיבוי, ולמניפסט יש טביעת אצבע של התוכן.
+ *     חדר שהנגר הוסיף לעצמו נשאר מחוץ לקובץ עד כאן, ולכן שחזור
+ *     במכשיר חדש החזיר פרויקטים שמפנים לחדר שאינו קיים.
  * 3 — לגיבוי ספרייה יש מניפסט: כמה ארגזים, על אילו לוחות וגוונים
  *     הם נשענים, ומתי נוצר. מי שמקבל קובץ צריך לדעת מה בתוכו לפני
  *     שהוא מייבא אותו, ולא אחרי.
@@ -24,7 +28,7 @@ import type { CatalogItem, Finish, Material } from './types';
  *     אליהם. ב-1 הוא נשא רק את הארגזים, והמקבל קיבל הפניות למזהים
  *     שאין אצלו: הגוון שנבחר לחזית פשוט לא היה קיים.
  */
-export const BACKUP_FORMAT = 3;
+export const BACKUP_FORMAT = 4;
 
 /**
  * מה יש בחבילת ספרייה, בלי לפתוח את הטבלאות.
@@ -33,9 +37,14 @@ export const BACKUP_FORMAT = 3;
  * כמה לוחות וגוונים הם נשענים. בלי זה "ייבוא ספרייה" היה קפיצה
  * לתוך קובץ — והתוצאה התגלתה רק אחרי שהיא כבר נכתבה.
  *
- * `revision` הוא חותם הזמן של הפריט העדכני ביותר בחבילה. שתי חבילות
- * מאותה נגרייה נבדלות בו, ולכן אפשר לדעת מי מהן חדשה יותר בלי
- * להשוות שורה־שורה.
+ * שתי שאלות שונות, ולכן שני שדות.
+ *
+ * `fingerprint` הוא מה יש בחבילה: גיבוב של הארגזים, הלוחות
+ * והגוונים עצמם. שתי חבילות עם אותה טביעת אצבע הן אותה ספרייה,
+ * גם אם יוצאו בשני מכשירים ובשני ימים. `revision` הוא מתי נארזה,
+ * והוא רק מסדר בין שתיים — הוא היה עד כאן חותם הפריט העדכני,
+ * וכך שינוי בצבע של גוון היה בלתי נראה בו, והסרת הפריט החדש
+ * ביותר דווקא הקטינה אותו.
  */
 export interface LibraryManifest {
   items: number;
@@ -44,6 +53,8 @@ export interface LibraryManifest {
   /** המק״טים שבחבילה, ממוינים — הזהות שעוברת בין מכשירים */
   codes: string[];
   revision: number;
+  /** גיבוב התוכן — מה יש בחבילה, ולא מתי נארזה */
+  fingerprint: string;
 }
 
 
@@ -52,6 +63,7 @@ const TABLES = [
   'settings',
   'materials',
   'finishes',
+  'rooms',
   'catalog',
   'team',
   'customers',
@@ -71,6 +83,7 @@ const TABLE_LABEL: Record<TableName, string> = {
   settings: 'ההגדרות',
   materials: 'הלוחות',
   finishes: 'הגוונים',
+  rooms: 'החדרים',
   catalog: 'הספרייה',
   team: 'הצוות',
   customers: 'הלקוחות',
@@ -145,45 +158,45 @@ export async function exportLibrary(): Promise<Backup> {
   const materials = allMaterials.filter((m) => need.materials.has(m.id));
 
   const at = Date.now();
+  const tables = { catalog, materials, finishes };
   return {
     app: 'easycraft',
     format: BACKUP_FORMAT,
     at,
     kind: 'library',
-    tables: { catalog, materials, finishes },
-    manifest: {
-      items: catalog.length,
-      materials: materials.length,
-      finishes: finishes.length,
-      codes: catalog
-        .map((i) => i.code)
-        .filter((c): c is string => !!c)
-        .sort(),
-      /* המהדורה היא הפריט העדכני ביותר, ולא רגע הייצוא */
-      revision: catalog.reduce((n, i) => Math.max(n, i.updatedAt ?? 0), 0) || at,
-    },
+    tables,
+    manifest: { ...describe(tables), revision: at },
+  };
+}
+
+/** מה שאפשר לספור מהתוכן עצמו: הכול חוץ מהמהדורה. */
+function describe(tables: {
+  catalog: CatalogItem[];
+  materials: Material[];
+  finishes: Finish[];
+}): Omit<LibraryManifest, 'revision'> {
+  return {
+    items: tables.catalog.length,
+    materials: tables.materials.length,
+    finishes: tables.finishes.length,
+    codes: tables.catalog
+      .map((i) => i.code)
+      .filter((c): c is string => !!c)
+      .sort(),
+    fingerprint: libraryFingerprint(tables),
   };
 }
 
 /**
  * מה יש בקובץ, בלי לייבא אותו.
  *
- * חבילה מגרסה 3 נושאת מניפסט; ישנה יותר נספרת מהטבלאות עצמן, כדי
- * שגם קובץ שנוצר לפני כן ייקרא לפני שמייבאים אותו.
+ * הספירות מחושבות מהתוכן ולא נלקחות ממה שכתוב במניפסט: מספר
+ * בכותרת של קובץ הוא הצהרה של מי שכתב אותו, והמסך שמציג אותו
+ * לפני ייבוא צריך להראות את מה שבאמת בפנים. מהמניפסט נלקחת
+ * המהדורה בלבד — אותה אי אפשר לחשב מהטבלאות.
  */
 export function libraryManifest(backup: Backup): LibraryManifest {
-  if (backup.manifest) return backup.manifest;
-  const catalog = (backup.tables.catalog ?? []) as CatalogItem[];
-  return {
-    items: catalog.length,
-    materials: (backup.tables.materials ?? []).length,
-    finishes: (backup.tables.finishes ?? []).length,
-    codes: catalog
-      .map((i) => i.code)
-      .filter((c): c is string => !!c)
-      .sort(),
-    revision: backup.at ?? 0,
-  };
+  return { ...describe(pack(backup)), revision: backup.manifest?.revision ?? backup.at ?? 0 };
 }
 
 /** הגוונים והלוחות שארגזי הספרייה מפנים אליהם. */
@@ -234,18 +247,52 @@ export function readBackup(text: string): { backup: Backup } | { error: string }
   if (b.kind !== 'all' && b.kind !== 'library') {
     return { error: 'לא כתוב בקובץ מה יש בו — גיבוי מלא או ספרייה' };
   }
+  /* קובץ שנוצר לפני שהחדרים נכנסו לגיבוי אינו נדרש לשאת אותם */
+  const older = (b.format ?? 0) < 4;
   const required: readonly TableName[] = b.kind === 'all' ? TABLES : ['catalog'];
   for (const name of required) {
+    if (older && name === 'rooms') continue;
+    if (!Array.isArray(b.tables[name])) return { error: `חסר בקובץ החלק של ${TABLE_LABEL[name]}` };
+  }
+
+  /*
+   * ההפניות נבדקות מול הקובץ עצמו ולא מול המכשיר: שחזור מלא מוחק
+   * את מה שכאן, ולכן ארגז שמפנה לקיר שאינו בקובץ יישאר תלוי באוויר
+   * בדיוק כפי שהוא. חבילת ספרייה נושאת ארגזים בלי פרויקטים, ושם
+   * ההפניה פשוט אינה נבדקת.
+   */
+  const present: Record<string, Set<string>> = {};
+  for (const name of TABLES) {
     const rows = b.tables[name];
-    if (!Array.isArray(rows)) return { error: `חסר בקובץ החלק של ${TABLE_LABEL[name]}` };
-    if (!rows.every(isRow)) return { error: `יש שורות פגומות בחלק של ${TABLE_LABEL[name]}` };
+    if (Array.isArray(rows)) {
+      present[name] = new Set(rows.map((r) => (r as { id?: string })?.id ?? ''));
+    }
+  }
+  for (const name of TABLES) {
+    const rows = b.tables[name];
+    if (!Array.isArray(rows)) continue;
+    const bad = checkTable(name, rows, present);
+    if (bad) return { error: `בחלק של ${TABLE_LABEL[name]}: ${bad}` };
+  }
+
+  /*
+   * טביעת אצבע שנכתבה בקובץ חייבת לתאר את מה שיש בו. אי־התאמה
+   * אינה "קובץ ישן" — היא קובץ שנערך אחרי שנארז.
+   */
+  const stamped = b.manifest?.fingerprint;
+  if (stamped && stamped !== libraryFingerprint(pack(b as Backup))) {
+    return { error: 'תוכן הקובץ אינו תואם למה שכתוב עליו — ייתכן שהוא נערך אחרי שנוצר' };
   }
   return { backup: b as Backup };
 }
 
-/** שורה בטבלה היא אובייקט עם מזהה. בלי מזהה אי אפשר לכתוב אותה. */
-function isRow(row: unknown): boolean {
-  return !!row && typeof row === 'object' && typeof (row as { id?: unknown }).id === 'string';
+/** שלוש הטבלאות שחבילת ספרייה עשויה מהן. */
+function pack(backup: Backup): { catalog: CatalogItem[]; materials: Material[]; finishes: Finish[] } {
+  return {
+    catalog: (backup.tables.catalog ?? []) as CatalogItem[],
+    materials: (backup.tables.materials ?? []) as Material[],
+    finishes: (backup.tables.finishes ?? []) as Finish[],
+  };
 }
 
 /** מה קרה בייבוא, כדי לומר את זה במספרים ולא ב"בוצע". */

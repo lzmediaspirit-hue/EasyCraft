@@ -37,7 +37,9 @@ await asFile('bad.json', bad);
 await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).click();
 await page.waitForTimeout(900);
 const body = await dlg().innerText();
-ok('ייבוא פגום אומר מה קרה', /פגומות|נכשל/.test(body), JSON.stringify(body.slice(0, 200)));
+/* ההודעה מצביעה על השורה ועל השדה, ולא רק על "משהו פגום" */
+ok('ייבוא פגום אומר מה קרה', /פגום|פגומים|נכשל/.test(body), JSON.stringify(body.slice(0, 200)));
+ok('ומצביע על החלק שנפל', /הספרייה/.test(body), JSON.stringify(body.slice(0, 200)));
 ok('וכפתור הייבוא נשאר פעיל', await dlg().getByRole('button', { name: 'ייבוא ספרייה' }).isEnabled());
 ok('וגם השחזור המלא', await dlg().getByRole('button', { name: 'שחזור מלא' }).isEnabled());
 
