@@ -18,7 +18,7 @@ await addBox(page, BOX.sink);
 await addBox(page, BOX.drawers);
 await addBox(page, BOX.ovenDrawer);
 /* המכשיר נבדק כאן כי הוא מצויר אחרת מארגז: פני מכשיר, בלי גוף */
-await addBox(page, BOX.fridge, { tab: TAB.tall });
+await addBox(page, BOX.fridge, { tab: TAB.appliance });
 await addBox(page, BOX.upper, { tab: TAB.upper });
 await addBox(page, BOX.upperLift, { tab: TAB.upper });
 await shot('1-front');

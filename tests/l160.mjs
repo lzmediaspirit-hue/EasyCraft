@@ -93,10 +93,18 @@ const stale = () => page.evaluate(async (keep) => {
   const tx = dbh.transaction(['catalog', 'rooms', 'settings'], 'readwrite');
   const cat = tx.objectStore('catalog'), rm = tx.objectStore('rooms'), se = tx.objectStore('settings');
   const rows = await new Promise((res) => { const g = cat.getAll(); g.onsuccess = () => res(g.result); });
-  /* משאיר רק מה ששייך לחדרים שהיו אז — זו בדיוק ספריית אותה גרסה */
+  /*
+   * משאיר רק מה ששייך לחדרים שהיו אז — זו בדיוק ספריית אותה גרסה.
+   *
+   * גם השיוך עצמו נחתך לשלושת החדרים ההם: פריט שמופיע גם במטבח
+   * וגם בחדר שירות שרד את הסינון והביא איתו את חדר השירות, ואז
+   * "חדר שירות ריק" לא תיאר יותר את ההתקנה הוותיקה.
+   */
   const early = new Set(keep.slice(0, 3));
   for (const r of rows) {
-    if (!(r.rooms ?? []).some((x) => early.has(x))) cat.delete(r.id);
+    const mine = (r.rooms ?? []).filter((x) => early.has(x));
+    if (!mine.length) cat.delete(r.id);
+    else if (mine.length !== (r.rooms ?? []).length) cat.put({ ...r, rooms: mine });
   }
   const all = await new Promise((res) => { const g = rm.getAll(); g.onsuccess = () => res(g.result); });
   for (const r of all) if (!keep.includes(r.id)) rm.delete(r.id);

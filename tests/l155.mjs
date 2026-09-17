@@ -26,7 +26,13 @@ await page.waitForTimeout(400);
 
 const r = await page.evaluate(async () => {
   const v = '?v=' + Date.now();
-  const { unitCaps, capsProvide, unitProvides } = await import('/src/catalog/capabilities.ts' + v);
+  const { unitCaps, capsProvide } = await import('/src/catalog/capabilities.ts' + v);
+  /*
+   * אותה קריאה שהאפליקציה עושה. `unitProvides` היה עטיפה של שורה
+   * אחת סביב שתי אלה, ואחרי שהאזהרות ירדו איש בקוד לא קרא לה —
+   * ועטיפה שרק בדיקה משתמשת בה אינה חלק מהמודל.
+   */
+  const unitProvides = (u, role) => capsProvide(unitCaps(u), role);
   const { APPLIANCES, CUTOUTS, nicheFits } = await import('/src/catalog/appliances.ts' + v);
 
   const box = (over) => ({
