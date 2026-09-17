@@ -475,8 +475,23 @@ export async function importCabinets(
      * נאכפו כאן כלל. קובץ עם שני שמות שנבדלים ברווח נכנס כשניים,
      * וארגז אחר שנשא מק״ט קיים נכתב על הארגז שהחזיק בו.
      */
-    const takenNames = new Map(rows.map((i) => [cabinetNameKey(i.name), i.id]));
-    const takenCodes = new Map(rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i.id]));
+    /*
+     * בהחלפה מלאה שום שם ושום מק״ט אינם תפוסים: כל מה שאינו
+     * בייבוא נמחק בשורה שלמטה. הצמדת הכללים למה שעומד להימחק
+     * שינתה מק״ט של ארגז נכנס בלי סיבה — וארגז שמק״טו שונה אינו
+     * מזוהה עוד ב"החזרת ארגזי הספרייה", וחוזר לשם פעם שנייה.
+     *
+     * הכלל עצמו נשאר: גם בהחלפה, חבילה שיש בה שני שמות זהים
+     * נכנסת כשניים נבדלים — הם נצברים כאן תוך כדי.
+     */
+    const takenNames =
+      mode === 'merge'
+        ? new Map(rows.map((i) => [cabinetNameKey(i.name), i.id]))
+        : new Map<string, string>();
+    const takenCodes =
+      mode === 'merge'
+        ? new Map(rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i.id]))
+        : new Map<string, string>();
     const nextCode = () => {
       let n = 900;
       for (;;) {

@@ -146,7 +146,18 @@ await page.waitForTimeout(500);
 await dlg().getByRole('button', { name: 'ייבוא ארגזים' }).click();
 await page.waitForTimeout(1400);
 const restored = await counts();
-ok('הקובץ שירד מחזיר את אותם ארגזים', restored.catalog === before.catalog, `${restored.catalog} מול ${before.catalog}`);
+/*
+ * שני הארגזים שהנגר בנה יושבים על מק״טים של ארגזי הספרייה, ולכן
+ * שני הארגזים המקוריים שנושאים את אותם מק״טים נכנסים כחדשים
+ * ובמק״ט פנוי: ייבוא אינו כותב על ארגז אחר רק מפני שהמק״ט זהה.
+ * זו התוצאה הנכונה — שום ארגז לא נדרס, ואין מק״ט כפול.
+ */
+ok('הקובץ שירד מחזיר את כל הארגזים, בלי לדרוס מה שהנגר בנה',
+  restored.catalog === before.catalog + 2, `${restored.catalog} מול ${before.catalog}+2`);
+ok('וגם אחרי הייבוא אין מק״ט כפול',
+  new Set(restored.codes).size === restored.catalog, `${new Set(restored.codes).size}/${restored.catalog}`);
+ok('ומה שהנגר בנה עדיין שם',
+  restored.names.includes('הארגז של הנגרייה') && restored.names.includes('ארגז נוסף'));
 ok('והפרויקטים לא נגעו בהם לאורך כל הדרך',
   restored.units === before.units && restored.customers === before.customers && restored.projects === before.projects,
   JSON.stringify(restored).slice(0, 120));
@@ -156,7 +167,9 @@ await page.screenshot({ path: SP + 'L98-3-restored.png' });
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(1500);
 const afterReload = await counts();
-ok('הייבוא נשמר גם אחרי רענון', afterReload.catalog === before.catalog && afterReload.units === before.units);
+ok('הייבוא נשמר גם אחרי רענון',
+  afterReload.catalog === restored.catalog && afterReload.units === before.units,
+  `${afterReload.catalog} מול ${restored.catalog}`);
 
 console.log(`\n${pass} pass, ${fail} fail`);
 if (errs.length) console.log('PAGEERROR ' + errs.slice(0, 4).join(' | '));
