@@ -238,6 +238,16 @@ export function nestParts(parts: NestInputPart[], opts: NestOptions): NestResult
   parts.forEach((p, source) => {
     // חלק במידה אפס אינו חלק — נוצר כשארגז קטן מהעוביים שלו
     if (!(p.widthMm > 0 && p.heightMm > 0) || !(p.qty > 0)) return;
+    /*
+     * כמות היא מספר חלקים, ולכן היא שלמה.
+     *
+     * הלולאה שמתחת רצה `i < p.qty`, ולכן כמות 1.5 הפכה לשני
+     * חלקים בשקט — הפריסה יצאה תקינה, והנגר קיבל חלק שלא הזמין.
+     * מספר שאינו שלם אינו כמות, והוא נעצר בגבול ולא מתעגל.
+     */
+    if (!Number.isInteger(p.qty)) {
+      throw new RangeError(`כמות חייבת להיות מספר שלם: "${p.label}" הגיע בכמות ${p.qty}`);
+    }
     const grain: PartGrain = opts.hasGrain ? (p.grain ?? defaultGrain(p.role)) : 'free';
     const orientations = allowedOrientations(p.widthMm, p.heightMm, grain, grainAxis);
 

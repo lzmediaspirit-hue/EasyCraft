@@ -18,7 +18,7 @@ import { HardwareRows } from './HardwareRows';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
-import { BookmarkIcon, CloseIcon, PencilIcon } from '../../ui/icons';
+import { BookmarkIcon, CloseIcon, PencilIcon, RulerIcon } from '../../ui/icons';
 import { BACK_KINDS, DRAWER_BOXES, RAIL_WIDTH_MM, bodyHeightMm, slabThicknessMm } from '../../db/types';
 import type {
   ExposedSides,
@@ -95,6 +95,7 @@ export function UnitEditor({
   onChange,
   onApplyChoiceAll,
   onEdit,
+  onInterior,
   onClose,
 }: {
   unit: PlacedUnit;
@@ -119,6 +120,8 @@ export function UnitEditor({
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
   onEdit: () => void;
+  /** פותח את מידות הפנים של הארגז הנבחר */
+  onInterior: () => void;
   onClose: () => void;
 }) {
   const [axis, setAxis] = useState<Axis>('w');
@@ -293,21 +296,34 @@ export function UnitEditor({
           onClick={() => setSavingToLibrary(true)}
           aria-label="שמירה לספרייה"
           title="שמירה לספרייה"
-          className="rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
+          className="touch-target grid place-items-center rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
         >
           <BookmarkIcon className="size-5" />
+        </button>
+        {/*
+          המידות הנקיות שבפנים: מה נכנס לתא, לא מה מידות הארגז.
+          שאלה שנגר שואל לפני כל הזמנה של סל, מגירה או מדף, ועד
+          כאן היא נענתה בחשבון בראש.
+        */}
+        <button
+          onClick={onInterior}
+          aria-label="מידות פנימיות"
+          title="המידות הנקיות בפנים"
+          className="touch-target grid place-items-center rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
+        >
+          <RulerIcon className="size-5" />
         </button>
         <button
           onClick={onEdit}
           aria-label="עריכת הארגז"
-          className="rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
+          className="touch-target grid place-items-center rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
         >
           <PencilIcon className="size-5" />
         </button>
         <button
           onClick={onClose}
           aria-label="סיום עריכה"
-          className="-me-2 rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
+          className="touch-target -me-2 grid place-items-center rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
         >
           <CloseIcon className="size-5" />
         </button>

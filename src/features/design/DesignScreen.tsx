@@ -27,6 +27,7 @@ import { BulkWorkSheet } from './BulkWorkSheet';
 import { ProjectFinishesSheet } from './ProjectFinishesSheet';
 import { FlowIcon } from '../../ui/icons';
 import { DepthSheet } from './DepthSheet';
+import { InteriorSheet } from './InteriorSheet';
 import { PlanView } from './PlanView';
 import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
@@ -813,7 +814,7 @@ export function DesignScreen({
             aria-label={selected.hidden ? 'החזרת הארגז לתצוגה' : 'הסתרת הארגז מהתצוגה'}
             aria-pressed={!!selected.hidden}
             title={selected.hidden ? 'הארגז מוסתר — נספר, אבל לא מצויר' : 'הורדה מהתמונה בלי למחוק'}
-            className={`grid size-9 place-items-center rounded-full shadow-sm ring-1 transition-colors ${
+            className={`touch-target grid size-9 place-items-center rounded-full shadow-sm ring-1 transition-colors ${
               selected.hidden
                 ? 'bg-oak-600 text-white ring-oak-600'
                 : 'bg-white text-stone-600 ring-stone-200 hover:text-oak-700'
@@ -825,7 +826,7 @@ export function DesignScreen({
             onClick={duplicateSelected}
             aria-label="שכפול הארגז"
             title="עותק של הארגז הזה"
-            className="grid size-9 place-items-center rounded-full bg-white text-stone-600 shadow-sm ring-1 ring-stone-200 transition-colors hover:text-oak-700"
+            className="touch-target grid size-9 place-items-center rounded-full bg-white text-stone-600 shadow-sm ring-1 ring-stone-200 transition-colors hover:text-oak-700"
           >
             <CopyIcon className="size-4" />
           </button>
@@ -833,7 +834,7 @@ export function DesignScreen({
             onClick={() => setDeleting([selected])}
             aria-label="מחיקת הארגז"
             title="מחיקת הארגז"
-            className="grid size-9 place-items-center rounded-full bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition-colors hover:bg-red-50"
+            className="touch-target grid size-9 place-items-center rounded-full bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition-colors hover:bg-red-50"
           >
             <TrashIcon className="size-4" />
           </button>
@@ -867,6 +868,7 @@ export function DesignScreen({
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
           onEdit={() => setSheet('edit')}
+          onInterior={() => setSheet('interior')}
           onClose={() => setSelectedId(null)}
         />
         </div>
@@ -1233,6 +1235,14 @@ export function DesignScreen({
             }}
           />
         </Sheet>
+      )}
+
+      {sheet === 'interior' && selected && (
+        <InteriorSheet
+          unit={selected}
+          build={{ parts: parts ?? undefined, project: project ?? undefined }}
+          onClose={closeSheet}
+        />
       )}
 
       {sheet === 'depth' && (

@@ -12,6 +12,7 @@ export type SheetName =
   | 'nesting'
   | 'sale'
   | 'depth'
+  | 'interior'
   | 'plan'
   | 'present'
   | 'wallTools'

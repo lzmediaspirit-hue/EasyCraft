@@ -202,7 +202,7 @@ export function DesignToolbar({
       */}
       {toolsOpen && (
       <>
-      <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+      <div className="mt-3 tool-row flex items-center gap-1.5 overflow-x-auto pb-0.5">
         <Tool
           active={inside}
           onClick={() => design.toggle('inside')}
@@ -278,7 +278,7 @@ export function DesignToolbar({
         )}
       </div>
 
-      <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+      <div className="mt-1.5 tool-row flex items-center gap-1.5 overflow-x-auto pb-0.5">
         {/*
           שלושת המצבים יחד, והפעיל מסומן.
 
@@ -375,7 +375,7 @@ export function DesignToolbar({
         כלי התצוגה.
       */}
       {workMode && (
-        <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+        <div className="mt-1.5 tool-row flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <Tool
             active={sheet === 'bulk'}
             onClick={() => onSheet('bulk')}
@@ -407,7 +407,7 @@ export function DesignToolbar({
       )}
 
       {editable && (
-      <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+      <div className="mt-1.5 tool-row flex items-center gap-1.5 overflow-x-auto pb-0.5">
         <Tool
           active={false}
           disabled={!canUndo}
@@ -446,7 +446,7 @@ export function DesignToolbar({
       </>
       )}
       {wallsOpen && (
-      <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
+      <div className="mt-2 tool-row flex gap-1.5 overflow-x-auto pb-0.5">
         {walls.length > 1 &&
           walls.map((w, i) => (
             <button

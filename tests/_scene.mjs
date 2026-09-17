@@ -183,13 +183,22 @@ const out = await page.evaluate(async () => {
   check('rotation only turns the frame, not the box size', [bt.w, bt.d], [600, 580]);
   check('rotation turns the facing by 90', Math.round(((bt.facing - straight.facing) * 180) / Math.PI), 90);
 
-  /* --- 12. מכשיר בלי דלת מקבל חזית --- */
+  /*
+   * --- 12. מכשיר מצויר כמכשיר, ולא כקופסה עם חזית אפורה ---
+   *
+   * חמשת המכשירים העצמאיים קיבלו עד כה גוף אחד וחזית אחת, ולכן
+   * תנור, מקרר ומדיח נראו זהים. עכשיו כל אחד מהם נבנה מחלקים
+   * שמזהים אותו: חלון ופאנל בתנור, שתי דלתות וידיות במקרר.
+   */
   const oven = { ...base, id: 'ov', glyph: 'oven', doors: 0 };
-  check(
-    'appliance without doors gets a front',
-    uniq(keysOf(scene([oven]), 'ov')).some((k) => k.endsWith('-app')),
-    true,
-  );
+  const ovenKeys = uniq(keysOf(scene([oven]), 'ov'));
+  check('an oven has a body', ovenKeys.some((k) => k.endsWith('-appliance')), true);
+  check('and a window that identifies it', ovenKeys.some((k) => k.includes('-glass')), true);
+  const fridge = { ...base, id: 'fr', glyph: 'fridge', doors: 0, heightMm: 1800 };
+  const fridgeKeys = uniq(keysOf(scene([fridge]), 'fr'));
+  check('a fridge has two doors', fridgeKeys.filter((k) => k.includes('Door')).length, 2);
+  check('and they are not the same drawing as the oven',
+    fridgeKeys.some((k) => k.includes('-glass')), false);
 
   /* --- 13. לוח בודד: אין לו גוף --- */
   const panel = { ...base, id: 'pn', glyph: 'plain' };

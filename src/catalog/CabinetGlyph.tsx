@@ -243,11 +243,20 @@ function details(c: Ctx) {
     }
 
     case 'dishwasher': {
+      /*
+       * מדיח, ולא מכונת כביסה.
+       *
+       * העיגול שהיה כאן במרכז החזית הוא דלת עגולה — כלומר מכונת
+       * כביסה. למדיח דלת שטוחה שנפתחת כלפי מטה, פאנל פיקוד ברצועה
+       * העליונה, וידית לרוחב. אלה שלושת הסימנים שמזהים אותו.
+       */
       const strip = h * 0.16;
       return [
         L(0, strip, w, strip, 'strip'),
-        L(w * 0.14, strip * 0.5, w * 0.5, strip * 0.5, 'ctrl'),
-        <circle key="c" cx={w * 0.5} cy={h * 0.6} r={Math.min(w, h) * 0.16} strokeWidth={t} />,
+        L(w * 0.12, strip * 0.5, w * 0.46, strip * 0.5, 'ctrl'),
+        <circle key="k" cx={w * 0.86} cy={strip * 0.5} r={Math.min(w, h) * 0.035} strokeWidth={t} />,
+        L(w * 0.1, strip + h * 0.1, w * 0.9, strip + h * 0.1, 'grip'),
+        ...(inside ? [] : [L(w * 0.16, h * 0.62, w * 0.84, h * 0.62, 'rack')]),
       ];
     }
 

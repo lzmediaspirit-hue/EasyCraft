@@ -83,8 +83,13 @@ ok('מקרר אינו נחתך', r.fridge.sheets === 0 && r.fridge.drawers === 0
 ok('מדיח אינו נחתך', r.dish.sheets === 0 && r.dish.drawers === 0, JSON.stringify(r.dish));
 ok('ארגז באותן הגדרות כן נחתך ונספר', r.cab.sheets > 0 && r.cab.drawers > 0, JSON.stringify(r.cab));
 
-/* בתלת־ממד: גוף המכשיר וחזיתו, בלי דפנות, מדפים וגב */
-ok('המכשיר מצויר כמוצר', r.ovenSolids.includes('appliance') && r.ovenSolids.includes('app'), JSON.stringify(r.ovenSolids));
+/*
+ * בתלת־ממד: המכשיר מצויר כמכשיר — גוף, חזית, וחלק אחד לפחות
+ * שמזהה אותו — ובלי דפנות, מדפים וגב.
+ */
+ok('המכשיר מצויר כמוצר',
+  r.ovenSolids.includes('appliance') && r.ovenSolids.some((id) => id.startsWith('glass')),
+  JSON.stringify(r.ovenSolids));
 ok(
   'ואין לו גוף ארון',
   !r.ovenSolids.some((id) => ['l', 'r', 'b', 't', 'bk'].includes(id)),

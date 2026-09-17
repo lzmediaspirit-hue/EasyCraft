@@ -1,5 +1,6 @@
 import { glyphDef } from '../catalog/glyphList';
 import { nestParts, type NestResult, type PartGrain } from './nesting';
+import { checkNesting, type NestProblem } from './nestCheck';
 import { DRAWER, MATERIAL, drawerDepth } from '../catalog/standards';
 import {
   blindWidthMm,
@@ -127,7 +128,7 @@ interface GlassDoorLine {
 }
 
 /** החלקים שנחתכים מחומר וגוון מסוימים, והפריסה שלהם על הפלטות. */
-interface PartGroup {
+export interface PartGroup {
   key: string;
   material: Material;
   finish?: Finish;
@@ -137,6 +138,14 @@ interface PartGroup {
    * בתמחור וגם לציור במסך הניסור — אותו מספר בשני המקומות.
    */
   nest: NestResult;
+  /**
+   * מה שמאמת עצמאי מצא בפריסה הזאת.
+   *
+   * המנוע בוחר איפה להניח כל חלק, ולכן הוא אינו העד הנכון לשאלה
+   * אם התוצאה תקינה. `checkNesting` נבנה מהקלט ומהתוצאה בלבד,
+   * ורשימה שאינה ריקה חוסמת אישור של תוכנית חיתוך.
+   */
+  problems: NestProblem[];
 }
 
 export interface ProjectCosting {
@@ -952,7 +961,16 @@ export function projectCosting(
       overridden: !!override,
       unpriced: noPrice,
     });
-    groups.push({ key, material, finish, parts: row.parts, nest });
+    const nestOpts = {
+      sheetWidthMm: material.sheetWidthMm,
+      sheetHeightMm: material.sheetHeightMm,
+      kerfMm: settings.kerfMm,
+      hasGrain: !!finish?.hasGrain,
+    };
+    groups.push({
+      key, material, finish, parts: row.parts, nest,
+      problems: checkNesting(row.parts, nestOpts, nest),
+    });
   }
   lines.sort((a, b) => a.material.sortOrder - b.material.sortOrder || b.areaM2 - a.areaM2);
 

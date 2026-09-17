@@ -6,6 +6,7 @@ import { productionGap } from '../../catalog/production';
 import { Sheet } from '../../ui/Sheet';
 import { cm, unitLabel } from '../../ui/units';
 import type { NestResult } from '../../costing/nesting';
+import type { PartGroup } from '../../costing/boards';
 
 /** צבע לכל סוג חלק, כדי לזהות אותו על הפלטה במבט אחד. */
 const TONES = ['#d9b483', '#a8c3d9', '#c4b5a0', '#b8d4b8', '#d9b8c4', '#c9c4a8'];
@@ -49,6 +50,15 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
           נישה או מידות יצרן נאמר כאן — לפני הפלטות ולא אחריהן.
         */}
         <GapsInProject projectId={projectId} />
+
+        {/*
+          מה שהמאמת העצמאי מצא בפריסה עצמה.
+
+          המנוע שבוחר איפה להניח כל חלק אינו העד הנכון לשאלה אם
+          התוצאה תקינה. `checkNesting` נבנה מהקלט ומהתוצאה בלבד,
+          ורשימה שאינה ריקה פירושה שאסור לנסר לפי מה שכתוב כאן.
+        */}
+        <NestProblems groups={groups} />
 
         <div className="grid grid-cols-3 gap-2">
           <Stat variant="flat" label="פלטות" value={String(totalSheets)} />
@@ -280,6 +290,34 @@ function SheetPlan({
   );
 }
 
+
+/**
+ * מה שנמצא בפריסה עצמה, בידי מאמת שאינו המנוע שיצר אותה.
+ *
+ * חלק שנעלם, חלק שיצא מהפלטה, שני חלקים שחופפים או חתך גיליוטינה
+ * שלא היה אפשרי — כל אלה חוסמים ניסור, ולכן הם נאמרים בראש המסך
+ * ולא נבלעים באחוז ניצולת.
+ */
+function NestProblems({ groups }: { groups: PartGroup[] }) {
+  const all = groups.flatMap((g) => g.problems.map((p) => ({ g, p })));
+  if (!all.length) return null;
+  return (
+    <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
+      <p className="text-sm font-semibold text-red-900">
+        הפריסה אינה תקינה — אין לנסר לפיה
+      </p>
+      {all.slice(0, 8).map(({ g, p }, i) => (
+        <p key={i} className="mt-1 text-xs leading-snug text-red-800">
+          {g.material.name}
+          {p.sheet !== undefined ? ` · פלטה ${p.sheet + 1}` : ''}: {p.text}
+        </p>
+      ))}
+      {all.length > 8 && (
+        <p className="mt-1 text-xs text-red-700">ועוד {all.length - 8}.</p>
+      )}
+    </div>
+  );
+}
 
 /**
  * הארגזים בפרויקט שהתבנית שלהם אינה מספיקה לייצור.

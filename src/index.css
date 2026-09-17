@@ -100,7 +100,61 @@
   outline-offset: 2px;
 }
 
+/*
+ * יעד המגע של פקד ראשי.
+ *
+ * מדידת DOM מצאה עשרות פקדים שגובהם או רוחבם קטנים מ-40 פיקסל.
+ * האייקון עצמו יכול להישאר קטן — מה שצריך להיות גדול הוא השטח
+ * שהאצבע פוגעת בו.
+ *
+ * ומה שלא נעשה כאן, במכוון: הרחבה גורפת של כל כפתור בפסאודו־אלמנט
+ * שמרחף מעל שכניו. היא נראית זולה ושוברת בדיוק את מה שהיא באה
+ * לתקן — שני כפתורים במרחק 36 פיקסל מקבלים שטחי לחיצה חופפים,
+ * והלחיצה נופלת על השכן. הסימון מפורש, על הפקדים שבאמת קטנים.
+ */
+@media (pointer: coarse) {
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/*
+ * שורת כלים שאפשר לגלול: הקצה נחתך בהדרגתיות, וזה מה שאומר
+ * "יש כאן עוד". בלי הסימן הזה הכלים שמעבר לקצה פשוט אינם קיימים
+ * למי שלא ניחש לגרור — וכך מדידת המגע וכלי המדידה נעלמו ב-360.
+ */
+.tool-row {
+  --edge: 28px;
+  -webkit-mask-image: linear-gradient(
+    to left,
+    transparent 0,
+    #000 var(--edge),
+    #000 calc(100% - var(--edge)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to left,
+    transparent 0,
+    #000 var(--edge),
+    #000 calc(100% - var(--edge)),
+    transparent 100%
+  );
+}
+
 @media (min-width: 1024px) {
+  /*
+   * הכותרת במחשב נמוכה יותר: אותה כותרת שממלאת מסך טלפון משאירה
+   * במסך רחב רצועה ריקה גבוהה, והציור הוא מה שמתקצר בגללה.
+   */
+  .planner-workspace > header {
+    padding-top: 10px;
+    padding-bottom: 8px;
+  }
+  .planner-workspace > header h1 {
+    font-size: 1.05rem;
+    line-height: 1.4;
+  }
   .planner-workspace {
     max-width: none;
     display: grid;

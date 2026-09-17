@@ -20,9 +20,10 @@ import {
 } from './isoMath';
 
 import { rad, unitBox, unitFrame } from './placement';
+import { applianceOf } from '../../catalog/appliances';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
-import type { Face, IsoView, Solid, Tf } from './isoMath';
+import type { Face, Frame, IsoView, Solid, Tf } from './isoMath';
 import { RAIL_WIDTH_MM, slabThicknessMm } from '../../db/types';
 import { WORK_TONES, tracksWork, workTone } from '../../workflow/unitWork';
 import { partChoice, partThicknessMm } from '../../costing/boards';
@@ -295,16 +296,7 @@ function unitSolids(
    * מי שבונה סביבם עמודה מוסיף אותה כארגז נפרד, וזה הארגז שנספר.
    */
   if (def.standalone) {
-    const body = shade(carcassTone, 0.92);
-    /* הגוף עצמו */
-    add(slab(frame, 0, u.yMm, 0, u.widthMm, u.heightMm, d, body, `${u.id}-appliance`));
-    /* והחזית שלו, מעט בולטת — זה מה שמזהים בתמונה */
-    add(
-      slab(
-        frame, 6, u.yMm + 6, d, u.widthMm - 12, Math.max(u.heightMm - 12, 0),
-        MATERIAL.frontMm, '#d6d3d1', `${u.id}-app`,
-      ),
-    );
+    for (const part of appliancePieces(u, frame, d, shade(carcassTone, 0.92))) add(part);
     return out;
   }
 
@@ -806,4 +798,101 @@ function wallScenery(
     });
   }
   return { backdrop, mark, solids: out, bounds };
+}
+
+/* ------------------------------------------------------------------ */
+/* מכשירי החשמל                                                        */
+/* ------------------------------------------------------------------ */
+
+/** גוונים שמזהים מכשיר: מתכת, זכוכית כהה ופאנל פיקוד. */
+const APPLIANCE_TONES = {
+  steel: '#d6d3d1',
+  dark: '#3f3f46',
+  panel: '#71717a',
+  handle: '#a1a1aa',
+};
+
+/**
+ * המכשיר כפי שמזהים אותו, ולא קופסה עם חזית אפורה.
+ *
+ * חמשת המכשירים העצמאיים קיבלו עד כה גוף אחד וחזית אחת, ולכן
+ * מקרר, תנור ומדיח נראו זהים בתלת־ממד — אין חלון תנור, אין
+ * חלוקת מקרר, ואין מבנה קולט. הציור אינו משנה את המעטפת
+ * הפיזית: הוא מחלק את אותו נפח לחלקים שאפשר לזהות, וכל מידה
+ * נגזרת מהמכשיר עצמו ולא מוזזת מחוצה לו.
+ *
+ * הדגם הוא גנרי במכוון — הוא אינו מתיימר להיות דגם של יצרן
+ * מסוים, והוא נגזר מ`applianceType` ולא מהאיור שנבחר לרשימה.
+ */
+function appliancePieces(
+  u: PlacedUnit,
+  frame: Frame,
+  d: number,
+  bodyTone: string,
+): Solid[] {
+  const w = u.widthMm;
+  const h = u.heightMm;
+  const y = u.yMm;
+  const front = MATERIAL.frontMm;
+  const out: Solid[] = [];
+  /* הגוף, ועליו חזית מתכת — המשותף לכולם */
+  out.push(slab(frame, 0, y, 0, w, h, d, bodyTone, `${u.id}-appliance`));
+  const face = (
+    key: string, fx: number, fy: number, fw: number, fh: number, tone: string, depth = front,
+  ) => out.push(slab(frame, fx, y + fy, d, Math.max(fw, 0), Math.max(fh, 0), depth, tone, `${u.id}-${key}`));
+
+  const type = applianceOf(u)?.type;
+  const pad = Math.min(w * 0.04, 24);
+
+  if (type === 'oven' || type === 'micro' || type === 'ovenMicro') {
+    /* חלון כהה עם ידית מעליו, ופאנל פיקוד בראש */
+    const panelH = Math.min(h * 0.16, 90);
+    const boxes = type === 'ovenMicro' ? 2 : 1;
+    const each = (h - panelH) / boxes;
+    face('panel', pad, h - panelH, w - pad * 2, panelH - 6, APPLIANCE_TONES.panel);
+    for (let i = 0; i < boxes; i++) {
+      const base = i * each;
+      face(`door${i}`, pad, base + 6, w - pad * 2, each - 12, APPLIANCE_TONES.steel);
+      face(`glass${i}`, pad * 2, base + each * 0.28, w - pad * 4, each * 0.46, APPLIANCE_TONES.dark, front + 2);
+      face(`grip${i}`, pad * 2, base + each * 0.82, w - pad * 4, 26, APPLIANCE_TONES.handle, front + 14);
+    }
+    return out;
+  }
+
+  if (type === 'fridge') {
+    /* שתי דלתות — מקרר ומקפיא — וידית אנכית לכל אחת */
+    const freezer = h * 0.32;
+    face('fridgeDoor', pad, freezer + 6, w - pad * 2, h - freezer - pad, APPLIANCE_TONES.steel);
+    face('freezerDoor', pad, pad, w - pad * 2, freezer - pad, APPLIANCE_TONES.steel);
+    const grip = Math.max(w * 0.06, 30);
+    face('grip1', w - pad - grip, freezer + 40, grip, h - freezer - 100, APPLIANCE_TONES.handle, front + 12);
+    face('grip2', w - pad - grip, pad + 30, grip, Math.max(freezer - 90, 40), APPLIANCE_TONES.handle, front + 12);
+    return out;
+  }
+
+  if (type === 'dishwasher') {
+    /* פאנל פיקוד בראש, דלת אחת מתחתיו, וידית לרוחבה */
+    const panelH = Math.min(h * 0.12, 80);
+    face('panel', pad, h - panelH, w - pad * 2, panelH - 6, APPLIANCE_TONES.panel);
+    face('door', pad, pad, w - pad * 2, h - panelH - pad - 8, APPLIANCE_TONES.steel);
+    face('grip', pad * 2, h - panelH - 40, w - pad * 4, 26, APPLIANCE_TONES.handle, front + 14);
+    return out;
+  }
+
+  if (type === 'hood') {
+    /* מכסה רחב בתחתית, וארובה צרה מעליו */
+    const canopy = Math.min(h * 0.45, 200);
+    out.push(slab(frame, 0, y, 0, w, canopy, d, APPLIANCE_TONES.steel, `${u.id}-canopy`));
+    const chimney = w * 0.34;
+    out.push(slab(
+      frame, (w - chimney) / 2, y + canopy, 0, chimney, Math.max(h - canopy, 0), d * 0.5,
+      APPLIANCE_TONES.steel, `${u.id}-chimney`,
+    ));
+    face('filter', pad, 6, w - pad * 2, Math.max(canopy - 24, 0), APPLIANCE_TONES.dark, 6);
+    return out;
+  }
+
+  /* מכשיר שאין לו דגם — חזית מתכת אחת, ונאמר שזה כל מה שידוע */
+  face('app', 6, 6, w - 12, Math.max(h - 12, 0), APPLIANCE_TONES.steel);
+  return out;
 }
