@@ -90,14 +90,20 @@ ok('ואיפוס המשטח', zeroed.counterMm === 0, String(zeroed.counterMm));
 /* התפריט אינו רשימה: הארגז נמצא דרך הספרייה של החדר */
 await openBox(/QA ספרייה אישית/);
 const rooms = dlg();
-/* מכבים כל חדר שדלוק, יהיו אשר יהיו — החדרים הם נתונים ולא רשימה קבועה */
-for (const room of ['מטבח', 'סלון', 'חדר שירות']) {
-  const chip = rooms.getByRole('button', { name: room, exact: true });
-  if ((await chip.count()) && (await chip.getAttribute('aria-pressed')) === 'true') await chip.click();
-  await page.waitForTimeout(200);
+/*
+ * משאירים דלוק את חדר השינה בלבד.
+ *
+ * החדרים הם נתונים ולא רשימה קבועה, ולכן הבדיקה עוברת על השבבים
+ * שיש בפועל. רשימה קבועה של שלושה שמות כיבתה שלושה חדרים והשאירה
+ * דלוקים את כל מי שנוסף מאז.
+ */
+const chips = rooms.getByRole('group', { name: 'באילו חדרים יופיע' }).getByRole('button');
+for (let i = 0; i < (await chips.count()); i++) {
+  const chip = chips.nth(i);
+  const on = (await chip.getAttribute('aria-pressed')) === 'true';
+  const wanted = (await chip.innerText()).trim() === 'חדר שינה';
+  if (on !== wanted) { await chip.click(); await page.waitForTimeout(150); }
 }
-const bedroom = rooms.getByRole('button', { name: 'חדר שינה' });
-if ((await bedroom.getAttribute('aria-pressed')) !== 'true') await bedroom.click();
 await page.waitForTimeout(300);
 await rooms.getByRole('button', { name: /שמירה/ }).last().click();
 await page.waitForTimeout(900);

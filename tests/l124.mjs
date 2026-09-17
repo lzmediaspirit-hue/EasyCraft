@@ -8,7 +8,7 @@ import './_exit.mjs';
  * לקיר השכן. ולמי שאינו גורר — מקשי החצים, באותם צירים בדיוק.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -204,7 +204,7 @@ ok('an island key moves one floor axis', math.keyIsland?.free?.zMm === 600 && ma
 /* ------------------------------------------------------------------ */
 
 await setup(page, { name: 'ציר בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(900);
 
 const state = () =>

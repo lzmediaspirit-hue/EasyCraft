@@ -13,7 +13,7 @@ import './_exit.mjs';
  * F05 — שמירה כארגז חדש כשהמקור נמחק שייכה קשיח לשלושה חדרים.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -196,7 +196,7 @@ ok('and the room itself lands', pack.landedRoom, String(pack.landedRoom));
 /* F03 + F05 — במסך                                                    */
 /* ------------------------------------------------------------------ */
 
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(900);
 /* עורך הארגז הוא לוח במסך ולא חלון — ולכן הכפתורים נמצאים על הדף */
 await btn(/עריכה מתקדמת/).click();

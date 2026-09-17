@@ -12,7 +12,7 @@ import './_exit.mjs';
  *       והעתיק את המקום ברצפה כפי שהוא. שני גופים באותו מקום בדיוק.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -90,7 +90,7 @@ ok('and on Z keeps X exact', axes.keyZ?.free?.xMm === 1503 && axes.keyZ?.free?.z
 /* ------------------------------------------------------------------ */
 
 await setup(page, { name: 'ביטול בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(900);
 
 const at = () =>

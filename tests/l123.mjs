@@ -7,7 +7,7 @@ import './_exit.mjs';
  * מידת התקנה — מה שחסר נאמר ולא מומצא.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -99,7 +99,7 @@ ok('and a deliberate zero is not flagged', math.zeroFlag === false, String(math.
 /* ------------------------------------------------------------------ */
 
 await setup(page, { name: 'פרזול בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(800);
 
 await btn(/עריכה מתקדמת/).click();

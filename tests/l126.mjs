@@ -11,7 +11,7 @@ import './_exit.mjs';
  * שהוכרזה כסיבוב נשארת סיבוב עד ההרפיה — בשני מצבי המצלמה.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -72,7 +72,7 @@ ok('movement later in the wait cancels it too', timer.late === 0, String(timer.l
 /* ------------------------------------------------------------------ */
 
 await setup(page, { name: 'סיבוב בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(900);
 
 const state = () =>

@@ -1,6 +1,6 @@
 import './_exit.mjs';
 import { chromium } from 'playwright';
-import { pickFinishes, pickWalls } from './mk.mjs';
+import { BOX, pickFinishes, pickWalls } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const page = await b.newPage({ viewport: { width: 400, height: 840 }, deviceScaleFactor: 2 });
@@ -51,11 +51,11 @@ await btn(/יצירת הפרויקט/).click(); await page.waitForTimeout(1000);
 
 // ארגז בקיר א' עם גוון אלון
 await btn('הוספת ארגז').click(); await page.waitForTimeout(450);
-await btn(/^ארגז שתי דלתות/).click(); await page.waitForTimeout(800);
+await btn(BOX.doors2).click(); await page.waitForTimeout(800);
 await btn('סיום עריכה').click(); await page.waitForTimeout(400);
 // ארגז נוסף
 await btn('הוספת ארגז').click(); await page.waitForTimeout(450);
-await btn(/^ארגז 3 מגירות/).click(); await page.waitForTimeout(800);
+await btn(BOX.drawers).click(); await page.waitForTimeout(800);
 await btn('סיום עריכה').click(); await page.waitForTimeout(400);
 /* הגוונים נבחרים לפרויקט כולו, בסוף — "גוון לכולם" */
 await pickFinishes(page);
@@ -70,7 +70,7 @@ await page.keyboard.press('Escape'); await page.waitForTimeout(500);
 // ארגז בקיר ב' בתוך אזור הפינה, כדי לייצר התנגשות
 await btn(/^קיר ב/).click(); await page.waitForTimeout(600);
 await btn('הוספת ארגז').click(); await page.waitForTimeout(450);
-await btn(/^ארגז שתי דלתות/).click(); await page.waitForTimeout(800);
+await btn(BOX.doors2).click(); await page.waitForTimeout(800);
 await btn('סיום עריכה').click(); await page.waitForTimeout(400);
 // דחיפה ידנית של הארגז אל תוך הפינה, דרך בסיס הנתונים
 await page.evaluate(

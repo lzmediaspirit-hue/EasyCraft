@@ -3,8 +3,8 @@ import type { ShippedItem } from './shipped';
 /**
  * מוצרים שמגיעים עם האפליקציה עצמה.
  *
- * הספרייה ב-`shipped.ts` היא של הנגרייה והיא נכתבת בכלי; שני אלה
- * הם חלק מהאפליקציה, ולכן הם חיים כאן ונוסעים לצד כל ספרייה.
+ * הספרייה ב-`shipped.ts` היא של הנגרייה והיא נכתבת בכלי; אלה
+ * חלק מהאפליקציה, ולכן הם חיים כאן ונוסעים לצד כל ספרייה.
  *
  * המזהה והמק״ט קבועים ולא אקראיים, וזה מה שמונע שכפול: זריעה
  * שנייה, ייבוא חוזר או סנכרון מוצאים את אותו מזהה ומעדכנים אותו
@@ -19,7 +19,7 @@ import type { ShippedItem } from './shipped';
  * שלא היה", ובלי לשחזר את כל ספריית ההדגמה ובלי להחזיר מה שנמחק
  * בכוונה. כשמוסיפים מוצר מערכת חדש — מעלים את המספר.
  */
-export const PRODUCTS_GENERATION = 1;
+export const PRODUCTS_GENERATION = 2;
 
 export const SHIPPED_PRODUCTS: ShippedItem[] = [
   {
@@ -67,5 +67,78 @@ export const SHIPPED_PRODUCTS: ShippedItem[] = [
     isBuiltin: true,
     sortOrder: 1010,
     note: 'עובי המדף הוא גובהו. הרוחב והעומק הם הלוח עצמו.',
+  },
+
+  /*
+   * תנור, מקרר ומדיח.
+   *
+   * מכשיר חשמלי נכנס למטבח מוכן: אין לו דפנות שנחתכות, אין לו מדפים
+   * וגב, ואין לו מגירות שמזמינים — מה שנקבע לו הוא המידה והמקום.
+   * לכן הוא מוצר של המערכת ולא ארגז של הנגרייה, והוא אינו נספר
+   * בייצור. הארגז שנבנה *סביבו* — עמודת תנור, ארון תנור תחתון —
+   * הוא ארגז לכל דבר, והוא כן נספר.
+   *
+   * המזהים הם אלה שהיו להם כשהגיעו בתוך הספרייה, כדי שמכשיר שכבר
+   * יש לו אותם יזהה את אותה שורה במקום לקבל עותק שני.
+   */
+  {
+    id: 'k-base-oven',
+    code: 'B-110',
+    rooms: ['kitchen'],
+    group: 'base',
+    name: 'תנור',
+    glyph: 'oven',
+    level: 'floor',
+    defaultWidthMm: 600,
+    widthOptionsMm: [600],
+    defaultHeightMm: 720,
+    defaultDepthMm: 580,
+    defaultYMm: 150,
+    socleMm: 150,
+    counterMm: 30,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1020,
+    note: 'נישת תנור בילד אין: כ-560×590 מ״מ',
+  },
+  {
+    id: 'k-base-dw',
+    code: 'B-109',
+    rooms: ['kitchen'],
+    group: 'base',
+    name: 'מדיח',
+    glyph: 'dishwasher',
+    level: 'floor',
+    defaultWidthMm: 600,
+    widthOptionsMm: [300, 450, 600, 750, 900],
+    defaultHeightMm: 870,
+    defaultDepthMm: 580,
+    defaultYMm: 0,
+    socleMm: 0,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1030,
+    note: 'נישת מדיח: רוחב 600, גובה 820 מ״מ',
+  },
+  {
+    id: 'k-tall-fridge',
+    code: 'T-103',
+    rooms: ['kitchen'],
+    group: 'tall',
+    name: 'מקרר',
+    glyph: 'fridge',
+    level: 'tall',
+    defaultWidthMm: 700,
+    widthOptionsMm: [600, 700, 800, 900],
+    defaultHeightMm: 2050,
+    defaultDepthMm: 650,
+    defaultYMm: 150,
+    socleMm: 150,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1040,
+    note: 'לבדוק עומק המקרר בפועל — לרוב 650–700 מ״מ',
   },
 ];

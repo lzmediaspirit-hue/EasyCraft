@@ -52,14 +52,19 @@ await sheet.getByRole('button', { name: 'עליונים' }).click();
 await page.waitForTimeout(500);
 await sheet.getByRole('button', { name: 'מועדף', exact: true }).click();
 await page.waitForTimeout(250);
-/* חדר שינה בלבד — כל שאר החדרים מכובים, יהיו אשר יהיו */
-for (const room of ['מטבח', 'סלון', 'חדר שירות']) {
-  const chip = sheet.getByRole('button', { name: room, exact: true });
-  if ((await chip.count()) && (await chip.getAttribute('aria-pressed')) === 'true') await chip.click();
-  await page.waitForTimeout(200);
+/*
+ * חדר שינה בלבד — כל שאר החדרים מכובים, יהיו אשר יהיו.
+ *
+ * עוברים על השבבים שיש בפועל ולא על רשימת שמות כתובה: החדרים הם
+ * נתונים, ורשימה כתובה משאירה דלוק את כל מי שנוסף מאז שנכתבה.
+ */
+const chips = sheet.getByRole('group', { name: 'באילו חדרים יופיע' }).getByRole('button');
+for (let i = 0; i < (await chips.count()); i++) {
+  const chip = chips.nth(i);
+  const on = (await chip.getAttribute('aria-pressed')) === 'true';
+  const wanted = (await chip.innerText()).trim() === 'חדר שינה';
+  if (on !== wanted) { await chip.click(); await page.waitForTimeout(150); }
 }
-const bed = sheet.getByRole('button', { name: 'חדר שינה', exact: true });
-if ((await bed.getAttribute('aria-pressed')) !== 'true') await bed.click();
 await page.waitForTimeout(300);
 await sheet.getByRole('button', { name: /שמירה|הוספה/ }).last().click();
 await page.waitForTimeout(1000);

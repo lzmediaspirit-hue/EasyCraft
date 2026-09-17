@@ -1,5 +1,5 @@
 import './_exit.mjs';
-import { pickWalls } from './mk.mjs';
+import { BOX, pickWalls } from './mk.mjs';
 import { chromium } from 'playwright';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -60,7 +60,7 @@ ok('calculator on design screen', await page.getByRole('button', { name: 'מחש
 ok('no workflow tool on design screen', await page.getByRole('button', { name: /^תהליך/ }).count() === 0);
 
 await btn('הוספת ארגז').click(); await page.waitForTimeout(500);
-await btn(/^ארגז שתי דלתות/).click(); await page.waitForTimeout(800);
+await btn(BOX.doors2).click(); await page.waitForTimeout(800);
 
 /* ===== 2. גובה הלוח נגרר ===== */
 const sep = page.getByRole('separator', { name: 'גובה לוח העריכה' });

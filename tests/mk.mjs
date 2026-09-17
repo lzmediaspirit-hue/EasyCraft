@@ -59,16 +59,86 @@ export async function addUnit(page, n = 0) {
 }
 
 /**
- * מוסיף ארגז לפי שם ולא לפי מקום ברשימה.
+ * הארגז שבדיקה מתכוונת אליו, לפי תפקיד ולא לפי שם.
+ *
+ * הספרייה נבנית בנגרייה, והשמות שבה משתנים כשהיא מוחלפת. בדיקה
+ * שצריכה "ארגז תחתון עם שתי דלתות" מתכוונת לתפקיד הזה, לא למחרוזת
+ * מסוימת — ולכן ההתאמה בין תפקיד לשם יושבת כאן, במקום אחד, ולא
+ * פזורה בעשרים חבילות.
+ *
+ * הביטויים הם של ספריית המטבח, והכרטיסייה שבה כל אחד יושב רשומה
+ * לצידו: "תחתונים" נפתחת כברירת מחדל, והשאר נבחרות לפניה.
+ */
+export const BOX = {
+  /* תחתונים */
+  /* ארגז תחתון רגיל — כשלבדיקה לא משנה איזה */
+  any: /^ארון תחתון שתי דלתות/,
+  doors1: /^ארון תחתון דלתות — מטבח/,
+  doors2: /^ארון תחתון שתי דלתות/,
+  drawers: /^ארון תחתון מגירות/,
+  sink: /^ארון כיור/,
+  hob: /^ארון כיריים עם מגירות/,
+  oven: /^ארון תנור תחתון/,
+  ovenDrawer: /^ארון תנור עם מגירה/,
+  cornerL: /^ארון פינה L/,
+  blindEnd: /^פינה מתה ימין/,
+  blindStart: /^פינה מתה שמאל/,
+  /* מוצר של המערכת, ולא ארגז שנחתך */
+  dishwasher: /^מדיח/,
+  /* עליונים */
+  upper: /^ארון עליון דלתות/,
+  upperOpen: /^ארון עליון פתוח/,
+  upperLift: /^ארון עליון קלפה/,
+  /* עמודות */
+  tall: /^עמודת מזווה מדפים/,
+  fridge: /^מקרר/,
+};
+
+/** הכרטיסייה שבה יושב כל ארגז, למי שצריך לעבור אליה קודם. */
+export const TAB = { upper: 'עליונים', tall: 'עמודות', island: 'איים', shelf: 'מדפים' };
+
+/** ארגזים שאינם במטבח — עם החדר שצריך לעבור אליו כדי להגיע אליהם. */
+export const OTHER_ROOM = {
+  /* זכוכית אינה במטבח: ויטרינה ותצוגה הן של הסלון */
+  glassUpper: { box: /^ארון תצוגה עליון/, room: /^סלון/, tab: TAB.upper },
+  glassTall: { box: /^ויטרינה גבוהה/, room: /^סלון/, tab: TAB.tall },
+};
+
+/**
+ * מוסיף ארגז מהספרייה לפי שם, ולא לפי מקום ברשימה.
  *
  * הספרייה היא של הנגרייה ולא רשימה קבועה, ולכן "הארגז השני" אינו
  * אותו ארגז בכל ספרייה. בדיקה שצריכה ארגז דלתות מבקשת ארגז דלתות.
+ *
+ * הספרייה נפתחת ישר בחדר של הפרויקט: כרטיסייה אחרת נבחרת בשמה,
+ * וחדר אחר — דרך "לשלב הקודם", שחוזר לתפריט החדרים.
+ *
+ * `edit` משאיר את עורך הארגז פתוח; ברירת המחדל סוגרת אותו, כי רוב
+ * הבדיקות רוצות את הארגז על הקיר ולא את המסך שמעליו.
  */
-export async function addNamed(page, re) {
+export async function addBox(page, box, { tab, room, edit = false } = {}) {
   const dlg = () => page.getByRole('dialog').last();
   while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(250); }
   await page.getByRole('button', { name: /הוספת ארגז/ }).first().click();
   await page.waitForTimeout(700);
-  await dlg().getByRole('button', { name: re }).first().click();
+  if (room) {
+    const back = dlg().getByRole('button', { name: 'לשלב הקודם' });
+    if (await back.count()) { await back.first().click(); await page.waitForTimeout(500); }
+    await dlg().getByRole('button', { name: room }).first().click();
+    await page.waitForTimeout(600);
+  }
+  if (tab) {
+    await dlg().getByRole('button', { name: tab, exact: true }).click();
+    await page.waitForTimeout(500);
+  }
+  await dlg().getByRole('button', { name: box }).first().click();
   await page.waitForTimeout(900);
+  if (edit) return;
+  await page.getByRole('button', { name: 'סיום עריכה' }).first().click().catch(() => {});
+  await page.waitForTimeout(400);
+}
+
+/** מוסיף ארגז ומשאיר את העורך פתוח — מה שרוב הבדיקות הוותיקות מצפות לו. */
+export function addNamed(page, box) {
+  return addBox(page, box, { edit: true });
 }

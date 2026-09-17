@@ -12,7 +12,7 @@ import './_exit.mjs';
  * אחרי — ולא רק "הגענו לאן שרצינו".
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -28,7 +28,7 @@ const ok = (name, cond, extra = '') => {
 };
 
 await setup(page, { name: 'מעברים בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(900);
 
 /* ------------------------------------------------------------------ */

@@ -13,7 +13,7 @@ import './_exit.mjs';
  *       האזורים מגירות: הארון נחתך כמגירות והטופס הראה דלתות.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -116,7 +116,7 @@ ok('columns inside a zone convert as well', rules.colKinds?.join() === 'shelves,
 /* ------------------------------------------------------------------ */
 
 await setup(page, { name: 'שער בע״מ' });
-await addNamed(page, /^ארגז שתי דלתות/);
+await addNamed(page, BOX.doors2);
 await page.waitForTimeout(900);
 
 const unit = () =>

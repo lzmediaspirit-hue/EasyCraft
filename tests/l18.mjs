@@ -1,6 +1,6 @@
 import './_exit.mjs';
 import { chromium } from 'playwright';
-import { pickFinishes, pickWalls } from './mk.mjs';
+import { BOX, pickFinishes, pickWalls } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const page = await b.newPage({ viewport: { width: 400, height: 840 }, deviceScaleFactor: 2 });
@@ -68,7 +68,7 @@ await full('7-design');
 
 await btn(/הוספת ארגז/).click(); await page.waitForTimeout(700);
 /* ארגז לפי שם: הספרייה היא של הנגרייה, והמחיר נגזר מהארגז שנבחר */
-await dlg().getByRole('button', { name: /^ארגז שתי דלתות/ }).first().click();
+await dlg().getByRole('button', { name: BOX.doors2 }).first().click();
 await page.waitForTimeout(1200);
 const ed = await page.innerText('body');
 ok('unit inherits project finish', ed.includes('לבן') && ed.includes('מהפרויקט'), '');

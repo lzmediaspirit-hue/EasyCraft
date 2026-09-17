@@ -7,7 +7,7 @@ import './_exit.mjs';
  * 880, עליון ברוחב 600 — התחלה נותנת 500/880, סוף נותן 700/880.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -88,7 +88,7 @@ ok('משטח התמיכה כולל את השיש', math.top === 910, String(math
 
 await setup(page, { name: 'הנחה', walls: 'קיר יחיד' });
 await page.waitForTimeout(600);
-await addNamed(page, /ארגז 3 מגירות|ארגז כיריים|ארגז תנור/);
+await addNamed(page, BOX.drawers);
 await page.waitForTimeout(700);
 
 /** קורא ישירות מ-IndexedDB, כמו שאר חבילות הגרירה */

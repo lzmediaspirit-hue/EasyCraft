@@ -8,7 +8,7 @@ import './_exit.mjs';
  * B08 — מחווה אחת, ושמירה אחת, הן צעד אחד לביטול.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -138,7 +138,7 @@ const xOf = () =>
   });
 
 await setup(page, { name: 'מיקום בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(700);
 await btn(/סיום עריכה/).click().catch(() => {});
 await page.waitForTimeout(400);

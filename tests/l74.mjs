@@ -1,7 +1,7 @@
 import './_exit.mjs';
 /* שכבה 23: נעילת החדר, ביטול גרירת הלוח, צד זכוכית לוויטרינה, אייקון הסיבוב */
 import { chromium } from 'playwright';
-import { setup } from './mk.mjs';
+import { BOX, OTHER_ROOM, addBox, setup } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 
 let fail = 0;
@@ -17,22 +17,11 @@ const btn = (re) => page.getByRole('button', { name: re }).first();
 
 const dlg = () => page.getByRole('dialog').last();
 /** הוספת ארגז מהספרייה, וסגירת לוח העריכה שנפתח אחריה */
-async function add(name, tab) {
-  while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
-  await btn(/הוספת ארגז/).click(); await page.waitForTimeout(600);
-  /* הספרייה נפתחת ישר בחדר של הפרויקט, ולכן בוחר החדרים אינו תמיד שם */
-  const room = dlg().getByRole('button', { name: /^מטבח/ });
-  if (await room.count()) { await room.click(); await page.waitForTimeout(600); }
-  if (tab) { await dlg().getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(500); }
-  await dlg().getByRole('button', { name: new RegExp('^' + name) }).first().click();
-  await page.waitForTimeout(800);
-  await page.getByRole('button', { name: 'סיום עריכה' }).first().click().catch(() => {});
-  await page.waitForTimeout(400);
-}
 
 await setup(page);
-await add('ארגז דלת אחת');
-await add('עליון ויטרינה', 'עליונים');
+await addBox(page, BOX.doors1);
+/* צד זכוכית אינו במטבח — הוויטרינה היא של הסלון */
+await addBox(page, OTHER_ROOM.glassUpper.box, OTHER_ROOM.glassUpper);
 
 /* --- הלוח שמתחת להדמיה אינו נגרר --- */
 ok('no panel drag handle', (await page.getByRole('separator', { name: /גובה לוח/ }).count()) === 0);

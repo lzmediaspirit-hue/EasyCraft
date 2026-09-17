@@ -1,7 +1,7 @@
 import './_exit.mjs';
 /* שכבה 24ב: טבעת הכפתורים בתלת־ממד — תזוזה, בחירה מרובה, עיפרון */
 import { chromium } from 'playwright';
-import { setup } from './mk.mjs';
+import { BOX, addBox, setup } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 let fail = 0;
 const ok = (n, c, g = '') => { if (c) console.log('PASS ', n); else { fail++; console.log('FAIL ', n, g); } };
@@ -10,18 +10,6 @@ const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 page.on('pageerror', (e) => { fail++; console.log('PAGEERROR', e.message); });
 const btn = (re) => page.getByRole('button', { name: re }).first();
 const dlg = () => page.getByRole('dialog').last();
-async function add(name, tab) {
-  while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
-  await btn(/הוספת ארגז/).click(); await page.waitForTimeout(600);
-  /* הספרייה נפתחת ישר בחדר של הפרויקט, ולכן בוחר החדרים אינו תמיד שם */
-  const room = dlg().getByRole('button', { name: /^מטבח/ });
-  if (await room.count()) { await room.click(); await page.waitForTimeout(600); }
-  if (tab) { await dlg().getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(500); }
-  await dlg().getByRole('button', { name: new RegExp('^' + name) }).first().click();
-  await page.waitForTimeout(800);
-  await page.getByRole('button', { name: 'סיום עריכה' }).first().click().catch(() => {});
-  await page.waitForTimeout(400);
-}
 const units = () => page.evaluate(async () => {
   const req = indexedDB.open('easycraft');
   const dbh = await new Promise((r) => (req.onsuccess = () => r(req.result)));
@@ -32,9 +20,9 @@ const units = () => page.evaluate(async () => {
 });
 
 await setup(page);
-await add('ארגז דלת אחת');
-await add('ארגז שתי דלתות');
-await add('ארגז 3 מגירות');
+await addBox(page, BOX.doors1);
+await addBox(page, BOX.doors2);
+await addBox(page, BOX.drawers);
 await btn(/^תלת־ממד/).click(); await page.waitForTimeout(1400);
 
 const svg = page.locator('svg').filter({ has: page.locator('[data-room-floor]') }).first();

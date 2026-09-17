@@ -9,7 +9,7 @@ import './_exit.mjs';
  *   • תנועה בניצב לקיר, בלי להפוך את הארגז לאי.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -149,7 +149,7 @@ ok('a negative distance is clamped, not applied', off.negative === off.baseZ, St
 
 await setup(page, { name: 'פרזול בע״מ' });
 await page.waitForTimeout(900);
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(900);
 await btn(/עריכה מתקדמת/).click();
 await page.waitForTimeout(800);
