@@ -5,8 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { SaveError, useSaveGuard } from '../../ui/saveGuard';
 import { roomsRepo } from '../../catalog/roomsRepo';
-import { constructionCaps } from '../../catalog/construction';
-import { autoShelves } from '../../catalog/construction';
+import { autoShelves, constructionCaps } from '../../catalog/construction';
 import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog/zones';
 import { GROUP_LABELS } from '../../catalog/rooms';
 import { KITCHEN } from '../../catalog/standards';
@@ -197,11 +196,49 @@ export function CustomItemSheet({
       }
     >
       <div className="space-y-5">
+        {/*
+          סדר השאלות הוא סדר ההחלטות: שם, איפה הוא יושב, ואיזו
+          קבוצה הוא — ורק אז האיור והבנייה. החדר והקבוצה ישבו
+          אחרי הכול, ולכן בורר האיורים לא ידע בשביל מה הוא נשאל
+          והציג את כל שלושים וארבעה.
+        */}
         <BoxForm
           value={spec}
           composed={composed}
+          room={rooms[0] ?? (roomKind === CUSTOM_ROOM ? undefined : roomKind)}
           onChange={(patch) => setSpec((s) => ({ ...s, ...patch }))}
           namePlaceholder="למשל: שידה עם שש מגירות"
+          identity={
+            <div className="space-y-5">
+              <Field group label="באילו חדרים יופיע">
+                <div className="flex flex-wrap gap-1.5">
+                  {roomChoices.map((r) => (
+                    <Chip
+                      key={r.id}
+                      active={rooms.includes(r.id)}
+                      onClick={() =>
+                        setRooms((prev) =>
+                          prev.includes(r.id) ? prev.filter((k) => k !== r.id) : [...prev, r.id],
+                        )
+                      }
+                    >
+                      {r.label}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+
+              <Field group label="קבוצה בספרייה">
+                <div className="flex flex-wrap gap-1.5">
+                  {GROUPS.map((g) => (
+                    <Chip key={g} active={g === group} onClick={() => changeGroup(g)}>
+                      {GROUP_LABELS[g]}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          }
         />
 
         <div className="space-y-5 border-t border-stone-100 pt-5">
@@ -217,35 +254,6 @@ export function CustomItemSheet({
               <Chip active={!favorite} onClick={() => setFavorite(false)}>
                 לא מועדף
               </Chip>
-            </div>
-          </Field>
-
-          <Field group label="קבוצה בספרייה">
-
-            <div className="flex flex-wrap gap-1.5">
-              {GROUPS.map((g) => (
-                <Chip key={g} active={g === group} onClick={() => changeGroup(g)}>
-                  {GROUP_LABELS[g]}
-                </Chip>
-              ))}
-            </div>
-          </Field>
-
-          <Field group label="באילו חדרים יופיע">
-            <div className="flex flex-wrap gap-1.5">
-              {roomChoices.map((r) => (
-                <Chip
-                  key={r.id}
-                  active={rooms.includes(r.id)}
-                  onClick={() =>
-                    setRooms((prev) =>
-                      prev.includes(r.id) ? prev.filter((k) => k !== r.id) : [...prev, r.id],
-                    )
-                  }
-                >
-                  {r.label}
-                </Chip>
-              ))}
             </div>
           </Field>
         </div>

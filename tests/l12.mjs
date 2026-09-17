@@ -16,6 +16,12 @@ const ok = (l, c, e = '') => console.log(`${c ? 'PASS' : 'FAIL'}  ${l}${e ? ' �
 await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
 
 /* ---- כניסה ראשונה: יצירת מנהל ---- */
+/*
+ * המסך נבנה אחרי שהמסד נפתח, ולכן ספירה מיד אחרי `goto` מדדה
+ * את הרגע שלפני ההרכבה ודיווחה "אין מסך כניסה". הבדיקה ממתינה
+ * למה שהיא בודקת, ולא לזמן.
+ */
+await page.getByLabel('שם משתמש').waitFor({ state: 'visible', timeout: 15000 });
 ok('login screen first', await page.getByLabel('שם משתמש').count() > 0);
 /* חשבון admin נוצר מראש; יצירת המנהל הראשון נבדקת ב-admin.mjs */
 await page.getByLabel('שם משתמש').fill('admin');

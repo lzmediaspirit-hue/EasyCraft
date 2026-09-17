@@ -8,6 +8,7 @@ import './_exit.mjs';
  * מה שבאמת אין בו מה לבנות הוא מכשיר שנקנה שלם ולוח בודד.
  */
 import { chromium } from 'playwright';
+import { pickGlyph } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -51,8 +52,7 @@ await page.waitForTimeout(900);
 
 await dlg().getByLabel('שם הארגז').fill('QA איור ופנים');
 /* שלוש מגירות ושתי דלתות, בארגז שמצויר כדלתות */
-await dlg().getByRole('button', { name: 'דלתות', exact: true }).first().click();
-await page.waitForTimeout(300);
+await pickGlyph(page, dlg(), 'דלתות');
 
 const rowOf = (label) => dlg().getByRole('group', { name: label });
 await rowOf('דלתות').getByRole('button', { name: '2', exact: true }).click();
@@ -64,8 +64,8 @@ ok('הוגדרו דלתות ומגירות',
   (await rowOf('שורות מגירות').getByRole('button', { name: '3', exact: true }).getAttribute('aria-pressed')) === 'true');
 
 /* עכשיו מחליפים את האיור למדפים */
-await dlg().getByRole('button', { name: 'מדפים', exact: true }).first().click();
-await page.waitForTimeout(500);
+await pickGlyph(page, dlg(), 'מדפים');
+await page.waitForTimeout(300);
 ok('אחרי החלפת איור שדה הדלתות עדיין שם', (await rowOf('דלתות').count()) === 1);
 ok('וגם שדה המגירות', (await rowOf('שורות מגירות').count()) === 1);
 ok('והמספרים לא נמחקו',

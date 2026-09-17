@@ -28,7 +28,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # חבילות החוזה, בדפדפן אמיתי, לפני שמשהו עולה לאוויר.
+  #
+  # `npm run build` מריץ טיפוסים ובנייה, וזה כל מה שנבדק כאן עד
+  # היום: גרסה שבה שמירה דורסת ארגז, או שאיור מוחק מגירות, עברה
+  # אותו בירוק ופורסמה. הבדיקות רצות מול האפליקציה עצמה, ולכן
+  # הן צריכות שרת פיתוח ודפדפן — ולכן זו משרה נפרדת.
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+      - run: npx playwright install --with-deps chromium
+      # שרת הפיתוח והבדיקות באותו שלב: תהליך רקע אינו שורד מעבר שלב
+      - name: בדיקות חוזה מול שרת פיתוח
+        run: |
+          npm run dev &
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:5173/ && break
+            sleep 2
+          done
+          npm run test:contract
+
   build:
+    needs: contract
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,6 +1,8 @@
 import { GLYPH_FAMILIES, glyphsOf } from '../catalog/glyphList';
+import { commonGlyphs, isCommonGlyph } from '../catalog/glyphPicks';
 import { constructionCaps } from '../catalog/construction';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import type { RoomKind } from '../db/types';
 import { KITCHEN } from '../catalog/standards';
 import { limitsFor } from '../catalog/saveGate';
 import { GlyphPreview } from '../catalog/GlyphPreview';
@@ -39,10 +41,23 @@ export function BoxForm({
   onChange,
   namePlaceholder,
   composed,
+  room,
+  identity,
 }: {
   value: BoxSpec;
   onChange: (patch: Partial<BoxSpec>) => void;
   namePlaceholder?: string;
+  /**
+   * החדר שבשבילו נבנה הארגז — קובע אילו איורים מוצגים ראשונים.
+   * בלעדיו מוצגים הנפוצים בכל חדר.
+   */
+  room?: RoomKind;
+  /**
+   * זהות הארגז — חדר, קבוצה, וכל מה ששייך ל"מה זה" ולא ל"איך הוא
+   * בנוי". נכנס מיד אחרי השם, לפני בחירת האיור: מי שעונה קודם
+   * "ארון מטבח תחתון" רואה אחר כך את האיורים של מטבח.
+   */
+  identity?: ReactNode;
   /**
    * פנים הארון מתואר באזורים שאי אפשר לסכם במספר אחד — שני אזורי
    * מגירות, או קושרת שמחלקת אותם לעמודות. מספר יחיד כאן היה
@@ -63,6 +78,9 @@ export function BoxForm({
   const limits = limitsFor(value.glyph);
   /* העובי שנבחר, כדי שכיבוי המשטח לא ימחק אותו */
   const [lastCounter, setLastCounter] = useState(value.counterMm || KITCHEN.counterH);
+  /* הרשימה הקצרה של החדר, והמתג שפותח את כולן */
+  const short = commonGlyphs(room);
+  const [all, setAll] = useState(() => !isCommonGlyph(value.glyph, room));
 
   return (
     <div className="cabinet-form space-y-5">
@@ -109,50 +127,64 @@ export function BoxForm({
         />
       </Field>
 
-      {/*
-        האיורים לפי משפחות.
+      {identity}
 
-        שלושים ואחד ברשת אחת הם רשימה שמחפשים בה: מי שחיפש כיור
-        עבר בדרך על מראה, נעליים ותלייה כפולה. ארון, פינה, מכשיר
-        ולוח הם ארבע שאלות שונות, ולכן ארבע קבוצות.
+      {/*
+        האיורים.
+
+        שלושים וארבעה ברשת אחת הם רשימה שמחפשים בה: מי שחיפש כיור
+        עבר בדרך על מראה, נעליים ותלייה כפולה. מה שמוצג הוא מה
+        שבאמת נבנה בחדר הזה, וכל השאר במרחק לחיצה — לפי משפחות,
+        כי ארון, פינה, מכשיר ולוח הם ארבע שאלות שונות.
+
+        ארגז שהאיור שלו אינו ברשימה הקצרה פותח אותה מעצמו: רשימה
+        שאינה מכילה את מה שנבחר מראה "לא נבחר כלום".
       */}
       <Field group label="איור">
-        <div className="space-y-2.5">
-          {GLYPH_FAMILIES.map((fam) => {
-            const list = glyphsOf(fam.key);
-            if (!list.length) return null;
-            return (
-              <div key={fam.key}>
-                <p className="mb-1 text-[10px] font-medium text-stone-400">{fam.label}</p>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {list.map((g) => (
-                    <button
-                      key={g.key}
-                      onClick={() => onChange({ glyph: g.key })}
-                      title={g.label}
-                      className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 transition-colors ${
-                        g.key === value.glyph
-                          ? 'border-oak-500 bg-oak-50 text-oak-700'
-                          : 'border-stone-200 bg-white text-stone-400 hover:border-oak-300'
-                      }`}
-                    >
-                      <GlyphPreview
+        {all ? (
+          <div className="space-y-2.5">
+            {GLYPH_FAMILIES.map((fam) => {
+              const list = glyphsOf(fam.key);
+              if (!list.length) return null;
+              return (
+                <div key={fam.key}>
+                  <p className="mb-1 text-[10px] font-medium text-stone-400">{fam.label}</p>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {list.map((g) => (
+                      <GlyphButton
+                        key={g.key}
                         glyph={g.key}
-                        widthMm={600}
-                        heightMm={720}
-                        doors={2}
-                        drawers={3}
-                        shelves={2}
-                        className="h-8 w-full"
+                        label={g.label}
+                        active={g.key === value.glyph}
+                        onClick={() => onChange({ glyph: g.key })}
                       />
-                      <span className="w-full truncate text-[9px] leading-none">{g.label}</span>
-                    </button>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-4 gap-1.5">
+              {short.map((g) => (
+                <GlyphButton
+                  key={g.key}
+                  glyph={g.key}
+                  label={g.label}
+                  active={g.key === value.glyph}
+                  onClick={() => onChange({ glyph: g.key })}
+                />
+              ))}
+            </div>
+            <button
+              onClick={() => setAll(true)}
+              className="mt-2 text-xs font-medium text-oak-700 underline underline-offset-2"
+            >
+              כל האיורים
+            </button>
+          </>
+        )}
       </Field>
 
       {!bought && caps.doors && (
@@ -327,5 +359,44 @@ export function BoxForm({
         </Field>
       )}
     </div>
+  );
+}
+
+/**
+ * כפתור איור אחד. הרשימה הקצרה והרשימה המלאה מציגות את אותו דבר
+ * ולכן מציירות אותו מקוד אחד — שתי עותקות של אותה רשת היו נפרדות
+ * בשינוי הראשון.
+ */
+function GlyphButton({
+  glyph,
+  label,
+  active,
+  onClick,
+}: {
+  glyph: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      /*
+       * "מדפים" הוא גם שם של איור וגם כותרת של שדה. שם נגיש מפורש
+       * מבדיל ביניהם — למי שמקריא את המסך, ולבדיקות.
+       */
+      aria-label={`איור ${label}`}
+      aria-pressed={active}
+      className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 transition-colors ${
+        active
+          ? 'border-oak-500 bg-oak-50 text-oak-700'
+          : 'border-stone-200 bg-white text-stone-400 hover:border-oak-300'
+      }`}
+    >
+      <GlyphPreview glyph={glyph} widthMm={600} heightMm={720} doors={2} drawers={3} shelves={2}
+        className="h-8 w-full" />
+      <span className="w-full truncate text-[9px] leading-none">{label}</span>
+    </button>
   );
 }

@@ -142,3 +142,20 @@ export async function addBox(page, box, { tab, room, edit = false } = {}) {
 export function addNamed(page, box) {
   return addBox(page, box, { edit: true });
 }
+
+/**
+ * בוחר איור בטופס הארגז.
+ *
+ * הרשימה הקצרה מציגה את מה שנבנה בחדר הזה, וכל השאר מאחורי
+ * "כל האיורים". הבדיקה אינה אמורה לדעת מה במקרה בפנים — היא
+ * מבקשת איור, והעוזר פותח אם צריך.
+ */
+export async function pickGlyph(page, scope, label) {
+  const btn = scope.getByRole('button', { name: `איור ${label}`, exact: true });
+  if ((await btn.count()) === 0) {
+    await scope.getByRole('button', { name: 'כל האיורים', exact: true }).first().click();
+    await page.waitForTimeout(300);
+  }
+  await btn.first().click();
+  await page.waitForTimeout(300);
+}

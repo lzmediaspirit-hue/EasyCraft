@@ -112,6 +112,13 @@ const bb = await shape.boundingBox();
 ok('the cabinet is on the wall', !!bb, JSON.stringify(bb));
 
 const before2d = await at();
+/* עומק ההיסטוריה לפני המחווה — נקודת ההשוואה אחריה */
+const beforeDepth = await page.evaluate(async () => {
+  const { history } = await import('/src/features/design/history.ts');
+  const { db } = await import('/src/db/db.ts');
+  const pid = (await db.units.toArray())[0].projectId;
+  return history.state(pid).depth;
+});
 await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);
 await page.mouse.down();
 await page.mouse.move(bb.x + bb.width / 2 + 60, bb.y + bb.height / 2 - 40, { steps: 8 });
@@ -140,9 +147,15 @@ ok('a cancelled drag writes nothing in 2D', after2d.x === before2d.x && after2d.
 const undoState = await page.evaluate(async (pid) => {
   const { history } = await import('/src/features/design/history.ts');
   const { preview } = await import('/src/features/design/preview.ts');
-  return { canUndo: history.state(pid).canUndo, held: preview.active() };
+  return { depth: history.state(pid).depth, held: preview.active() };
 }, await page.evaluate(async () => (await (await import('/src/db/db.ts')).db.units.toArray())[0].projectId));
-ok('and leaves no undo step behind', !undoState.canUndo, JSON.stringify(undoState));
+/*
+ * הוספת הארגז עצמו כותבת צעד — זה נכון וזה רצוי. מה שנבדק כאן
+ * הוא שהמחווה שבוטלה לא הוסיפה עליו, ולכן ההשוואה היא מול העומק
+ * שנמדד לפניה ולא מול "יש בכלל מה לבטל".
+ */
+ok('and leaves no undo step behind', undoState.depth === beforeDepth,
+  `${beforeDepth} → ${undoState.depth}`);
 ok('and nothing is left in hand', !undoState.held, JSON.stringify(undoState));
 
 /* ובקרה חיובית: אותה תנועה שמסתיימת בהרפיה כן נשמרת */

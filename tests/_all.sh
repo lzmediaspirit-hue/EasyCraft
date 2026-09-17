@@ -9,6 +9,15 @@
 # שלה לא מדפיסה FAIL, וספירת טקסט לבדה דיווחה עליה "ok".
 cd "$(dirname "$0")"
 
+# הדפדפן. ברירת המחדל שבתוך החבילות היא הנתיב של סביבת הפיתוח כאן;
+# במקום שבו הוא אינו קיים — CI, מכונה אחרת — נשאל Playwright עצמו
+# איפה הדפדפן שהוא התקין.
+DEV_CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome
+if [ -z "$CHROME_PATH" ] && [ ! -x "$DEV_CHROME" ]; then
+  CHROME_PATH=$(node -e "console.log(require('playwright').chromium.executablePath())" 2>/dev/null)
+  export CHROME_PATH
+fi
+
 if ! curl -sf -o /dev/null http://localhost:5173/; then
   echo "אין שרת על http://localhost:5173 — הרץ 'npm run dev' בחלון אחר"
   exit 1

@@ -69,6 +69,29 @@ out.push(
     'מאגר הצריכה אינו נשען על מאגר הפרויקטים',
 );
 
+/* ------------------------------------------------------------------ */
+/* A06 — המספרים בתיעוד הם המספר האמיתי                                */
+/* ------------------------------------------------------------------ */
+/*
+ * AGENTS.md אמר 95 ו-README אמר 107, והיו 111. מספר שאיש אינו
+ * בודק אותו נכון רק ביום שנכתב. כאן הוא נספר מהתיקייה, ומי
+ * שמוסיף חבילה מקבל שורה אדומה במקום תיעוד שקרי.
+ */
+const runner = readFileSync(path.join(root, 'tests/_all.sh'), 'utf8');
+const extras = (runner.match(/_[a-z]+\.mjs/g) ?? []).length;
+const suites =
+  execSync("ls tests/l*.mjs | wc -l", { cwd: root }).toString().trim() * 1 + extras;
+
+for (const doc of ['AGENTS.md', 'README.md']) {
+  const text = readFileSync(path.join(root, doc), 'utf8');
+  const said = [...text.matchAll(/(\d+) חבילות/g)].map((m) => Number(m[1]));
+  const wrong = said.filter((n) => n !== suites);
+  out.push(
+    `${said.length > 0 && wrong.length === 0 ? 'PASS' : 'FAIL'} ` +
+      `${doc} סופר נכון | אמר ${said.join(',') || '—'}, יש ${suites}`,
+  );
+}
+
 console.log(out.join('\n'));
 const fail = out.filter((l) => l.startsWith('FAIL')).length;
 console.log(`${out.length - fail} pass, ${fail} fail`);

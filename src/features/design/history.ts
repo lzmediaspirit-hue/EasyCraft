@@ -157,9 +157,21 @@ export const history = {
     emit();
   },
 
-  state(projectId: string): { canUndo: boolean; canRedo: boolean } {
+  /*
+   * `depth` הוא כמה צעדים אחורה יש, ולא רק "יש או אין".
+   *
+   * "מחווה שבוטלה אינה משאירה צעד" נבדק מול הבוליאני, ולכן כל
+   * פעולה קודמת באותו פרויקט — הוספת הארגז עצמו, למשל — הפכה
+   * את הבדיקה לאדומה בלי שהמחווה כתבה דבר. מה שנשאל הוא האם
+   * המחסנית גדלה, וזו שאלה על מספר.
+   */
+  state(projectId: string): { canUndo: boolean; canRedo: boolean; depth: number } {
     const s = stacks.get(projectId);
-    return { canUndo: !!s?.past.length, canRedo: !!s?.future.length };
+    return {
+      canUndo: !!s?.past.length,
+      canRedo: !!s?.future.length,
+      depth: s?.past.length ?? 0,
+    };
   },
 
   subscribe: bus.subscribe,

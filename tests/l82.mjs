@@ -52,7 +52,11 @@ await page.screenshot({ path: SP + 'L82-3-proposals.png', fullPage: true });
 /* 4 — בחירת הצעה מניחה מטבח */
 const title = (await cards.first().innerText()).split('\n')[0];
 await cards.first().click();
-await page.waitForTimeout(1500);
+/*
+ * הנחת מטבח שלם נמשכת כמה שהיא נמשכת. המתנה קבועה של 1500 מ״ש
+ * הצליחה במכונה אחת ונכשלה באחרת; מה שנבדק הוא הסימון עצמו.
+ */
+await dlg().getByText('מוצג').first().waitFor({ state: 'visible', timeout: 20000 });
 ok('ההצעה מסומנת כמוצגת', await dlg().getByText('מוצג').first().isVisible(), title);
 await page.screenshot({ path: SP + 'L82-4-applied.png', fullPage: true });
 

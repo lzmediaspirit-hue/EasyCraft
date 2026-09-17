@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "build:single": "npm run build && node scripts/build-single.mjs",
-    "test": "sh tests/_all.sh"
+    "test": "sh tests/_all.sh",
+    "test:contract": "sh tests/_contract.sh"
   },
   "repository": {
     "type": "git",
