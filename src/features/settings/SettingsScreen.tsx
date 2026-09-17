@@ -7,7 +7,7 @@ import { CabinetsSheet } from './CabinetsSheet';
 import { ExtrasSection } from './ExtrasSection';
 import { Page, ScreenHeader } from '../../ui/Page';
 import { nav } from '../../nav/navigation';
-import { Field, NumField, PriceField, inputClass, selectOnFocus } from '../../ui/Field';
+import { Field, MoneyInput, NumField, PriceField, inputClass, selectOnFocus } from '../../ui/Field';
 import { displayUnit } from '../../ui/units';
 import { useDisplayUnit } from '../../ui/useDisplayUnit';
 import { ArchiveIcon, ChevronIcon, PlusIcon, SheetIcon, TeamIcon } from '../../ui/icons';
@@ -223,29 +223,15 @@ export function SettingsScreen() {
               />
             </Field>
             <Field label="קנט לצרכן" hint="₪ למטר">
-              <input
+              <MoneyInput
                 value={settings.edgeConsumerPerM || ''}
-                onChange={(e) =>
-                  settingsRepo.save({ edgeConsumerPerM: Number(e.target.value) || 0 })
-                }
-                onFocus={selectOnFocus}
-                type="number"
-                inputMode="decimal"
-                placeholder="₪"
-                className={`${inputClass} num text-end`}
+                onChange={(raw) => settingsRepo.save({ edgeConsumerPerM: Number(raw) || 0 })}
               />
             </Field>
             <Field label="קנט במפעל" hint="₪ למטר">
-              <input
+              <MoneyInput
                 value={settings.edgeFactoryPerM || ''}
-                onChange={(e) =>
-                  settingsRepo.save({ edgeFactoryPerM: Number(e.target.value) || 0 })
-                }
-                onFocus={selectOnFocus}
-                type="number"
-                inputMode="decimal"
-                placeholder="₪"
-                className={`${inputClass} num text-end`}
+                onChange={(raw) => settingsRepo.save({ edgeFactoryPerM: Number(raw) || 0 })}
               />
             </Field>
           </div>

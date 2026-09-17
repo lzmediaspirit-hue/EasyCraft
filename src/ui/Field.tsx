@@ -108,6 +108,37 @@ export function PriceField({
   );
 }
 
+/**
+ * שדה כסף בשורה מלאה.
+ *
+ * אותן שש תכונות בדיוק — מקלדת עשרונית, יישור לקצה, ספרות בכיוון
+ * שלהן וסימן השקל כרמז — חזרו בכל מקום שבו מזינים מחיר. מספר
+ * שנקרא אחרת בכל מסך הוא מספר שמוקלד אחרת, ולכן זו החלטה אחת.
+ */
+export function MoneyInput({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string | number;
+  /** הטקסט הגולמי — ההמרה למספר היא של המסך שיודע מה הוא שומר */
+  onChange: (raw: string) => void;
+  ariaLabel?: string;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onFocus={selectOnFocus}
+      type="number"
+      inputMode="decimal"
+      placeholder="₪"
+      aria-label={ariaLabel}
+      className={`${inputClass} num text-end`}
+    />
+  );
+}
+
 /** בחירה בודדת מתוך כמה אפשרויות קצרות. */
 export function Chip({
   active,

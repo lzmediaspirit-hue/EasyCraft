@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { projectsRepo } from './projectsRepo';
 import { PRICING_LABEL, paymentStatus, projectQuote } from '../../costing/pricing';
 import { Sheet } from '../../ui/Sheet';
-import { Chip, Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
+import { Chip, Field, MoneyInput, PrimaryButton, selectOnFocus } from '../../ui/Field';
 import { shekels } from '../../ui/units';
 import { CheckIcon, PlusIcon, TrashIcon } from '../../ui/icons';
 import type { PaymentPlan, Payment, PlacedUnit, PricingMode, Project } from '../../db/types';
@@ -164,43 +164,19 @@ export function SaleSheet({
 
         {mode === 'perUnit' && (
           <Field label="מחיר למ״ר חזית" hint="ארגז גדול עולה יותר">
-            <input
-              value={perUnit}
-              onChange={(e) => setPerUnit(e.target.value)}
-              onFocus={selectOnFocus}
-              type="number"
-              inputMode="decimal"
-              placeholder="₪"
-              className={`${inputClass} num text-end`}
-            />
+            <MoneyInput value={perUnit} onChange={setPerUnit} />
           </Field>
         )}
 
         {mode === 'perMeter' && (
           <Field label="מחיר למטר רץ" hint="לפי רוחב הארונות התחתונים">
-            <input
-              value={perMeter}
-              onChange={(e) => setPerMeter(e.target.value)}
-              onFocus={selectOnFocus}
-              type="number"
-              inputMode="decimal"
-              placeholder="₪"
-              className={`${inputClass} num text-end`}
-            />
+            <MoneyInput value={perMeter} onChange={setPerMeter} />
           </Field>
         )}
 
         {mode === 'manual' && (
           <Field label="מחיר הפרויקט" hint="גובר על כל חישוב">
-            <input
-              value={manual}
-              onChange={(e) => setManual(e.target.value)}
-              onFocus={selectOnFocus}
-              type="number"
-              inputMode="decimal"
-              placeholder="₪"
-              className={`${inputClass} num text-end`}
-            />
+            <MoneyInput value={manual} onChange={setManual} />
           </Field>
         )}
 
