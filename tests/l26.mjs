@@ -18,6 +18,9 @@ await setup(page, { name: 'באגים 15' });
 await btn(/הוספת ארגז/).click(); await page.waitForTimeout(700);
 await dlg().getByRole('button', { name: /^מטבח/ }).click().catch(() => {});
 await page.waitForTimeout(500);
+/* מכשיר שנקנה שלם יושב בקטגוריה משלו, ולא בין הארגזים שנבנים */
+await dlg().getByRole('button', { name: 'מכשירי חשמל', exact: true }).first().click();
+await page.waitForTimeout(500);
 const tiles = dlg().locator('div.relative > button').filter({ hasText: /\S/ });
 console.log('TILES:', (await tiles.allInnerTexts()).map((t) => t.split('\n')[0]).join(','));
 const fridge = tiles.filter({ hasText: 'מדיח' });
