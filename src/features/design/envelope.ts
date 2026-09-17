@@ -2,7 +2,7 @@ import { bodyHeightMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, WallFeature } from '../../db/types';
 import { glyphDef } from '../../catalog/glyphList';
 import { unitFronts, unitZones } from '../../catalog/zones';
-import { rad, unitBox, unitFrame } from './placement';
+import { featureBox, rad, unitBox, unitFrame } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import { boxesMeet } from './collision';
@@ -229,6 +229,12 @@ export interface EnvelopeClash {
   blockerName: string;
 }
 
+/** שם קריא לסימון מבני שחוסם פתיחה. */
+const FEATURE_LABEL: Partial<Record<WallFeature['kind'], string>> = {
+  pillar: 'עמוד',
+  step: 'מדרגה',
+};
+
 /**
  * מי חוסם את מי.
  *
@@ -247,6 +253,27 @@ export function envelopeClashes(
     .filter((x): x is { u: PlacedUnit; b: UnitBox } => x.b !== null)
     .filter((x) => !glyphDef(x.u.glyph).cladding);
 
+  /*
+   * עמוד ומדרגה חוסמים מגירה בדיוק כמו ארגז.
+   *
+   * המעטפת נבדקה מול ארגזים בלבד, ולכן מגירה שנפתחת אל תוך עמוד
+   * בטון עברה בשקט: גוף הארגז פנוי, והמגירה אינה. הם נמדדים
+   * באותה מערכת ובאותה שאלה — `boxesMeet` — ולכן אין כאן קירוב.
+   *
+   * מה שבולט לחדר בלבד: חלון ושקע שטוחים על הקיר אינם חוסמים
+   * פתיחה, והם כבר נבדקים כמעטפת בפני עצמם.
+   */
+  const solids: { id: string; name: string; b: UnitBox }[] = [];
+  for (const p of plan) {
+    for (const f of p.wall.features) {
+      const label = FEATURE_LABEL[f.kind];
+      if (!label) continue;
+      const bite = f.depthMm ?? 0;
+      if (bite <= 0) continue;
+      solids.push({ id: f.id, name: label, b: featureBox(f, p, bite) });
+    }
+  }
+
   const out: EnvelopeClash[] = [];
   for (const e of envelopes) {
     if (!e.box) continue;
@@ -254,6 +281,11 @@ export function envelopeClashes(
       if (u.id === e.ownerId) continue;
       if (!boxesMeet(e.box, b)) continue;
       out.push({ envelope: e, blockerId: u.id, blockerName: u.name });
+    }
+    for (const sol of solids) {
+      if (sol.id === e.ownerId) continue;
+      if (!boxesMeet(e.box, sol.b)) continue;
+      out.push({ envelope: e, blockerId: sol.id, blockerName: sol.name });
     }
   }
   return out;

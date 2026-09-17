@@ -1,5 +1,6 @@
 import type { Placement as PlanPlacement } from '../design/autoPlan';
-import { matchCatalog } from '../design/planMatch';
+import { resolvePlan, type PlanIssue } from '../design/planResolve';
+import { placementName } from '../design/autoPlan';
 import {
   allMine,
   bumped,
@@ -15,10 +16,9 @@ import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { partsOf, projectCosting, type ProjectCosting } from '../../costing/boards';
 import { BuildError, checkUnit } from '../../catalog/saveGate';
-import { landsOnFloor } from '../../catalog/construction';
+import { unitSpec } from './unitSpec';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { releaseConsumption } from '../../materials/consumptionRepo';
-import { reusableSpec } from '../../db/types';
 import type {
 
   CatalogItem,
@@ -443,73 +443,14 @@ export const unitsRepo = {
   ): Promise<PlacedUnit> {
     const now = Date.now();
     const { defaults } = await settingsRepo.get();
+    /* התרגום מפריט ספרייה לארגז על הקיר יושב במקום אחד — `unitSpec` */
     const unit: PlacedUnit = {
-      /*
-       * כל תיאור הבנייה שנשמר בפריט, מרשימה אחת משותפת עם השמירה
-       * לספרייה. ככה מאפיין שנוסף לארגז אינו נשמט באחד משני הכיוונים.
-       */
-      ...reusableSpec(item),
+      ...unitSpec(item, { projectId, wallId, xMm, widthMm, free }, defaults),
       id: crypto.randomUUID(),
-      projectId,
-      wallId,
-      catalogItemId: item.id,
-      name: item.name,
-      glyph: item.glyph,
-      /*
-       * תיבת המגירה שהתבנית נשמרה איתה, ואם אין — דרך העבודה
-       * של הנגרייה.
-       *
-       * הכלל היה הפוך: ברירת המחדל דרסה את מה שנשמר, ולכן ארגז
-       * שנבנה במכוון עם תיבת עץ חזר מהספרייה עם תיבת ברזל. מי
-       * שטרח לשמור תבנית מצפה לקבל אותה כפי ששמר; ברירת המחדל
-       * היא תשובה לשאלה שלא נענתה, לא דריסה של תשובה שכן.
-       */
-      drawerBox: item.drawerBox ?? defaults.drawerBox,
-      // הגב שהפריט הגיע איתו, ואם אין — דרך העבודה של הנגרייה
-      backKind: item.backKind ?? defaults.backKind,
-      level: item.level,
-
-      xMm,
-      /*
-       * הגובה שנשמר בפריט הוא הגובה שהוא נולד בו.
-       *
-       * קודם כל מה שאינו תלוי על הקיר נחת על אפס, ולכן ארון בלי
-       * רגליים שנשמר מרחף בגובה 45 ס"מ — מזנון תלוי, ספסל על
-       * בסיס — ירד לרצפה בכל הנחה, ומי ששמר אותו כך גילה את זה
-       * רק על הקיר.
-       */
-      yMm: item.defaultYMm ?? 0,
-      widthMm: widthMm ?? item.defaultWidthMm,
-      heightMm: item.defaultHeightMm,
-      depthMm: item.defaultDepthMm,
-      /*
-       * הרגליים כפי שנשמרו, וברירת המחדל של הנגרייה רק כשאין.
-       *
-       * קודם כל ערך חיובי הוחלף בברירת המחדל, בנימוק שהרגליים הן
-       * אותו גובה בכל העסק. אבל הגובה השמור הוא גוף ועוד רגליים,
-       * ולכן החלפת 170 ב-100 לא קיצרה את הרגליים — היא האריכה את
-       * הגוף מ-80 ל-87 ס"מ, בשקט, ובניגוד למה שנשמר. זה גם בדיוק
-       * הכלל של `drawerBox` ו-`backKind` שלמעלה: ברירת המחדל היא
-       * תשובה לשאלה שלא נענתה, ולא דריסה של תשובה שכן.
-       */
-      socleMm: item.socleMm ?? defaults.socleMm,
-      counterMm: item.counterMm,
-      /* נעול לרצפה = באמת עומד עליה — הכלל ב-`construction` */
-      floorLocked: landsOnFloor(item.level, item.defaultYMm),
-      /* תבנית אי נוחתת בחדר; כל השאר נוחת על הקיר */
-      ...(item.island && free ? { free } : {}),
       ...owned(),
       createdAt: now,
       updatedAt: now,
     };
-    /*
-     * אותו שער שחל על עריכה חל גם על הנחה.
-     *
-     * `update` בדק, `add` לא — ולכן ארגז שאי אפשר לבנות נכנס
-     * בדלת הראשונה ונעצר רק בדלת השנייה. מי שהניח ארגז ברוחב
-     * 50 מ״מ דרך התכנון האוטומטי קיבל אותו שמור, ורשימת החיתוך
-     * יצאה ממנו. הבדיקה כאן היא אותה בדיקה, באותו הקשר חומר.
-     */
     const why = checkUnit(unit, await buildContext(projectId));
     if (why) throw new BuildError(why);
     await db.units.add(unit);
@@ -535,33 +476,51 @@ export const unitsRepo = {
   async applyPlan(
     projectId: string,
     placements: PlanPlacement[],
-  ): Promise<{ ok: true } | { ok: false; missing: number }> {
+  ): Promise<{ ok: true } | { ok: false; issues: PlanIssue[] }> {
     /*
-     * ההצעה מדברת בתפקידים, והספרייה היא של הנגרייה: כל תפקיד
-     * מתורגם לארגז שקיים כאן בפועל, ולא למפתח של ארגזי התקן.
+     * ההצעה נפתרת פעם אחת — אותה פתירה שהכרטיס צייר ממנה.
+     *
+     * קודם התרגום לספרייה קרה כאן מחדש, והבדיקה היחידה הייתה
+     * "האם נמצא פריט". ארגז שחוסם חלון, שעובר את התקרה או שאי
+     * אפשר לבנות ממנו נכנס בלי מילה.
      */
-    const [items, project] = await Promise.all([allMine(db.catalog), db.projects.get(projectId)]);
-    const chosen = new Map<string, CatalogItem>();
-    for (const p of placements) {
-      const item = matchCatalog(p.catalogKey, items, p.widthMm, project?.roomKind);
-      if (item) chosen.set(`${p.catalogKey}|${p.widthMm}`, item);
-    }
-    const missing = placements.filter(
-      (p) => !chosen.has(`${p.catalogKey}|${p.widthMm}`),
-    ).length;
-    if (missing) return { ok: false, missing };
+    const [items, project, walls, settings] = await Promise.all([
+      allMine(db.catalog),
+      db.projects.get(projectId),
+      wallsRepo.listForProject(projectId),
+      settingsRepo.get(),
+    ]);
+    const resolved = resolvePlan({
+      placements,
+      items,
+      walls,
+      defaults: settings.defaults,
+      room: project?.roomKind,
+      build: await buildContext(projectId),
+      nameOf: placementName,
+    });
+    if (resolved.issues.length) return { ok: false, issues: resolved.issues };
 
-    await eraseRows(db.units, await unitsRepo.listForProject(projectId));
-    for (const p of placements) {
-      const item = chosen.get(`${p.catalogKey}|${p.widthMm}`)!;
-      const unit = await this.add(projectId, p.wallId, item, p.xMm, p.widthMm);
-      if (p.free || p.blindMm) {
-        await this.update(unit.id, {
-          ...(p.free ? { free: p.free } : {}),
-          ...(p.blindMm ? { blindMm: p.blindMm } : {}),
-        });
-      }
-    }
+    /*
+     * החלפה אחת, לא מחיקה ואז סדרת הוספות.
+     *
+     * קודם הארגזים הישנים נמחקו ואז נכתבו החדשים אחד־אחד: כישלון
+     * באמצע השאיר פרויקט חצי־מוחלף, בלי דרך חזרה. עכשיו הכול בתוך
+     * עסקה אחת — או שהמטבח החדש עומד, או שהישן לא זז.
+     */
+    const now = Date.now();
+    const rows = resolved.units.map((r, i) => ({
+      ...r.unit,
+      id: crypto.randomUUID(),
+      projectId,
+      ...owned(),
+      createdAt: now + i,
+      updatedAt: now + i,
+    }));
+    await db.transaction('rw', db.units, db.tombstones, async () => {
+      await eraseRows(db.units, await unitsRepo.listForProject(projectId));
+      await db.units.bulkAdd(rows);
+    });
     return { ok: true };
   },
 

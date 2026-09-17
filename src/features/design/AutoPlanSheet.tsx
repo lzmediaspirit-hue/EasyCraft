@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Sheet } from '../../ui/Sheet';
 import { CheckIcon, WandIcon } from '../../ui/icons';
 import { unitsRepo } from '../projects/projectsRepo';
 import { history } from './history';
 import { buildPlan } from './plan';
 import type { PlanWall } from './plan';
-import { planKitchen, placementName, previewUnits, whyNothing } from './autoPlan';
+import { planKitchen, placementName, whyNothing } from './autoPlan';
+import { resolvePlan, type ResolvedPlan } from './planResolve';
+import { catalogRepo } from '../../catalog/catalogRepo';
+import { settingsRepo } from '../../materials/materialsRepo';
+import { projectsRepo } from '../projects/projectsRepo';
 import { PlanThumb } from './PlanThumb';
 import type { Appliances, AutoInput, Proposal } from './autoPlan';
 import type { PlacedUnit, Wall } from '../../db/types';
@@ -83,24 +88,65 @@ export function AutoPlanSheet({
     setStep('pick');
   };
 
+  /*
+   * הספרייה האמיתית, ההגדרות והחדר — מה שההצעה נפתרת מולו.
+   *
+   * הכרטיס צייר מארגזי התקן והשמירה בחרה מהספרייה של הנגרייה,
+   * ולכן מה שנראה בכרטיס לא היה מה שהונח. עכשיו שניהם קוראים
+   * את אותה פתירה.
+   */
+  const items = useLiveQuery(() => catalogRepo.all(), [], []);
+  const settings = useLiveQuery(() => settingsRepo.get(), []);
+  const project = useLiveQuery(() => projectsRepo.get(projectId), [projectId]);
+  const resolved = useMemo(() => {
+    const map = new Map<string, ResolvedPlan>();
+    if (!settings || !items.length) return map;
+    for (const p of proposals) {
+      map.set(
+        p.key,
+        resolvePlan({
+          placements: p.units,
+          items,
+          walls,
+          defaults: settings.defaults,
+          room: project?.roomKind,
+          nameOf: placementName,
+        }),
+      );
+    }
+    return map;
+  }, [proposals, items, walls, settings, project]);
+
   async function apply(p: Proposal) {
     if (busy) return;
     setBusy(true);
     setProblem(null);
     /*
-     * צילום אחד לפני ההצעה הראשונה בלבד: מעבר בין הצעות אינו
-     * צעד חדש בהיסטוריה אלא אותה בחירה שמתחלפת, ו"בטל" צריך
-     * להחזיר את מה שהיה על הקיר לפני שנפתחה המגירה.
+     * כישלון אינו משאיר את המסך תקוע.
+     *
+     * `busy` נדלק לפני הצילום וההחלפה, וכובה רק בהצלחה: חריגה
+     * באמצע השאירה את הכפתורים מושבתים בלי שום הודעה, ורק רענון
+     * הדף שחרר אותם. `finally` הוא מה שמחזיר את המסך למשתמש.
      */
-    if (!applied) await history.capture(projectId, `autoplan:${Date.now()}`);
-    const res = await unitsRepo.applyPlan(projectId, p.units);
-    if (res.ok) setApplied(p.key);
-    else {
+    try {
+      /*
+       * צילום אחד לפני ההצעה הראשונה בלבד: מעבר בין הצעות אינו
+       * צעד חדש בהיסטוריה אלא אותה בחירה שמתחלפת, ו"בטל" צריך
+       * להחזיר את מה שהיה על הקיר לפני שנפתחה המגירה.
+       */
+      if (!applied) await history.capture(projectId, `autoplan:${Date.now()}`);
+      const res = await unitsRepo.applyPlan(projectId, p.units);
+      if (res.ok) setApplied(p.key);
+      else setProblem(res.issues.map((i) => i.text).join(' '));
+    } catch (e) {
       setProblem(
-        `${res.missing} מהארגזים שבהצעה אינם בספרייה שלך. ההצעה בנויה על ארגזי התקן — אפשר להחזיר אותם ב"גיבוי והעברה" בהגדרות.`,
+        e instanceof Error && e.message
+          ? `ההצעה לא הונחה: ${e.message}`
+          : 'ההצעה לא הונחה. הפרויקט נשאר כפי שהיה.',
       );
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   if (step === 'ask') {
@@ -226,6 +272,7 @@ export function AutoPlanSheet({
             key={p.key}
             proposal={p}
             walls={walls}
+            resolved={resolved.get(p.key)}
             active={applied === p.key}
             onPick={() => apply(p)}
           />
@@ -273,17 +320,28 @@ function Toggle({
 function ProposalCard({
   proposal,
   walls,
+  resolved,
   active,
   onPick,
 }: {
   proposal: Proposal;
   walls: Wall[];
+  /** ההצעה כארגזים אמיתיים מהספרייה — אותם אלה שיישמרו */
+  resolved?: ResolvedPlan;
   active: boolean;
   onPick: () => void;
 }) {
   const { score } = proposal;
-  /* הארגזים לציור בלבד — הם לא נשמרים, ולכן הם נבנים פעם אחת */
-  const preview = useMemo(() => previewUnits(proposal), [proposal]);
+  /*
+   * מה שמצויר הוא מה שיונח.
+   *
+   * הכרטיס צייר מארגזי התקן ולא מהספרייה של הנגרייה, ולכן גובה,
+   * עומק ואיור בתמונה היו של ארגז אחר. עד שהפתירה מגיעה אין מה
+   * לצייר — וזה עדיף על לצייר משהו אחר.
+   */
+  const preview = resolved?.units.map((r) => r.unit) ?? [];
+  const issues = resolved?.issues ?? [];
+  const blocked = issues.length > 0;
   const counts = new Map<string, number>();
   for (const u of proposal.units) {
     const name = placementName(u);
@@ -293,11 +351,22 @@ function ProposalCard({
   return (
     <button
       onClick={onPick}
+      /*
+       * הצעה שיש בה חסם אינה נבחרת.
+       *
+       * קודם היא הוצגה עם ציון 99, ורק אחרי ההנחה התגלו ההתנגשויות.
+       * מה שאי אפשר להניח אינו מוצע — והסיבה כתובה על הכרטיס.
+       */
+      disabled={blocked}
+      aria-disabled={blocked}
       /* ההצעה שנבחרה מסומנת גם למי שלא רואה את המסגרת הכתומה */
       aria-pressed={active}
       className={`block w-full rounded-2xl border-2 p-4 text-start transition-colors ${
-
-        active ? 'border-oak-600 bg-oak-50' : 'border-stone-200 bg-white hover:border-stone-300'
+        blocked
+          ? 'border-red-200 bg-red-50/40'
+          : active
+            ? 'border-oak-600 bg-oak-50'
+            : 'border-stone-200 bg-white hover:border-stone-300'
       }`}
     >
       {/*
@@ -314,7 +383,11 @@ function ProposalCard({
           </span>
           <span className="block text-xs text-stone-400">{proposal.layoutName}</span>
         </span>
-        {active ? (
+        {blocked ? (
+          <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800">
+            לא ניתן להניח
+          </span>
+        ) : active ? (
           <span className="flex items-center gap-1 rounded-full bg-oak-600 px-2.5 py-1 text-xs font-semibold text-white">
             <CheckIcon className="size-3.5" />
             מוצג
@@ -327,7 +400,11 @@ function ProposalCard({
       </div>
 
       <dl className="mt-3 grid grid-cols-4 gap-1.5 text-center">
-        <Metric label="משולש עבודה" value={`${Math.round(score.triangle * 100)}%`} />
+        {/* משולש עבודה אינו נמדד כשחסרה תחנה — אין ממה למדוד אותו */}
+        <Metric
+          label="משולש עבודה"
+          value={score.missing ? '—' : `${Math.round(score.triangle * 100)}%`}
+        />
         <Metric label="משטח הכנה" value={`${Math.round(score.prepMm / 10)} ס״מ`} />
         <Metric label="מטר רץ" value={`${(score.runMm / 1000).toFixed(2)} מ׳`} />
         <Metric label="ארגזים" value={String(score.boxes)} />
@@ -337,6 +414,16 @@ function ProposalCard({
         {[...counts].map(([name, n]) => (n > 1 ? `${n}× ${name}` : name)).join(' · ')}
       </p>
 
+      {score.missing > 0 && (
+        <p className="mt-2 text-xs leading-snug text-amber-700">
+          חסרות <span className="num">{score.missing}</span> תחנות ממה שביקשת — ראה למטה.
+        </p>
+      )}
+      {issues.map((it, i) => (
+        <p key={`i${i}`} className="mt-1.5 text-xs leading-snug text-red-800">
+          {it.text}
+        </p>
+      ))}
       {proposal.notes.map((n, i) => (
         <p key={`n${i}`} className="mt-1.5 text-xs leading-snug text-stone-500">
           {n}

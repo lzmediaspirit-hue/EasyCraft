@@ -1,8 +1,7 @@
 import { AISLE, BLIND_CORNER, ISLAND, KITCHEN, LANDING, PREP, SAFETY, TRIANGLE } from '../../catalog/kitchenRules';
-import type { FreePlacement, PlacedUnit, UnitLevel, Wall, WallFeature } from '../../db/types';
+import type { FreePlacement, UnitLevel, Wall, WallFeature } from '../../db/types';
 import { SEED_CATALOG } from '../../catalog/builtins';
 import type { PlanWall } from './plan';
-import { owned } from '../../db/rows';
 import { rad } from './placement';
 
 /**
@@ -101,6 +100,14 @@ export interface Score {
   runMm: number;
   /** מספר הארגזים — פחות ארגזים, פחות דפנות וצירים */
   boxes: number;
+  /**
+   * כמה תחנות שנתבקשו חסרות בהצעה.
+   *
+   * זה מה שמונע "99 ומשולש 100%" למטבח בלי כיריים: המשולש נמדד
+   * על הצלעות שקיימות, וכשחסרה תחנה הוא מודד פחות ולכן נראה טוב
+   * יותר. מספר שאומר מה חסר קודם למספר שאומר כמה טוב.
+   */
+  missing: number;
   /** הציון הכולל שלפיו ההצעות מסודרות */
   total: number;
 }
@@ -680,6 +687,19 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
   /* ---- ארונות עליונים ---- */
   if (priority === 'economical') {
     notes.push('בלי ארונות עליונים — הגרסה החסכונית');
+    /*
+     * מכשיר שנבחר אינו נעלם בגלל העדפת אחסון.
+     *
+     * טיפול המיקרוגל ישב כולו בענף שאינו החסכוני, ולכן מי שביקש
+     * מיקרוגל בלי תנור קיבל הצעה חסכונית בלי מיקרוגל ובלי מילה —
+     * רשימת "לא נכנס" הייתה ריקה. אם אין לו מקום, זה נאמר.
+     */
+    if (input.appliances.microwave && !input.appliances.oven) {
+      dropped.push('מיקרוגל — בגרסה החסכונית אין ארונות עליונים לתלות אותו');
+    }
+    if (input.appliances.hood && input.appliances.hob) {
+      dropped.push('קולט אדים — בגרסה החסכונית אין ארונות עליונים לתלות אותו');
+    }
   } else {
     const hood = input.appliances.hood && input.appliances.hob;
     for (const u of [...units]) {
@@ -715,7 +735,7 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
 
   if (units.some((u) => u.role === 'hood')) {
     notes.push(`תחתית קולט האדים ${SAFETY.hoodElectricMm} מ"מ מעל הכיריים`);
-  } else if (input.appliances.hood && input.appliances.hob) {
+  } else if (priority !== 'economical' && input.appliances.hood && input.appliances.hob) {
     dropped.push('קולט אדים — אין ארון עליון מעל הכיריים שאפשר לתלות אותו בו');
   }
 
@@ -745,7 +765,7 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
     /* אותה הערה על שתי פינות היא אותה הערה — פעם אחת מספיקה */
     dropped: [...new Set(dropped)],
     notes: [...new Set(notes)],
-    score: scoreOf(units),
+    score: scoreOf(units, input.appliances),
   };
 }
 
@@ -828,7 +848,7 @@ function islandFor(input: AutoInput, layout: LayoutKind): Placement | null {
  * הגרסה החסכונית תקבל ציון נמוך יותר, וזה נכון: היא ויתור מדעת,
  * ולא מטבח טוב יותר.
  */
-function scoreOf(units: Placement[]): Score {
+function scoreOf(units: Placement[], want: Appliances): Score {
   const floor = units.filter((u) => !u.free && u.level !== 'wall');
   const runMm = floor.reduce((n, u) => n + u.widthMm, 0);
 
@@ -862,11 +882,39 @@ function scoreOf(units: Placement[]): Score {
   }
 
   const boxes = units.length;
+  /*
+   * תחנה שנתבקשה ואינה בהצעה מורידה את הציון, ולא רק מופיעה
+   * ברשימת "לא נכנס".
+   *
+   * הצעה שבה לא נכנסו הכיריים ולא התנור קיבלה 99 ו"משולש עבודה
+   * 100%": המשולש חושב על הצלעות שקיימות, וכשאין כיריים יש רק
+   * צלע אחת — שהיא תמיד בטווח. מטבח בלי כיריים אינו מטבח מצוין,
+   * וציון גבוה עליו הוא הבטחה שאינה מתקיימת.
+   */
+  const STATIONS: [keyof Appliances, Role][] = [
+    ['hob', 'hob'],
+    ['oven', 'oven'],
+    ['fridge', 'fridge'],
+    ['dishwasher', 'dishwasher'],
+  ];
+  const asked = STATIONS.filter(([a]) => want[a]);
+  /* הכיור אינו נבחר — הוא תמיד חלק מהמטבח */
+  const missing =
+    asked.filter(([, role]) => !units.some((u) => u.role === role)).length +
+    (units.some((u) => u.role === 'sink') ? 0 : 1);
+  const complete = asked.length + 1 === 0 ? 1 : 1 - missing / (asked.length + 1);
+
   const total =
-    45 * triangle +
-    30 * Math.min(prepMm / PREP.widthMm, 1) +
-    25 * Math.min(runMm / 5000, 1);
-  return { triangle, prepMm, runMm, boxes, total: Math.round(total) };
+    (45 * triangle + 30 * Math.min(prepMm / PREP.widthMm, 1) + 25 * Math.min(runMm / 5000, 1)) *
+    complete;
+  return {
+    triangle: missing ? 0 : triangle,
+    prepMm,
+    runMm,
+    boxes,
+    missing,
+    total: Math.round(total),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -933,47 +981,3 @@ function aisleAdvice(widthMm: number): string | null {
 /** שם קריא לארגז בהצעה, לתצוגה ברשימה. */
 export const placementName = (p: Placement): string => NAME[p.catalogKey] ?? 'ארגז';
 
-/**
- * הצעה כארגזים לציור, בלי לגעת בבסיס הנתונים.
- *
- * הכרטיס מראה תמונה של המטבח לפני שבוחרים בו, ותמונה כזאת צריכה
- * ארגזים ולא הפניות. הם נבנים מאותה שורה בספרייה שממנה ייבנו
- * הארגזים האמיתיים — ולכן מה שרואים בכרטיס הוא מה שיעמוד על הקיר.
- *
- * המזהים כאן זמניים ואינם נשמרים: זו תמונה, לא מטבח.
- */
-export function previewUnits(proposal: Proposal): PlacedUnit[] {
-  const now = 0;
-  return proposal.units.flatMap((p, i) => {
-    const item = seedOf(p.catalogKey);
-    if (!item) return [];
-    return [
-      {
-        id: `preview-${i}`,
-        projectId: 'preview',
-        wallId: p.wallId,
-        catalogItemId: p.catalogKey,
-        name: NAME[p.catalogKey] ?? item.name,
-        glyph: item.glyph,
-        doors: item.doors,
-        drawers: item.drawers,
-        drawerCols: item.drawerCols,
-        shelves: item.shelves,
-        level: p.level,
-        xMm: p.xMm,
-        yMm: p.level === 'wall' ? item.y : 0,
-        widthMm: p.widthMm,
-        heightMm: item.h,
-        depthMm: item.d,
-        socleMm: item.socle,
-        counterMm: item.counter,
-        corner: item.corner,
-        blindMm: p.blindMm ?? item.blind,
-        free: p.free,
-        ...owned(),
-        createdAt: now,
-        updatedAt: now,
-      } satisfies PlacedUnit,
-    ];
-  });
-}
