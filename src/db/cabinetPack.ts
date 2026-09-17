@@ -1,6 +1,9 @@
 import { db } from './db';
 import { allMine, eraseIds, mine, owned, revive } from './rows';
 import { SEED_ROOMS } from '../catalog/rooms';
+
+/** מזהי החדרים המובנים — אלה שהשם שלהם הוא זהות ידועה. */
+const SEED_IDS = new Set(SEED_ROOMS.map((r) => r.id));
 import { workshopId } from './workshop';
 import type { Table } from 'dexie';
 import { normalizeTables } from './legacy';
@@ -468,24 +471,29 @@ export async function importCabinets(
      */
     const mapRooms = await localIds(db.rooms, rooms);
     /*
-     * חדר שכבר קיים כאן באותו שם הוא אותו חדר.
+     * חדר מובנה שהגיע במזהה ישן הוא אותו חדר מובנה.
      *
      * הספרייה של הבעלים נשמרה עם מזהי UUID ישנים, ולכן הייבוא
      * יצר "אמבטיה" שנייה: המובנית נשארה ריקה ועם פרופיל תכנון,
      * והמיובאת קיבלה שבעה ארגזים ובלי פרופיל. חמישה חדרים כך.
      *
-     * הזהות של החדר היא השם שהמשתמש רואה, ולכן חדר נכנס שנושא
-     * שם של חדר קיים מתמזג אליו וכל ההפניות מופנות לשם. מה
-     * שנשאר באמת חדש נכנס כחדר חדש — ואם הוא נושא שם של חדר
-     * מובנה שכבר אינו כאן, הוא לפחות מקבל את פרופיל התכנון שלו.
+     * האיחוד מוגבל לחדרים המובנים בלבד, ובכוונה. שם הוא זהות
+     * ידועה: "אמבטיה" של האפליקציה היא אותה אמבטיה בכל מכשיר,
+     * והמזהה הוא פרט פנימי שהשתנה בין גרסאות. אבל שני חדרים
+     * *מותאמים* שנקראים אותו דבר אינם בהכרח אותו חדר — "חדר
+     * עבודה" של נגר אחד אינו "חדר עבודה" של אחר — ואיחוד שלהם
+     * לפי שם בלבד היה מוחק חדר שהמשתמש בנה. הם נכנסים כחדר
+     * נפרד, ורק פרופיל התכנון מועתק מהשם.
      */
     const localRooms = await allMine(db.rooms);
     const key = (label: string) => label.trim().replace(/\s+/g, ' ');
-    const byLabel = new Map(localRooms.map((r) => [key(r.label), r]));
+    const builtinByLabel = new Map(
+      localRooms.filter((r) => r.isBuiltin && SEED_IDS.has(r.id)).map((r) => [key(r.label), r]),
+    );
     const merged = new Map<string, string>();
     for (const r of rooms) {
       if (!mapRooms.fresh.has(r.id)) continue;
-      const twin = byLabel.get(key(r.label));
+      const twin = builtinByLabel.get(key(r.label));
       if (twin && twin.id !== r.id) {
         merged.set(r.id, twin.id);
         out.roomsMerged += 1;

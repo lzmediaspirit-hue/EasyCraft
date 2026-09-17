@@ -127,6 +127,22 @@ ok('תבנית שלא נגעו בה מוצעת לעדכון', r.oldChanged === 1
 ok('ותבנית שנערכה כאן מוצגת כהתנגשות', r.oldEdited === 1, String(r.oldEdited));
 ok('ומה שנמחק בכוונה אינו חוזר', r.erasedKind === 'removed', String(r.erasedKind));
 
+/* ------------------------------------------------------------------ */
+/* A03: איחוד חדרים בייבוא — רק מובנים, ורק לפי זהות ידועה             */
+/* ------------------------------------------------------------------ */
+const rooms = await page.evaluate(async () => {
+  const v = '?v=' + Date.now();
+  const { SEED_ROOMS } = await import('/src/catalog/rooms.ts' + v);
+  const { roomPlanKey } = await import('/src/catalog/roomsRepo.ts' + v);
+  return {
+    seeded: SEED_ROOMS.length,
+    /* חדר מובנה מתוכנן לפי עצמו */
+    builtin: roomPlanKey('bathroom'),
+  };
+});
+ok('תשעה חדרים מובנים', rooms.seeded === 9, String(rooms.seeded));
+ok('וחדר מובנה מתוכנן לפי עצמו', rooms.builtin === 'bathroom', String(rooms.builtin));
+
 await browser.close();
 for (const e of errs) out.push('FAIL ' + e);
 console.log(out.join('\n'));
