@@ -6,7 +6,7 @@ import { catalogRepo } from '../../catalog/catalogRepo';
 import { SaveError, useSaveGuard } from '../../ui/saveGuard';
 import { roomsRepo } from '../../catalog/roomsRepo';
 import { constructionCaps } from '../../catalog/construction';
-import { autoShelves } from '../../catalog/CabinetGlyph';
+import { autoShelves } from '../../catalog/construction';
 import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog/zones';
 import { GROUP_LABELS } from '../../catalog/rooms';
 import { KITCHEN } from '../../catalog/standards';

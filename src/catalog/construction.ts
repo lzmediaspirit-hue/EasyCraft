@@ -18,3 +18,15 @@ export function constructionCaps(glyph: string): GlyphDef {
     ? def
     : { ...def, doors: true, drawers: true, shelves: true };
 }
+
+/**
+ * מספר מדפים סביר לגובה נתון, כשלא הוגדר מספר במפורש.
+ *
+ * זהו חשבון ולא ציור, והוא ישב במנוע האיורים: `zones` ייבא ממנו,
+ * והוא ייבא מ-`zones` בחזרה. מעגל ייבוא בין שני מודולים שנטענים
+ * זה מתוך זה הוא פצצת השהיה — מי שנטען ראשון ראה את השני חצי
+ * מאותחל. הכלל אינו שייך לאף אחד מהם, אלא לכללי הבנייה.
+ */
+export function autoShelves(h: number): number {
+  return Math.max(0, Math.round(h / 400) - 1);
+}

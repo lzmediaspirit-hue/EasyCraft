@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { unitsRepo } from '../projects/projectsRepo';
 import { history } from './history';
 import { constructionCaps } from '../../catalog/construction';
-import { autoShelves } from '../../catalog/CabinetGlyph';
+import { autoShelves } from '../../catalog/construction';
 import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog/zones';
 import { Sheet } from '../../ui/Sheet';
 import { NumField, PrimaryButton } from '../../ui/Field';

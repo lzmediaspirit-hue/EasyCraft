@@ -1,4 +1,5 @@
 import { blindSide, blindWidthMm, isContainer, unitFronts, zoneBands, zoneCells } from './zones';
+import { autoShelves } from './construction';
 import type { CornerKind, OpeningMech, Zone, ZoneContent } from '../db/types';
 
 /**
@@ -108,11 +109,6 @@ export function CabinetGlyph({
       })}
     </g>
   );
-}
-
-/** מספר מדפים סביר לגובה נתון, כשלא הוגדר מספר במפורש. */
-export function autoShelves(h: number): number {
-  return Math.max(0, Math.round(h / 400) - 1);
 }
 
 /* ------------------------------------------------------------------ */

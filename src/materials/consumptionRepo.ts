@@ -1,7 +1,5 @@
 import { db } from '../db/db';
 import { partChoice, unitParts } from '../costing/boards';
-import { settingsRepo } from './materialsRepo';
-import { projectsRepo, unitsRepo } from '../features/projects/projectsRepo';
 import { stageIndex, stageOf, tracksOf } from '../workflow/unitWork';
 import type { PartSettings } from '../costing/boards';
 import type { Consumption, PartRole, PlacedUnit, Project, WorkTrack } from '../db/types';
@@ -49,7 +47,7 @@ function partCut(u: PlacedUnit, role: PartRole): boolean {
  * השורה, אבל גם אינו מספיק לבדו: שורה שכולה כזו לא תופחת לעולם,
  * כי אף אחד לא סימן בה כלום.
  */
-function cutLines(
+export function cutLines(
   units: PlacedUnit[],
   settings: PartSettings,
   project?: Project,
@@ -85,83 +83,6 @@ export const consumptionRepo = {
 };
 
 /**
- * מיישר את המלאי למה שסומן בפרויקט.
- *
- * נקראת אחרי כל שינוי בסימוני העבודה. היא מחשבת מחדש מה נחתך, ומזיזה
- * את המלאי רק בהפרש: שורה שכבר הופחתה לא תופחת שוב, ושורה שהסימון
- * שלה בוטל מקבלת את הפלטות בחזרה.
- */
-export function syncConsumption(projectId: string): Promise<void> {
-  /*
-   * שתי הקשות מהירות על שלבי עבודה הריצו שתי סנכרונים במקביל, שניהם
-   * קראו את אותו מצב מלאי — והפלטות ירדו פעמיים. לכל פרויקט תור אחד.
-   */
-  const prev = pending.get(projectId) ?? Promise.resolve();
-  const next = prev.catch(() => {}).then(() => runSync(projectId));
-  pending.set(projectId, next);
-  next.finally(() => {
-    if (pending.get(projectId) === next) pending.delete(projectId);
-  });
-  return next;
-}
-
-const pending = new Map<string, Promise<void>>();
-
-async function runSync(projectId: string): Promise<void> {
-  const [costing, units, settings, project] = await Promise.all([
-    projectsRepo.costing(projectId),
-    unitsRepo.listForProject(projectId),
-    settingsRepo.get(),
-    projectsRepo.get(projectId),
-  ]);
-  const cut = cutLines(units, settings, project);
-  const now = Date.now();
-
-  /*
-   * הקריאה של הצריכה והכתיבה למלאי חייבות לשבת באותה עסקה: שני
-   * פרויקטים שמסונכרנים במקביל — בשתי לשוניות, למשל — קראו את אותה
-   * שורת מלאי ודרסו זה את זה, ופלטה אחת נעלמה מההפחתה. התור שלפני
-   * כן מסדר רק פרויקט מול עצמו, והעסקה מסדרת פרויקט מול פרויקט.
-   */
-  await db.transaction('rw', db.consumption, db.stock, db.tombstones, async () => {
-    const existing = await consumptionRepo.listForProject(projectId);
-
-    for (const line of costing.lines) {
-      const was = existing.find((c) => c.lineKey === line.key);
-      const wants = cut.has(line.key) ? line.sheets : 0;
-      const had = was?.sheets ?? 0;
-      if (wants === had) continue;
-
-      await moveStock(line.finish?.id, line.material.id, had - wants);
-      if (wants === 0) {
-        if (was) await eraseIds(db.consumption, [was.id]);
-      } else if (was) {
-        await patchRow(db.consumption, was.id, { sheets: wants });
-      } else {
-        await db.consumption.add({
-          id: crypto.randomUUID(),
-          projectId,
-          lineKey: line.key,
-          finishId: line.finish?.id,
-          materialId: line.material.id,
-          sheets: wants,
-          ...owned(),
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    }
-
-    /* שורה שנעלמה מהתמחור — הגוון הוחלף, הארגז נמחק — מחזירה את שלה */
-    for (const c of existing) {
-      if (costing.lines.some((l) => l.key === c.lineKey)) continue;
-      await moveStock(c.finishId, c.materialId, c.sheets);
-      await eraseIds(db.consumption, [c.id]);
-    }
-  });
-}
-
-/**
  * מחזיר למלאי את מה שהפרויקט לקח, ומוחק את רישומי הצריכה שלו.
  *
  * נקראת כשפרויקט נמחק. בלעדיה הפלטות שנחתכו בפרויקט שנמחק היו
@@ -182,7 +103,7 @@ export async function releaseConsumption(projectId: string): Promise<void> {
  * קריאה וכתיבה באותה עסקה, כדי ששתי הפחתות במקביל לא יקראו את אותו
  * מצב ויכתבו זו על זו. קריאה מתוך עסקה פתוחה מצטרפת אליה.
  */
-async function moveStock(
+export async function moveStock(
   finishId: string | undefined,
   materialId: string,
   delta: number,

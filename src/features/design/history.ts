@@ -1,7 +1,7 @@
 import { subscribers } from '../../ui/store';
 import { useSyncExternalStore } from 'react';
 import { unitsRepo } from '../projects/projectsRepo';
-import { syncConsumption } from '../../materials/consumptionRepo';
+import { syncConsumption } from '../../materials/consumptionSync';
 import type { PlacedUnit } from '../../db/types';
 
 /**

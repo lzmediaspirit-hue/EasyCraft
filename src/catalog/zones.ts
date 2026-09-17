@@ -1,6 +1,5 @@
-import { autoShelves } from './CabinetGlyph';
 import { clamp } from '../ui/units';
-import { constructionCaps } from './construction';
+import { autoShelves, constructionCaps } from './construction';
 import type { CornerKind, PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../db/types';
 
 /** מה שצריך לדעת על ארגז כדי לחשב את הפינה המתה שלו. */

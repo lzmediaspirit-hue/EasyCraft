@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { CabinetGlyph, autoShelves, shelfYs } from '../../catalog/CabinetGlyph';
+import { CabinetGlyph, shelfYs } from '../../catalog/CabinetGlyph';
+import { autoShelves } from '../../catalog/construction';
 import { glyphDef } from '../../catalog/glyphList';
 import { isDark, shade } from '../../ui/color';
 import { unitZones } from '../../catalog/zones';

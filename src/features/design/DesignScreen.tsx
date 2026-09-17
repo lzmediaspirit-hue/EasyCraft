@@ -54,7 +54,7 @@ import type { WallWarning } from './analysis';
 import { WarningsSheet, warnLevelTone } from './WarningsSheet';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
-import { syncConsumption } from '../../materials/consumptionRepo';
+import { syncConsumption } from '../../materials/consumptionSync';
 import { Sheet } from '../../ui/Sheet';
 import {
   CalcIcon,

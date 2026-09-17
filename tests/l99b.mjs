@@ -17,7 +17,7 @@ const log = await page.evaluate(async () => {
   const { db } = await import('/src/db/db.ts' + v);
   const { unitsRepo, projectsRepo } = await import('/src/features/projects/projectsRepo.ts' + v);
   const { settingsRepo, stockRepo } = await import('/src/materials/materialsRepo.ts' + v);
-  const { syncConsumption } = await import('/src/materials/consumptionRepo.ts' + v);
+  const { syncConsumption } = await import('/src/materials/consumptionSync.ts' + v);
   const { history } = await import('/src/features/design/history.ts' + v);
   const { catalogRepo } = await import('/src/catalog/catalogRepo.ts' + v);
   const { importCabinets, readPack } = await import('/src/db/cabinetPack.ts' + v);
