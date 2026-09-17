@@ -5,7 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { SaveError, useSaveGuard } from '../../ui/saveGuard';
 import { roomsRepo } from '../../catalog/roomsRepo';
-import { glyphDef } from '../../catalog/glyphList';
+import { constructionCaps } from '../../catalog/construction';
 import { autoShelves } from '../../catalog/CabinetGlyph';
 import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog/zones';
 import { GROUP_LABELS } from '../../catalog/rooms';
@@ -118,7 +118,7 @@ export function CustomItemSheet({
 
   function save() {
     return guard.run(async () => {
-    const caps = glyphDef(spec.glyph);
+    const caps = constructionCaps(spec.glyph);
     /* שינוי המספר מגיע גם אל האזור עצמו, שאחרת גובר עליו */
     const zones =
       item && caps.drawers && !composed

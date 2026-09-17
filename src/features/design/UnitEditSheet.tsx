@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { unitsRepo } from '../projects/projectsRepo';
 import { history } from './history';
-import { glyphDef } from '../../catalog/glyphList';
+import { constructionCaps } from '../../catalog/construction';
 import { autoShelves } from '../../catalog/CabinetGlyph';
 import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog/zones';
 import { Sheet } from '../../ui/Sheet';
@@ -108,7 +108,7 @@ export function UnitEditSheet({
 
   async function save() {
     if (outOfWall || problem) return;
-    const caps = glyphDef(spec.glyph);
+    const caps = constructionCaps(spec.glyph);
     /*
      * שינוי מספר השורות חייב להגיע גם אל האזור עצמו.
      *
