@@ -124,6 +124,32 @@ export function UnitEditor({
   const [axis, setAxis] = useState<Axis>('w');
   /** שדה מידה מדויקת, נפתח מהעיפרון שבקצה הקרוסלה */
   const [typing, setTyping] = useState(false);
+  /*
+   * הרגליים שהמתג הוריד, כדי שיחזיר בדיוק אותן.
+   *
+   * ה-ref הוא לכל ארגז בנפרד — הלוח ממופתח לפי מזהה הארגז — ולכן
+   * הוא נשכח ברגע שעוברים לארגז אחר, וזה בדיוק הטווח הנכון.
+   */
+  const removedSocle = useRef<number | null>(null);
+
+  /**
+   * הצמדה לרצפה, בלי לשנות את גוף הארון.
+   *
+   * תחתית הארגז היא `yMm`, והרגליים כלולות ב-`heightMm` — ולכן
+   * הורדת רגליים בלי לגעת בגובה אינה מורידה רגליים אלא מאריכה את
+   * הגוף באותה מידה, והצמדה חוזרת מקצרת אותו בגובה שהעסק עובד בו
+   * ולא בגובה שהיה. המתג אמור להיות הפיך, וכאן הוא באמת כזה.
+   */
+  function floorToggle(): Partial<PlacedUnit> {
+    const socle = unit.socleMm ?? 0;
+    if (locked) {
+      removedSocle.current = socle;
+      return { floorLocked: false, socleMm: 0, heightMm: unit.heightMm - socle };
+    }
+    const back = removedSocle.current ?? defaultSocleMm;
+    return { floorLocked: true, yMm: 0, socleMm: back, heightMm: unit.heightMm + back };
+  }
+
   const activeChip = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
   const [addingFinish, setAddingFinish] = useState(false);
@@ -982,17 +1008,7 @@ export function UnitEditor({
 
       <div className="mt-3 flex items-stretch gap-2">
         <button
-          onClick={() =>
-            /* תחתית הארגז היא yMm, והרגליים כלולות בגובה — ולכן ארגז
-               שנצמד לרצפה יושב על 0 ולא על גובה הרגליים.
-               ארגז שמשוחרר מהרצפה תלוי, ורגליים לארגז תלוי אין; ארגז
-               שחוזר לרצפה מקבל אותן בחזרה בגובה שהעסק עובד בו. המתג
-               הוא הפיך, ולכן הוא מחזיר בדיוק את מה שלקח. */
-            onChange({
-              floorLocked: !locked,
-              ...(locked ? { socleMm: 0 } : { yMm: 0, socleMm: defaultSocleMm }),
-            })
-          }
+          onClick={() => onChange(floorToggle())}
           aria-pressed={locked}
           className={`flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-start text-sm font-medium transition-colors ${
             locked ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'

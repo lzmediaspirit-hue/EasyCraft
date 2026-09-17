@@ -3,10 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { roomsRepo } from '../../catalog/roomsRepo';
-import { GlyphPreview } from '../../catalog/GlyphPreview';
+import { CabinetThumbnail, cabinetSize } from '../../catalog/CabinetThumbnail';
 import { GROUP_LABELS } from '../../catalog/rooms';
 import { cabinetNameKey } from '../../catalog/names';
-import { cm } from '../../ui/units';
 import type { CatalogItem, CatalogGroup } from '../../db/types';
 
 /**
@@ -86,21 +85,9 @@ export function DesktopLibrary({
             aria-label={`הוספת ${item.name}`}
             className="flex flex-col items-center gap-1 rounded-xl border border-stone-200 bg-white p-2 text-center transition-colors hover:border-oak-400 hover:bg-oak-50"
           >
-            <GlyphPreview
-              glyph={item.glyph}
-              widthMm={item.defaultWidthMm}
-              heightMm={item.defaultHeightMm}
-              doors={item.doors}
-              drawers={item.drawers}
-              drawerCols={item.drawerCols}
-              shelves={item.shelves}
-              zones={item.zones}
-              corner={item.corner}
-              blindMm={item.blindMm}
-              className="h-14 w-full text-stone-500"
-            />
+            <CabinetThumbnail item={item} className="h-14 w-full text-stone-500" />
             <span className="text-[11px] leading-tight font-medium text-stone-800">{item.name}</span>
-            <span className="num text-[10px] text-stone-400">{cm(item.defaultWidthMm)}</span>
+            <span className="num text-[10px] text-stone-400">{cabinetSize(item)}</span>
           </button>
         ))}
       </div>

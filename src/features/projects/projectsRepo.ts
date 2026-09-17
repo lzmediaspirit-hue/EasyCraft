@@ -329,7 +329,21 @@ function islandStepMm(u: { widthMm: number }): number {
 }
 
 /** השדות שמשנים את מה שאפשר לבנות — ורק הם מפעילים את השער */
-const BUILD_FIELDS = ['glyph', 'heightMm', 'widthMm', 'depthMm', 'socleMm'] as const;
+/*
+ * השדות שמפעילים את שער הבנייה.
+ *
+ * הרשימה החזיקה את מידות הגוף בלבד, ולכן משטח שלילי וגובה מהרצפה
+ * שאינו מספר נכתבו ישר למסד: הם לא היו ברשימה, ולכן השער לא רץ.
+ */
+const BUILD_FIELDS = [
+  'glyph',
+  'heightMm',
+  'widthMm',
+  'depthMm',
+  'socleMm',
+  'counterMm',
+  'yMm',
+] as const;
 
 /** ההגדרות והפרויקט שמהם נגזר עובי הלוח בפועל */
 async function buildContext(projectId: string) {

@@ -72,6 +72,9 @@ export function checkItem(
       heightMm: item.defaultHeightMm,
       depthMm: item.defaultDepthMm,
       socleMm: item.socleMm,
+      /* גם אלה מידות, וגם הן היו יכולות להגיע שליליות או כ-NaN */
+      counterMm: item.counterMm,
+      yMm: item.defaultYMm,
       carcassMaterialId: item.carcassMaterialId,
     },
     ctx,

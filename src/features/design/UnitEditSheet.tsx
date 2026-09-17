@@ -7,6 +7,7 @@ import { drawerRows, drawersAreSimple, zonesWithDrawerRows } from '../../catalog
 import { Sheet } from '../../ui/Sheet';
 import { NumField, PrimaryButton } from '../../ui/Field';
 import { BoxForm, type BoxSpec } from '../../ui/BoxForm';
+import { SaveError, useSaveGuard } from '../../ui/saveGuard';
 import { cm } from '../../ui/units';
 import { checkUnit, convertZones } from '../../catalog/saveGate';
 import { alongWallMm } from '../../db/types';
@@ -106,8 +107,11 @@ export function UnitEditSheet({
   /* ארון שפנימו מתואר באזורים מורכבים אינו מקבל מספר מגירות יחיד */
   const composed = !drawersAreSimple(unit);
 
-  async function save() {
+  const guard = useSaveGuard();
+
+  function save() {
     if (outOfWall || problem) return;
+    return guard.run(async () => {
     const caps = constructionCaps(spec.glyph);
     /*
      * שינוי מספר השורות חייב להגיע גם אל האזור עצמו.
@@ -156,6 +160,7 @@ export function UnitEditSheet({
         : { xMm: Math.max(Math.round(xMm), 0) }),
     });
     onClose();
+    });
   }
 
   return (
@@ -164,9 +169,12 @@ export function UnitEditSheet({
       onClose={onClose}
       tall
       footer={
-        <PrimaryButton disabled={!canSave || outOfWall} onClick={save}>
-          עדכון הארגז
-        </PrimaryButton>
+        <>
+          <SaveError text={guard.error} />
+          <PrimaryButton disabled={!canSave || outOfWall || guard.busy} onClick={save}>
+            עדכון הארגז
+          </PrimaryButton>
+        </>
       }
     >
       <BoxForm

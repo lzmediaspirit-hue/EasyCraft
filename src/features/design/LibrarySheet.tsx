@@ -3,13 +3,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { GLYPH_GROUPS_FALLBACK, GROUP_LABELS } from '../../catalog/rooms';
 import { roomDef, roomsRepo } from '../../catalog/roomsRepo';
-import { GlyphPreview } from '../../catalog/GlyphPreview';
+import { CabinetThumbnail, cabinetSize } from '../../catalog/CabinetThumbnail';
 import { glyphDef } from '../../catalog/glyphList';
 import { CustomItemSheet } from './CustomItemSheet';
 import { RoomSheet } from './RoomSheet';
 import { Sheet } from '../../ui/Sheet';
 import { ConfirmSheet } from '../../ui/ConfirmSheet';
-import { cm } from '../../ui/units';
 import { CloseIcon, PencilIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon, groupIcon, roomIcon } from '../../ui/icons';
 
 import {
@@ -220,25 +219,13 @@ export function LibrarySheet({
                 className="flex h-full w-full flex-col items-center gap-1.5 rounded-2xl border border-stone-200 bg-white p-2.5 text-center transition-colors hover:border-oak-400 hover:bg-oak-50 active:bg-oak-100"
               >
                 <span className="text-stone-500">
-                  <GlyphPreview
-                    glyph={item.glyph}
-                    widthMm={item.defaultWidthMm}
-                    heightMm={item.defaultHeightMm}
-                    doors={item.doors}
-                    drawers={item.drawers}
-                    drawerCols={item.drawerCols}
-                    shelves={item.shelves}
-                    zones={item.zones}
-                    corner={item.corner}
-                    blindMm={item.blindMm}
-                    className="h-14 w-full"
-                  />
+                  <CabinetThumbnail item={item} className="h-14 w-full" />
                 </span>
                 <span className="text-[11px] leading-tight font-medium text-stone-800">
                   {item.name}
                 </span>
                 <span className="num text-[10px] text-stone-400">
-                  {cm(item.defaultWidthMm)}
+                  {cabinetSize(item)}
                   {/* ללוח בודד העובי הוא המידה עצמה, ולכן הוא נגזר ולא נשמר */}
                   {thicknessOf(item) && <> · {thicknessOf(item)} מ״מ</>}
                 </span>

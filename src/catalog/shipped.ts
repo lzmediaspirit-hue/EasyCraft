@@ -24,6 +24,14 @@ export type ShippedFinish = Omit<Finish, 'createdAt' | 'updatedAt' | 'workshopId
  * הוא זה שנזרע — ומה שכתוב ב-`builtins.ts` כבר אינו מוצג.
  *
  * נכתב בכלי, לא ביד.
+ *
+ * שבעים ושבעה, ולא שבעים ושישה: הגיליון הביא 79 שורות, שלוש מהן
+ * נישות מכשיר שהוסרו במפורש (EC-039, EC-040, EC-067), ואל 76
+ * שנשארו נוסף EC-081 — "ארון תחתון שתי דלתות" למטבח — לבקשת
+ * הנגרייה. הוא אח של EC-055 באותן מידות ובאותה משפחה, ולא ארגז
+ * שהומצא כאן. `l111` סופרת מהקוד ולא ממספר כתוב, ו-`l146` מאמתת
+ * את ההתאמה מול הגיליון: 76 מקוריים, שלוש הסרות, ותוספת אחת
+ * מאושרת.
  */
 export const SHIPPED_LIBRARY: ShippedItem[] = [
   {"id":"f3072627-f242-4d22-9056-ff08bbdd5b40","code":"EC-002","name":"ארון כיור דלתות","rooms":["bathroom"],"group":"base","level":"floor","glyph":"sink","doors":2,"drawers":0,"drawerCols":1,"shelves":0,"zones":[{"id":"main","heightMm":550,"kind":"empty"}],"drawerStyle":"outer","defaultWidthMm":800,"widthOptionsMm":[800],"defaultHeightMm":550,"defaultDepthMm":480,"defaultYMm":0,"socleMm":0,"counterMm":20,"backKind":"thin","drawerBox":"metal","note":"תבנית ארגז. מרווחי מכשיר, צנרת ופרזול ייעודי דורשים מידות יצרן לפני ייצור.","common":true,"isBuiltin":true,"sortOrder":0},

@@ -54,9 +54,31 @@ export const MAX_BOARD_MM = 100;
  * הנגר לנחש, ומי שמכוון גובה רוצה לדעת לאן.
  */
 export function unitProblem(
-  u: Pick<PlacedUnit, 'glyph' | 'heightMm' | 'widthMm' | 'depthMm' | 'socleMm'>,
+  u: Pick<PlacedUnit, 'glyph' | 'heightMm' | 'widthMm' | 'depthMm' | 'socleMm'> &
+    Partial<Pick<PlacedUnit, 'counterMm' | 'yMm'>>,
   t: number,
 ): string | null {
+  /*
+   * קודם כל: מספר.
+   *
+   * ההשוואות שלמטה הן `<` ו-`>`, ומול NaN שתיהן מחזירות false —
+   * ולכן רוחב NaN עבר את כל הבדיקות והגיע למסד, ומשם לרשימת
+   * חיתוך עם מידה שאינה מידה. גם מידה שלילית נכנסה כך: היא נבדקה
+   * רק מול מינימום של הגוף, ומשטח ומרחק מהרצפה לא נבדקו כלל.
+   */
+  const SIZES: [string, number | undefined][] = [
+    ['רוחב', u.widthMm],
+    ['גובה', u.heightMm],
+    ['עומק', u.depthMm],
+    ['גובה רגליים', u.socleMm],
+    ['עובי המשטח', u.counterMm],
+    ['גובה מהרצפה', u.yMm],
+  ];
+  const bad = SIZES.find(([, mm]) => mm !== undefined && !Number.isFinite(mm));
+  if (bad) return `${bad[0]} אינו מספר.`;
+  const negative = SIZES.find(([, mm]) => mm !== undefined && mm < 0);
+  if (negative) return `${negative[0]} אינו יכול להיות שלילי.`;
+
   /*
    * לוח בודד נבדק על מה שהוא כן — העובי שלו.
    *
