@@ -90,10 +90,6 @@
  * קיימת ב-DOM ואינה קיימת בפריסה, ולכן הילדים שלה מסודרים בדיוק
  * כמו קודם עד שהמסך מתרחב.
  */
-.desktop-library {
-  display: none;
-}
-
 .planner-properties {
   display: contents;
 }

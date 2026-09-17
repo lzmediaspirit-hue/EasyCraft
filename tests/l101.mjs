@@ -45,10 +45,19 @@ await sheet.getByLabel('שם הארגז').fill('QA ספרייה אישית');
 await sheet.getByRole('button', { name: 'דלת ומגירה' }).click(); await page.waitForTimeout(500);
 await sheet.getByRole('button', { name: /פנימית מאחורי דלתות/ }).click(); await page.waitForTimeout(400);
 const num = (label) => sheet.getByLabel(label, { exact: true }).or(sheet.locator(`input`).nth(0));
-await sheet.getByRole('textbox', { name: 'סוקל' }).fill('12').catch(() => {});
-await sheet.getByRole('spinbutton', { name: 'סוקל' }).fill('12').catch(() => {});
-await sheet.getByRole('spinbutton', { name: 'משטח עבודה' }).fill('4').catch(() => {});
-await page.waitForTimeout(300);
+/*
+ * המשטח הוא יש/אין, והעובי נשאל רק כשיש. הרגליים אחרונות: ברגע
+ * שהן חיוביות שדה "גובה מהרצפה" יורד מהטופס, והשדות שאחריו נבנים
+ * מחדש.
+ */
+await sheet.getByRole('button', { name: 'יש', exact: true }).click();
+await page.waitForTimeout(400);
+await sheet.getByLabel('עובי המשטח').fill('40');
+await sheet.getByLabel('עובי המשטח').blur();
+await page.waitForTimeout(400);
+await sheet.getByLabel('גובה רגליים').fill('12');
+await sheet.getByLabel('גובה רגליים').blur();
+await page.waitForTimeout(400);
 await sheet.getByRole('button', { name: /שמירה|הוספה/ }).last().click();
 await page.waitForTimeout(900);
 
@@ -73,8 +82,9 @@ const innerPressed = await reopened
 ok('בפתיחה חוזרת המגירה עדיין פנימית', innerPressed === 'true', String(innerPressed));
 
 /* C2 — איפוס לאפס נשמר */
-await reopened.getByRole('spinbutton', { name: 'סוקל' }).fill('0');
-await reopened.getByRole('spinbutton', { name: 'משטח עבודה' }).fill('0');
+await reopened.getByLabel('גובה רגליים').fill('0');
+await reopened.getByLabel('גובה רגליים').blur();
+await reopened.getByRole('button', { name: 'אין', exact: true }).click();
 await page.waitForTimeout(300);
 await reopened.getByRole('button', { name: /שמירה/ }).last().click();
 await page.waitForTimeout(900);

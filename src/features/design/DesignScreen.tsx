@@ -33,6 +33,7 @@ import { useDesignView } from './designView';
 import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatGrid';
 import { DesignToolbar } from './DesignToolbar';
 import { DesktopLibrary } from './DesktopLibrary';
+import { useMedia } from '../../ui/useMedia';
 import type { SheetName } from './sheets';
 import { readPref, writePref } from '../../ui/prefs';
 import { clamp, cm } from '../../ui/units';
@@ -117,6 +118,8 @@ export function DesignScreen({
    * שייכת לרגע ההסתכלות ולא לפרויקט — ומכאן עוברת הבקשה בלבד.
    */
   const [fitAt, setFitAt] = useState<number | undefined>(undefined);
+  /* ספריית המחשב קיימת רק כשיש לה מקום — ראו התנאי בפריסה למטה */
+  const wide = useMedia('(min-width: 1200px)');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** מה שהמקלדת הזיזה כרגע — נאמר ונעלם, כמו מחוון הגרירה */
   const [keyAxis, setKeyAxis] = useState<string | null>(null);
@@ -631,10 +634,11 @@ export function DesignScreen({
         צריך מקום, וקיר שכבר בנוי אפשר להסתיר לרגע.
       */}
       {/*
-        הספרייה כפאנל קבוע. ב-CSS היא מוסתרת מתחת ל-1200 פיקסל,
-        ולכן בנייד היא אינה על המסך ואינה בסדר המקלדת.
+        הספרייה כפאנל קבוע. היא אינה מוסתרת ב-CSS אלא פשוט אינה
+        קיימת מתחת ל-1200 פיקסל: פאנל מוסתר עדיין נבנה, עדיין שואל
+        את המסד, ועדיין נמצא ב-DOM.
       */}
-      {editable && (
+      {editable && wide && (
         <DesktopLibrary roomKind={project.roomKind} onAdd={addItem} />
       )}
 

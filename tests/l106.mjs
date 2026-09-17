@@ -122,15 +122,28 @@ const dedupe = await page.evaluate(async (code) => {
   const ok2 = (name, cond, extra = '') => res.push(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ' | ' + extra : ''}`);
   const before = (await catalogRepo.all()).length;
 
-  /* שמירה חדשה תחת מק״ט קיים — מעדכנת ולא מוסיפה */
-  const again = await catalogRepo.saveCustom({
-    rooms: ['bedroom'], group: 'upper', name: 'QA אותו מק״ט', glyph: 'doors',
-    level: 'wall', defaultWidthMm: 800, widthOptionsMm: [800],
-    defaultHeightMm: 700, defaultDepthMm: 320, defaultYMm: 1500, code,
-  });
+  /*
+   * שמירה חדשה תחת מק״ט תפוס נעצרת.
+   *
+   * קודם היא עדכנה בשקט את הארגז שנושא אותו: מי ששמר ארגז חדש
+   * והקליד מק״ט קיים מחק בכך ארגז אחר בלי שנאמר לו דבר.
+   */
+  const owner = (await catalogRepo.all()).find((i) => i.code === code);
+  let why = null;
+  try {
+    await catalogRepo.saveCustom({
+      rooms: ['bedroom'], group: 'upper', name: 'QA אותו מק״ט', glyph: 'doors',
+      level: 'wall', defaultWidthMm: 800, widthOptionsMm: [800],
+      defaultHeightMm: 700, defaultDepthMm: 320, defaultYMm: 1500, code,
+    });
+  } catch (e) {
+    why = String(e.message ?? e);
+  }
   const after = await catalogRepo.all();
-  ok2('שמירה תחת מק״ט קיים אינה מוסיפה ארגז', after.length === before, `${before} → ${after.length}`);
-  ok2('והיא מעדכנת את הארגז שנושא אותו', after.find((i) => i.id === again)?.name === 'QA אותו מק״ט');
+  ok2('שמירה תחת מק״ט תפוס נדחית', !!why, String(why));
+  ok2('ואינה מוסיפה ארגז', after.length === before, `${before} → ${after.length}`);
+  ok2('והארגז שנושא אותו לא נגע',
+    after.find((i) => i.id === owner?.id)?.name === owner?.name, owner?.name);
 
   /* ייבוא חוזר של אותה ספרייה במזהים אחרים — גם הוא אינו משכפל */
   const pack = await exportCabinets();

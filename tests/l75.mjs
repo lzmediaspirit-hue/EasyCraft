@@ -5,7 +5,11 @@ import { BOX, addBox, setup } from './mk.mjs';
 let fail = 0;
 const ok = (n, c, g = '') => { if (c) console.log('PASS ', n); else { fail++; console.log('FAIL ', n, g); } };
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+/*
+ * מסך טלפון: ידית הלוח, המחוונים והציור הם הפריסה של הנייד. במסך
+ * רחב הלוח הוא עמודה לצד הקיר, ואין מה לגרור בין השניים.
+ */
+const page = await browser.newPage({ viewport: { width: 420, height: 900 } });
 page.on('pageerror', (e) => { fail++; console.log('PAGEERROR', e.message); });
 const btn = (re) => page.getByRole('button', { name: re }).first();
 const dlg = () => page.getByRole('dialog').last();

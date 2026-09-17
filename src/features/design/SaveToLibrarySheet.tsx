@@ -5,6 +5,7 @@ import { roomsRepo } from '../../catalog/roomsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { SaveError, useSaveGuard } from '../../ui/saveGuard';
+import { freeCabinetName } from '../../catalog/names';
 import { Pill } from '../../ui/Pill';
 import { cm } from '../../ui/units';
 import { reusableSpec } from '../../db/types';
@@ -43,7 +44,15 @@ export function SaveToLibrarySheet({
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
   const canUpdate = source !== undefined && !source.isBuiltin;
   const [mode, setMode] = useState<'update' | 'new'>('new');
-  const [name, setName] = useState(unit.name);
+  /*
+   * השם המוצע.
+   *
+   * הארגז שעל הקיר נושא את שם הפריט שממנו נולד, ולכן "שמירה כארגז
+   * חדש" הציעה שם שכבר תפוס — ונדחתה בכל פעם. כאן מוצע שם פנוי,
+   * ומרגע שהוקלד משהו הוא מה שקובע.
+   */
+  const inLibrary = useLiveQuery(() => catalogRepo.all(), [], []);
+  const [typed, setTyped] = useState<string | null>(null);
   const guard = useSaveGuard();
 
   /*
@@ -58,6 +67,8 @@ export function SaveToLibrarySheet({
   const chosen = picked ?? source?.rooms ?? (projectRoom ? [projectRoom] : []);
 
   const target = canUpdate && mode === 'update' ? source : undefined;
+  /* עדכון שומר את השם שיש; ארגז חדש מקבל שם פנוי */
+  const name = typed ?? (target ? unit.name : freeCabinetName(unit.name, inLibrary.map((i) => i.name)));
 
   function save() {
     return guard.run(async () => {
@@ -149,7 +160,7 @@ export function SaveToLibrarySheet({
           <input
             autoFocus
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setTyped(e.target.value)}
             onFocus={selectOnFocus}
             className={inputClass}
           />

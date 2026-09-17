@@ -19,3 +19,21 @@ export function cleanCabinetName(name: string): string {
 export function cabinetNameKey(name: string): string {
   return cleanCabinetName(name).toLocaleLowerCase('he');
 }
+
+/**
+ * שם פנוי שנגזר משם תפוס.
+ *
+ * "שמירה כארגז חדש" הציעה את שם הארגז שעל הקיר, והוא בדיוק השם
+ * של הפריט שממנו הוא נולד — כלומר שם תפוס, תמיד. שער השמירה היה
+ * צודק בדחייה, והמסך היה זה ששלח אותו לשם. מספר בסוף, עד שנמצא
+ * שם שאינו קיים.
+ */
+export function freeCabinetName(base: string, taken: string[]): string {
+  const used = new Set(taken.map(cabinetNameKey));
+  const clean = cleanCabinetName(base);
+  if (!used.has(cabinetNameKey(clean))) return clean;
+  for (let n = 2; ; n++) {
+    const next = `${clean} ${n}`;
+    if (!used.has(cabinetNameKey(next))) return next;
+  }
+}
