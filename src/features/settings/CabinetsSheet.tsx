@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Sheet } from '../../ui/Sheet';
 import { saveFile } from '../../ui/saveFile';
 import { Pill } from '../../ui/Pill';
-import { applyLibraryUpdate, catalogRepo, libraryUpdate } from '../../catalog/catalogRepo';
+import {
+  applyLibraryUpdate,
+  catalogRepo,
+  libraryUpdate,
+  removeSuperseded,
+  supersededBuiltins,
+} from '../../catalog/catalogRepo';
 import {
   hasLibraryUpdate,
   type LibraryChange,
@@ -41,6 +47,13 @@ export function CabinetsSheet({ onClose }: { onClose: () => void }) {
   /* עדכון הספרייה: מה שמוצע, ומה שסומן לקבלה */
   const [update, setUpdate] = useState<LibraryUpdate | null>(null);
   const [take, setTake] = useState<Set<string>>(new Set());
+  /* תבניות שהגיעו עם גרסה קודמת ואינן נשלחות עוד — וכמה יש */
+  const [stale, setStale] = useState(0);
+  /* ההסרה נשאלת פעם אחת לפני שהיא קורית */
+  const [asking, setAsking] = useState(false);
+  useEffect(() => {
+    void supersededBuiltins().then((rows) => setStale(rows.length));
+  }, []);
   useEffect(() => {
     void libraryUpdate().then((u) => {
       setUpdate(u);
@@ -384,6 +397,68 @@ export function CabinetsSheet({ onClose }: { onClose: () => void }) {
             >
               החלת מה שסומן
             </button>
+          </section>
+        )}
+
+        {/*
+          תבניות משחרור קודם של האפליקציה.
+
+          כשספריית הנגרייה נכנסה במקום ספריית ההדגמה היא לא החליפה
+          את מה שכבר הותקן — מזהים אחרים, מק״טים אחרים — ולכן מי
+          שהתקין לפני כן מחזיק את שתיהן זו לצד זו באותם חדרים.
+
+          ההסרה כאן ולא בהפעלה: זו מחיקה, וההחלטה עליה היא של
+          הנגרייה. פרויקטים אינם נפגעים — ארגז שהונח שומר את
+          המידות שלו בעצמו.
+        */}
+        {stale > 0 && (
+          <section className="rounded-2xl border border-oak-200 bg-oak-50/60 p-3">
+            <h3 className="mb-1 text-sm font-semibold text-stone-700">
+              תבניות משחרור קודם
+            </h3>
+            <p className="mb-2 text-[11px] leading-snug text-stone-500">
+              <span className="num">{stale}</span> תבניות הגיעו עם גרסה קודמת של
+              האפליקציה ואינן חלק מהספרייה הנוכחית. ארגזים שכבר הונחו בפרויקטים
+              אינם נמחקים.
+            </p>
+            {asking ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-stone-600">
+                  להסיר <span className="num">{stale}</span> תבניות מהספרייה?
+                </span>
+                <button
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const n = await removeSuperseded();
+                      setProblem(null);
+                      setNote(`${n} תבניות משחרור קודם הוסרו.`);
+                      setStale((await supersededBuiltins()).length);
+                      setAsking(false);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  className="rounded-xl bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-500 disabled:opacity-50"
+                >
+                  הסרה
+                </button>
+                <button
+                  onClick={() => setAsking(false)}
+                  className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm text-stone-600"
+                >
+                  ביטול
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAsking(true)}
+                className="rounded-xl border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 transition-colors hover:bg-stone-100"
+              >
+                הסרת התבניות הישנות
+              </button>
+            )}
           </section>
         )}
 

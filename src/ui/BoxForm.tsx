@@ -2,11 +2,13 @@ import { GLYPH_FAMILIES, glyphsOf } from '../catalog/glyphList';
 import { commonGlyphs, isCommonGlyph } from '../catalog/glyphPicks';
 import { constructionCaps } from '../catalog/construction';
 import { useState, type ReactNode } from 'react';
-import type { RoomKind } from '../db/types';
+import type { RoomKind, Zone } from '../db/types';
 import { KITCHEN } from '../catalog/standards';
 import { limitsFor } from '../catalog/saveGate';
 import { GlyphPreview } from '../catalog/GlyphPreview';
 import { ProductionGap } from '../catalog/CabinetThumbnail';
+import { fitCapability } from '../catalog/production';
+import type { ApplianceType } from '../catalog/appliances';
 import { Field, Chip, NumField, inputClass, selectOnFocus } from './Field';
 
 /** תיאור מלא של ארגז — משותף לפריט בספרייה ולארגז שכבר מונח על הקיר. */
@@ -27,6 +29,36 @@ export interface BoxSpec {
   yMm: number;
   socleMm: number;
   counterMm: number;
+  /**
+   * פנים הארון כפי שנבנה, כשהוא אינו נגזר מהשדות השטוחים.
+   *
+   * הטופס אינו עורך אזורים — לזה יש את עורך הפנים — אבל הוא חייב
+   * לשאת אותם: בלעדיהם כל ארגז שנפתח כאן נראה למודל היכולות כאילו
+   * אין בו נישה, והאזהרה על מה שחסר לייצור נדלקה על ארגז תקין.
+   */
+  zones?: Zone[];
+  /** המכשיר שהארגז נבנה סביבו, כשנקבע במפורש */
+  applianceType?: ApplianceType;
+}
+
+
+/**
+ * בחירת איור, ומה שהאיור גורר איתו.
+ *
+ * כיור וכיריים אינם ארון עם תווית: שניהם חיתוך במשטח, ובלי משטח
+ * אין מה לחתוך בו. עד כאן הטופס נתן להם `counterMm` אפס, ולכן מי
+ * שבחר "כיור" קיבל מיד אזהרה שאין בטופס אף פקד להסיר אותה —
+ * המשטח הוא חלק מהבחירה, לא הגדרה נפרדת שצריך לנחש.
+ *
+ * מה שאינו נעשה כאן: נישות מכשיר. אלה משנות את מידות הארגז, ולכן
+ * הן נשארות פעולה שנלחצת ולא תוצאה של בחירת איור.
+ */
+function pickGlyph(value: BoxSpec, glyph: string): Partial<BoxSpec> {
+  const next = { ...value, glyph };
+  if ((glyph === 'sink' || glyph === 'hob') && value.counterMm === 0) {
+    return { glyph, ...fitCapability(next, glyph) };
+  }
+  return { glyph };
 }
 
 const COUNTS = [0, 1, 2, 3, 4, 5, 6];
@@ -123,7 +155,7 @@ export function BoxForm({
         אם התבנית אינה כוללת את הנישה או הפרזול שהשם והאיור
         מבטיחים — זה נאמר כאן, ליד התמונה עצמה.
       */}
-      <ProductionGap item={value} />
+      <ProductionGap item={value} onFit={(cap) => onChange(fitCapability(value, cap) ?? {})} />
 
       <Field label="שם הארגז">
         <input
@@ -164,7 +196,7 @@ export function BoxForm({
                         glyph={g.key}
                         label={g.label}
                         active={g.key === value.glyph}
-                        onClick={() => onChange({ glyph: g.key })}
+                        onClick={() => onChange(pickGlyph(value, g.key))}
                       />
                     ))}
                   </div>
@@ -181,7 +213,7 @@ export function BoxForm({
                   glyph={g.key}
                   label={g.label}
                   active={g.key === value.glyph}
-                  onClick={() => onChange({ glyph: g.key })}
+                  onClick={() => onChange(pickGlyph(value, g.key))}
                 />
               ))}
             </div>

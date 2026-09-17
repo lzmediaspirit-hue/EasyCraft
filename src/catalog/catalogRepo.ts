@@ -137,27 +137,136 @@ export async function applyLibraryUpdate(take: string[]): Promise<number> {
   return n;
 }
 
+/**
+ * תבנית שמגיעה עם האפליקציה ומעולם לא הייתה כאן — נכנסת לבד.
+ *
+ * `applyLibraryUpdate` היא בחירה מפורשת, והיא נכונה לתבנית שכבר
+ * קיימת כאן: דריסה של שורה שהנגרייה אולי ערכה היא החלטה שלה. אבל
+ * תבנית *חדשה* אינה דריסה של דבר, והדרישה שמישהו ייכנס להגדרות
+ * וילחץ עליה הפכה כל ארגז שנוסף לספרייה לארגז שאיש אינו רואה.
+ *
+ * כך בדיוק נעלמו הארגזים מהחדרים: הספרייה שנזרעה בגרסה מוקדמת
+ * כיסתה מטבח, סלון וחדר שינה בלבד, ושש הקטגוריות שנוספו אחריה —
+ * אמבטיה, חדר ארונות, חדר ילדים, כניסה, משרד וחדר שירות — נשארו
+ * ריקות לנצח. `addBuiltinRooms` החזיר את החדרים; זה מחזיר את מה
+ * שבתוכם.
+ *
+ * שלוש הגבלות, וכולן מכוונות:
+ *
+ *   • רק `added` ו-`changed`. `changed` היא שורה שטביעת האצבע שלה
+ *     זהה לסימון שקיבלה בשחרור הקודם — כלומר מוכח שלא נערכה כאן,
+ *     ולכן עדכון שלה אינו מוחק עבודה. `edited` היא התנגשות, והיא
+ *     נשארת למסך שמציג אותה ושואל.
+ *   • אינה מחזירה תבנית שנמחקה. סימון המחיקה הוא תשובה.
+ *   • אינה נוגעת במק״ט שכבר תפוס כאן. שני ארגזים באותו מק״ט הם
+ *     בדיוק מה שהגירה 23 באה לנקות.
+ *
+ * הגרסה נרשמת רק כשלא נשארה התנגשות: אחרת ההתנגשות הייתה נעלמת
+ * מהמסך שאמור להציג אותה, בלי שאיש ענה עליה.
+ */
+export async function addShippedCabinets(): Promise<number> {
+  const { have, release, changes } = await libraryUpdate();
+  if (have >= release) return 0;
+
+  const now = Date.now();
+  const added = await db.transaction('rw', db.catalog, async () => {
+    /*
+     * המק״טים התפוסים נקראים בתוך הטרנזקציה: בין "מה חסר" לבין
+     * "הוסף" אסור שמישהו אחר יתפוס מק״ט.
+     */
+    const here = await allMine(db.catalog);
+    const byId = new Set(here.map((i) => i.id));
+    const byCode = new Set(here.filter((i) => i.code).map((i) => i.code!.toUpperCase()));
+    let n = 0;
+    for (const c of changes) {
+      if (!c.shipped) continue;
+      if (c.kind === 'added') {
+        if (byId.has(c.shipped.id)) continue;
+        if (c.shipped.code && byCode.has(c.shipped.code.toUpperCase())) continue;
+        await db.catalog.put({
+          ...c.shipped,
+          releaseMark: fingerprintOf(c.shipped),
+          ...owned(),
+          createdAt: now,
+          updatedAt: now,
+        } as CatalogItem);
+        byId.add(c.shipped.id);
+        if (c.shipped.code) byCode.add(c.shipped.code.toUpperCase());
+        n += 1;
+      } else if (c.kind === 'changed' && c.local) {
+        await db.catalog.put(mergedRow(c.local, c.shipped, now));
+        n += 1;
+      }
+    }
+    return n;
+  });
+
+  if (!changes.some((c) => c.kind === 'edited')) {
+    await settingsRepo.save({ libraryRelease: LIBRARY_RELEASE });
+  }
+  return added;
+}
+
+/**
+ * תבניות שהגיעו עם גרסה קודמת של האפליקציה, ואינן נשלחות עוד.
+ *
+ * הספרייה הוחלפה כולה כשנכנסה ספריית הנגרייה: מזהים אחרים, מק״טים
+ * אחרים, שמות אחרים. מי שהתקין לפני כן נשאר עם שתיהן זו לצד זו —
+ * שישים ואחת תבניות הדגמה ישנות מתחת לשבעים ושבע החדשות, באותם
+ * חדרים.
+ *
+ * ההסרה אינה אוטומטית ולא תהיה: זו מחיקה, והמחיקה היא של הנגרייה.
+ * מה שהיא כן — ניתנת לזיהוי בלי לנחש. `isBuiltin` מסמן תבנית
+ * שהגיעה עם האפליקציה ולא נבנתה כאן (ארגז שנשמר מהמסך מקבל
+ * `false`), ולכן "מובנית ואינה בשחרור הנוכחי" היא בדיוק "הגיעה
+ * עם גרסה קודמת".
+ */
+export async function supersededBuiltins(): Promise<CatalogItem[]> {
+  const shipped = new Set(shippedLibrary().map((s) => s.id));
+  return (await allMine(db.catalog)).filter((i) => i.isBuiltin && !shipped.has(i.id));
+}
+
+/** הסרת אותן תבניות. פרויקטים אינם נפגעים — ארגז שהונח הוא צילום מצב. */
+export async function removeSuperseded(): Promise<number> {
+  const rows = await supersededBuiltins();
+  if (rows.length) await eraseIds(db.catalog, rows.map((i) => i.id));
+  return rows.length;
+}
+
 export async function addSystemProducts(): Promise<number> {
   const settings = await settingsRepo.get();
   const had = settings.productsGeneration ?? 0;
   if (had >= PRODUCTS_GENERATION) return 0;
 
-  const [rows, marks] = await Promise.all([
-    allMine(db.catalog),
-    db.tombstones.where('[workshopId+table]').equals([workshopId(), 'catalog']).toArray(),
-  ]);
-  const byId = new Set(rows.map((i) => i.id));
-  const byCode = new Set(rows.filter((i) => i.code).map((i) => i.code!.toUpperCase()));
+  const marks = await db.tombstones
+    .where('[workshopId+table]')
+    .equals([workshopId(), 'catalog'])
+    .toArray();
   const erased = new Set(marks.map((m) => m.rowId));
 
   const now = Date.now();
-  const missing = SHIPPED_PRODUCTS.filter(
-    (p) => !byId.has(p.id) && !erased.has(p.id) && !(p.code && byCode.has(p.code.toUpperCase())),
-  ).map((p) => ({ ...p, ...owned(), createdAt: now, updatedAt: now }));
+  /*
+   * הקריאה והכתיבה בטרנזקציה אחת.
+   *
+   * בין "מה חסר" לבין "הוסף" אסור שמישהו אחר יוסיף: `App` נטען
+   * פעמיים במצב הפיתוח של React, ושתי קריאות שקראו את אותה טבלה
+   * הוסיפו את אותם מוצרים — והשנייה נפלה על מפתח כפול. הפתרון
+   * אינו לזכור שכבר רצנו: הפונקציה נקראת שוב אחרי מחיקה, וזיכרון
+   * כזה היה עונה על השאלה הישנה.
+   */
+  const missing = await db.transaction('rw', db.catalog, async () => {
+    const rows = await allMine(db.catalog);
+    const byId = new Set(rows.map((i) => i.id));
+    const byCode = new Set(rows.filter((i) => i.code).map((i) => i.code!.toUpperCase()));
+    const add = SHIPPED_PRODUCTS.filter(
+      (p) => !byId.has(p.id) && !erased.has(p.id) && !(p.code && byCode.has(p.code.toUpperCase())),
+    ).map((p) => ({ ...p, ...owned(), createdAt: now, updatedAt: now }));
+    if (add.length) await db.catalog.bulkAdd(add);
+    return add.length;
+  });
 
-  if (missing.length) await db.catalog.bulkAdd(missing);
   await settingsRepo.save({ productsGeneration: PRODUCTS_GENERATION });
-  return missing.length;
+  return missing;
 }
 
 function toShipped(s: SeedItem, order: number): ShippedItem {

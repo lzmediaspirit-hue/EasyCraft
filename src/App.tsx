@@ -9,7 +9,7 @@ import { CalendarScreen } from './features/workflow/CalendarScreen';
 import { TasksScreen } from './features/workflow/TasksScreen';
 import { TeamScreen } from './features/team/TeamScreen';
 import { StockScreen } from './features/stock/StockScreen';
-import { addSystemProducts, seedCatalog } from './catalog/catalogRepo';
+import { addShippedCabinets, addSystemProducts, seedCatalog } from './catalog/catalogRepo';
 import { addBuiltinRooms, seedRooms } from './catalog/roomsRepo';
 import { seedMaterials } from './materials/materialsRepo';
 import { seedAdmin } from './workflow/auth';
@@ -39,7 +39,7 @@ export default function App() {
        * מוצרי מערכת וחדרים מובנים כאחד: שניהם נחסמו על ידי סימון
        * "כבר נזרע", ולכן התקנה ותיקה נשארה בלעדיהם.
        */
-      .then(() => Promise.all([addSystemProducts(), addBuiltinRooms()]))
+      .then(() => Promise.all([addSystemProducts(), addBuiltinRooms(), addShippedCabinets()]))
       .finally(() => setReady(true));
   }, []);
 

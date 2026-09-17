@@ -68,6 +68,8 @@ export function UnitEditSheet({
     yMm: unit.yMm,
     socleMm: unit.socleMm ?? 0,
     counterMm: unit.counterMm ?? 0,
+    zones: unit.zones,
+    applianceType: unit.applianceType,
   });
 
   /*
@@ -119,11 +121,19 @@ export function UnitEditSheet({
      * האזורים גוברים על השדה הישן, ולכן כתיבה לשדה בלבד דיווחה
      * על שינוי שלא קרה: הטופס הראה שש, והארון נשאר שלוש.
      */
-    const zones = conversion.zones
-      ? conversion.zones
-      : caps.drawers && !composed
-        ? zonesWithDrawerRows(unit, spec.drawers)
-        : undefined;
+    /*
+     * אזורים שהטופס עצמו בנה — התאמה למידות תקן — הם הבסיס, והם
+     * גוברים על המרת האיור. שורות המגירות מוחלות *מעליהם* ולא
+     * במקומם: `zonesWithDrawerRows` נוגעת במספר שבתוך אזור מגירות
+     * בלבד, ולכן היא אינה הורסת נישה — ובלי זה שינוי מספר השורות
+     * אחרי התאמה לא היה מגיע לשום מקום.
+     */
+    const built = spec.zones && spec.zones !== unit.zones ? spec.zones : null;
+    const base = built ?? conversion.zones;
+    const rows = caps.drawers && !composed
+      ? zonesWithDrawerRows({ ...unit, zones: base ?? unit.zones }, spec.drawers)
+      : undefined;
+    const zones = built ? rows ?? built : conversion.zones ?? rows;
     /*
      * צעד אחד לביטול.
      *
@@ -154,6 +164,7 @@ export function UnitEditSheet({
        */
       socleMm: spec.socleMm,
       counterMm: spec.counterMm,
+      ...(spec.applianceType ? { applianceType: spec.applianceType } : {}),
       /* אי נמדד ברצפת החדר, ולכן המיקום על הקיר אינו שלו */
       ...(unit.free
         ? { free: { ...unit.free, xMm: Math.round(freeX), zMm: Math.round(freeZ) } }

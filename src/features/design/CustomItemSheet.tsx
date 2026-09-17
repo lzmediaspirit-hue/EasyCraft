@@ -101,6 +101,8 @@ export function CustomItemSheet({
     yMm: item?.defaultYMm ?? Y_BY_GROUP[defaultGroup],
     socleMm: item?.socleMm ?? 0,
     counterMm: item?.counterMm ?? 0,
+    zones: item?.zones,
+    applianceType: item?.applianceType,
   });
 
   const canSave = spec.name.trim().length > 0 && spec.widthMm > 0 && spec.heightMm > 0 && rooms.length > 0;
@@ -118,11 +120,16 @@ export function CustomItemSheet({
   function save() {
     return guard.run(async () => {
     const caps = constructionCaps(spec.glyph);
-    /* שינוי המספר מגיע גם אל האזור עצמו, שאחרת גובר עליו */
-    const zones =
-      item && caps.drawers && !composed
-        ? zonesWithDrawerRows(asUnit(item), spec.drawers)
-        : undefined;
+    /*
+     * שינוי המספר מגיע גם אל האזור עצמו, שאחרת גובר עליו — ומה
+     * שהטופס בנה בהתאמה למידות תקן הוא הבסיס שעליו זה מוחל.
+     */
+    const built = spec.zones && spec.zones !== item?.zones ? spec.zones : null;
+    const source = built ?? item?.zones;
+    const rows = caps.drawers && !composed && source
+      ? zonesWithDrawerRows({ glyph: spec.glyph, heightMm: spec.heightMm, zones: source }, spec.drawers)
+      : undefined;
+    const zones = built ? rows ?? built : item ? rows : undefined;
     await catalogRepo.saveCustom({
       id: item?.id,
       rooms,
@@ -149,6 +156,7 @@ export function CustomItemSheet({
        */
       socleMm: spec.socleMm,
       counterMm: spec.counterMm,
+      ...(spec.applianceType ? { applianceType: spec.applianceType } : {}),
       code: code.trim() || undefined,
       favorite,
       note: item?.note,
