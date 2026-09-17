@@ -239,6 +239,17 @@ ok('and empties the preview after it', cancel.drained === false, String(cancel.d
 /* 5 — סוג ארגז ← סוג אחר                                              */
 /* ------------------------------------------------------------------ */
 
+/*
+ * החלפת איור אינה החלפת ארגז.
+ *
+ * הבדיקה הזאת דרשה שמעבר מ"מגירות" ל"דלתות" יהפוך את המגירות
+ * למדפים — כלומר שהאיור יחליט מה בפנים. זו בדיוק ההתנהגות שנמצאה
+ * כבאג: הנגר שבחר איור אחר קיבל ארגז אחר. ארון עם דלתות יכול
+ * להחזיק מגירות, ולכן אין כאן מה להמיר ואין מה להודיע.
+ *
+ * מה שכן מומר הוא מעבר למוצר שאין לו פנים בכלל — לוח בודד,
+ * מכשיר שנקנה שלם — ושם זה נאמר במפורש.
+ */
 const convert = await page.evaluate(async () => {
   const { convertZones, checkUnit } = await import('/src/catalog/saveGate.ts');
   const drawers = {
@@ -253,37 +264,39 @@ const convert = await page.evaluate(async () => {
   };
   const toDoors = convertZones(drawers, 'doors');
   const toBoard = convertZones(drawers, 'slab');
+  const toFridge = convertZones(drawers, 'fridge');
   const same = convertZones(drawers, 'drawers');
   const cols = convertZones(withCols, 'doors');
 
   return {
-    toDoorsKind: toDoors.zones?.[0]?.kind,
+    toDoorsZones: toDoors.zones,
     toDoorsNote: toDoors.note,
-    toDoorsDrawers: toDoors.zones?.[0]?.drawers,
     toBoard: toBoard.zones?.length,
     toBoardNote: toBoard.note,
+    toFridge: toFridge.zones?.length,
     sameNote: same.note,
-    colKind: cols.zones?.[0]?.columns?.[0]?.kind,
-    /* והמעבר אינו יוצר ארגז שאי אפשר לבנות */
+    colsZones: cols.zones,
+    colsNote: cols.note,
+    /* והארגז שנשאר הוא ארגז שאפשר לבנות */
     stillValid: checkUnit({
       glyph: 'doors',
       widthMm: 600,
       heightMm: 880,
       depthMm: 580,
       socleMm: 100,
-      zones: toDoors.zones,
+      zones: drawers.zones,
     }),
   };
 });
 
-ok('changing type converts the inside, not just the label', convert.toDoorsKind === 'shelves', String(convert.toDoorsKind));
-ok('and the old drawer count is dropped with it', convert.toDoorsDrawers === undefined, String(convert.toDoorsDrawers));
-ok('the change is said out loud, in Hebrew', /הומר|הומרו/.test(convert.toDoorsNote ?? ''), String(convert.toDoorsNote));
-ok('columns inside a zone are converted too', convert.colKind === 'shelves', String(convert.colKind));
+ok('changing the icon leaves the inside alone', convert.toDoorsZones === undefined, JSON.stringify(convert.toDoorsZones));
+ok('and says nothing, because nothing happened', convert.toDoorsNote === null, String(convert.toDoorsNote));
+ok('columns inside a zone survive too', convert.colsZones === undefined && convert.colsNote === null, JSON.stringify([convert.colsZones, convert.colsNote]));
 ok('a single board has no inside at all', convert.toBoard === 0, String(convert.toBoard));
-ok('and that is said too', /אין פנים/.test(convert.toBoardNote ?? ''), String(convert.toBoardNote));
+ok('and that is said out loud, in Hebrew', /אין פנים/.test(convert.toBoardNote ?? ''), String(convert.toBoardNote));
+ok('an appliance bought whole loses it as well', convert.toFridge === 0, String(convert.toFridge));
 ok('converting to the same type changes nothing', convert.sameNote === null, String(convert.sameNote));
-ok('and what comes out is still buildable', convert.stillValid === null, String(convert.stillValid));
+ok('and what stays is still buildable', convert.stillValid === null, String(convert.stillValid));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' | '));
 const bad = out.filter((l) => l.startsWith('FAIL'));

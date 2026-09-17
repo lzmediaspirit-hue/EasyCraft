@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
-import { constructionCaps } from '../../catalog/construction';
+import { constructionCaps, floorToggle } from '../../catalog/construction';
 import { MAX_BODY_MM, doorCells, isContainer, unitCells } from '../../catalog/zones';
 import { MATERIAL, drawerDepth } from '../../catalog/standards';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
@@ -132,22 +132,13 @@ export function UnitEditor({
    */
   const removedSocle = useRef<number | null>(null);
 
-  /**
-   * הצמדה לרצפה, בלי לשנות את גוף הארון.
-   *
-   * תחתית הארגז היא `yMm`, והרגליים כלולות ב-`heightMm` — ולכן
-   * הורדת רגליים בלי לגעת בגובה אינה מורידה רגליים אלא מאריכה את
-   * הגוף באותה מידה, והצמדה חוזרת מקצרת אותו בגובה שהעסק עובד בו
-   * ולא בגובה שהיה. המתג אמור להיות הפיך, וכאן הוא באמת כזה.
-   */
-  function floorToggle(): Partial<PlacedUnit> {
-    const socle = unit.socleMm ?? 0;
-    if (locked) {
-      removedSocle.current = socle;
-      return { floorLocked: false, socleMm: 0, heightMm: unit.heightMm - socle };
-    }
-    const back = removedSocle.current ?? defaultSocleMm;
-    return { floorLocked: true, yMm: 0, socleMm: back, heightMm: unit.heightMm + back };
+  /* הכלל עצמו יושב ב-`construction`; כאן נזכר רק מה שהוסר */
+  function toggleFloor(): Partial<PlacedUnit> {
+    if (locked) removedSocle.current = unit.socleMm ?? 0;
+    return floorToggle(
+      { socleMm: unit.socleMm ?? 0, heightMm: unit.heightMm, floorLocked: locked },
+      { fallbackSocleMm: defaultSocleMm, remembered: removedSocle.current },
+    );
   }
 
   const activeChip = useRef<HTMLButtonElement>(null);
@@ -1008,7 +999,7 @@ export function UnitEditor({
 
       <div className="mt-3 flex items-stretch gap-2">
         <button
-          onClick={() => onChange(floorToggle())}
+          onClick={() => onChange(toggleFloor())}
           aria-pressed={locked}
           className={`flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-start text-sm font-medium transition-colors ${
             locked ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'

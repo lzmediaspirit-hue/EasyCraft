@@ -13,7 +13,7 @@ import './_exit.mjs';
  *       האזורים מגירות: הארון נחתך כמגירות והטופס הראה דלתות.
  */
 import { chromium } from 'playwright';
-import { BOX, addNamed, setup } from './mk.mjs';
+import { BOX, addNamed, pickGlyph, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -209,8 +209,8 @@ await page.locator('svg g[data-unit-id]').first().click();
 await page.waitForTimeout(600);
 await btn(/עריכת הארגז|^עריכה$/).click();
 await page.waitForTimeout(700);
-await dlg().getByRole('button', { name: 'דלתות', exact: true }).first().click();
-await page.waitForTimeout(500);
+await pickGlyph(page, dlg(), 'דלתות');
+await page.waitForTimeout(200);
 const convText = await dlg().innerText();
 /* אין מה להודיע עליו: האיור הוא תמונה, והפנים נשאר */
 ok('the form promises no conversion', !/הומר|הומרו/.test(convText),

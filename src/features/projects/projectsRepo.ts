@@ -15,6 +15,7 @@ import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { partsOf, projectCosting, type ProjectCosting } from '../../costing/boards';
 import { BuildError, checkUnit } from '../../catalog/saveGate';
+import { landsOnFloor } from '../../catalog/construction';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { releaseConsumption } from '../../materials/consumptionRepo';
 import { reusableSpec } from '../../db/types';
@@ -484,11 +485,8 @@ export const unitsRepo = {
        */
       socleMm: item.socleMm ?? defaults.socleMm,
       counterMm: item.counterMm,
-      /*
-       * נעול לרצפה = באמת עומד עליה. המפלס לבדו אמר "תחתון, לכן
-       * נעול", וכך ארגז שנשמר מרחף ננעל לרצפה שהוא אינו נוגע בה.
-       */
-      floorLocked: item.level !== 'wall' && (item.defaultYMm ?? 0) === 0,
+      /* נעול לרצפה = באמת עומד עליה — הכלל ב-`construction` */
+      floorLocked: landsOnFloor(item.level, item.defaultYMm),
       /* תבנית אי נוחתת בחדר; כל השאר נוחת על הקיר */
       ...(item.island && free ? { free } : {}),
       ...owned(),

@@ -204,11 +204,18 @@ ok('the supplier is stored', hw.supplier === 'בלום', String(hw.supplier));
 ok('the model too', hw.model === 'X-12', String(hw.model));
 ok('and the replacement it prevents', hw.replaces === 'lift', String(hw.replaces));
 
-/* בורר האיורים על המסך — כותרת לכל משפחה, ולא רשת אחת ארוכה */
+/*
+ * בורר האיורים על המסך.
+ *
+ * מה שנפתח הוא הרשימה הקצרה של החדר; "כל האיורים" פותח את השאר,
+ * ושם — כותרת לכל משפחה, ולא רשת אחת ארוכה.
+ */
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 await btn(/^עריכה$|עריכת הארגז/).first().click().catch(() => {});
 await page.waitForTimeout(800);
+await dlg().getByRole('button', { name: 'כל האיורים', exact: true }).first().click().catch(() => {});
+await page.waitForTimeout(400);
 const form = await dlg().innerText().catch(() => '');
 const heads = ['ארונות', 'פינות', 'מטבח ומכשירים', 'לוחות ומשטחים'].filter((h) =>
   form.includes(h),
