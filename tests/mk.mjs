@@ -1,5 +1,5 @@
 /** עוזר משותף: כניסה, לקוח, פרויקט עם קיר אחד, וחזרה למסך ההדמיה. */
-export async function setup(page, { name = 'בדיקה', walls = 'קיר יחיד' } = {}) {
+export async function setup(page, { name = 'בדיקה', walls = 'קיר יחיד', room = 'מטבח' } = {}) {
   const btn = (re) => page.getByRole('button', { name: re }).first();
   const dlg = () => page.getByRole('dialog').last();
   await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
@@ -12,7 +12,9 @@ export async function setup(page, { name = 'בדיקה', walls = 'קיר יחי�
   await dlg().getByRole('button', { name: /שמירה|הוספה/ }).click(); await page.waitForTimeout(900);
   await btn(new RegExp(name)).click(); await page.waitForTimeout(700);
   await btn(/פרויקט ראשון|פרויקט חדש|הוספת פרויקט/).click(); await page.waitForTimeout(500);
-  await dlg().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(800);
+  /* החדר של הפרויקט. ברירת המחדל היא מטבח, כי כך רוב הבדיקות בנויות */
+  await dlg().getByRole('button', { name: new RegExp('^' + room) }).first().click();
+  await page.waitForTimeout(800);
   await pickWalls(page, walls); await page.waitForTimeout(700);
   await btn(/קיר נקי/).click(); await page.waitForTimeout(700);
   await dlg().getByRole('button', { name: /יצירת הפרויקט/ }).click(); await page.waitForTimeout(1700);

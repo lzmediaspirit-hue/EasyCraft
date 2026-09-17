@@ -8,6 +8,8 @@ import { buildPlan } from './plan';
 import type { PlanWall } from './plan';
 import { planKitchen, placementName, whyNothing } from './autoPlan';
 import { resolvePlan, type ResolvedPlan } from './planResolve';
+import { planRoom, roomPlacementName } from './planRoom';
+import { roomProfile } from './roomProfiles';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { settingsRepo } from '../../materials/materialsRepo';
 import { projectsRepo } from '../projects/projectsRepo';
@@ -52,15 +54,29 @@ const DEFAULT_APPLIANCES: Appliances = {
 
 export function AutoPlanSheet({
   projectId,
+  roomKind,
   walls,
   units,
   onClose,
 }: {
   projectId: string;
+  /** החדר שמתוכנן. מטבח נבנה במנוע משלו; לשאר יש פרופיל. */
+  roomKind: string;
   walls: Wall[];
   units: PlacedUnit[];
   onClose: () => void;
 }) {
+  /*
+   * החדר קובע מה נשאל ומה נבנה.
+   *
+   * הכפתור היה של המטבח בלבד, ולכן כל השאלות היו על מכשירי חשמל
+   * ועל משולש עבודה. בחדר ארונות אין מקרר ואין משולש — יש תלייה,
+   * מדפים ומגירות, והפרופיל הוא מה שאומר את זה.
+   */
+  const profile = roomProfile(roomKind);
+  const [roomOptions, setRoomOptions] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries((profile?.options ?? []).map((o) => [o.key, o.on])),
+  );
   const [appliances, setAppliances] = useState<Appliances>(DEFAULT_APPLIANCES);
   const [seating, setSeating] = useState(false);
   const [finish, setFinish] = useState<AutoInput['finish']>('standard');
@@ -79,10 +95,23 @@ export function AutoPlanSheet({
    */
   const [frozen, setFrozen] = useState<PlanWall[] | null>(null);
   const plan = frozen ?? buildPlan(walls, units);
-  const proposals = useMemo(
-    () => (frozen ? planKitchen({ walls, plan: frozen, appliances, seating, finish }) : []),
-    [frozen, walls, appliances, seating, finish],
+  const items = useLiveQuery(() => catalogRepo.all(), [], []);
+  /* רק הספרייה של החדר: ארון בגדים אינו ממלא תפקיד במטבח */
+  const roomItems = useMemo(
+    () => items.filter((i) => i.rooms.includes(roomKind)),
+    [items, roomKind],
   );
+  const proposals = useMemo(() => {
+    if (!frozen) return [];
+    if (!profile) return planKitchen({ walls, plan: frozen, appliances, seating, finish });
+    return planRoom({
+      room: roomKind,
+      walls,
+      plan: frozen,
+      items: roomItems,
+      options: roomOptions,
+    });
+  }, [frozen, walls, appliances, seating, finish, profile, roomKind, roomItems, roomOptions]);
   const show = () => {
     setFrozen(buildPlan(walls, units));
     setStep('pick');
@@ -95,7 +124,6 @@ export function AutoPlanSheet({
    * ולכן מה שנראה בכרטיס לא היה מה שהונח. עכשיו שניהם קוראים
    * את אותה פתירה.
    */
-  const items = useLiveQuery(() => catalogRepo.all(), [], []);
   const settings = useLiveQuery(() => settingsRepo.get(), []);
   const project = useLiveQuery(() => projectsRepo.get(projectId), [projectId]);
   const resolved = useMemo(() => {
@@ -110,12 +138,12 @@ export function AutoPlanSheet({
           walls,
           defaults: settings.defaults,
           room: project?.roomKind,
-          nameOf: placementName,
+          nameOf: (pl) => (profile ? roomPlacementName(pl, roomItems) : placementName(pl)),
         }),
       );
     }
     return map;
-  }, [proposals, items, walls, settings, project]);
+  }, [proposals, items, walls, settings, project, profile, roomItems]);
 
   async function apply(p: Proposal) {
     if (busy) return;
@@ -166,8 +194,9 @@ export function AutoPlanSheet({
       >
         <div className="space-y-6 px-5 py-5">
           <p className="text-sm leading-snug text-stone-500">
-            המערכת מסדרת את המטבח לפי מידות החדר, החלונות והדלתות שכבר סימנת.
-            צריך רק לומר מה נכנס פנימה.
+            {profile
+              ? `${profile.intro} התכנון לפי מידות החדר, החלונות והדלתות שכבר סימנת.`
+              : 'המערכת מסדרת את המטבח לפי מידות החדר, החלונות והדלתות שכבר סימנת. צריך רק לומר מה נכנס פנימה.'}
           </p>
 
           {units.length > 0 && (
@@ -177,6 +206,32 @@ export function AutoPlanSheet({
             </p>
           )}
 
+          {/*
+            חדר שאינו מטבח נשאל את השאלות שלו.
+            "מקרר, תנור, כיריים" אינן שאלות על חדר ארונות, ותשובה
+            להן שם היא רעש.
+          */}
+          {profile ? (
+            <section>
+              <h3 className="mb-2 text-sm font-semibold text-stone-900">מה נכנס ל{profile.label}</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {profile.options.map((o) => (
+                  <Toggle
+                    key={o.key}
+                    label={o.hint ? `${o.label} · ${o.hint}` : o.label}
+                    on={!!roomOptions[o.key]}
+                    onToggle={() =>
+                      setRoomOptions((prev) => ({ ...prev, [o.key]: !prev[o.key] }))
+                    }
+                  />
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-stone-400">
+                מה שאין לו יחידה מתאימה בספרייה של החדר — נאמר, ולא מדולג בשקט.
+              </p>
+            </section>
+          ) : (
+          <>
           <section>
             <h3 className="mb-2 text-sm font-semibold text-stone-900">מה יש במטבח</h3>
             <div className="grid grid-cols-3 gap-2">
@@ -224,6 +279,8 @@ export function AutoPlanSheet({
               אי נכנס רק כשיש לו מרווח מלא מכל צד. אם אין — נאמר למה.
             </p>
           </section>
+          </>
+          )}
         </div>
       </Sheet>
     );
@@ -342,9 +399,15 @@ function ProposalCard({
   const preview = resolved?.units.map((r) => r.unit) ?? [];
   const issues = resolved?.issues ?? [];
   const blocked = issues.length > 0;
+  /*
+   * השם מהפתירה, ולא מטבלת שמות של ארגזי תקן.
+   *
+   * בחדר שאינו מטבח היחידה *היא* פריט מהספרייה, ולכן השם שלה הוא
+   * השם שהנגר נתן לה. "ארגז" לכל דבר אינו רשימה.
+   */
   const counts = new Map<string, number>();
-  for (const u of proposal.units) {
-    const name = placementName(u);
+  for (const [i, u] of proposal.units.entries()) {
+    const name = resolved?.units[i]?.item.name ?? placementName(u);
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
 

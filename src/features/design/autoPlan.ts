@@ -49,10 +49,20 @@ export interface AutoInput {
 export type LayoutKind = 'single' | 'galley' | 'l' | 'u';
 export type Priority = 'ergonomic' | 'economical' | 'storage';
 
-/** תפקיד של ארגז ברצף — זה מה שקובע את סדר התנועה. */
+/**
+ * תפקיד של ארגז ברצף.
+ *
+ * במטבח זה מה שקובע את סדר התנועה — מקרר, כיור, כיריים. בחדרים
+ * האחרים אין סדר תנועה אלא סדר חשיבות: מה נכנס ראשון ומקבל את
+ * המקום הטוב. אותו שדה משרת את שניהם, כי בשניהם השאלה היא "מה
+ * הארגז הזה עושה כאן".
+ */
 export type Role =
   | 'fridge' | 'sink' | 'dishwasher' | 'hob' | 'oven'
-  | 'prep' | 'store' | 'corner' | 'upper' | 'hood' | 'island';
+  | 'prep' | 'store' | 'corner' | 'upper' | 'hood' | 'island'
+  /* חדרים שאינם מטבח */
+  | 'hang' | 'shelving' | 'drawers' | 'vanity' | 'shoes' | 'media'
+  | 'display' | 'appliance';
 
 /**
  * ארגז אחד בהצעה, כהפניה לספרייה.
@@ -113,7 +123,7 @@ export interface Score {
 }
 
 /** רוחב מזערי שמתחתיו אין טעם להתחיל ארגז. */
-const MIN_BOX = 300;
+export const MIN_BOX = 300;
 /** קיר קצר מזה אינו קיר עבודה. */
 const MIN_WALL = 1200;
 
@@ -124,7 +134,7 @@ const MIN_WALL = 1200;
  * לוח סתימה — בלעדיו הדלת של הארון הפינתי והמגירה של הניצב לו
  * נפגשות באוויר.
  */
-const CORNER_START = KITCHEN.baseDepthMm + BLIND_CORNER.fillerMm;
+export const CORNER_START = KITCHEN.baseDepthMm + BLIND_CORNER.fillerMm;
 
 /**
  * ארון הפינה המתה: הרוחב, והחלק שנחסם בתוכו.
@@ -156,7 +166,7 @@ const parallel = (a: PlanWall, b: PlanWall): boolean => {
  * ארון פינתי והסטה. בחירה של "שני הארוכים ביותר" הייתה מייצרת L
  * בין קירות שאין ביניהם פינה בכלל.
  */
-function runOf(plan: PlanWall[], layout: LayoutKind): PlanWall[] {
+export function runOf(plan: PlanWall[], layout: LayoutKind): PlanWall[] {
   const usable = usableWalls(plan);
   if (!usable.length) return [];
   if (layout === 'single') {
@@ -469,21 +479,35 @@ function widthsFor(key: string): number[] {
 /* ------------------------------------------------------------------ */
 
 /** קטע פנוי על קיר — מה שנשאר אחרי דלתות ועמודים. */
-interface Span {
+export interface Span {
   fromMm: number;
   toMm: number;
 }
 
 /**
- * הקטעים שאפשר להעמיד בהם ארונות תחתונים.
+ * הקטעים שאפשר להעמיד בהם יחידות שעומדות על הרצפה.
  *
- * דלת חוסמת לגמרי; חלון אינו חוסם ארון תחתון אלא רק עליון, כי
- * הוא מתחיל מעל המשטח. עמוד ומדרגה גונבים עומק ולכן הם נחשבים
- * חסימה לתחתונים גם הם.
+ * דלת חוסמת לגמרי, ועמוד ומדרגה גונבים עומק ולכן הם חוסמים גם הם.
+ *
+ * חלון תלוי בגובה. ארון מטבח תחתון עובר מתחת לחלון רגיל, ולכן
+ * החלון לא נחשב חסימה — עד שמגיע חלון עם אדן בגובה 30 ס״מ, או
+ * ארון בגדים בגובה 2.4 מטר. `topMm` הוא הגובה שהיחידה מגיעה
+ * אליו, וחלון שמתחיל מתחתיו הוא חסימה אמיתית.
  */
-function baseSpans(p: PlanWall, fromMm: number, toMm: number): Span[] {
+export function baseSpans(
+  p: PlanWall,
+  fromMm: number,
+  toMm: number,
+  topMm = KITCHEN.counterTopMm,
+): Span[] {
   const blocks = p.wall.features
-    .filter((f) => f.kind === 'door' || f.kind === 'pillar' || f.kind === 'step')
+    .filter(
+      (f) =>
+        f.kind === 'door' ||
+        f.kind === 'pillar' ||
+        f.kind === 'step' ||
+        (f.kind === 'window' && f.yMm < topMm),
+    )
     .map((f) => ({ from: f.xMm, to: f.xMm + f.widthMm }))
     .sort((x, y) => x.from - y.from);
   const out: Span[] = [];
@@ -498,7 +522,7 @@ function baseSpans(p: PlanWall, fromMm: number, toMm: number): Span[] {
 }
 
 /** האם ארון עליון ברוחב הזה יתנגש בחלון או בדלת. */
-function upperBlocked(wall: Wall, fromMm: number, widthMm: number): boolean {
+export function upperBlocked(wall: Wall, fromMm: number, widthMm: number): boolean {
   return wall.features.some((f: WallFeature) => {
     if (f.kind !== 'window' && f.kind !== 'door') return false;
     if (f.yMm + f.heightMm <= KITCHEN.upperBottomMm) return false;

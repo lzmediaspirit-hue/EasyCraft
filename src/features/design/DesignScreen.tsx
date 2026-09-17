@@ -11,6 +11,7 @@ import { rad, unitBox } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
+import { autoPlannable } from './roomProfiles';
 import { UnitEditor } from './UnitEditor';
 import { UnitEditSheet } from './UnitEditSheet';
 import { SaveGroupSheet } from './SaveGroupSheet';
@@ -1024,8 +1025,8 @@ export function DesignScreen({
 
             {statsOpen && units.length === 0 && (
               <p className="mt-6 text-center text-[15px] text-stone-500">
-                {project.roomKind === 'kitchen'
-                  ? 'הקיר ריק. אפשר לתכנן מטבח שלם בלחיצה, או להוסיף ארגז אחד מהספרייה.'
+                {autoPlannable(project.roomKind)
+                  ? 'הקיר ריק. אפשר לתכנן את החדר בלחיצה, או להוסיף ארגז אחד מהספרייה.'
                   : 'הקיר ריק. פתח את הספרייה והוסף את הארגז הראשון.'}
               </p>
             )}
@@ -1039,7 +1040,13 @@ export function DesignScreen({
                 הוא נקודת פתיחה שממשיכים לערוך, לא תחליף לעריכה.
               */
               <div className="flex gap-2">
-                {project.roomKind === 'kitchen' && (
+                {/*
+                  התכנון האוטומטי אינו של המטבח בלבד.
+                  לכל חדר שיש לו פרופיל — תלייה בחדר ארונות, ספרייה
+                  במשרד, נעליים בכניסה — יש מה לתכנן. חדר שאין לו
+                  פרופיל אינו מציג כפתור שלא יעשה דבר.
+                */}
+                {autoPlannable(project.roomKind) && (
                   <button
                     onClick={() => setSheet('autoPlan')}
                     className="flex shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-oak-600 bg-white px-4 py-4 text-base font-semibold text-oak-700 transition-colors hover:bg-oak-50"
@@ -1290,6 +1297,7 @@ export function DesignScreen({
       {sheet === 'autoPlan' && walls && (
         <AutoPlanSheet
           projectId={projectId}
+          roomKind={project.roomKind}
           walls={walls}
           units={allUnits ?? NO_UNITS}
           onClose={closeSheet}
