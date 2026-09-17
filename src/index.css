@@ -77,3 +77,89 @@
     appearance: textfield;
   }
 }
+
+/*
+ * שולחן עבודה: הספרייה, הקיר, והמאפיינים — שלושתם על המסך.
+ *
+ * בנייד אין מקום לשלושה, ולכן הספרייה היא גיליון שנפתח ונסגר
+ * והמאפיינים הם לוח שעולה מלמטה. במחשב יש מקום, וכל פתיחה וסגירה
+ * היא עבודה שלא צריך לעשות: הקיר באמצע, הספרייה בהתחלה של השורה
+ * והמאפיינים בסופה — וב-RTL זה ימין ושמאל בהתאמה, בלי לכתוב אותם.
+ *
+ * `display: contents` הוא מה שמשאיר את הנייד כפי שהיה: העטיפה
+ * קיימת ב-DOM ואינה קיימת בפריסה, ולכן הילדים שלה מסודרים בדיוק
+ * כמו קודם עד שהמסך מתרחב.
+ */
+.desktop-library {
+  display: none;
+}
+
+.planner-properties {
+  display: contents;
+}
+
+/* מיקוד נראה, למי שעובד במקלדת */
+:focus-visible {
+  outline: 2px solid var(--color-oak-600);
+  outline-offset: 2px;
+}
+
+@media (min-width: 1024px) {
+  .planner-workspace {
+    max-width: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .planner-workspace > header {
+    grid-column: 1 / -1;
+  }
+  .planner-canvas {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+  }
+  .planner-properties {
+    display: flex;
+    flex-direction: column;
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 0;
+    overflow-y: auto;
+    border-inline-start: 1px solid var(--color-stone-200);
+  }
+  /*
+   * גובה הלוח נקבע בגרירה כשהוא יושב מתחת לציור. כאן הוא עמודה,
+   * ולכן הוא ממלא את הגובה — והידית שמזיזה אותו אינה רלוונטית.
+   */
+  .planner-properties > div[style] {
+    height: auto !important;
+    flex: 1;
+  }
+  .planner-properties [role='separator'] {
+    display: none;
+  }
+}
+
+@media (min-width: 1200px) {
+  .planner-workspace {
+    grid-template-columns: 280px minmax(0, 1fr) 340px;
+  }
+  .desktop-library {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+    border-inline-end: 1px solid var(--color-stone-200);
+  }
+  .planner-canvas {
+    grid-column: 2;
+  }
+  .planner-properties {
+    grid-column: 3;
+  }
+}

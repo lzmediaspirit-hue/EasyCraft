@@ -32,6 +32,7 @@ import { orderedStats, useViewOptions } from './viewOptions';
 import { useDesignView } from './designView';
 import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatGrid';
 import { DesignToolbar } from './DesignToolbar';
+import { DesktopLibrary } from './DesktopLibrary';
 import type { SheetName } from './sheets';
 import { readPref, writePref } from '../../ui/prefs';
 import { clamp, cm } from '../../ui/units';
@@ -599,7 +600,7 @@ export function DesignScreen({
   if (!project || !walls || !wall) return null;
 
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-lg flex-col overflow-hidden bg-stone-50">
+    <div className="planner-workspace mx-auto flex h-dvh w-full max-w-lg flex-col overflow-hidden bg-stone-50">
       <DesignToolbar
         project={project}
         walls={walls}
@@ -629,7 +630,15 @@ export function DesignScreen({
         כלפי מעלה באמת מכסה את הקיר — וזו הנקודה: לוח הגדרות ארוך
         צריך מקום, וקיר שכבר בנוי אפשר להסתיר לרגע.
       */}
-      <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
+      {/*
+        הספרייה כפאנל קבוע. ב-CSS היא מוסתרת מתחת ל-1200 פיקסל,
+        ולכן בנייד היא אינה על המסך ואינה בסדר המקלדת.
+      */}
+      {editable && (
+        <DesktopLibrary roomKind={project.roomKind} onAdd={addItem} />
+      )}
+
+      <div className="planner-canvas min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
         <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
           {/* מה שהמקלדת הזיזה עכשיו, ובאיזה ציר */}
           {keyAxis && (
@@ -730,6 +739,11 @@ export function DesignScreen({
         </div>
       </div>
 
+      {/*
+        לוח המאפיינים. `display: contents` בנייד משאיר אותו בדיוק
+        כפי שהיה — הוא נעשה עמודה משלו רק במסך רחב.
+      */}
+      <div className="planner-properties">
       {selected && editable ? (
         <>
         {/*
@@ -1095,6 +1109,7 @@ export function DesignScreen({
           </div>
         </>
       )}
+      </div>
 
       {/*
         הארגז נמצא לפני הפתיחה ולא נכפה בסימן קריאה: ארגז יכול
