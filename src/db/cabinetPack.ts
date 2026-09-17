@@ -5,6 +5,7 @@ import type { Table } from 'dexie';
 import { normalizeTables } from './legacy';
 import { checkTable, packFingerprint } from './packSchema';
 import type { CatalogItem, Finish, Material, Room } from './types';
+import { cabinetNameKey, cleanCabinetName, freeCabinetName } from '../catalog/names';
 
 
 /**
@@ -323,6 +324,10 @@ export interface ImportResult {
   deps: number;
   /** ארגזים שנשארו עם הפניה לגוון או ללוח שאינם במכשיר הזה */
   unresolved: number;
+  /** ארגזים שהגיעו בשם שכבר תפוס כאן, וקיבלו שם פנוי */
+  renamed: number;
+  /** ארגזים שהגיעו במק״ט של ארגז אחר כאן, וקיבלו מק״ט פנוי */
+  recoded: number;
 }
 
 
@@ -394,7 +399,7 @@ export async function importCabinets(
 ): Promise<ImportResult> {
   const { catalog: items, materials, finishes, rooms } = tablesOf(pack);
   const now = Date.now();
-  const out: ImportResult = { added: 0, replaced: 0, removed: 0, deps: 0, unresolved: 0 };
+  const out: ImportResult = { added: 0, replaced: 0, removed: 0, deps: 0, unresolved: 0, renamed: 0, recoded: 0 };
 
   await db.transaction(
     'rw',
@@ -447,8 +452,8 @@ export async function importCabinets(
      */
     const byCode =
       mode === 'merge'
-        ? new Map(rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i.id]))
-        : new Map<string, string>();
+        ? new Map(rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i]))
+        : new Map<string, CatalogItem>();
     /*
      * החדרים לפני הארגזים: ארגז מצביע על חדר, ולא להפך.
      *
@@ -462,14 +467,64 @@ export async function importCabinets(
     if (newRooms.length) await db.rooms.bulkAdd(newRooms);
 
     const mapItems = await localIds(db.catalog, items);
+    /*
+     * שמות תפוסים ומק״טים תפוסים, כפי שהם כאן לפני הייבוא.
+     *
+     * הייבוא כותב ב-bulkPut ולכן אינו עובר דרך `saveCustom`, ושני
+     * הכללים שנאכפים שם — שם ייחודי, ומק״ט ששייך לארגז אחד — לא
+     * נאכפו כאן כלל. קובץ עם שני שמות שנבדלים ברווח נכנס כשניים,
+     * וארגז אחר שנשא מק״ט קיים נכתב על הארגז שהחזיק בו.
+     */
+    const takenNames = new Map(rows.map((i) => [cabinetNameKey(i.name), i.id]));
+    const takenCodes = new Map(rows.filter((i) => i.code).map((i) => [i.code!.toUpperCase(), i.id]));
+    const nextCode = () => {
+      let n = 900;
+      for (;;) {
+        const code = `IM-${n++}`;
+        if (!takenCodes.has(code)) return code;
+      }
+    };
+
     const landed = items.map((i) => {
-      const twin = i.code ? byCode.get(i.code.toUpperCase()) : undefined;
+      /*
+       * מק״ט זהה הוא זהות רק כשזה אותו ארגז.
+       *
+       * ייבוא חוזר של אותה ספרייה במזהים אחרים נשען על ההצמדה
+       * הזאת, ולכן היא נשארת — אבל ארגז *אחר* שנושא מק״ט קיים
+       * אינו מקבל בכך רשות לכתוב עליו. השם הוא מה שמבדיל.
+       */
+      const sameCode = i.code ? byCode.get(i.code.toUpperCase()) : undefined;
+      const twin =
+        sameCode && cabinetNameKey(sameCode.name) === cabinetNameKey(i.name)
+          ? sameCode.id
+          : undefined;
       const id = twin ?? mapItems.to(i.id);
+
+      /* שם שתפוס בידי ארגז אחר — הנכנס מקבל שם פנוי, ונאמר כמה */
+      const name = cleanCabinetName(i.name);
+      const heldBy = takenNames.get(cabinetNameKey(name));
+      const free =
+        heldBy === undefined || heldBy === id
+          ? name
+          : freeCabinetName(name, [...takenNames.keys()]);
+      if (free !== name) out.renamed++;
+      takenNames.set(cabinetNameKey(free), id);
+
+      /* וכך גם מק״ט שתפוס בידי ארגז אחר */
+      const code = i.code?.trim().toUpperCase();
+      const codeHeldBy = code ? takenCodes.get(code) : undefined;
+      const ownCode =
+        !code || codeHeldBy === undefined || codeHeldBy === id ? code : nextCode();
+      if (code && ownCode !== code) out.recoded++;
+      if (ownCode) takenCodes.set(ownCode, id);
+
       /* ההפניות לתלויות עוברות למזהים המקומיים שלהן */
       const ref = (v?: string) => (v ? mapMaterials.to(mapFinishes.to(v)) : v);
       return {
         ...i,
         id,
+        name: free,
+        ...(ownCode ? { code: ownCode } : {}),
         ...(id === i.id ? {} : { sourceId: i.id }),
         rooms: (i.rooms ?? []).map((r) => mapRooms.to(r)),
         carcassFinishId: ref(i.carcassFinishId),

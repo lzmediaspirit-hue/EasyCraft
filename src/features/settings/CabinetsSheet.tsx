@@ -338,6 +338,9 @@ function summary(r: ImportResult): string {
   if (r.replaced) parts.push(`${r.replaced} עודכנו`);
   if (r.removed) parts.push(`${r.removed} הוסרו`);
   if (r.deps) parts.push(`${r.deps} לוחות וגוונים הגיעו איתם`);
+  /* התנגשות זהות אינה שקטה: מי שקיבל שם או מק״ט חדש — נאמר כמה */
+  if (r.renamed) parts.push(`${r.renamed} קיבלו שם פנוי`);
+  if (r.recoded) parts.push(`${r.recoded} קיבלו מק״ט פנוי`);
   return parts.length ? parts.join(' · ') : 'הכול כבר היה מעודכן';
 }
 

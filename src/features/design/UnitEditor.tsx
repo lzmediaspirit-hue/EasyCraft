@@ -1024,7 +1024,8 @@ export function UnitEditor({
               /* הרגליים מרימות את גוף הארון, ולכן הגובה הכולל גדל איתן */
               onChange={(mm) =>
                 resize({
-                  socleMm: mm || undefined,
+                  /* אפס רגליים הוא בחירה, ולא שדה שלא מולא */
+                  socleMm: mm,
                   /* הרגליים מרימות את הגוף, ולכן הגובה הכולל גדל איתן */
                   heightMm: unit.heightMm + mm - (unit.socleMm ?? 0),
                   yMm: 0,

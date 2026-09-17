@@ -141,8 +141,15 @@ export function UnitEditSheet({
       heightMm: spec.heightMm,
       depthMm: spec.depthMm,
       yMm: spec.yMm,
-      socleMm: spec.socleMm || undefined,
-      counterMm: spec.counterMm || undefined,
+      /*
+       * אפס הוא ערך, לא "לא צוין".
+       *
+       * `|| undefined` הפך "בלי רגליים" ו"בלי משטח" לשדה שלא נשלח,
+       * ואז כל שער בדרך שמר על מה שהיה: הארגז על הקיר איבד את
+       * המשטח, ובשמירה חזרה לספרייה העובי הישן חזר משם.
+       */
+      socleMm: spec.socleMm,
+      counterMm: spec.counterMm,
       /* אי נמדד ברצפת החדר, ולכן המיקום על הקיר אינו שלו */
       ...(unit.free
         ? { free: { ...unit.free, xMm: Math.round(freeX), zMm: Math.round(freeZ) } }
