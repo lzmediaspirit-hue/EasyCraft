@@ -21,6 +21,8 @@ export const CODE_PREFIX: Record<string, string> = {
   tall: 'T',
   storage: 'S',
   panel: 'P',
+  /* מכשיר שנקנה שלם, ולא ארגז שנבנה */
+  appliance: 'A',
 };
 
 function prefixOf(group: Group): string {

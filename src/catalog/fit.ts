@@ -1,120 +1,21 @@
 import { glyphDef } from './glyphList';
-import { APPLIANCES, CUTOUTS, type ApplianceType } from './appliances';
-import {
-  CAPABILITY_LABELS,
-  capsProvide,
-  promisedByGlyph,
-  unitCaps,
-  type Capability,
-  type CapSource,
-} from './capabilities';
-import { promisedRole } from './roles';
+import { APPLIANCES, type ApplianceType } from './appliances';
+import { capsProvide, unitCaps, type Capability, type CapSource } from './capabilities';
 import { KITCHEN, MATERIAL } from './standards';
 import { blindWidthMm, MIN_ZONE_MM, unitZones } from './zones';
 import type { Zone } from '../db/types';
 
 /**
- * מה שהתבנית אינה יודעת לבנות.
+ * התאמת ארגז למידות התקן של מה שנכנס אליו.
  *
- * ארגז יכול להיראות נכון בכל התצוגות ועדיין לא להיות בר־ייצור:
- * "ארון תנור עם מגירה" שהוא אזור מגירה אחד בגובה 800 מ״מ אינו
- * ארון תנור — אין בו נישה שהתנור נכנס אליה — ו"ארון פינה L"
- * שנחתך ומצויר כתיבה מלבנית אינו פינה.
+ * כאן ישבו גם אזהרות הייצור — "חסר מידע לייצור", "השם מבטיח
+ * נישת תנור" — והן ירדו לבקשת הבעלים. מה שנשאר הוא הצד המועיל
+ * שלהן: החשבון שיודע לבנות נישה, משטח או חלל לקערה במידות תקן,
+ * בלי להטיף למי שלא ביקש.
  *
- * מה שהשתנה כאן: הבדיקה נגזרת מהמבנה ולא מהשם. שינוי שם של
- * EC-057 ל־Custom cabinet היה מעלים את האזהרה בלי לשנות לוח אחד;
- * עכשיו השם אינו חלק מהשאלה, ולכן הוא גם אינו יכול לענות עליה.
- *
- * ומה שירד מכאן במפורש: צנרת ואוורור. הם אינם מידה של הארגז,
- * הם אינם נחתכים מפלטה, והנגר מקדח אותם באתר — ולכן הם אינם
- * חוסמים ייצור. מידות המכשירים עצמם אינן "נתוני יצרן" אלא תקן,
- * והן יושבות ב-`appliances.ts`.
- */
-export function productionGap(u: CapSource): string | null {
-  /*
-   * מכשיר שנקנה שלם אינו נבנה, ולכן אין בו מה לחסר. מה שחסר הוא
-   * דווקא בארגז שכן נבנה סביב מכשיר או סביב שירות.
-   */
-  const def = glyphDef(u.glyph);
-  if (def.standalone) return null;
-  if (u.corner === 'lShape' || def.key === 'lShape') {
-    /*
-     * זו האזהרה היחידה שאין ממנה כפתור, וזה נכון: אין מידות תקן
-     * לגוף L כי אין גוף כזה. מה שיש הוא שני גופים מלבניים —
-     * וזה מה שנאמר כאן, כדי שהאזהרה תהיה הוראה ולא מבוי סתום.
-     */
-    return (
-      'הפינה מצוירת כ-L והגוף נחתך כתיבה מלבנית. ' +
-      'בנה אותה כשני ארגזים — רגל לאורך הקיר ורגל שחוזרת ניצב לה.'
-    );
-  }
-  /*
-   * מה שהאיור או הסוג מבטיחים, והמבנה אינו מספק.
-   *
-   * כאן נבדק המבנה בלבד: נישה במידות התקן של המכשיר, או משטח
-   * וחלל פנוי מתחתיו לחיתוך. ארגז שמקיים את זה מוכן לייצור ואינו
-   * נושא אזהרה, וארגז שאינו מקיים אותו נושא אותה גם אחרי שינוי שם.
-   */
-  const promised = promisedByGlyph(u);
-  if (promised && !capsProvide(unitCaps(u), promised)) {
-    return `${CAPABILITY_LABELS[promised]}: המבנה אינו מפנה ${gapDetail(promised)}.`;
-  }
-  return null;
-}
-
-/**
- * אי־התאמה בין השם לבין מה שנבנה.
- *
- * זו שאלה אחרת מהאזהרה שלמעלה, ולכן היא נפרדת ממנה. "ארון כיור
- * מגירות" שהוא שלוש מגירות ואין בו חלל לקערה אינו ארון כיור, ומי
- * שרואה את השם ברשימה מצפה לאחד. כאן השם *כן* חלק מהשאלה, ולכן
- * כאן שינוי שם *כן* מתקן — וזה נכון: מי ששינה את השם ל"ארון
- * מגירות" תיאר נכון את מה שיש לו.
- *
- * מה שאינו משתנה בשינוי שם הוא `productionGap`: שם אינו בונה
- * נישה ואינו הורס אותה.
- */
-export function nameMismatch(u: CapSource): string | null {
-  if (!u.name) return null;
-  if (glyphDef(u.glyph).standalone) return null;
-  const promised = promisedRole(u.name);
-  if (!promised) return null;
-  if (promisedByGlyph(u) === promised.cap) return null;
-  if (capsProvide(unitCaps(u), promised.cap)) return null;
-  return `השם מבטיח ${promised.label}, והמבנה מתאר משהו אחר.`;
-}
-
-/** מה בדיוק חסר, במידות — כדי שאפשר יהיה לתקן ולא רק לדעת. */
-function gapDetail(cap: Capability): string {
-  if (cap === 'sink' || cap === 'hob') {
-    const cut = CUTOUTS[cap];
-    return `משטח וחלל פנוי מתחתיו לחיתוך ${cut.widthMm}×${cut.depthMm} מ״מ`;
-  }
-  const std = APPLIANCES[cap as ApplianceType];
-  if (!std) return 'את מה שנדרש';
-  return std.niches
-    .map((n) => `נישה ${n.widthMm}×${n.heightMm}×${n.depthMm} מ״מ`)
-    .join(' ו-');
-}
-
-/**
- * מה לשנות בארגז כדי שהוא באמת יספק את מה שהוא מבטיח.
- *
- * אזהרה שאי אפשר לפעול לפיה היא באג. במסך יצירת ארגז זה היה
- * המצב: מי שבחר את איור הכיור קיבל מיד "המבנה אינו מפנה משטח
- * וחלל פנוי", ובטופס לא היה אף פקד שמסיר את זה; מי שהקליד
- * "ארון תנור" קיבל "השם מבטיח נישת תנור", ונישה אי אפשר היה
- * לבנות שם בכלל.
- *
- * כאן נגזר התיקון מאותן מידות תקן שמהן נגזרת האזהרה, ולכן הוא
- * מסיר אותה בהגדרה ולא במקרה. מה שהוא מחזיר הוא טלאי על המפרט,
- * לא כתיבה למסד: מי שקרא לו מחליט אם להחיל אותו.
- *
- * הוא אינו מוחק את הארגז שנבנה: לכיור מתפנה התא העליון בלבד, ולנישת
- * מכשיר נבנית פריסה שהשארית שלה יורדת למטה כמגירה. הוא כן מגדיל את
- * הארגז כשהמידה אינה מספיקה:
- * מקרר בגובה 1772 אינו נכנס לארגז תחתון, וארגז שמתיימר להכיל
- * אותו הוא מידה שגויה במסור.
+ * מידות המכשירים עצמן אינן "נתוני יצרן" אלא תקן, והן יושבות
+ * ב-`appliances.ts`. צנרת ואוורור אינן כאן במפורש: הן אינן מידה
+ * של הארגז ואינן נחתכות מפלטה.
  */
 export function fitCapability(u: CapSource, cap: Capability): Partial<CapSource> | null {
   if (glyphDef(u.glyph).standalone) return null;

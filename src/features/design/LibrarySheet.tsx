@@ -1,10 +1,9 @@
-import { itemSpec } from '../../catalog/roles';
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { GLYPH_GROUPS_FALLBACK, GROUP_LABELS } from '../../catalog/rooms';
 import { roomDef, roomsRepo } from '../../catalog/roomsRepo';
-import { CabinetThumbnail, ProductionGap, cabinetSize } from '../../catalog/CabinetThumbnail';
+import { CabinetThumbnail, cabinetSize } from '../../catalog/CabinetThumbnail';
 import { glyphDef } from '../../catalog/glyphList';
 import { CustomItemSheet } from './CustomItemSheet';
 import { RoomSheet } from './RoomSheet';
@@ -231,7 +230,6 @@ export function LibrarySheet({
                   {thicknessOf(item) && <> · {thicknessOf(item)} מ״מ</>}
                 </span>
                 {/* מה שהתבנית אינה יודעת לבנות — ליד הארגז, ולא בהערה נסתרת */}
-                <ProductionGap item={itemSpec(item)} className="w-full" />
               </button>
               {/*
                 כוכב: הארגז נכנס למועדפים או יוצא מהם. זו רשימת

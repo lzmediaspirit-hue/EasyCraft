@@ -93,8 +93,16 @@ ok('each leaf reaches half the cabinet', model.twoDoorReach === 300, String(mode
 ok('a single leaf reaches the whole width', model.oneDoorReach === 600, String(model.oneDoorReach));
 ok('a sliding door sweeps nothing', !model.slidingKinds.includes('cabinetDoor'), model.slidingKinds.join(','));
 ok('a lift door needs the air above it', model.liftKinds.includes('lift'), model.liftKinds.join(','));
-ok('a single leaf with no hinge side says so', /צירים/.test(model.singleMissing ?? ''), String(model.singleMissing));
-ok('and says nothing once it is known', model.singleKnown === null, String(model.singleKnown));
+/*
+ * צד הצירים של דלת ארון ירד מהעורך, ואיתו הדיווח שהוא חסר.
+ *
+ * המעטפת עצמה לא השתנתה: דלת יחידה שלא ידוע לאן היא נפתחת עדיין
+ * מכסה את כל החזית — ההערכה הבטוחה. מה שהשתנה הוא שאין על כך
+ * הודעה, כי לא נשאר בממשק פקד שעונה עליה.
+ */
+ok('a single leaf with no hinge side is silent', model.singleMissing === null, String(model.singleMissing));
+ok('and stays silent once it is known', model.singleKnown === null, String(model.singleKnown));
+ok('while it still covers the whole front', model.oneDoorReach === 600, String(model.oneDoorReach));
 ok('drawers pull out into the room', model.drawerKinds.includes('drawer'), model.drawerKinds.join(','));
 ok('and the runner length is reported missing', /מסילה/.test(model.drawerMissing ?? ''), String(model.drawerMissing));
 ok('until the carpenter enters it', model.drawerKnown === null, String(model.drawerKnown));
@@ -181,7 +189,12 @@ await badge.click();
 await page.waitForTimeout(800);
 const sheetText = await dlg().innerText();
 ok('the sheet sorts by severity', /לא ייבנה/.test(sheetText), sheetText.split('\n').slice(0, 5).join(' | '));
-ok('and names the missing data separately', /חסרים נתונים/.test(sheetText), '');
+/*
+ * ואין יותר "חסרים נתונים" שמקורו בארון: הקטגוריה נשארת לפתחים
+ * בקיר, שעדיין נשאלים לאיזה צד הם נפתחים.
+ */
+ok('and the cabinet contributes no missing-data row',
+  !/צד הצירים של הדלת/.test(sheetText), '');
 
 /* לחיצה על שורה מדליקה את העצמים על הציור */
 await dlg().getByRole('button', { name: /חורגים|יוצאים/ }).first().click();

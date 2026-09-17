@@ -6,8 +6,7 @@ import type { RoomKind, Zone } from '../db/types';
 import { KITCHEN } from '../catalog/standards';
 import { limitsFor } from '../catalog/saveGate';
 import { GlyphPreview } from '../catalog/GlyphPreview';
-import { ProductionGap } from '../catalog/CabinetThumbnail';
-import { fitCapability } from '../catalog/production';
+import { fitCapability } from '../catalog/fit';
 import type { ApplianceType } from '../catalog/appliances';
 import { Field, Chip, NumField, inputClass, selectOnFocus } from './Field';
 
@@ -149,13 +148,6 @@ export function BoxForm({
           חזית ופנים הארון, בפרופורציה של המידות שהזנת.
         </p>
       </div>
-
-      {/*
-        תצוגה יפה אינה אישור לייצור.
-        אם התבנית אינה כוללת את הנישה או הפרזול שהשם והאיור
-        מבטיחים — זה נאמר כאן, ליד התמונה עצמה.
-      */}
-      <ProductionGap item={value} onFit={(cap) => onChange(fitCapability(value, cap) ?? {})} />
 
       <Field label="שם הארגז">
         <input

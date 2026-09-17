@@ -25,6 +25,7 @@ const LEVEL_BY_GROUP: Record<CatalogGroup, UnitLevel> = {
   storage: 'floor',
   island: 'floor',
   shelf: 'wall',
+  appliance: 'floor',
   panel: 'floor',
 };
 
@@ -36,6 +37,7 @@ const Y_BY_GROUP: Record<CatalogGroup, number> = {
   storage: 80,
   island: 0,
   shelf: KITCHEN.upperBottom,
+  appliance: 0,
   panel: 0,
 };
 

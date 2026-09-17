@@ -1,7 +1,7 @@
 import { MATERIAL } from './standards';
 import { glyphDef } from './glyphList';
 import { blindWidthMm, unitZones, zoneBands, zoneCells } from './zones';
-import { applianceOf, nicheFits, CUTOUTS, APPLIANCES, type ApplianceType, type Niche } from './appliances';
+import { nicheFits, CUTOUTS, APPLIANCES, type ApplianceType, type Niche } from './appliances';
 import type { PlacedUnit, Zone } from '../db/types';
 
 /**
@@ -181,19 +181,4 @@ export function capsProvide(caps: UnitCaps, role: Capability): boolean {
   return true;
 }
 
-/** האם הארגז הזה, כפי שנבנה, ממלא את התפקיד. */
-export function unitProvides(u: CapSource, role: Capability): boolean {
-  return capsProvide(unitCaps(u), role);
-}
 
-/**
- * התפקיד שהמכשיר שבאיור מבטיח — כדי שאפשר יהיה לבדוק אותו מול
- * המבנה. מכשיר עצמאי אינו מבטיח נישה: הוא עצמו המכשיר.
- */
-export function promisedByGlyph(u: CapSource): Capability | undefined {
-  const def = glyphDef(u.glyph);
-  if (def.standalone) return undefined;
-  if (u.glyph === 'sink') return 'sink';
-  const std = applianceOf(u);
-  return std?.type;
-}

@@ -29,7 +29,6 @@ import type {
   PartRole,
   PlacedUnit,
   Project,
-  WallSide,
 } from '../../db/types';
 
 const DOOR_COUNTS = [0, 1, 2, 3, 4, 5, 6];
@@ -47,12 +46,6 @@ const LED_SPOTS: { key: LedSpot; label: string }[] = [
   { key: 'top', label: 'עליון' },
   { key: 'bottom', label: 'תחתון' },
   { key: 'shelf', label: 'מתחת למדף' },
-];
-
-/** לאיזה צד תלויה דלת יחידה. */
-const HINGE_SIDES: { key: WallSide; label: string }[] = [
-  { key: 'start', label: 'ימין' },
-  { key: 'end', label: 'שמאל' },
 ];
 
 const OPENINGS: { key: OpeningMech; label: string }[] = [
@@ -304,14 +297,20 @@ export function UnitEditor({
           המידות הנקיות שבפנים: מה נכנס לתא, לא מה מידות הארגז.
           שאלה שנגר שואל לפני כל הזמנה של סל, מגירה או מדף, ועד
           כאן היא נענתה בחשבון בראש.
+
+          עם מילה, ולא אייקון בלבד. סרגל לבדו בשורה של ארבעה
+          אייקונים אינו נמצא — ובמסך הזה כבר יש "סרגל", שהוא כלי
+          אחר לגמרי: מדידת מרחק בין ארגזים. שני סרגלים בלי מילה
+          הם שני כפתורים שנראים אותו דבר ועושים דברים שונים.
         */}
         <button
           onClick={onInterior}
           aria-label="מידות פנימיות"
-          title="המידות הנקיות בפנים"
-          className="touch-target grid place-items-center rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
+          title="המידות הנקיות בפנים — מה שנכנס לתא"
+          className="touch-target flex items-center gap-1 rounded-full px-2.5 py-2 text-xs font-medium text-stone-500 transition-colors hover:bg-oak-50 hover:text-oak-700"
         >
           <RulerIcon className="size-5" />
+          <span className="whitespace-nowrap">מידות פנימיות</span>
         </button>
         <button
           onClick={onEdit}
@@ -609,26 +608,6 @@ export function UnitEditor({
                       </Pill>
                     ))}
                   </Row>
-
-                  {/*
-                    צד הצירים. דלת אחת נפתחת לצד אחד, ורק הוא קובע
-                    אם ארון או קיר עומדים בדרכה — לשתי דלתות אין
-                    שאלה. בלי הנתון הזה הבדיקה מדווחת שהוא חסר,
-                    במקום לנחש.
-                  */}
-                  {(unit.doors ?? 0) === 1 && (unit.opening ?? 'hinge') === 'hinge' && (
-                    <Row label="צירים בצד" hint="הדלת נפתחת אל הצד השני">
-                      {HINGE_SIDES.map((h) => (
-                        <Pill
-                          key={h.key}
-                          active={unit.hingeSide === h.key}
-                          onClick={() => onChange({ hingeSide: h.key })}
-                        >
-                          {h.label}
-                        </Pill>
-                      ))}
-                    </Row>
-                  )}
 
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <button

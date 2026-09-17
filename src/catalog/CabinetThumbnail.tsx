@@ -2,9 +2,6 @@ import { GlyphPreview } from './GlyphPreview';
 import { unitZones } from './zones';
 import type { CatalogItem } from '../db/types';
 import { cm } from '../ui/units';
-import { fitCapability, nameMismatch, productionGap } from './production';
-import { promisedByGlyph, type Capability, type CapSource } from './capabilities';
-import { promisedRole } from './roles';
 
 /**
  * פריט ספרייה בלשון של ארגז מונח.
@@ -73,58 +70,3 @@ export function cabinetSize(item: CatalogItem): string {
   return `${cm(item.defaultWidthMm)} × ${cm(body)} × ${cm(item.defaultDepthMm)}`;
 }
 
-/**
- * תג "חסר מידע לייצור".
- *
- * הוא יושב ליד הארגז בכל מקום שבו רואים אותו, ולא בהערה שצריך
- * לפתוח: תצוגה יפה נקראת כאישור לייצור, וזו בדיוק הקריאה שצריך
- * למנוע. מה שחסר כתוב במשפט אחד, ולא רק "יש בעיה".
- */
-export function ProductionGap(
-  { item, className, onFit }: {
-    item: CapSource;
-    className?: string;
-    /**
-     * מה לעשות כשאפשר לתקן.
-     *
-     * אזהרה שאין ממנה דרך החוצה היא באג, לא מידע. במסך יצירת ארגז
-     * לא היה שום פקד שבונה נישה או מוסיף משטח, ולכן האזהרה נדלקה
-     * ונשארה. כשהמסך יודע להחיל תיקון הוא מוסר את הפונקציה הזו,
-     * והיא מקבלת את התפקיד שצריך להיבנות.
-     */
-    onFit?: (cap: Capability) => void;
-  },
-) {
-  /* אותו מפרט שנשמר, במידות שלו — האזהרה נגזרת מהמבנה ולא מהשם */
-  const why = productionGap(item);
-  /* ואי־התאמה בין השם למבנה נאמרת בנפרד, כי היא עניין אחר */
-  const naming = nameMismatch(item);
-  if (!why && !naming) return null;
-  const text = why ? `חסר מידע לייצור — ${why}` : naming!;
-  /*
-   * התפקיד שאפשר לבנות: מה שהאיור מבטיח, ואם אין — מה שהשם מבטיח.
-   *
-   * פינת L יוצאת מכאן במפורש. אין מידת תקן לגוף שאינו קיים, ולכן
-   * אין מה לבנות — וכפתור שבונה נישה ליד אזהרה על פינה היה מתקן
-   * משהו אחר מזה שכתוב, ומשאיר את האזהרה על המסך.
-   */
-  const corner = !!why && !promisedByGlyph(item);
-  const cap = corner ? undefined : promisedByGlyph(item) ?? promisedRole(item.name ?? '')?.cap;
-  const fix = onFit && cap && fitCapability(item, cap) ? cap : null;
-  return (
-    <div
-      className={`rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-800 ${className ?? ''}`}
-    >
-      <p title={text}>{text}</p>
-      {fix && (
-        <button
-          type="button"
-          onClick={() => onFit!(fix)}
-          className="mt-1 rounded-md bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition-colors hover:bg-amber-300"
-        >
-          התאמה למידות התקן
-        </button>
-      )}
-    </div>
-  );
-}

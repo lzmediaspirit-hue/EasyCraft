@@ -178,14 +178,14 @@ export function unitEnvelopes(u: PlacedUnit, plan: PlanWall[]): Envelope[] {
        * מפני שיש עוד כנף מעליה.
        *
        * דלת אחת בלי צד צירים — לא ידוע לאן היא נפתחת, ולכן
-       * המעטפת מכסה את כל החזית: זו ההערכה הבטוחה, והחוסר מדווח.
+       * המעטפת מכסה את כל החזית. זו ההערכה הבטוחה, והיא מספיקה:
+       * הבחירה הידנית של צד הצירים ירדה מהעורך, ולכן "חסר צד
+       * הצירים" הייתה הודעה שאין ממנה דרך החוצה.
        */
-      const single = f.doors === 1 && !u.hingeSide;
       out.push({
         ...own,
         kind: 'cabinetDoor',
         box: inFront(box, leafReachMm(u.widthMm, f.doors), bottom + f.fromMm, h),
-        missing: single ? 'צד הצירים של הדלת' : undefined,
       });
     }
   }

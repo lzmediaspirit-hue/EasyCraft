@@ -1,8 +1,7 @@
 import { Stat } from '../../ui/Stat';
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { projectsRepo, unitsRepo } from '../projects/projectsRepo';
-import { productionGap } from '../../catalog/production';
+import { projectsRepo } from '../projects/projectsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { cm, unitLabel } from '../../ui/units';
 import type { NestResult } from '../../costing/nesting';
@@ -44,13 +43,6 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
   return (
     <Sheet title="ניסור הלוחות" onClose={onClose} tall>
       <div className="space-y-4">
-        {/*
-          מה שאי אפשר לנסר לפי מה שכתוב כאן.
-          רשימת חיתוך היא מסמך ייצור, ולכן ארגז שהתבנית שלו חסרה
-          נישה או מידות יצרן נאמר כאן — לפני הפלטות ולא אחריהן.
-        */}
-        <GapsInProject projectId={projectId} />
-
         {/*
           מה שהמאמת העצמאי מצא בפריסה עצמה.
 
@@ -319,28 +311,3 @@ function NestProblems({ groups }: { groups: PartGroup[] }) {
   );
 }
 
-/**
- * הארגזים בפרויקט שהתבנית שלהם אינה מספיקה לייצור.
- *
- * שורה אחת לכל ארגז, עם השם ועם מה שחסר: "יש בעיה" אינו מידע,
- * ו"חסר מידע לייצור" בלי לומר מה אינו שונה ממנו.
- */
-function GapsInProject({ projectId }: { projectId: string }) {
-  const units = useLiveQuery(() => unitsRepo.listForProject(projectId), [projectId], []);
-  const gaps = units
-    .map((u) => ({ u, why: productionGap(u) }))
-    .filter((g): g is { u: (typeof units)[number]; why: string } => g.why !== null);
-  if (!gaps.length) return null;
-  return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
-      <p className="text-sm font-semibold text-amber-900">
-        <span className="num">{gaps.length}</span> ארגזים — חסר מידע לייצור
-      </p>
-      {gaps.map(({ u, why }) => (
-        <p key={u.id} className="mt-1 text-xs leading-snug text-amber-800">
-          {u.name}: {why}
-        </p>
-      ))}
-    </div>
-  );
-}

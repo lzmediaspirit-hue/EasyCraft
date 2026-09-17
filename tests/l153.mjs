@@ -1,12 +1,15 @@
 import './_exit.mjs';
 /*
- * שכבה 153 — N12 והספרייה: מה שאינו מוכן לייצור נאמר, ומה
- * שאושר מתועד.
+ * שכבה 153 — יכולת נגזרת מהמבנה, ולא מהשם.
  *
- * ארגז יכול להיראות נכון בכל התצוגות ועדיין לא להיות בר־ייצור:
- * "ארון תנור עם מגירה" הוא אזור מגירה אחד בלי נישה, ו"ארון פינה L"
- * נחתך כתיבה מלבנית. תצוגה יפה נקראת כאישור לייצור, וזו הקריאה
- * שצריך למנוע.
+ * כאן ישבו גם אזהרות הייצור — "חסר מידע לייצור", "השם מבטיח נישת
+ * תנור" — והן ירדו לבקשת הבעלים. מה שלא ירד הוא הכלל שמאחוריהן,
+ * וזה מה שנבדק כאן: שם אינו בונה נישה ואינו הורס אותה, ולכן הוא
+ * גם אינו מעניק יכולת. התכנון האוטומטי נשען על זה כשהוא בוחר
+ * לאיזה ארגז מכניסים כיור או תנור.
+ *
+ * ובנוסף: גבהי ההתקנה שאושרו במפורש בספרייה, שלא ישתנו בשקט
+ * בייצוא הבא של הכלי שכותב אותה.
  */
 import { chromium } from 'playwright';
 
@@ -22,71 +25,52 @@ const ok = (name, cond, extra = '') => out.push(`${cond ? 'PASS' : 'FAIL'} ${nam
 await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
 await page.waitForTimeout(500);
 
-const gap = await page.evaluate(async () => {
+const r = await page.evaluate(async () => {
   const v = '?v=' + Date.now();
-  const { productionGap, nameMismatch } = await import('/src/catalog/production.ts' + v);
   const { SHIPPED_LIBRARY } = await import('/src/catalog/shipped.ts' + v);
   const { itemSpec } = await import('/src/catalog/roles.ts' + v);
-  const { unitProvides } = await import('/src/catalog/capabilities.ts' + v);
+  const { unitCaps, capsProvide } = await import('/src/catalog/capabilities.ts' + v);
   const at = (code) => SHIPPED_LIBRARY.find((i) => i.code === code);
-  const spec = (code) => itemSpec(at(code));
+  const provides = (u, cap) => capsProvide(unitCaps(u), cap);
 
-  /* עמודה שמצהירה על תנור ואין בה נישה — כאן, ולא בספרייה */
-  const fake = {
-    glyph: 'open', applianceType: 'oven', name: 'עמודת תנור',
-    widthMm: 600, heightMm: 2100, depthMm: 580, socleMm: 0,
-    zones: [{ id: 'z', heightMm: 2100, kind: 'empty' }],
-  };
-  /* ארגז דלתות רגיל ששמו הוחלף ל"כיור" */
+  /* ארגז דלתות רגיל ששמו הוחלף ל"ארון כיור" */
   const renamedToSink = {
     glyph: 'doors', name: 'ארון כיור', doors: 2,
     widthMm: 600, heightMm: 720, depthMm: 580, socleMm: 0, counterMm: 0,
     zones: [{ id: 'z', heightMm: 720, kind: 'shelves', shelves: 1 }],
   };
+  /* עמודה שמצהירה על תנור, ואין בה נישה */
+  const fakeOven = {
+    glyph: 'open', applianceType: 'oven', name: 'עמודת תנור',
+    widthMm: 600, heightMm: 2100, depthMm: 580, socleMm: 0,
+    zones: [{ id: 'z', heightMm: 2100, kind: 'empty' }],
+  };
+  /* ואותה עמודה בשם תמים */
+  const renamedAway = { ...fakeOven, name: 'עמודה' };
 
   return {
-    /* התבניות שתוקנו: נישות ומשטח במידות תקן, ולכן אין בהן חוסר */
-    sink: productionGap(spec('EC-053')),
-    oven: productionGap(spec('EC-057')),
-    lShape: productionGap(spec('EC-059')),
-    plain: productionGap(spec('EC-081')),
-    /* מכשיר שנקנה שלם אינו נבנה כאן, ולכן אין בו חוסר ייצור */
-    bought: productionGap({ glyph: 'fridge', name: 'מקרר', widthMm: 600, heightMm: 1800, depthMm: 600 }),
-    /* ספרייה מוכנה לעבודה: אפס אזהרות בנייה מתוך כל התבניות */
-    flagged: SHIPPED_LIBRARY.filter((i) => productionGap(itemSpec(i))).length,
-    mislabelled: SHIPPED_LIBRARY.filter((i) => nameMismatch(itemSpec(i))).length,
-    total: SHIPPED_LIBRARY.length,
-
-    /* והחוק שאינו משתנה: שם אינו בונה נישה ואינו מבטל אותה */
-    fakeGap: productionGap(fake),
-    fakeRenamedGap: productionGap({ ...fake, name: 'Custom cabinet' }),
-    renamedIsSink: unitProvides(renamedToSink, 'sink'),
-
-    /* גבהי ההתקנה שאושרו במפורש */
+    renamedIsSink: provides(renamedToSink, 'sink'),
+    fakeIsOven: provides(fakeOven, 'oven'),
+    renamedAwayIsOven: provides(renamedAway, 'oven'),
+    /* ומה שכן בנוי — כן מספק */
+    realSink: provides(itemSpec(at('EC-002')), 'sink'),
+    realOven: provides(itemSpec(at('EC-057')), 'oven'),
     offsets: ['EC-047', 'EC-075', 'EC-080'].map((c) => [c, at(c)?.defaultYMm]),
   };
 });
 
-ok('ארון הכיור בנוי ואין בו חוסר', gap.sink === null, String(gap.sink));
-ok('ארון התנור קיבל נישה במידות תקן', gap.oven === null, String(gap.oven));
-ok('ופינת ה-L נבנית כשני גופים מלבניים', gap.lShape === null, String(gap.lShape));
-ok('ארגז רגיל אינו מסומן', gap.plain === null, String(gap.plain));
-ok('מכשיר שנקנה שלם אינו מסומן', gap.bought === null, String(gap.bought));
-ok('אפס אזהרות בנייה בספרייה', gap.flagged === 0, `${gap.flagged}/${gap.total}`);
-ok('ואפס אי־התאמות בין שם למבנה', gap.mislabelled === 0, `${gap.mislabelled}/${gap.total}`);
-
-/* A10: הסטטוס נגזר מהמבנה, ולכן שינוי שם אינו מעלים אותו */
-ok('עמודה שמצהירה על תנור בלי נישה מסומנת', !!gap.fakeGap, String(gap.fakeGap));
-ok('ושינוי שם אינו מנקה אותה', gap.fakeRenamedGap === gap.fakeGap, String(gap.fakeRenamedGap));
-/* A09: וגם ההפך — שם אינו מקנה יכולת */
-ok('שינוי שם ל"כיור" אינו הופך ארגז לארגז כיור', gap.renamedIsSink === false, String(gap.renamedIsSink));
-
+ok('שינוי שם ל"ארון כיור" אינו הופך ארגז לארגז כיור', r.renamedIsSink === false);
+ok('הצהרה על תנור בלי נישה אינה מספקת תנור', r.fakeIsOven === false);
+ok('ושינוי השם בחזרה אינו משנה דבר — המבנה הוא שקובע',
+  r.renamedAwayIsOven === r.fakeIsOven);
+ok('ארון כיור שבנוי כמו שצריך מספק כיור', r.realSink === true);
+ok('וארון תנור עם נישה מספק תנור', r.realOven === true);
 ok('גבהי ההתקנה שאושרו נשמרו',
-  JSON.stringify(gap.offsets) === JSON.stringify([['EC-047', 1500], ['EC-075', 1500], ['EC-080', 600]]),
-  JSON.stringify(gap.offsets));
+  JSON.stringify(r.offsets) === JSON.stringify([['EC-047', 1500], ['EC-075', 1500], ['EC-080', 600]]),
+  JSON.stringify(r.offsets));
 
 /* ------------------------------------------------------------------ */
-/* ועל המסך: התג נראה בספרייה                                         */
+/* ועל המסך: אין אזהרות בנייה, בשום מקום                              */
 /* ------------------------------------------------------------------ */
 await page.getByLabel('שם משתמש').waitFor({ state: 'visible', timeout: 15000 });
 await page.getByLabel('שם משתמש').fill('admin');
@@ -95,26 +79,21 @@ await page.getByRole('button', { name: 'כניסה' }).first().click();
 await page.waitForTimeout(1600);
 await page.getByRole('button', { name: /ספריית הארגזים/ }).first().click();
 await page.waitForTimeout(1200);
-/* הספרייה נפתחת ברשימת החדרים; הארגזים עצמם בתוך חדר */
 await page.getByRole('button', { name: /^מטבח/ }).first().click();
 await page.waitForTimeout(1200);
 
-/*
- * ספרייה מוכנה לעבודה אינה מציגה אזהרת בנייה.
- *
- * זו הייתה הבדיקה ההפוכה — שהתג נראה — כי ארבע־עשרה תבניות נשאו
- * אזהרה שאי אפשר היה להסיר. עכשיו הן בנויות, ולכן מה שנבדק הוא
- * שהמסך שקט. התג עצמו עדיין נבדק, על מפרט שבאמת חסר, למעלה.
- */
-const shown = await page.evaluate(() =>
-  [...document.querySelectorAll('[role="dialog"] p')]
-    .filter((p) => p.textContent.includes('חסר מידע לייצור')).length,
-);
-ok('אין אזהרת בנייה בספריית הארגזים', shown === 0, String(shown));
+const noise = await page.evaluate(() => {
+  const t = document.body.textContent ?? '';
+  return {
+    gap: (t.match(/חסר מידע לייצור/g) ?? []).length,
+    naming: (t.match(/השם מבטיח/g) ?? []).length,
+  };
+});
+ok('אין "חסר מידע לייצור" בספרייה', noise.gap === 0, String(noise.gap));
+ok('ואין "השם מבטיח"', noise.naming === 0, String(noise.naming));
 
-await browser.close();
-for (const e of errs) out.push('FAIL ' + e);
+ok('בלי שגיאות דף', errs.length === 0, errs.join(' ; '));
+
 console.log(out.join('\n'));
-const fail = out.filter((l) => l.startsWith('FAIL')).length;
-console.log(`${out.length - fail} pass, ${fail} fail`);
-process.exit(fail ? 1 : 0);
+await browser.close();
+process.exit(out.some((l) => l.startsWith('FAIL')) ? 1 : 0);

@@ -783,3 +783,41 @@ const TABLES_V29 = {
 } as const;
 
 db.version(29).stores(TABLES_V29);
+
+/*
+ * מכשירי החשמל עוברים לקטגוריה משלהם.
+ *
+ * תנור, מקרר ומדיח ישבו ב"תחתונים" וב"עמודות", מעורבבים בין
+ * ארגזים שנבנים — והם אינם נבנים: אין להם דפנות שנחתכות ואין להם
+ * מה להזמין בפלטות. עכשיו יש להם קטגוריה, ואיתם גם מיקרוגל, תנור
+ * ומיקרוגל, קולט אדים וכיריים.
+ *
+ * שני חצאים לאותו מעבר. הראשון — הקטגוריה נכנסת לחדרים שכבר
+ * נזרעו: `groups` הוא גם סדר וגם *סינון*, ולכן קטגוריה שאינה
+ * כתובה בחדר אינה מוצגת בו גם כשיש בה פריטים. השני — שלושת
+ * המכשירים שכבר קיימים עוברים לקטגוריה החדשה. מה שנוסף אחריהם
+ * מגיע דרך `addSystemProducts`, כמו כל מוצר מערכת.
+ */
+db.version(30)
+  .stores(TABLES_V29)
+  .upgrade(async (tx) => {
+    const rooms = (await tx.table('rooms').toArray()) as {
+      id: string;
+      isBuiltin?: boolean;
+      groups: string[];
+    }[];
+    for (const room of rooms) {
+      if (!room.isBuiltin) continue;
+      if (room.groups.includes('appliance')) continue;
+      /* לפני "דפנות ולוחות", שהוא תמיד האחרון */
+      const at = room.groups.indexOf('panel');
+      const groups = [...room.groups];
+      groups.splice(at < 0 ? groups.length : at, 0, 'appliance');
+      await tx.table('rooms').update(room.id, { groups });
+    }
+
+    for (const id of ['k-base-oven', 'k-base-dw', 'k-tall-fridge']) {
+      const row = await tx.table('catalog').get(id);
+      if (row) await tx.table('catalog').update(id, { group: 'appliance' });
+    }
+  });

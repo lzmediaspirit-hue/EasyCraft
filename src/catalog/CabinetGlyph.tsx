@@ -260,6 +260,32 @@ function details(c: Ctx) {
       ];
     }
 
+    case 'micro': {
+      /* דלת זכוכית ברוב הרוחב, ופאנל פיקוד ברצועה שלצידה */
+      const pad = w * 0.07;
+      const panel = w * 0.22;
+      return [
+        <rect key="door" x={pad} y={h * 0.16} width={w - pad * 2 - panel} height={h * 0.68}
+          rx={w * 0.02} strokeWidth={t} />,
+        L(w - pad - panel * 0.75, h * 0.24, w - pad - panel * 0.2, h * 0.24, 'p1'),
+        L(w - pad - panel * 0.75, h * 0.36, w - pad - panel * 0.2, h * 0.36, 'p2'),
+        <circle key="knob" cx={w - pad - panel * 0.48} cy={h * 0.62} r={Math.min(w, h) * 0.06}
+          strokeWidth={t} />,
+      ];
+    }
+
+    case 'cooktop': {
+      /* לוח שמונח במשטח: ארבעה מבערים, ובלי גוף שמתחתיו */
+      const r = Math.min(w, h) * 0.17;
+      return [
+        <rect key="plate" x={w * 0.06} y={h * 0.14} width={w * 0.88} height={h * 0.72}
+          rx={w * 0.03} strokeWidth={t} />,
+        ...[[0.3, 0.36], [0.7, 0.36], [0.3, 0.68], [0.7, 0.68]].map(([fx, fy], i) => (
+          <circle key={`b${i}`} cx={w * fx} cy={h * fy} r={r} strokeWidth={t} />
+        )),
+      ];
+    }
+
     case 'hood':
       return [
         <path key="p" d={`M ${w * 0.24} ${h} L ${w * 0.34} ${h * 0.3} L ${w * 0.66} ${h * 0.3} L ${w * 0.76} ${h} Z`}

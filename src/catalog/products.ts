@@ -15,12 +15,16 @@ import type { ShippedItem } from './shipped';
 /**
  * הדור של מוצרי המערכת.
  *
+ * 3 — כל המכשירים החשמליים בקטגוריה משלהם בספרייה: לתנור, למדיח
+ *     ולמקרר שכבר היו נוספו מיקרוגל, תנור ומיקרוגל, קולט אדים
+ *     וכיריים, ושבעתם עברו מ"תחתונים"/"עמודות" ל"מכשירי חשמל".
+ *
  * מי שהתקין לפני שהאי והמדף נוספו לא קיבל אותם: הזריעה רצה פעם אחת
  * בהתקנה, והספרייה כבר סומנה כ"נזרעה". דור שעולה אומר "יש כאן מוצר
  * שלא היה", ובלי לשחזר את כל ספריית ההדגמה ובלי להחזיר מה שנמחק
  * בכוונה. כשמוסיפים מוצר מערכת חדש — מעלים את המספר.
  */
-export const PRODUCTS_GENERATION = 2;
+export const PRODUCTS_GENERATION = 3;
 
 /**
  * הלוחות הבודדים: מזהה, מק״ט, שם, רוחב, רוחבים, גובה, עובי.
@@ -103,7 +107,7 @@ export const SHIPPED_PRODUCTS: ShippedItem[] = [
     id: 'k-base-oven',
     code: 'B-110',
     rooms: ['kitchen'],
-    group: 'base',
+    group: 'appliance',
     name: 'תנור',
     glyph: 'oven',
     level: 'floor',
@@ -123,7 +127,7 @@ export const SHIPPED_PRODUCTS: ShippedItem[] = [
     id: 'k-base-dw',
     code: 'B-109',
     rooms: ['kitchen'],
-    group: 'base',
+    group: 'appliance',
     name: 'מדיח',
     glyph: 'dishwasher',
     level: 'floor',
@@ -143,7 +147,7 @@ export const SHIPPED_PRODUCTS: ShippedItem[] = [
     id: 'k-tall-fridge',
     code: 'T-103',
     rooms: ['kitchen'],
-    group: 'tall',
+    group: 'appliance',
     name: 'מקרר',
     glyph: 'fridge',
     level: 'tall',
@@ -158,6 +162,88 @@ export const SHIPPED_PRODUCTS: ShippedItem[] = [
     isBuiltin: true,
     sortOrder: 1040,
     note: 'לבדוק עומק המקרר בפועל — לרוב 650–700 מ״מ',
+  },
+
+  {
+    id: 'appliance-micro',
+    code: 'A-104',
+    rooms: ['kitchen', 'utility', 'office'],
+    group: 'appliance',
+    name: 'מיקרוגל',
+    glyph: 'micro',
+    level: 'wall',
+    defaultWidthMm: 595,
+    widthOptionsMm: [500, 595, 600],
+    defaultHeightMm: 388,
+    defaultDepthMm: 390,
+    defaultYMm: 1500,
+    socleMm: 0,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1050,
+    note: 'נישת מיקרוגל: 560×380×380 מ״מ. מרווח פתיחה 400 מ״מ.',
+  },
+  {
+    id: 'appliance-oven-micro',
+    code: 'A-105',
+    rooms: ['kitchen'],
+    group: 'appliance',
+    name: 'תנור ומיקרוגל',
+    glyph: 'ovenMicro',
+    level: 'tall',
+    defaultWidthMm: 595,
+    widthOptionsMm: [595, 600],
+    defaultHeightMm: 1010,
+    defaultDepthMm: 550,
+    defaultYMm: 700,
+    socleMm: 0,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1060,
+    note: 'שתי נישות נפרדות: תנור 560×590 ומיקרוגל 560×380 מ״מ.',
+  },
+  {
+    id: 'appliance-hood',
+    code: 'A-106',
+    rooms: ['kitchen'],
+    group: 'appliance',
+    name: 'קולט אדים',
+    glyph: 'hood',
+    level: 'wall',
+    defaultWidthMm: 600,
+    widthOptionsMm: [600, 700, 800, 900],
+    defaultHeightMm: 400,
+    defaultDepthMm: 500,
+    defaultYMm: 1500,
+    socleMm: 0,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1070,
+    note: 'נתלה 650–750 מ״מ מעל הכיריים. הארובה נמדדת עד התקרה.',
+  },
+  {
+    id: 'appliance-cooktop',
+    code: 'A-107',
+    rooms: ['kitchen'],
+    group: 'appliance',
+    name: 'כיריים',
+    glyph: 'cooktop',
+    level: 'floor',
+    defaultWidthMm: 590,
+    widthOptionsMm: [300, 450, 590, 750, 900],
+    defaultHeightMm: 50,
+    defaultDepthMm: 520,
+    /* מונחות במשטח: גובה העבודה פחות עובי הכיריים */
+    defaultYMm: 880,
+    socleMm: 0,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1080,
+    note: 'חיתוך במשטח: 560×490 מ״מ, עם 50 מ״מ שוליים מכל צד.',
   },
 
   /* הלוחות הבודדים — ראה `BOARDS` מתחת */

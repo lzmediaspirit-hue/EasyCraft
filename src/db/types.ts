@@ -712,7 +712,23 @@ export const RAIL_WIDTH_MM = 100;
  * `island` ו-`shelf` הם מוצרים בפני עצמם ולא ארגז על קיר, ולכן
  * יש להם מקום משלהם ולא שורה בתוך "תחתונים".
  */
-export type CatalogGroup = 'base' | 'upper' | 'tall' | 'storage' | 'panel' | 'island' | 'shelf';
+/**
+ * קטגוריה בספרייה.
+ *
+ * `appliance` הוא מכשיר שנקנה שלם — תנור, מקרר, מיקרוגל, כיריים —
+ * ולא ארגז שנבנה. הוא יושב בספרייה לצד הארגזים כי שם מחפשים אותו
+ * כשמתכננים מטבח, והוא בקטגוריה משלו כי הוא אינו נחתך מפלטה
+ * ואינו נספר בייצור.
+ */
+export type CatalogGroup =
+  | 'base'
+  | 'upper'
+  | 'tall'
+  | 'storage'
+  | 'panel'
+  | 'island'
+  | 'shelf'
+  | 'appliance';
 
 /**
  * חלק בפריט מורכב.
