@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Sheet } from '../../ui/Sheet';
 import { saveFile } from '../../ui/saveFile';
 import { Pill } from '../../ui/Pill';
-import { catalogRepo } from '../../catalog/catalogRepo';
+import { applyLibraryUpdate, catalogRepo, libraryUpdate } from '../../catalog/catalogRepo';
 import {
-  applyLibraryUpdate,
   hasLibraryUpdate,
-  libraryUpdate,
   type LibraryChange,
   type LibraryUpdate,
 } from '../../catalog/libraryRelease';

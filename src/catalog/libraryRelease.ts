@@ -1,7 +1,3 @@
-import { db } from '../db/db';
-import { settingsRepo } from '../materials/materialsRepo';
-import { allMine, owned } from '../db/rows';
-import { workshopId } from '../db/workshop';
 import { LIBRARY_RELEASE, SHIPPED_LIBRARY, type ShippedItem } from './shipped';
 import { reusableSpec } from '../db/types';
 import type { CatalogItem } from '../db/types';
@@ -76,19 +72,21 @@ function fingerprint(i: Partial<CatalogItem>): string {
 /**
  * מה יקרה אם נחיל את השחרור — בלי להחיל אותו.
  *
- * `edited` היא ההתנגשות: התבנית קיימת כאן, היא שונה מהשחרור, והיא
- * שונה גם מהגרסה שנשלחה בשחרור. בלי היסטוריה של הגרסה הקודמת אי
- * אפשר לדעת מי שינה אותה, ולכן ברירת המחדל היא לא לגעת בה.
+ * טהורה במכוון: היא מקבלת את מה שיש ומחזירה את ההפרש, ולכן אפשר
+ * להריץ אותה על נתוני בדיקה. הקריאה למסד יושבת ב-`catalogRepo`,
+ * כמו כל קריאה אחרת.
+ *
+ * `edited` היא ההתנגשות: התבנית קיימת כאן והיא שונה גם מהשחרור
+ * וגם מהסימון שקיבלה בשחרור הקודם — כלומר ייתכן שנערכה כאן.
+ * ברירת המחדל היא לא לגעת בה.
  */
-export async function libraryUpdate(): Promise<LibraryUpdate> {
-  const [settings, rows, marks] = await Promise.all([
-    settingsRepo.get(),
-    allMine(db.catalog),
-    db.tombstones.where('[workshopId+table]').equals([workshopId(), 'catalog']).toArray(),
-  ]);
-  const have = settings.libraryRelease ?? 0;
+export function diffLibrary(
+  rows: CatalogItem[],
+  erasedIds: string[],
+  have: number,
+): LibraryUpdate {
   const byId = new Map(rows.map((i) => [i.id, i]));
-  const erased = new Set(marks.map((m) => m.rowId));
+  const erased = new Set(erasedIds);
   const changes: LibraryChange[] = [];
 
   for (const s of SHIPPED_LIBRARY) {
@@ -103,12 +101,6 @@ export async function libraryUpdate(): Promise<LibraryUpdate> {
       continue;
     }
     if (fingerprint(local) === fingerprint(s)) continue;
-    /*
-     * שונה מהשחרור. תבנית שנושאת סימון שחרור וזהה לו מעולם לא
-     * נערכה כאן, ולכן השינוי הוא של השחרור בלבד. תבנית שתוכנה
-     * שונה מהסימון שלה — או שאין לה סימון כלל — ייתכן שנערכה
-     * כאן, והיא מוצגת כהתנגשות ואינה נדרסת.
-     */
     const untouched = !!local.releaseMark && local.releaseMark === fingerprint(local);
     changes.push({ kind: untouched ? 'changed' : 'edited', ...label, shipped: s, local });
   }
@@ -122,48 +114,24 @@ export function hasLibraryUpdate(u: LibraryUpdate): boolean {
 }
 
 /**
- * החלת השחרור, על מה שנבחר בלבד.
+ * התבנית כפי שהיא תיראה אחרי שהשחרור יוחל עליה.
  *
- * `take` הוא רשימת המזהים שאושרו. מה שאינו בה נשאר כפי שהוא,
- * והגרסה נרשמת בכל מקרה — כדי שמי שבחר לא לקבל שינוי לא יישאל
- * עליו שוב בכל פתיחה.
+ * הסדר בספרייה, המועדף והמק״ט הם של הנגרייה, ולכן הם שורדים את
+ * העדכון. כל השאר מגיע מהשחרור, והסימון נרשם כדי שהעריכה הבאה
+ * תהיה ניתנת לזיהוי.
  */
-export async function applyLibraryUpdate(take: string[]): Promise<number> {
-  const picked = new Set(take);
-  const { changes } = await libraryUpdate();
-  const now = Date.now();
-  let n = 0;
-  await db.transaction('rw', db.catalog, async () => {
-    for (const c of changes) {
-      if (!c.shipped || c.kind === 'removed' || !picked.has(c.shipped.id)) continue;
-      const mark = fingerprintOf(c.shipped);
-      if (c.kind === 'added') {
-        await db.catalog.put({
-          ...c.shipped,
-          releaseMark: mark,
-          ...owned(),
-          createdAt: now,
-          updatedAt: now,
-        } as CatalogItem);
-      } else if (c.local) {
-        /* הסדר, המועדף והמק״ט של הנגרייה נשארים שלה */
-        await db.catalog.put({
-          ...c.local,
-          ...c.shipped,
-          id: c.local.id,
-          code: c.local.code ?? c.shipped.code,
-          sortOrder: c.local.sortOrder,
-          favorite: c.local.favorite,
-          releaseMark: mark,
-          updatedAt: now,
-          rev: (c.local.rev ?? 0) + 1,
-        } as CatalogItem);
-      }
-      n += 1;
-    }
-  });
-  await settingsRepo.save({ libraryRelease: LIBRARY_RELEASE });
-  return n;
+export function mergedRow(local: CatalogItem, shipped: ShippedItem, now: number): CatalogItem {
+  return {
+    ...local,
+    ...shipped,
+    id: local.id,
+    code: local.code ?? shipped.code,
+    sortOrder: local.sortOrder,
+    favorite: local.favorite,
+    releaseMark: fingerprint(shipped),
+    updatedAt: now,
+    rev: (local.rev ?? 0) + 1,
+  } as CatalogItem;
 }
 
 /** טביעת האצבע של תבנית בשחרור — נשמרת בשורה כדי לדעת מה נערך. */

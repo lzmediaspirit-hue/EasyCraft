@@ -65,9 +65,18 @@ ok('אין אותו ארגז פעמיים', lib.twins === lib.n, `${lib.twins}/$
 ok('כל הארגזים נגישים מהספרייה הקלאסית', lib.common === lib.n, `${lib.common}/${lib.n}`);
 ok('שלוש הקטגוריות שכל חדר בנוי מהן קיימות',
   ['base', 'upper', 'tall'].every((g) => lib.groups.includes(g)), lib.groups.join());
-/* ארגז שנבנה בנגרייה שמר את המבנה שלו, ולא רק את המידות */
+/*
+ * ארגז שנבנה בנגרייה שמר את המבנה שלו, ולא רק את המידות.
+ *
+ * ארון הכיריים תואר עד כה כאזור מגירות אחד שממלא את הגוף, ולכן
+ * לא היה בו חלל מתחת למשטח שהכיריים נופלות לתוכו — והבדיקה
+ * המבנית סימנה אותו כמי שהשם שלו מבטיח מה שהמבנה אינו נותן.
+ * עכשיו יש בו שני אזורים: מגירות, ומעליהן חלל לחיתוך.
+ */
 ok('ארגז הכיריים שמר את האזורים שלו',
-  lib.sample?.zones?.length === 1 && lib.sample.zones[0].drawers === 3,
+  lib.sample?.zones?.length === 2 &&
+    lib.sample.zones[0].kind === 'drawers' &&
+    lib.sample.zones[1].kind === 'empty',
   JSON.stringify(lib.sample?.zones));
 ok('ואת המסילות החסרות', lib.sample?.rails?.back === false && lib.sample?.rails?.top === false,
   JSON.stringify(lib.sample?.rails));

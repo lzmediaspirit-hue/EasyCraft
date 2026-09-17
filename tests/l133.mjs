@@ -76,6 +76,7 @@ const model = await page.evaluate(async () => {
         (e) => e.kind === 'drawer',
       )?.missing ?? null,
     ovenMissing: of({ glyph: 'oven', doors: 0 }).find((e) => e.kind === 'appliance')?.missing ?? null,
+    ovenReach: of({ glyph: 'oven', doors: 0 }).find((e) => e.kind === 'appliance')?.box?.d ?? null,
     ovenKnown:
       of({ glyph: 'oven', doors: 0, openClearanceMm: 600 }).find((e) => e.kind === 'appliance')
         ?.box?.d ?? null,
@@ -97,7 +98,16 @@ ok('and says nothing once it is known', model.singleKnown === null, String(model
 ok('drawers pull out into the room', model.drawerKinds.includes('drawer'), model.drawerKinds.join(','));
 ok('and the runner length is reported missing', /מסילה/.test(model.drawerMissing ?? ''), String(model.drawerMissing));
 ok('until the carpenter enters it', model.drawerKnown === null, String(model.drawerKnown));
-ok('an oven has no invented clearance', /יצרן/.test(model.ovenMissing ?? ''), String(model.ovenMissing));
+/*
+ * מרווח הפתיחה של מכשיר אינו "נתון חסר" אלא מידת תקן.
+ *
+ * עד כאן הוא דווח כחסר, כי איש לא ידע כמה סוחפת דלת תנור. מכשירי
+ * בילד־אין מיוצרים לפי תקן אחד, והמידות יושבות ב-`appliances.ts`;
+ * מי שמזין מידה משלו מקבל אותה. שאלה שיש לה תשובה אינה מוצגת
+ * כחוסר.
+ */
+ok('an oven uses the standard clearance', model.ovenMissing === null, String(model.ovenMissing));
+ok('and it is the standard 600', model.ovenReach === 600, String(model.ovenReach));
 ok('and takes the one from the maker', model.ovenKnown === 600, String(model.ovenKnown));
 ok('a room door with no data says which data', /נפתחת/.test(model.doorNoData ?? ''), String(model.doorNoData));
 ok('a sliding room door sweeps nothing', model.doorSlide === null, String(model.doorSlide));

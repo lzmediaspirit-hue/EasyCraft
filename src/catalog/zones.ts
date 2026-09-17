@@ -1,5 +1,6 @@
 import { clamp } from '../ui/units';
 import { autoShelves, constructionCaps } from './construction';
+import { glyphDef } from './glyphList';
 import type { CornerKind, PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../db/types';
 
 /** מה שצריך לדעת על ארגז כדי לחשב את הפינה המתה שלו. */
@@ -293,7 +294,17 @@ function derive(u: FlatSource): Zone[] {
    * ארון — מי שכן רוצה שם מדף יגדיר אותו, אבל הוא לא ייספר בחומרים
    * רק מפני שהצורה נראית כמו ארגז.
    */
-  const auto = constructionCaps(u.glyph).shelves ? autoShelves(h) : 0;
+  /*
+   * נישה למכשיר או לכיור מתחילה ריקה.
+   *
+   * `constructionCaps` מרשה לכל גוף ארון גם מדפים — וזה נכון,
+   * האיור אינו מגביל את מה שאפשר לבנות. אבל ברירת המחדל היא
+   * שאלה אחרת: ארגז שצויר ככיור ולא הוגדרו בו אזורים אינו ארגז
+   * מדפים, כי מתחת לקערה אין מדף. חלל ריק הוא מה שיש שם עד
+   * שנאמר אחרת, וזה גם מה שהופך אותו לארגז כיור בפועל.
+   */
+  const auto =
+    glyphDef(u.glyph).appliance ? 0 : constructionCaps(u.glyph).shelves ? autoShelves(h) : 0;
   const shelves = u.shelves ?? auto;
   return [
     {

@@ -130,13 +130,38 @@ const out = await page.evaluate(async () => {
     collision.clash(boxAt({ id: 'a', xMm: 0 }), boxAt({ id: 'b', xMm: 0, yMm: 820 })),
     false,
   );
+  /*
+   * הכלה אינה שאלה על שתי תיבות אלא על שני ארגזים: ארגז מארח
+   * לתוך נישה שהוא מפנה. `clash` מחזיר חפיפה פיזית — וזה נכון,
+   * שני גופים באמת נפגשים — ו-`unitsClash` הוא מי שיודע להתיר.
+   */
+  const host = {
+    ...base, id: 'a', xMm: 0, widthMm: 900, heightMm: 2000, depthMm: 580,
+    zones: [{ id: 'z', heightMm: 2000, kind: 'empty' }],
+  };
+  const guest = { ...base, id: 'b', xMm: 100, widthMm: 500, heightMm: 400, yMm: 300, depthMm: 560 };
   check(
-    'a small box fully inside a big one does not clash',
-    collision.clash(
-      boxAt({ id: 'a', xMm: 0, widthMm: 900, heightMm: 2000 }),
-      boxAt({ id: 'b', xMm: 100, widthMm: 500, heightMm: 400, yMm: 300 }),
+    'nested boxes physically meet',
+    collision.clash(boxAt(host), boxAt(guest)),
+    true,
+  );
+  check(
+    'an appliance inside a declared cavity is allowed',
+    collision.unitsClash(
+      { unit: host, box: boxAt(host) },
+      { unit: guest, box: boxAt(guest) },
     ),
     false,
+  );
+  /* וארגז מלא אינו מארח דבר: אין בו חלל, ולכן זו חדירה */
+  const solid = { ...host, zones: [{ id: 'z', heightMm: 2000, kind: 'shelves', shelves: 4 }] };
+  check(
+    'a full carcass hosts nothing',
+    collision.unitsClash(
+      { unit: solid, box: boxAt(solid) },
+      { unit: guest, box: boxAt(guest) },
+    ),
+    true,
   );
   check(
     'two identical boxes clash',

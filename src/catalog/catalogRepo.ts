@@ -5,7 +5,7 @@ import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind } from 
 import { CODE_PREFIX, codeNumber, fillCodes } from './codes';
 import { SEED_CATALOG, type SeedItem } from './builtins';
 import { LIBRARY_RELEASE, SHIPPED_LIBRARY, type ShippedItem } from './shipped';
-import { fingerprintOf } from './libraryRelease';
+import { diffLibrary, fingerprintOf, mergedRow, type LibraryUpdate } from './libraryRelease';
 import { PRODUCTS_GENERATION, SHIPPED_PRODUCTS } from './products';
 import { allMine, eraseIds, mine, owned, patchRow } from '../db/rows';
 import { workshopId } from '../db/workshop';
@@ -90,6 +90,53 @@ async function runSeed(): Promise<void> {
  * אינו מחזיר מה שנמחק בכוונה — סימון המחיקה הוא התשובה ל"כבר היה
  * לי את זה ולא רציתי אותו".
  */
+/**
+ * מה מציע השחרור הנוכחי לספרייה שכאן.
+ *
+ * הקריאה למסד יושבת כאן; ההשוואה עצמה טהורה ויושבת ב-
+ * `libraryRelease`. ראה שם למה זה לא זריעה חוזרת.
+ */
+export async function libraryUpdate(): Promise<LibraryUpdate> {
+  const [settings, rows, marks] = await Promise.all([
+    settingsRepo.get(),
+    allMine(db.catalog),
+    db.tombstones.where('[workshopId+table]').equals([workshopId(), 'catalog']).toArray(),
+  ]);
+  return diffLibrary(rows, marks.map((m) => m.rowId), settings.libraryRelease ?? 0);
+}
+
+/**
+ * החלת השחרור, על מה שסומן בלבד.
+ *
+ * הגרסה נרשמת בכל מקרה: מי שבחר לא לקבל שינוי לא יישאל עליו שוב
+ * בכל פתיחה. מה שלא סומן נשאר כפי שהוא.
+ */
+export async function applyLibraryUpdate(take: string[]): Promise<number> {
+  const picked = new Set(take);
+  const { changes } = await libraryUpdate();
+  const now = Date.now();
+  let n = 0;
+  await db.transaction('rw', db.catalog, async () => {
+    for (const c of changes) {
+      if (!c.shipped || c.kind === 'removed' || !picked.has(c.shipped.id)) continue;
+      if (c.kind === 'added') {
+        await db.catalog.put({
+          ...c.shipped,
+          releaseMark: fingerprintOf(c.shipped),
+          ...owned(),
+          createdAt: now,
+          updatedAt: now,
+        } as CatalogItem);
+      } else if (c.local) {
+        await db.catalog.put(mergedRow(c.local, c.shipped, now));
+      }
+      n += 1;
+    }
+  });
+  await settingsRepo.save({ libraryRelease: LIBRARY_RELEASE });
+  return n;
+}
+
 export async function addSystemProducts(): Promise<number> {
   const settings = await settingsRepo.get();
   const had = settings.productsGeneration ?? 0;
