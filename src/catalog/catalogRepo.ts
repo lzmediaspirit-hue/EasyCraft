@@ -4,7 +4,8 @@ import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind } from 
 
 import { CODE_PREFIX, codeNumber, fillCodes } from './codes';
 import { SEED_CATALOG, type SeedItem } from './builtins';
-import { SHIPPED_LIBRARY, type ShippedItem } from './shipped';
+import { LIBRARY_RELEASE, SHIPPED_LIBRARY, type ShippedItem } from './shipped';
+import { fingerprintOf } from './libraryRelease';
 import { PRODUCTS_GENERATION, SHIPPED_PRODUCTS } from './products';
 import { allMine, eraseIds, mine, owned, patchRow } from '../db/rows';
 import { workshopId } from '../db/workshop';
@@ -61,8 +62,20 @@ async function runSeed(): Promise<void> {
    */
   const fresh = new Map(fillCodes(rows).map((c) => [c.id, c.code]));
   // bulkPut ולא bulkAdd — כדי ששתי הפעלות במקביל לא ייפלו על כפילות
-  await db.catalog.bulkPut(rows.map((r) => ({ ...r, code: r.code ?? fresh.get(r.id) })));
-  await settingsRepo.save({ catalogSeededAt: now, productsGeneration: PRODUCTS_GENERATION });
+  await db.catalog.bulkPut(
+    rows.map((r) => ({
+      ...r,
+      code: r.code ?? fresh.get(r.id),
+      /* הסימון שממנו יידעו בעתיד מה נערך כאן ומה שינה שחרור */
+      releaseMark: fingerprintOf(r),
+    })),
+  );
+  await settingsRepo.save({
+    catalogSeededAt: now,
+    productsGeneration: PRODUCTS_GENERATION,
+    /* התקנה חדשה מקבלת את הגרסה הנוכחית, ואין לה מה לעדכן */
+    libraryRelease: LIBRARY_RELEASE,
+  });
 }
 
 /**

@@ -1,3 +1,4 @@
+import { itemSpec } from '../../catalog/roles';
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
@@ -88,7 +89,7 @@ export function DesktopLibrary({
             <CabinetThumbnail item={item} className="h-14 w-full text-stone-500" />
             <span className="text-[11px] leading-tight font-medium text-stone-800">{item.name}</span>
             <span className="num text-[10px] text-stone-400">{cabinetSize(item)}</span>
-            <ProductionGap item={item} className="w-full" />
+            <ProductionGap item={itemSpec(item)} className="w-full" />
           </button>
         ))}
       </div>

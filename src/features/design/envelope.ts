@@ -1,7 +1,8 @@
 import { bodyHeightMm, intoRoomMm } from '../../db/types';
 import type { PlacedUnit, WallFeature } from '../../db/types';
 import { glyphDef } from '../../catalog/glyphList';
-import { unitFronts, unitZones } from '../../catalog/zones';
+import { applianceOf } from '../../catalog/appliances';
+import { unitFronts, unitZones, zoneBands, zoneCells } from '../../catalog/zones';
 import { featureBox, rad, unitBox, unitFrame } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
@@ -81,15 +82,39 @@ function inFront(b: UnitBox, reachMm: number, y: number, h: number): UnitBox {
   return { cx, cz, w: b.w, d: reachMm, y, h, facing: b.facing };
 }
 
-/** כמה דלתות יש לארגז בפועל, אחרי כל הרצפים. */
-function doorLeaves(u: PlacedUnit): number {
-  const h = bodyHeightMm(u);
-  return unitFronts({ ...u, heightMm: h }, h).reduce((n, f) => n + f.doors, 0);
+/**
+ * רצועה אופקית בגוף הארון, שמשהו בה נפתח.
+ *
+ * הגבהים נמדדים מתחתית הגוף כלפי מעלה, כמו האזורים עצמם.
+ */
+interface Band {
+  fromMm: number;
+  toMm: number;
 }
 
-/** האם יש בארגז מגירה חיצונית שנשלפת אל החדר. */
-function hasDrawers(u: PlacedUnit): boolean {
-  return unitZones(u).some((z) => z.kind === 'drawers' && z.drawerStyle !== 'inner');
+/** תחתית גוף הארון מהרצפה — מעל הרגליים. */
+function bodyBottomMm(u: PlacedUnit): number {
+  return u.yMm + (u.socleMm ?? 0);
+}
+
+/**
+ * כל רצועת מגירות בארון, כולל פנימיות וכולל אלה שבתוך עמודה.
+ *
+ * הבדיקה הקודמת שאלה רק את סוג האזור העליון, ורק על מגירה
+ * חיצונית. לכן מגירה פנימית מאחורי דלת ומגירה בתוך עמודת אזור לא
+ * קיבלו מעטפת שליפה כלל: פתיחת הדלת אינה מייתרת את המקום שהמגירה
+ * צריכה, ומכשול בין טווח הדלת לבין השליפה לא נראה.
+ */
+function drawerBands(u: PlacedUnit, bodyMm: number): Band[] {
+  const out: Band[] = [];
+  for (const { zone, top, bottom } of zoneBands(unitZones(u), bodyMm)) {
+    /* `zoneBands` מודד מלמעלה; הרצועה נמדדת מלמטה */
+    const band = { fromMm: bodyMm - bottom, toMm: bodyMm - top };
+    if (zoneCells(zone).some((c) => c.content.kind === 'drawers' && (c.content.drawers ?? 0) > 0)) {
+      out.push(band);
+    }
+  }
+  return out;
 }
 
 /**
@@ -106,58 +131,78 @@ export function unitEnvelopes(u: PlacedUnit, plan: PlanWall[]): Envelope[] {
   const own = { ownerId: u.id, ownerName: u.name };
 
   /*
-   * מכשיר עצמאי אינו ארון שאנחנו בונים, ולכן מרווח הפתיחה שלו הוא
-   * של היצרן. דלת תנור נופלת קדימה, דלת מקרר מסתובבת, ומדיח נפתח
-   * כלפי מטה — שלושה מספרים שונים שאיש כאן אינו יודע. בלי הנתון
-   * נאמר שהוא חסר.
+   * מכשיר עצמאי אינו ארון שאנחנו בונים, אבל מרווח הפתיחה שלו אינו
+   * נעלם: דלת תנור נופלת קדימה, דלת מקרר מסתובבת ומדיח נפתח כלפי
+   * מטה, ולכל אחד מהם מידת תקן. מי שהזין מידה משלו מקבל אותה;
+   * מי שלא — מקבל את התקן, ולא "נתון חסר" על שאלה שיש לה תשובה.
    */
   if (def.standalone) {
-    const reach = u.openClearanceMm;
+    const std = applianceOf(u);
+    const reach = u.openClearanceMm ?? std?.openClearanceMm;
     out.push({
       ...own,
       kind: 'appliance',
       box: reach ? inFront(box, reach, u.yMm, u.heightMm) : null,
-      missing: reach ? undefined : 'מרווח הפתיחה של המכשיר, לפי היצרן',
+      missing: reach ? undefined : 'מרווח הפתיחה של המכשיר',
     });
     return out;
   }
 
-  const leaves = doorLeaves(u);
-  if (leaves > 0 && u.opening !== 'sliding') {
-    const h = bodyHeightMm(u);
-    if (u.opening === 'lift') {
+  const bodyMm = bodyHeightMm(u);
+  const bottom = bodyBottomMm(u);
+  const fronts = unitFronts({ ...u, heightMm: bodyMm }, bodyMm);
+
+  if (u.opening !== 'sliding') {
+    for (const f of fronts) {
+      if (f.doors <= 0) continue;
+      const h = f.toMm - f.fromMm;
+      if (u.opening === 'lift') {
+        /*
+         * קלאפה אינה סוחפת רצפה אלא אוויר מעליה: היא מתרוממת ונשארת
+         * פתוחה מעל הארון. מה שחוסם אותה הוא ארון שמעליו, ולכן
+         * המעטפת עולה מהתקרה של הגוף.
+         */
+        out.push({
+          ...own,
+          kind: 'lift',
+          box: { ...box, y: u.yMm + u.heightMm, h: leafReachMm(h, f.doors) },
+        });
+        continue;
+      }
       /*
-       * קלאפה אינה סוחפת רצפה אלא אוויר מעליה: היא מתרוממת ונשארת
-       * פתוחה מעל הארון. מה שחוסם אותה הוא ארון שמעליו, ולכן
-       * המעטפת עולה מהתקרה של הגוף.
-       */
-      out.push({
-        ...own,
-        kind: 'lift',
-        box: { ...box, y: u.yMm + u.heightMm, h: leafReachMm(h, leaves) },
-      });
-    } else {
-      /*
+       * מעטפת לכל קומת חזית בנפרד, ברוחב הכנף שלה ובגובה שלה.
+       *
+       * הסכימה הקודמת חיברה את כל הכנפיים בארון לספירה אחת: ארון
+       * ברוחב 800 עם שתי קומות ובכל קומה שתי דלתות קיבל 800 חלקי
+       * ארבע — טווח פתיחה של 200 מ״מ במקום 400. כנף אינה מתקצרת
+       * מפני שיש עוד כנף מעליה.
+       *
        * דלת אחת בלי צד צירים — לא ידוע לאן היא נפתחת, ולכן
        * המעטפת מכסה את כל החזית: זו ההערכה הבטוחה, והחוסר מדווח.
-       * שתי דלתות נפתחות לשני הצדדים ממילא, ואין מה לשאול.
        */
-      const single = leaves === 1 && !u.hingeSide;
+      const single = f.doors === 1 && !u.hingeSide;
       out.push({
         ...own,
         kind: 'cabinetDoor',
-        box: inFront(box, leafReachMm(u.widthMm, leaves), u.yMm, u.heightMm),
+        box: inFront(box, leafReachMm(u.widthMm, f.doors), bottom + f.fromMm, h),
         missing: single ? 'צד הצירים של הדלת' : undefined,
       });
     }
   }
 
-  if (hasDrawers(u)) {
-    const reach = u.openClearanceMm ?? drawerReachMm(u);
+  /*
+   * שליפת מגירה, לכל רצועת מגירות בגובה שלה.
+   *
+   * המעטפת נמתחת על כל רוחב הארון גם כשהמגירה יושבת בעמודה אחת:
+   * זו הערכה כלפי מעלה, והיא מסומנת ככזאת. מוטב להתריע על מכשול
+   * שאינו בדרך מאשר לפספס אחד שכן.
+   */
+  const reach = u.openClearanceMm ?? drawerReachMm(u);
+  for (const band of drawerBands(u, bodyMm)) {
     out.push({
       ...own,
       kind: 'drawer',
-      box: reach > 0 ? inFront(box, reach, u.yMm, u.heightMm) : null,
+      box: reach > 0 ? inFront(box, reach, bottom + band.fromMm, band.toMm - band.fromMm) : null,
       missing: u.openClearanceMm ? undefined : 'אורך השליפה של המסילה',
     });
   }

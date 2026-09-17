@@ -1,6 +1,7 @@
 import { glyphDef } from '../../catalog/glyphList';
 import { featureBiteMm, featureDef, featureOverlaps } from '../projects/wallFeatures';
-import { boxCorners, featureBox, unitBox } from './placement';
+import { boxCorners, featureBox, frontOverhangMm, solidBox } from './placement';
+import { unitCaps } from '../../catalog/capabilities';
 import type { UnitBox } from './placement';
 import type { PlacedUnit } from '../../db/types';
 import type { PlanWall } from './plan';
@@ -17,11 +18,17 @@ import type { PlanWall } from './plan';
  *
  *   • נגיעה מותרת. שני ארגזים שחולקים פאה — זו הצמדה, וזה מה
  *     שההצמדה נועדה לעשות.
- *   • הכלה מותרת. ארגז שנכנס כולו לתוך השני הוא מכשיר בתוך עמודה
- *     או מגירה בתוך ארון; חזית שבולטת קדימה עדיין נחשבת בפנים, כי
- *     ככה נראה תנור אמיתי.
- *   • חדירה חלקית אסורה. שתי תיבות שנכנסות זו לזו רק בחלקן פירושן
- *     שדופן עוברת באמצע תחתית — זה לא נבנה, ולכן זה גם לא מצויר.
+ *   • הכנסה לתא מארח מותרת. מכשיר שנכנס לנישה שהארון פינה לו הוא
+ *     בדיוק מה שהארון נבנה בשבילו.
+ *   • כל חפיפה אחרת אסורה. שתי תיבות שנכנסות זו לזו פירושן שדופן
+ *     עוברת באמצע תחתית — זה לא נבנה, ולכן זה גם לא מצויר.
+ *
+ * וזה מה שהשתנה כאן. ההיתר הישן היה "כל תיבה צרה יותר שיושבת
+ * כולה בפנים", בלי קשר הרכבה ובלי גבול לבליטה קדימה — ולכן שני
+ * ארגזים סגורים בגובה 2,000, אחד ברוחב 1,000 ועומק 600 והשני
+ * ברוחב 800 ועומק 2,000, עברו בלי התנגשות אף ששניהם גופים מלאים
+ * שחופפים. עכשיו ההיתר דורש תא מארח מוגדר: חלל פנוי שהארון
+ * באמת מפנה, במקום שהוא מפנה אותו ובמידות שלו.
  */
 
 /** סובלנות במ"מ: מגע והצמדה אינם חדירה */
@@ -47,12 +54,85 @@ export function blocked(
 ): boolean {
   if (glyphDef(unit.glyph).cladding) return false;
   if (hitsFeature(unit, at, plan)) return true;
+  /* הגוף כולל את החזית הסגורה שבולטת ממנו */
+  const mine = grow(unit, at);
   for (const o of others) {
     if (o.id === unit.id || glyphDef(o.glyph).cladding) continue;
-    const ob = unitBox(o, plan);
-    if (ob && clash(at, ob)) return true;
+    const ob = solidBox(o, plan);
+    if (ob && unitsClash({ unit, box: mine }, { unit: o, box: ob })) return true;
   }
   return false;
+}
+
+/** הוספת עובי החזית לתיבה שכבר חושבה — לגרירה, שמחשבת מיקום נבדק. */
+function grow(u: PlacedUnit, b: UnitBox): UnitBox {
+  const front = frontOverhangMm(u);
+  if (front <= 0) return b;
+  const f = { x: Math.cos(b.facing), z: Math.sin(b.facing) };
+  return { ...b, d: b.d + front, cx: b.cx + f.x * (front / 2), cz: b.cz + f.z * (front / 2) };
+}
+
+/** ארגז עם התיבה הפיזית שלו, כדי לשאול על השניים יחד. */
+export interface Solid {
+  unit: PlacedUnit;
+  box: UnitBox;
+}
+
+/**
+ * האם שני הארגזים האלה אינם יכולים לעמוד יחד.
+ *
+ * שאלה אחת, ולכן תשובה אחת: הגרירה, מבט העל ושער התכנון קוראים
+ * לה ואינם יכולים לחלוק.
+ */
+export function unitsClash(a: Solid, b: Solid): boolean {
+  if (!meet(a.box, b.box)) return false;
+  /* חפיפה שהיא הכנסה לתא מארח מוגדר אינה התנגשות */
+  return !insertedIn(b, a) && !insertedIn(a, b);
+}
+
+/**
+ * כמה מותר למכשיר לבלוט מפני הנישה שלו.
+ *
+ * חזית תנור יושבת על פני הארון ובולטת ממנו כעובי חזית ועוד ידית.
+ * מה שבולט יותר מזה אינו מכשיר בנישה אלא ארגז שנדחף לתוך ארגז.
+ */
+const PROTRUDE_MM = 60;
+
+/**
+ * האם `inner` נכנס לתא מארח שהארון `outer` באמת מפנה.
+ *
+ * שלושה תנאים, וכולם על הארון המארח: יש לו חלל פנוי, החלל הזה
+ * נמצא בגובה שבו היחידה הפנימית יושבת, והיא נכנסת בו לרוחב
+ * ולעומק. גוף ארון מלא אינו מארח דבר, ולכן ארגז רגיל שנדחף
+ * לתוך ארגז רגיל נחסם — וזה נכון.
+ */
+function insertedIn(inner: Solid, outer: Solid): boolean {
+  const caps = unitCaps(outer.unit);
+  if (!caps.cavities.length) return false;
+
+  /* מידות היחידה הפנימית בצירים של המארחת */
+  const f = { x: Math.cos(outer.box.facing), z: Math.sin(outer.box.facing) };
+  const side = { x: Math.sin(outer.box.facing), z: -Math.cos(outer.box.facing) };
+  const along = spanOn(inner.box, outer.box, side);
+  const depth = spanOn(inner.box, outer.box, f);
+  const halfW = outer.box.w / 2;
+  const halfD = outer.box.d / 2;
+  /* הגב חייב להיות בתוך הנישה; מה שבולט קדימה מוגבל */
+  if (depth.lo < -halfD - TOUCH) return false;
+  if (depth.hi > halfD + PROTRUDE_MM) return false;
+  if (along.lo < -halfW - TOUCH || along.hi > halfW + TOUCH) return false;
+
+  const width = along.hi - along.lo;
+  const into = depth.hi - depth.lo;
+  /* תחתית הגוף של המארח — החללים נמדדים ממנה */
+  const base = outer.unit.yMm + (outer.unit.socleMm ?? 0);
+  return caps.cavities.some((c) => {
+    if (c.widthMm + TOUCH < width) return false;
+    if (c.depthMm + PROTRUDE_MM < into) return false;
+    /* והגובה: היחידה יושבת בתוך החלל, ולא חוצה אותו */
+    const lo = base + c.fromMm;
+    return inner.box.y >= lo - TOUCH && inner.box.y + inner.box.h <= lo + c.heightMm + TOUCH;
+  });
 }
 
 /**
@@ -114,26 +194,25 @@ function featureBlockMm(f: Parameters<typeof featureBiteMm>[0]): number {
   return bite > 0 ? bite : bite < 0 ? 0 : OPENING_CLEAR_MM;
 }
 
-/**
- * חפיפה בפועל, בלי היתר ההכלה.
- *
- * `clash` מתיר לתיבה אחת לשבת כולה בתוך השנייה — מכשיר בתוך
- * עמודה. מול סימון על הקיר ההיתר הזה אינו נכון, ולכן כאן נשאלת
- * השאלה הפיזית בלבד: האם שני הגופים נפגשים.
- */
+/** חפיפה פיזית בין שני גופים, בשמה המוכר למי שקורא לה על מעטפת. */
 export function boxesMeet(a: UnitBox, b: UnitBox): boolean {
-  if (a.y + a.h <= b.y + TOUCH || b.y + b.h <= a.y + TOUCH) return false;
-  return floorsMeet(a, b);
+  return meet(a, b);
 }
 
-/** האם שתי תיבות חודרות זו לזו בפועל. */
+/**
+ * האם שתי תיבות נפגשות בפועל — בלי שאלת ההרכבה.
+ *
+ * זו השאלה הפיזית בלבד, והיא זהה ל-`boxesMeet`. מי ששואל על שני
+ * ארגזים שואל את `unitsClash`, שמכיר גם את הנישות שלהם.
+ */
 export function clash(a: UnitBox, b: UnitBox): boolean {
-  // גובה: אין מפגש בכלל כשאחד נגמר לפני שהשני מתחיל
+  return meet(a, b);
+}
+
+/** מפגש בשלושת הצירים: גובה, ואז רצפה מסובבת. */
+function meet(a: UnitBox, b: UnitBox): boolean {
   if (a.y + a.h <= b.y + TOUCH || b.y + b.h <= a.y + TOUCH) return false;
-  // רצפה: מלבנים מסובבים, ולכן צירים מפרידים
-  if (!floorsMeet(a, b)) return false;
-  // נפגשים — ומותר רק אם אחד מהם נמצא כולו בתוך השני
-  return !contains(a, b) && !contains(b, a);
+  return floorsMeet(a, b);
 }
 
 /**
@@ -156,34 +235,6 @@ function floorsMeet(a: UnitBox, b: UnitBox): boolean {
     }
   }
   return true;
-}
-
-/**
- * האם `inner` יושב כולו בתוך `outer`.
- *
- * נמדד בצירים של החיצוני: זו השאלה "האם הוא נכנס לארון", ולארון יש
- * כיוון.
- *
- * שני סייגים שבלעדיהם החוק היה מתיר את מה שאי אפשר לבנות. הרוחב
- * חייב להיות קטן ממש — דבר שנכנס לתוך ארון צר ממנו, ושתי תיבות
- * זהות באותו מקום אינן "אחת בתוך השנייה" אלא שתי תיבות באותו
- * מקום. הגובה לעומת זאת יכול להישען: מכשיר נח על תחתית התא שלו.
- * החזית היא היוצאת מן הכלל השנייה — תנור שבולט קדימה עדיין נמצא
- * בתוך העמודה, וכך הוא גם נראה בשטח.
- */
-function contains(inner: UnitBox, outer: UnitBox): boolean {
-  if (inner.y < outer.y - TOUCH) return false;
-  if (inner.y + inner.h > outer.y + outer.h + TOUCH) return false;
-
-  const f = { x: Math.cos(outer.facing), z: Math.sin(outer.facing) };
-  const side = { x: Math.sin(outer.facing), z: -Math.cos(outer.facing) };
-  const along = spanOn(inner, outer, side);
-  const depth = spanOn(inner, outer, f);
-  const halfW = outer.w / 2;
-  const halfD = outer.d / 2;
-  if (along.lo <= -halfW + TOUCH || along.hi >= halfW - TOUCH) return false;
-  // הגב חייב להיות בפנים; מה שבולט קדימה עדיין בפנים
-  return depth.lo >= -halfD - TOUCH;
 }
 
 /** הטווח שהתיבה הפנימית תופסת על ציר של החיצונית, ביחס למרכזו. */

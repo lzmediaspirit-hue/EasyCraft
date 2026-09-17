@@ -154,7 +154,7 @@ const SCHEMA: Record<string, TableSpec> = {
   },
   rooms: {
     need: { ...ENTITY, label: str, groups: listOf(str), sortOrder: order },
-    may: { hint: text, icon: str, isBuiltin: bool, hiddenAt: time },
+    may: { hint: text, icon: str, isBuiltin: bool, hiddenAt: time, plannerProfile: str },
   },
   catalog: {
     /*

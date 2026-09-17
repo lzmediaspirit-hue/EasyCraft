@@ -1,5 +1,6 @@
 import type { CatalogGroup, RoomKind, UnitLevel } from '../../db/types';
 import type { Role } from './autoPlan';
+import { roomPlanKey } from '../../catalog/roomsRepo';
 
 /**
  * מה מתכננים בחדר הזה.
@@ -46,6 +47,15 @@ export interface RoomWant {
   needs?: string;
   /** יורד בגרסה החסכונית */
   skipWhenPlain?: boolean;
+  /**
+   * תפקיד שבלעדיו החדר אינו החדר הזה.
+   *
+   * אמבטיה בלי ארון כיור אינה אמבטיה, וכניסה בלי ארון נעליים אינה
+   * כניסה. עד כאן דרישה שלא נמצאה לה יחידה בספרייה נמחקה בשקט
+   * לפני הניקוד, ולכן אמבטיה בלי כיור קיבלה 100 עם רשימת ויתורים
+   * ריקה. דרישה בסיסית אינה נעלמת: היא נאמרת, והיא מורידה.
+   */
+  essential?: boolean;
 }
 
 export interface RoomOption {
@@ -89,11 +99,11 @@ export const ROOM_PROFILES: RoomProfile[] = [
       { key: 'double', label: 'תלייה כפולה', hint: 'שתי קומות חולצות', on: true },
       { key: 'drawers', label: 'מגירות פנימיות', on: true },
       { key: 'shoes', label: 'נעליים', on: true },
-      { key: 'island', label: 'אי מגירות', hint: 'באמצע החדר', on: false },
+      { key: 'island', label: 'אי מגירות', hint: 'באמצע החדר, אם יש מעבר סביבו', on: false },
     ],
     wants: [
       { label: 'תלייה כפולה', role: 'hang', needs: 'double', pick: tall(['hangDouble'], 800, 600) },
-      { label: 'תלייה ארוכה', role: 'hang', repeat: true, pick: tall(['hang'], 600, 500) },
+      { label: 'תלייה ארוכה', role: 'hang', repeat: true, essential: true, pick: tall(['hang'], 600, 500) },
       { label: 'מגירות', role: 'drawers', needs: 'drawers', pick: tall(['innerDrawers', 'drawers'], 600, 400) },
       { label: 'מדפים', role: 'shelving', repeat: true, pick: tall(['shelves'], 500, 400) },
       { label: 'נעליים', role: 'shoes', needs: 'shoes', pick: tall(['open', 'shoes'], 600, 400) },
@@ -111,7 +121,7 @@ export const ROOM_PROFILES: RoomProfile[] = [
     ],
     wants: [
       { label: 'תלייה כפולה', role: 'hang', needs: 'double', pick: tall(['hangDouble'], 800, 600) },
-      { label: 'ארון תלייה', role: 'hang', repeat: true, pick: tall(['hang'], 600, 500) },
+      { label: 'ארון תלייה', role: 'hang', repeat: true, essential: true, pick: tall(['hang'], 600, 500) },
       { label: 'מדפים בארון', role: 'shelving', needs: 'shelves', pick: tall(['shelves'], 500, 400) },
       { label: 'מגירות פנימיות', role: 'drawers', pick: tall(['innerDrawers'], 600, 400) },
       { label: 'שידת מגירות', role: 'store', needs: 'dresser', pick: base(['drawers'], 800, 450) },
@@ -128,7 +138,7 @@ export const ROOM_PROFILES: RoomProfile[] = [
       { key: 'laundry', label: 'סל כביסה', on: false },
     ],
     wants: [
-      { label: 'ארון כיור', role: 'vanity', pick: base(['sink'], 800, 600) },
+      { label: 'ארון כיור', role: 'vanity', essential: true, pick: base(['sink'], 800, 600) },
       { label: 'ארון מראה', role: 'upper', needs: 'mirror', skipWhenPlain: true, pick: upper(['mirror'], 800, 500) },
       { label: 'עמודת שירות', role: 'store', needs: 'column', pick: tall(['doors', 'shelves'], 400, 350) },
       { label: 'סל כביסה', role: 'store', needs: 'laundry', pick: base(['doors'], 450, 400) },
@@ -146,7 +156,7 @@ export const ROOM_PROFILES: RoomProfile[] = [
     ],
     wants: [
       { label: 'ארון תלייה', role: 'hang', needs: 'hang', pick: tall(['hang'], 600, 500) },
-      { label: 'ארון משולב', role: 'store', pick: tall(['doors'], 900, 500) },
+      { label: 'ארון משולב', role: 'store', essential: true, pick: tall(['doors'], 900, 500) },
       { label: 'ארון נמוך', role: 'store', needs: 'low', repeat: true, pick: base(['doors'], 800, 400) },
       { label: 'יחידת מגירות', role: 'drawers', pick: base(['drawers'], 400, 350) },
       { label: 'ארון תלוי', role: 'upper', needs: 'upper', skipWhenPlain: true, pick: upper(['doors'], 800, 400) },
@@ -217,7 +227,7 @@ export const ROOM_PROFILES: RoomProfile[] = [
       { key: 'upper', label: 'ארון תלוי', on: true },
     ],
     wants: [
-      { label: 'ארון נעליים', role: 'shoes', pick: base(['shoes'], 800, 500) },
+      { label: 'ארון נעליים', role: 'shoes', essential: true, pick: base(['shoes'], 800, 500) },
       { label: 'ארון מעילים', role: 'hang', needs: 'coats', pick: tall(['hang'], 600, 500) },
       { label: 'ספסל אחסון', role: 'store', needs: 'bench', pick: base(['doors'], 1000, 600) },
       { label: 'ארון תלוי', role: 'upper', needs: 'upper', skipWhenPlain: true, pick: upper(['shoes', 'doors'], 800, 400) },
@@ -225,12 +235,19 @@ export const ROOM_PROFILES: RoomProfile[] = [
   },
 ];
 
-/** הפרופיל של החדר, אם יש לו אחד. מטבח מתוכנן במנוע משלו. */
+/**
+ * הפרופיל של החדר, אם יש לו אחד. מטבח מתוכנן במנוע משלו.
+ *
+ * הזהות של החדר אינה בהכרח מפתח הפרופיל שלו: חדר שהגיע בייבוא
+ * נושא מזהה משלו ומצביע על פרופיל קיים. `roomPlanKey` הוא
+ * התרגום, והוא נעשה כאן פעם אחת — כך שאף מסך אינו צריך לזכור.
+ */
 export function roomProfile(room: string | undefined): RoomProfile | undefined {
-  return ROOM_PROFILES.find((p) => p.room === room);
+  const key = roomPlanKey(room);
+  return ROOM_PROFILES.find((p) => p.room === key);
 }
 
 /** האם התכנון האוטומטי יודע לתכנן את החדר הזה. */
 export function autoPlannable(room: string | undefined): boolean {
-  return room === 'kitchen' || !!roomProfile(room);
+  return roomPlanKey(room) === 'kitchen' || !!roomProfile(room);
 }

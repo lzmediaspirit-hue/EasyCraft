@@ -23,12 +23,36 @@ const EDGE_CEILING = 'edge:ceiling';
 /** מה הסרגל מודד — מרווח לרוחב הקיר או לגובהו. */
 export type RulerAxis = 'w' | 'h';
 
-/** המרווח שנמדד: מאיפה, עד לאן, כמה, ואיפה הקו מצויר בציר השני. */
+/**
+ * מה נמדד בין שני הדברים שנבחרו.
+ *
+ * `gap` לבדו הטעה: שתי יחידות ברוחב 600 שמתחילות ב-0 וב-500
+ * החזירו `from=500, to=600, gap=0`, והסרגל צייר קו באורך 100 מ״מ
+ * ותייג אותו אפס. קו חיובי שכתוב עליו אפס הוא מדידה שאי אפשר
+ * לסמוך עליה.
+ *
+ * לכן המצב מפורש: מרווח, מגע, או חפיפה — וגודל החפיפה נאמר בשמה.
+ * חפיפה כאן היא בהיטל שנמדד בלבד; שני ארגזים בגבהים שונים יכולים
+ * לחפוף לרוחב ולא להיפגש בחדר.
+ */
+export type RulerKind = 'gap' | 'touch' | 'overlap';
+
 export interface RulerSpan {
   from: number;
   to: number;
+  /** המרווח הפנוי. אפס במגע ובחפיפה. */
   gap: number;
+  /** גודל החפיפה בהיטל. אפס כשאין. */
+  overlapMm: number;
+  kind: RulerKind;
   mid: number;
+}
+
+/** מה שכתוב על הקו: מרווח במספר, מגע בשמו, וחפיפה בשמה ובגודלה. */
+export function rulerLabel(span: RulerSpan): string {
+  if (span.kind === 'touch') return 'צמוד';
+  if (span.kind === 'overlap') return `חפיפה ${cm(span.overlapMm)}`;
+  return cm(span.gap);
 }
 
 /** גובה מהרצפה אל קואורדינטת הציור, שבה y יורד. */
@@ -78,10 +102,13 @@ export function rulerSpan(
   const second = first === a ? b : a;
   const from = first.far;
   const to = second.near;
+  const delta = to - from;
   return {
     from: Math.min(from, to),
     to: Math.max(from, to),
-    gap: Math.max(to - from, 0),
+    gap: Math.max(delta, 0),
+    overlapMm: Math.max(-delta, 0),
+    kind: delta > 0 ? 'gap' : delta < 0 ? 'overlap' : 'touch',
     mid: Math.round((a.mid + b.mid) / 2),
   };
 }
@@ -194,7 +221,11 @@ export function RulerMeasure({
   stroke: number;
   flip: Flip;
 }) {
-  const line = { stroke: '#0f766e', strokeWidth: stroke * 1.4 };
+  /* חפיפה אינה מרווח, ולכן היא גם אינה נראית כמוהו */
+  const line = {
+    stroke: span.kind === 'overlap' ? '#b91c1c' : '#0f766e',
+    strokeWidth: stroke * 1.4,
+  };
   const across = axis === 'w';
   const main = across
     ? { x1: span.from, y1: flip(span.mid), x2: span.to, y2: flip(span.mid) }
@@ -222,10 +253,10 @@ export function RulerMeasure({
         dominantBaseline={across ? undefined : 'middle'}
         fontSize={Math.max(wall.lengthMm / 34, 95)}
         fontWeight={600}
-        fill="#0f766e"
+        fill={span.kind === 'overlap' ? '#b91c1c' : '#0f766e'}
         direction="ltr"
       >
-        {cm(span.gap)}
+        {rulerLabel(span)}
       </text>
     </g>
   );

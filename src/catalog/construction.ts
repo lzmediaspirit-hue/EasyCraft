@@ -1,5 +1,13 @@
 import { glyphDef, type GlyphDef } from './glyphList';
-import { promisedRole, roleCapable } from './roles';
+
+/*
+ * מה שאינו כאן: אזהרות הייצור.
+ *
+ * הן נגזרות מהיכולות, והיכולות נגזרות מהאזורים — ו`zones` נשען
+ * על הקובץ הזה. שלושתם יחד סגרו מעגל ייבוא, וזו פצצת השהיה: מי
+ * שנטען ראשון רואה את השני חצי מאותחל. הן יושבות ב-`production`,
+ * מעל שלושתם.
+ */
 
 /**
  * מה אפשר לבנות בארגז — להבדיל מהאיור שנבחר להציג אותו.
@@ -75,48 +83,4 @@ export function floorToggle(
  */
 export function landsOnFloor(level: string, yMm: number | undefined): boolean {
   return level !== 'wall' && (yMm ?? 0) === 0;
-}
-
-/**
- * מה שהתבנית אינה יודעת לבנות.
- *
- * ארגז יכול להיראות נכון בכל התצוגות ועדיין לא להיות בר־ייצור:
- * "ארון תנור עם מגירה" הוא אזור מגירה אחד בגובה 800 מ״מ, בלי נישה
- * ובלי אוורור, ו"ארון פינה L" נחתך ומצויר כתיבה מלבנית — האיור
- * מראה L והגוף אינו L.
- *
- * זה לא באג שאפשר לתקן בשקט: נישת תנור, חיתוך כיור ומידות
- * החזרה של פינה הם נתוני יצרן, ואין להמציא אותם. מה שכן אפשר
- * הוא לומר את זה במקום שבו זה נקרא — בספרייה, בעורך וברשימת
- * החיתוך — כדי שתצוגה יפה לא תיקרא כאישור לייצור.
- */
-const NICHE_GLYPHS = new Set(['sink', 'hob', 'carousel']);
-
-export function productionGap(
-  u: { glyph: string; name?: string; corner?: string },
-): string | null {
-  /*
-   * מכשיר שנקנה שלם אינו נבנה, ולכן אין בו מה לחסר. מה שחסר הוא
-   * דווקא בארגז שכן נבנה סביב מכשיר או סביב שירות.
-   */
-  const def = glyphDef(u.glyph);
-  if (def.standalone) return null;
-  if (u.corner === 'lShape' || def.key === 'lShape') {
-    return 'הפינה מצוירת כ-L והגוף נחתך כתיבה מלבנית. מידות ההחזרה והחזיתות חסרות.';
-  }
-  if (def.appliance || NICHE_GLYPHS.has(u.glyph)) {
-    return 'תבנית ארגז בלבד: מרווחי המכשיר, הצנרת והפרזול הייעודי דורשים מידות יצרן.';
-  }
-  /*
-   * שם שמבטיח מכשיר שהתבנית אינה מכילה.
-   *
-   * "ארון תנור עם מגירה" הוא אזור מגירה אחד בגובה 800 מ״מ ותו לא:
-   * אין בו נישה, אין אוורור ואין תמיכה. מי שקורא את השם מצפה
-   * לארון תנור, ומי שחותך לפיו מקבל ארגז מגירות.
-   */
-  const promised = u.name ? promisedRole(u.name) : undefined;
-  if (promised && !roleCapable({ glyph: u.glyph, name: '' } as never, promised)) {
-    return `השם מבטיח ${promised.label}, והתבנית אינה כוללת את הנישה והפרזול שלו.`;
-  }
-  return null;
 }

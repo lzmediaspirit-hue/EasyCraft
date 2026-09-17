@@ -15,10 +15,12 @@ import {
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { partsOf, projectCosting, type ProjectCosting } from '../../costing/boards';
-import { BuildError, checkUnit } from '../../catalog/saveGate';
+import { BuildError, bodyDepthMm, checkUnit } from '../../catalog/saveGate';
+import { glyphDef } from '../../catalog/glyphList';
 import { unitSpec } from './unitSpec';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { releaseConsumption } from '../../materials/consumptionRepo';
+import { alongWallMm } from '../../db/types';
 import type {
 
   CatalogItem,
@@ -386,17 +388,21 @@ export const unitsRepo = {
     xMm: number,
   ): Promise<PlacedUnit[]> {
     const now = Date.now();
+    const settings = await settingsRepo.get();
     const out: PlacedUnit[] = [];
     for (const [i, part] of (item.parts ?? []).entries()) {
       out.push({
-        level: item.level,
-        widthMm: item.defaultWidthMm,
-        heightMm: item.defaultHeightMm,
-        depthMm: item.defaultDepthMm,
+        /*
+         * אותו תרגום שכל ארגז בודד עובר.
+         *
+         * כאן הייתה רשימת שדות קצרה משלה — מפלס ושלוש מידות — ולכן
+         * רגליים, משטח, גב וכל שאר תיאור הבנייה של הפריט נשמטו
+         * מחלקי הקבוצה: פינה שנשמרה עם משטח הונחה בלעדיו. מה
+         * שהחלק אומר במפורש גובר, וזה כל ההבדל בינו לבין אחיו.
+         */
+        ...unitSpec(item, { projectId, wallId, xMm: xMm + part.dxMm }, settings.defaults),
         ...part.unit,
         id: crypto.randomUUID(),
-        projectId,
-        wallId,
         catalogItemId: item.id,
         name: part.unit.name ?? item.name,
         glyph: part.unit.glyph ?? item.glyph,
@@ -406,7 +412,7 @@ export const unitsRepo = {
          * קודם נלקח ההפרש בלבד, ולכן קבוצה של ארונות תלויים שנשמרה
          * בגובה 1,500 הונחה כולה על הרצפה.
          */
-        yMm: item.defaultYMm + part.dyMm,
+        yMm: (item.defaultYMm ?? 0) + part.dyMm,
 
         ...owned(),
         createdAt: now + i,
@@ -629,17 +635,30 @@ export const unitsRepo = {
 
   /**
    * ממרכז את הארגזים על הקיר.
+   *
    * המרכוז נעשה על הקבוצה כולה ולא על כל ארגז בנפרד: המרווחים
    * שביניהם הם החלטה של הנגר, וריכוזם באמצע לא אמור לשנות אותם.
+   *
+   * מה שנמדד הוא מה שהארגז תופס *על הקיר*, ולא הרוחב הכתוב בו:
+   * ארגז 1,000×400 שסובב ברבע סיבוב תופס 400 מ״מ. עד כאן נמדד
+   * הרוחב, ולכן על קיר 3,000 הוא הוצב ב-1,000 ומרכזו יצא ב-1,200
+   * במקום ב-1,500. `alongWallMm` הוא אותה מידה שהגאומטריה
+   * והמתכנן משתמשים בה.
+   *
+   * ואי אינו על הקיר בכלל — הוא נמדד ברצפת החדר, ולכן הוא אינו
+   * חלק מהקבוצה שממורכזת עליו.
    */
   async centerOnWall(wallId: string, wallLengthMm: number): Promise<void> {
-    const rows = onlyMine(await db.units.where('wallId').equals(wallId).toArray());
+    const all = onlyMine(await db.units.where('wallId').equals(wallId).toArray());
+    const rows = all.filter((u) => !u.free);
     if (!rows.length) return;
     const from = Math.min(...rows.map((u) => u.xMm));
-    const to = Math.max(...rows.map((u) => u.xMm + u.widthMm));
+    const to = Math.max(...rows.map((u) => u.xMm + alongWallMm(u)));
     const offset = Math.round((wallLengthMm - (to - from)) / 2 - from);
     if (offset === 0) return;
-    await db.units.bulkPut(bumped(rows.map((u) => ({ ...u, xMm: Math.max(u.xMm + offset, 0) }))));
+    /* הקבוצה אינה נדחפת אל מעבר לקצה הקיר, ולא לפני תחילתו */
+    const shift = Math.max(offset, -from);
+    await db.units.bulkPut(bumped(rows.map((u) => ({ ...u, xMm: Math.max(u.xMm + shift, 0) }))));
   },
 
   /**
@@ -675,12 +694,44 @@ export const unitsRepo = {
   },
 
   /** קובע עומק אחיד לכל הארונות בפרויקט. */
-  async setDepthForProject(projectId: string, depthMm: number, onlyFloor: boolean): Promise<void> {
+  /**
+   * עומק אחיד לארונות הפרויקט.
+   *
+   * שלוש טעויות היו כאן, וכולן מאותו שורש — הפעולה כתבה ישירות
+   * למסד במקום לעבור בשער:
+   *
+   *   • הסינון היה לפי מפלס בלבד, ולכן תנור בעומק 580 ולוח גב
+   *     בעובי 5 מ״מ קיבלו שניהם 450. ללוח אנכי העומק *הוא* העובי,
+   *     והאפליקציה עצמה אוסרת עובי לוח מעל 100 — כך שהשורה שנשמרה
+   *     נפסלת בכלליה שלה. מכשיר נקנה שלם, ומידתו היא של היצרן.
+   *   • החלון הבטיח "עומק כולל חזית" והכתיבה כתבה עומק גוף, ולכן
+   *     אחרי 45 ס״מ הראתה העריכה המהירה 46.8.
+   *   • `bulkPut` עקף את `checkUnit`, ולכן לא הוצגה שגיאה.
+   *
+   * עכשיו: ארונות בלבד, המרה אחת משותפת, אימות כל שורה לפני
+   * הכתיבה, וכתיבה אחת בטרנזקציה — או הכול, או כלום.
+   */
+  async setDepthForProject(
+    projectId: string,
+    overallMm: number,
+    onlyFloor: boolean,
+  ): Promise<{ changed: number; skipped: number }> {
     const rows = await unitsRepo.listForProject(projectId);
-    await db.units.bulkPut(
-      bumped(
-        rows.filter((u) => (onlyFloor ? u.level !== 'wall' : true)).map((u) => ({ ...u, depthMm })),
-      ),
-    );
+    const ctx = await buildContext(projectId);
+    const targets = rows.filter((u) => {
+      if (onlyFloor && u.level === 'wall') return false;
+      const def = glyphDef(u.glyph);
+      /* מכשיר שנקנה שלם ולוח בודד אינם ארון, ועומקם אינו עומק ארון */
+      return !def.standalone && !def.noCarcass;
+    });
+    const next = targets.map((u) => ({ ...u, depthMm: bodyDepthMm(overallMm, u, ctx) }));
+    for (const u of next) {
+      const why = checkUnit(u, ctx);
+      if (why) throw new BuildError(`${u.name}: ${why}`);
+    }
+    await db.transaction('rw', db.units, async () => {
+      await db.units.bulkPut(bumped(next));
+    });
+    return { changed: next.length, skipped: rows.length - next.length };
   },
 };

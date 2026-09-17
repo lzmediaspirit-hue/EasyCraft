@@ -123,7 +123,7 @@ export function BoxForm({
         אם התבנית אינה כוללת את הנישה או הפרזול שהשם והאיור
         מבטיחים — זה נאמר כאן, ליד התמונה עצמה.
       */}
-      <ProductionGap item={{ glyph: value.glyph, name: value.name }} />
+      <ProductionGap item={value} />
 
       <Field label="שם הארגז">
         <input

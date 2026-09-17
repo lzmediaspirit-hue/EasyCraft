@@ -1,3 +1,4 @@
+import { itemSpec } from '../../catalog/roles';
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
@@ -230,7 +231,7 @@ export function LibrarySheet({
                   {thicknessOf(item) && <> · {thicknessOf(item)} מ״מ</>}
                 </span>
                 {/* מה שהתבנית אינה יודעת לבנות — ליד הארגז, ולא בהערה נסתרת */}
-                <ProductionGap item={item} className="w-full" />
+                <ProductionGap item={itemSpec(item)} className="w-full" />
               </button>
               {/*
                 כוכב: הארגז נכנס למועדפים או יוצא מהם. זו רשימת

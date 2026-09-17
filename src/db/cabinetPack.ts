@@ -1,5 +1,6 @@
 import { db } from './db';
 import { allMine, eraseIds, mine, owned, revive } from './rows';
+import { SEED_ROOMS } from '../catalog/rooms';
 import { workshopId } from './workshop';
 import type { Table } from 'dexie';
 import { normalizeTables } from './legacy';
@@ -328,6 +329,8 @@ export interface ImportResult {
   renamed: number;
   /** ארגזים שהגיעו במק״ט של ארגז אחר כאן, וקיבלו מק״ט פנוי */
   recoded: number;
+  /** חדרים מהחבילה שאוחדו עם חדר קיים באותו שם */
+  roomsMerged: number;
 }
 
 
@@ -399,7 +402,10 @@ export async function importCabinets(
 ): Promise<ImportResult> {
   const { catalog: items, materials, finishes, rooms } = tablesOf(pack);
   const now = Date.now();
-  const out: ImportResult = { added: 0, replaced: 0, removed: 0, deps: 0, unresolved: 0, renamed: 0, recoded: 0 };
+  const out: ImportResult = {
+    added: 0, replaced: 0, removed: 0, deps: 0, unresolved: 0, renamed: 0, recoded: 0,
+    roomsMerged: 0,
+  };
 
   await db.transaction(
     'rw',
@@ -461,9 +467,45 @@ export async function importCabinets(
      * וחדר חדש נכנס כמו שהוא, כדי שהשיוך של הארגז יימצא.
      */
     const mapRooms = await localIds(db.rooms, rooms);
+    /*
+     * חדר שכבר קיים כאן באותו שם הוא אותו חדר.
+     *
+     * הספרייה של הבעלים נשמרה עם מזהי UUID ישנים, ולכן הייבוא
+     * יצר "אמבטיה" שנייה: המובנית נשארה ריקה ועם פרופיל תכנון,
+     * והמיובאת קיבלה שבעה ארגזים ובלי פרופיל. חמישה חדרים כך.
+     *
+     * הזהות של החדר היא השם שהמשתמש רואה, ולכן חדר נכנס שנושא
+     * שם של חדר קיים מתמזג אליו וכל ההפניות מופנות לשם. מה
+     * שנשאר באמת חדש נכנס כחדר חדש — ואם הוא נושא שם של חדר
+     * מובנה שכבר אינו כאן, הוא לפחות מקבל את פרופיל התכנון שלו.
+     */
+    const localRooms = await allMine(db.rooms);
+    const key = (label: string) => label.trim().replace(/\s+/g, ' ');
+    const byLabel = new Map(localRooms.map((r) => [key(r.label), r]));
+    const merged = new Map<string, string>();
+    for (const r of rooms) {
+      if (!mapRooms.fresh.has(r.id)) continue;
+      const twin = byLabel.get(key(r.label));
+      if (twin && twin.id !== r.id) {
+        merged.set(r.id, twin.id);
+        out.roomsMerged += 1;
+      }
+    }
+    const toRoom = (id: string) => merged.get(id) ?? mapRooms.to(id);
+
+    const seedByLabel = new Map(SEED_ROOMS.map((r) => [key(r.label), r.id]));
     const newRooms = rooms
-      .filter((r) => mapRooms.fresh.has(r.id))
-      .map((r) => ({ ...r, id: mapRooms.to(r.id), sourceId: r.id, ...owned() }));
+      .filter((r) => mapRooms.fresh.has(r.id) && !merged.has(r.id))
+      .map((r) => ({
+        ...r,
+        id: mapRooms.to(r.id),
+        sourceId: r.id,
+        /* פרופיל התכנון נשמר בחבילה; ואם אין — לפי שם חדר מובנה */
+        ...(r.plannerProfile || seedByLabel.get(key(r.label))
+          ? { plannerProfile: r.plannerProfile ?? seedByLabel.get(key(r.label)) }
+          : {}),
+        ...owned(),
+      }));
     if (newRooms.length) await db.rooms.bulkAdd(newRooms);
 
     const mapItems = await localIds(db.catalog, items);
@@ -541,7 +583,7 @@ export async function importCabinets(
         name: free,
         ...(ownCode ? { code: ownCode } : {}),
         ...(id === i.id ? {} : { sourceId: i.id }),
-        rooms: (i.rooms ?? []).map((r) => mapRooms.to(r)),
+        rooms: (i.rooms ?? []).map((r) => toRoom(r)),
         carcassFinishId: ref(i.carcassFinishId),
         frontFinishId: ref(i.frontFinishId),
         exposedFinishId: ref(i.exposedFinishId),

@@ -2,7 +2,8 @@ import { GlyphPreview } from './GlyphPreview';
 import { unitZones } from './zones';
 import type { CatalogItem } from '../db/types';
 import { cm } from '../ui/units';
-import { productionGap } from './construction';
+import { nameMismatch, productionGap } from './production';
+import type { CapSource } from './capabilities';
 
 /**
  * פריט ספרייה בלשון של ארגז מונח.
@@ -78,15 +79,21 @@ export function cabinetSize(item: CatalogItem): string {
  * לפתוח: תצוגה יפה נקראת כאישור לייצור, וזו בדיוק הקריאה שצריך
  * למנוע. מה שחסר כתוב במשפט אחד, ולא רק "יש בעיה".
  */
-export function ProductionGap({ item, className }: { item: { glyph: string; name?: string; corner?: string }; className?: string }) {
+export function ProductionGap(
+  { item, className }: { item: CapSource; className?: string },
+) {
+  /* אותו מפרט שנשמר, במידות שלו — האזהרה נגזרת מהמבנה ולא מהשם */
   const why = productionGap(item);
-  if (!why) return null;
+  /* ואי־התאמה בין השם למבנה נאמרת בנפרד, כי היא עניין אחר */
+  const naming = nameMismatch(item);
+  if (!why && !naming) return null;
+  const text = why ? `חסר מידע לייצור — ${why}` : naming!;
   return (
     <p
-      title={why}
+      title={text}
       className={`rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-800 ${className ?? ''}`}
     >
-      חסר מידע לייצור — {why}
+      {text}
     </p>
   );
 }

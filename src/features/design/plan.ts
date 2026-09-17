@@ -1,7 +1,7 @@
 import { alongWallMm, intoRoomMm } from '../../db/types';
-import { boxCorners, rad, unitBox } from './placement';
+import { boxCorners, rad, solidBox, unitBox } from './placement';
 import type { UnitBox } from './placement';
-import { clash } from './collision';
+import { unitsClash } from './collision';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -172,11 +172,12 @@ export interface PlanUnit {
 export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
   const out: PlanUnit[] = [];
   /* התיבה מחושבת פעם אחת לכל ארגז, ומשמשת גם לציור וגם לבדיקה */
-  const boxes: UnitBox[] = [];
+  const solids: UnitBox[] = [];
   for (const u of units) {
     const b = unitBox(u, plan);
     if (!b) continue;
-    boxes.push(b);
+    /* הציור הוא הגוף; הבדיקה היא הגוף ועוד החזית שבולטת ממנו */
+    solids.push(solidBox(u, plan) ?? b);
     out.push({ unit: u, corners: boxCorners(b), center: { x: b.cx, y: b.cz }, clash: false });
   }
 
@@ -187,7 +188,10 @@ export function planUnits(plan: PlanWall[], units: PlacedUnit[]): PlanUnit[] {
    */
   for (let i = 0; i < out.length; i++) {
     for (let j = i + 1; j < out.length; j++) {
-      if (clash(boxes[i], boxes[j])) {
+      if (unitsClash(
+        { unit: out[i].unit, box: solids[i] },
+        { unit: out[j].unit, box: solids[j] },
+      )) {
         out[i].clash = true;
         out[j].clash = true;
       }

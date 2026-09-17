@@ -32,6 +32,19 @@ export function roomDef(kind: RoomKind): SeedRoom {
   return snapshot.find((r) => r.id === kind) ?? SEED_ROOMS.find((r) => r.id === kind) ?? CUSTOM_ROOM_DEF;
 }
 
+/**
+ * לפי איזה פרופיל מתוכנן החדר הזה.
+ *
+ * `plannerProfile` גובר, ואחריו המזהה עצמו. כך חדר מיובא במזהה
+ * UUID עדיין מתוכנן כאמבטיה, וחדר שהנגר הוסיף יכול להצביע על
+ * פרופיל קיים — בלי שאף אחד מהם יאבד את זהותו ואת הארגזים שלו.
+ */
+export function roomPlanKey(kind: RoomKind | undefined): RoomKind | undefined {
+  if (!kind) return undefined;
+  const room = snapshot.find((r) => r.id === kind);
+  return room?.plannerProfile ?? kind;
+}
+
 let seeding: Promise<void> | null = null;
 
 export function seedRooms(): Promise<void> {

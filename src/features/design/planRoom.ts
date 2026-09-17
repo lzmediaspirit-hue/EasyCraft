@@ -14,6 +14,7 @@ import {
 import { roomProfile, type Pick, type RoomProfile, type RoomWant } from './roomProfiles';
 import type { PlanWall } from './plan';
 import { promisedRole } from '../../catalog/roles';
+import { ISLAND } from '../../catalog/kitchenRules';
 import type { CatalogItem, RoomKind, Wall } from '../../db/types';
 
 /**
@@ -102,16 +103,26 @@ function choose(
   })[0];
 }
 
-/** הרוחב שהיחידה תונח בו: מרשימת הרוחבים שלה, ובתוך מה שנשאר. */
-function widthIn(item: CatalogItem, pick: Pick, freeMm: number): number | null {
+/**
+ * הרוחב שהיחידה תונח בו: מרשימת הרוחבים שלה, ובתוך המקום שנשמר לה.
+ *
+ * `capMm` הוא השטח שהוקצה לתפקיד הזה, ולא כל מה שנשאר על הקיר.
+ * בלעדיו הבחירה חמדנית: בקיר חדר שינה ברוחב 1,400, ארון מדפים
+ * שרוחביו 500 ו-900 לקח 900 — ואז לארון התלייה ברוחב 600 לא נשאר
+ * מקום, וההצעה דיווחה "אין מקום" למרות ש-500 ועוד 600 נכנסים
+ * ומשאירים 300 מ״מ פנויים.
+ *
+ * הרוחב הרחב ביותר שנכנס *בהקצאה* קודם; ורק אם אף אחד לא נכנס בה,
+ * נבדק מה שנכנס במקום שנשאר בפועל — כי מוטב יחידה רחבה מכפי
+ * שתוכננה מאשר קיר ריק.
+ */
+function widthIn(item: CatalogItem, pick: Pick, freeMm: number, capMm?: number): number | null {
   const options = [...new Set([item.defaultWidthMm, ...item.widthOptionsMm])]
     .filter((w) => w > 0)
     .sort((a, b) => b - a);
-  /* הרחב ביותר שנכנס, ולא צר מהמינימום של התפקיד */
-  const fit = options.find((w) => w <= freeMm && w >= pick.minMm);
-  if (fit) return fit;
-  /* ואם אף רוחב תקן אינו נכנס — היחידה אינה נכנסת כאן */
-  return null;
+  const fits = (limit: number) => options.find((w) => w <= limit && w >= pick.minMm) ?? null;
+  const cap = capMm == null ? freeMm : Math.min(capMm, freeMm);
+  return fits(cap) ?? fits(freeMm);
 }
 
 /**
@@ -126,16 +137,23 @@ const SPECIAL_GLYPHS = [
   'shelves', 'innerDrawers', 'lShape',
 ];
 
+/** דרישה שנתבקשה ולא נענתה, בשמה ובסיבתה. */
+interface Unmet {
+  want: RoomWant;
+  why: string;
+}
+
 function queueFor(
   profile: RoomProfile,
   input: RoomInput,
   priority: Priority,
-  dropped: string[],
-): Chosen[] {
-  const out: Chosen[] = [];
+): { queue: Chosen[]; unmet: Unmet[] } {
+  const queue: Chosen[] = [];
+  const unmet: Unmet[] = [];
   /* יחידה נבחרת פעם אחת לחדר: אותו ארגז אינו גם התלייה וגם המדפים */
   const taken = new Set<string>();
   for (const want of profile.wants) {
+    /* מה שלא נתבקש אינו חסר — זו בחירה של המשתמש ולא חוסר */
     if (want.needs && !input.options[want.needs]) continue;
     if (want.skipWhenPlain && priority === 'economical') continue;
     /*
@@ -146,13 +164,19 @@ function queueFor(
     const special = SPECIAL_GLYPHS.some((g) => want.pick.glyphs?.includes(g));
     const item = choose(input.items, want.pick, taken, special, !!want.repeat);
     if (!item) {
-      if (want.needs) dropped.push(`${want.label} — אין בספרייה של החדר יחידה כזאת`);
+      /*
+       * כל דרישה שלא נענתה נאמרת, גם כשהיא אינה מותנית באפשרות
+       * במסך. עד כאן דווחו רק המותנות, ולכן אמבטיה שאין בספרייה
+       * שלה ארגז כיור הציעה אחסון בלבד, בציון 100 וברשימת
+       * ויתורים ריקה.
+       */
+      unmet.push({ want, why: 'אין בספרייה של החדר יחידה כזאת' });
       continue;
     }
     taken.add(item.id);
-    out.push({ want, item });
+    queue.push({ want, item });
   }
-  return out;
+  return { queue, unmet };
 }
 
 /** יחידה אחת שמחכה למקום: מה נבחר, ובאיזה רוחב היא מבקשת לשבת. */
@@ -178,7 +202,8 @@ function slotsFor(queue: Chosen[], capacityMm: number): Slot[] {
   const out: Slot[] = [];
   for (const c of once) {
     if (left < c.want.pick.minMm) continue;
-    const w = Math.min(c.want.pick.wantMm, left);
+    /* ההקצאה אינה קטנה מהמינימום של התפקיד, אחרת שום רוחב לא ייכנס בה */
+    const w = Math.max(c.want.pick.minMm, Math.min(c.want.pick.wantMm, left));
     out.push({ chosen: c, wantMm: w });
     left -= w;
   }
@@ -202,6 +227,21 @@ function slotsFor(queue: Chosen[], capacityMm: number): Slot[] {
   return out;
 }
 
+/** מה שכבר תפוס בחזית של קיר אחד: לרוחב, ולגובה. */
+interface Taken {
+  wallId: string;
+  fromMm: number;
+  toMm: number;
+  bottomMm: number;
+  topMm: number;
+}
+
+/** הגובה שיחידה מהספרייה מגיעה אליו, והגובה שהיא מתחילה בו. */
+function bandOf(item: CatalogItem): { bottomMm: number; topMm: number } {
+  const bottomMm = item.defaultYMm ?? 0;
+  return { bottomMm, topMm: bottomMm + item.defaultHeightMm + (item.counterMm ?? 0) };
+}
+
 function buildRoomProposal(
   profile: RoomProfile,
   input: RoomInput,
@@ -214,8 +254,8 @@ function buildRoomProposal(
   const units: Placement[] = [];
   const dropped: string[] = [];
   const notes: string[] = [];
-  const queue = queueFor(profile, input, priority, dropped);
-  if (!queue.length) return null;
+  const { queue, unmet } = queueFor(profile, input, priority);
+  if (!queue.length && !unmet.length) return null;
 
   const corner = layout === 'l' || layout === 'u';
   /*
@@ -228,22 +268,43 @@ function buildRoomProposal(
   const topMm = Math.max(
     ...queue
       .filter((c) => c.item.level !== 'wall')
-      .map((c) => (c.item.defaultYMm ?? 0) + c.item.defaultHeightMm),
+      .map((c) => bandOf(c.item).topMm),
     1,
   );
+  /*
+   * המרווח שהקיר השני בפינה מתחיל ממנו הוא העומק שבאמת עומד שם.
+   *
+   * קבוע של 675 מ״מ נכון למטבח ולא לחדר ארונות: ארון בעומק 600
+   * משאיר פינה חסרה, וארון רדוד גוזל מקום לחינם. העומק הגדול
+   * שבין היחידות שנבחרו הוא מה שהפינה חייבת לפנות.
+   */
+  const deepest = Math.max(...queue.map((c) => c.item.defaultDepthMm), 0);
+  const cornerStartMm = deepest > 0 ? deepest + CORNER_FILLER : CORNER_START;
   /* הקטעים הפנויים, פעם אחת — גם החלוקה וגם ההנחה נשענות עליהם */
   const areas = run.map((p, wi) => ({
     p,
-    spans: baseSpans(p, corner && wi > 0 ? CORNER_START : 0, p.wall.lengthMm, topMm),
+    spans: baseSpans(p, corner && wi > 0 ? cornerStartMm : 0, p.wall.lengthMm, topMm),
   }));
   const capacity = areas.reduce(
     (n, a) => n + a.spans.reduce((m, sp) => m + (sp.toMm - sp.fromMm), 0), 0,
   );
 
   /*
-   * הרצפה והקיר אינם מתחרים על אותו מקום: ארון תלוי יושב מעל
-   * התחתון, ולכן לכל מפלס חלוקה משלו על אותו אורך קיר.
+   * מה שכבר עומד, בגובה שהוא עומד בו.
+   *
+   * הרצפה והקיר תוכננו עד כאן בנפרד, שניהם מתחילת אותו קטע, מתוך
+   * הנחה שארון תלוי יושב מעל התחתון. ההנחה נכונה למטבח ואינה
+   * נכונה לחדר עם עמודה: ארון עליון שמתחיל ב-1,500 נכנס היישר
+   * לתוך ארון בגדים בגובה 2,400. בחדר ילדים, בסלון ובחדר שירות
+   * זה קרה על קיר חלק בלי מכשולים בכלל.
    */
+  const taken: Taken[] = [];
+  const free = (wallId: string, fromMm: number, w: number, band: { bottomMm: number; topMm: number }) =>
+    !taken.some((t) =>
+      t.wallId === wallId &&
+      t.fromMm < fromMm + w && t.toMm > fromMm &&
+      t.bottomMm < band.topMm && t.topMm > band.bottomMm);
+
   const placed = new Set<string>();
   const put = (list: Slot[], wallLevel: boolean) => {
     let queueLeft = [...list];
@@ -252,17 +313,23 @@ function buildRoomProposal(
         let at = span.fromMm;
         while (queueLeft.length && span.toMm - at >= MIN_BOX) {
           const i = queueLeft.findIndex(
-            (sl) => widthIn(sl.chosen.item, sl.chosen.want.pick, span.toMm - at) !== null,
+            (sl) => widthIn(sl.chosen.item, sl.chosen.want.pick, span.toMm - at, sl.wantMm) !== null,
           );
           if (i < 0) break;
           const slot = queueLeft[i];
-          queueLeft = [...queueLeft.slice(0, i), ...queueLeft.slice(i + 1)];
-          const w = widthIn(slot.chosen.item, slot.chosen.want.pick, span.toMm - at)!;
+          const w = widthIn(slot.chosen.item, slot.chosen.want.pick, span.toMm - at, slot.wantMm)!;
+          const band = bandOf(slot.chosen.item);
           /* ארון תלוי אינו נכנס לתוך חלון; תחתונים כבר סוננו ב-`baseSpans` */
           if (wallLevel && upperBlocked(p.wall, at, w)) {
             at += w;
             continue;
           }
+          /* ואינו נכנס לתוך מה שכבר עומד שם בגובה הזה */
+          if (!free(p.wall.id, at, w, band)) {
+            at += MIN_BOX;
+            continue;
+          }
+          queueLeft = [...queueLeft.slice(0, i), ...queueLeft.slice(i + 1)];
           units.push({
             /*
              * המזהה של הפריט עצמו, ולא מפתח של ארגז תקן: הפתירה
@@ -275,6 +342,7 @@ function buildRoomProposal(
             level: slot.chosen.item.level,
             role: slot.chosen.want.role,
           });
+          taken.push({ wallId: p.wall.id, fromMm: at, toMm: at + w, ...band });
           placed.add(slot.chosen.want.label);
           at += w;
         }
@@ -287,6 +355,17 @@ function buildRoomProposal(
   put(slotsFor(onFloor, capacity), false);
   put(slotsFor(onWall, capacity), true);
 
+  /* ואי, כשנתבקש ויש לו מקום בחדר */
+  const island = islandFor(profile, input, units);
+  if (island) {
+    if (island.place) {
+      units.push(island.place);
+      placed.add(island.label);
+    } else {
+      dropped.push(`${island.label} — ${island.why}`);
+    }
+  }
+
   if (!units.length) return null;
 
   /* מה שנתבקש ולא נכנס — בשמו, ולא בשתיקה */
@@ -295,6 +374,7 @@ function buildRoomProposal(
       dropped.push(`${c.want.label} — לא נשאר קיר פנוי ברוחב ${c.want.pick.minMm} מ"מ`);
     }
   }
+  for (const u of unmet) dropped.push(`${u.want.label} — ${u.why}`);
   if (priority === 'economical') notes.push('בלי יחידות עליונות — הגרסה החסכונית');
 
   return {
@@ -306,9 +386,81 @@ function buildRoomProposal(
     units,
     dropped: [...new Set(dropped)],
     notes: [...new Set(notes)],
-    score: scoreRoom(units, queue, placed, input.plan),
+    score: scoreRoom(units, queue, unmet, placed, input.plan),
   };
 }
+
+/** לוח הסתימה שבין שתי שורות שנפגשות בפינה. */
+const CORNER_FILLER = 75;
+
+/**
+ * האי שבאמצע החדר, כשהחדר ביקש אותו.
+ *
+ * האפשרות "אי מגירות" בחדר ארונות הייתה קיימת במסך ולא עשתה דבר:
+ * חמישה סבבים נתנו בדיוק אותן יחידות בין מסומן ללא מסומן. כאן
+ * היא מיושמת — מתבנית האי שבספרייה, עם בדיקת מעבר סביבו — או
+ * נאמרת כמה שלא נכנס. אפשרות שאינה עושה דבר גרועה מאפשרות שאין.
+ */
+function islandFor(
+  profile: RoomProfile,
+  input: RoomInput,
+  units: Placement[],
+): { label: string; place?: Placement; why: string } | null {
+  const option = profile.options.find((o) => o.key === 'island');
+  if (!option || !input.options.island) return null;
+  const label = option.label;
+
+  const item = input.items.find((i) => i.island);
+  if (!item) return { label, why: 'אין בספרייה תבנית אי' };
+
+  /*
+   * החדר עצמו: התיבה שהקירות תוחמים. האי עומד במרכזה, ומה שנדרש
+   * הוא מעבר מכל צדדיו — גם מהקירות וגם ממה שכבר עומד עליהם.
+   */
+  const pts = input.plan.flatMap((p) => [p.start, p.end]);
+  if (pts.length < 3) return { label, why: 'אין מספיק קירות כדי למדוד מעבר' };
+  const xs = pts.map((q) => q.x);
+  const ys = pts.map((q) => q.y);
+  const roomW = Math.max(...xs) - Math.min(...xs);
+  const roomD = Math.max(...ys) - Math.min(...ys);
+
+  /* העומק שכבר תפוס לאורך הקירות, משני הצדדים */
+  const deepest = Math.max(
+    ...units.map((u) => input.items.find((i) => i.id === u.catalogKey)?.defaultDepthMm ?? 0),
+    0,
+  );
+  const freeW = roomW - 2 * deepest;
+  const freeD = roomD - 2 * deepest;
+  const needW = item.defaultWidthMm + 2 * ISLAND_AISLE;
+  const needD = item.defaultDepthMm + 2 * ISLAND_AISLE;
+  if (freeW < needW || freeD < needD) {
+    return {
+      label,
+      why: `אין מעבר של ${ISLAND_AISLE} מ"מ סביבו — נדרש חלל של ${Math.round(needW)}×${Math.round(needD)} מ"מ`,
+    };
+  }
+
+  return {
+    label,
+    why: '',
+    place: {
+      catalogKey: item.id,
+      wallId: input.plan[0].wall.id,
+      xMm: 0,
+      widthMm: item.defaultWidthMm,
+      level: item.level,
+      role: 'island',
+      free: {
+        xMm: (Math.min(...xs) + Math.max(...xs)) / 2,
+        zMm: (Math.min(...ys) + Math.max(...ys)) / 2,
+        headingDeg: input.plan[0].headingDeg,
+      },
+    },
+  };
+}
+
+/** המעבר שחייב להישאר סביב אי, מכל צדדיו. */
+const ISLAND_AISLE = ISLAND.clearMm;
 
 const PRIORITY_NAMES: Record<Priority, string> = {
   ergonomic: 'נוח לשימוש',
@@ -334,22 +486,37 @@ const LAYOUT_NAMES: Record<LayoutKind, string> = {
 function scoreRoom(
   units: Placement[],
   queue: Chosen[],
+  unmet: Unmet[],
   placed: Set<string>,
   plan: PlanWall[],
 ): Score {
   const floor = units.filter((u) => u.level !== 'wall');
   const runMm = floor.reduce((n, u) => n + u.widthMm, 0);
   const wallMm = plan.reduce((n, p) => n + p.wall.lengthMm, 0);
-  const missing = queue.filter((c) => !placed.has(c.want.label)).length;
+  /*
+   * החסרים הם שניים: מה שנבחר ולא נכנס, ומה שאין לו בכלל יחידה
+   * בספרייה. השני נמחק כאן בשקט, ולכן אמבטיה בלי ארגז כיור קיבלה
+   * 100. דרישה שנתבקשה נספרת גם כשלא נמצא לה מועמד.
+   */
+  const asked = queue.length + unmet.length;
+  const missing = queue.filter((c) => !placed.has(c.want.label)).length + unmet.length;
   const covered = wallMm > 0 ? Math.min(runMm / wallMm, 1) : 0;
-  const answered = queue.length ? (queue.length - missing) / queue.length : 0;
+  const answered = asked ? (asked - missing) / asked : 0;
+  /*
+   * ותפקיד בסיסי שחסר אינו עוד נקודה פחות: אמבטיה בלי כיור אינה
+   * אמבטיה טובה ב-80%. התקרה יורדת לחצי כל עוד הוא חסר.
+   */
+  const lostEssential =
+    unmet.some((u) => u.want.essential) ||
+    queue.some((c) => c.want.essential && !placed.has(c.want.label));
+  const total = Math.round(60 * answered + 40 * covered);
   return {
     triangle: 0,
     prepMm: 0,
     runMm,
     boxes: units.length,
     missing,
-    total: Math.round(60 * answered + 40 * covered),
+    total: lostEssential ? Math.min(total, 50) : total,
   };
 }
 

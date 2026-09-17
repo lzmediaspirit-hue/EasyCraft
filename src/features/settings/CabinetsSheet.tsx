@@ -1,8 +1,15 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sheet } from '../../ui/Sheet';
 import { saveFile } from '../../ui/saveFile';
 import { Pill } from '../../ui/Pill';
 import { catalogRepo } from '../../catalog/catalogRepo';
+import {
+  applyLibraryUpdate,
+  hasLibraryUpdate,
+  libraryUpdate,
+  type LibraryChange,
+  type LibraryUpdate,
+} from '../../catalog/libraryRelease';
 import { exportCabinets, importCabinets, packManifest, readPack } from '../../db/cabinetPack';
 import type { CabinetPack, ImportResult } from '../../db/cabinetPack';
 
@@ -33,6 +40,24 @@ export function CabinetsSheet({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   const file = useRef<HTMLInputElement>(null);
+  /* עדכון הספרייה: מה שמוצע, ומה שסומן לקבלה */
+  const [update, setUpdate] = useState<LibraryUpdate | null>(null);
+  const [take, setTake] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void libraryUpdate().then((u) => {
+      setUpdate(u);
+      /*
+       * ברירת המחדל מקבלת את מה שאין מחלוקת עליו: תבנית חדשה,
+       * ותבנית שלא נגעו בה כאן. תבנית שנערכה בנגרייה נשארת שלה
+       * אלא אם המשתמש סימן אותה במפורש.
+       */
+      setTake(new Set(
+        u.changes
+          .filter((c) => c.kind === 'added' || c.kind === 'changed')
+          .map((c) => c.shipped!.id),
+      ));
+    });
+  }, []);
 
   /** שם שאומר מה יש בקובץ ומתי הוא נוצר */
   function fileName(): string {
@@ -303,6 +328,68 @@ export function CabinetsSheet({ onClose }: { onClose: () => void }) {
         </section>
 
         {/*
+          עדכון ספרייה: מה השתנה בגרסה, ומה מתוכו להחיל.
+
+          שינוי בתבניות שמגיעות עם האפליקציה אינו מגיע להתקנה
+          קיימת מעצמו — זריעה חוזרת הייתה מוחקת התאמות אישיות
+          ומחזירה מה שנמחק בכוונה. כאן זה מוצג לפני שזה קורה,
+          ומוחל רק על מה שסומן.
+        */}
+        {update && hasLibraryUpdate(update) && (
+          <section className="rounded-2xl border border-oak-200 bg-oak-50/60 p-3">
+            <h3 className="mb-1 text-sm font-semibold text-stone-700">
+              עדכון לספרייה שמגיעה עם האפליקציה
+            </h3>
+            <p className="mb-2 text-[11px] leading-snug text-stone-500">
+              גרסה {update.release} · אצלך {update.have}. ארגזים שכבר הונחו
+              בפרויקטים אינם משתנים.
+            </p>
+            <ul className="mb-3 max-h-56 space-y-1 overflow-y-auto">
+              {update.changes
+                .filter((c) => c.kind !== 'removed')
+                .map((c) => (
+                  <li key={c.shipped!.id}>
+                    <label className="flex items-start gap-2 text-xs text-stone-600">
+                      <input
+                        type="checkbox"
+                        checked={take.has(c.shipped!.id)}
+                        onChange={(e) => {
+                          const next = new Set(take);
+                          if (e.target.checked) next.add(c.shipped!.id);
+                          else next.delete(c.shipped!.id);
+                          setTake(next);
+                        }}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <span className="num text-stone-400">{c.code}</span> {c.name}
+                        <span className="ms-1 text-[11px] text-stone-400">{changeLabel(c)}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+            </ul>
+            <button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const n = await applyLibraryUpdate([...take]);
+                  setProblem(null);
+                  setNote(n ? `${n} תבניות עודכנו.` : 'לא נבחר דבר לעדכון.');
+                  setUpdate(await libraryUpdate());
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-stone-800 disabled:opacity-50"
+            >
+              החלת מה שסומן
+            </button>
+          </section>
+        )}
+
+        {/*
           החזרת הספרייה שמגיעה עם האפליקציה. מי שמחק ארגזים ורוצה
           אותם בחזרה — זו הדרך, והיא לא מוחקת ולא דורסת כלום.
         */}
@@ -325,6 +412,13 @@ export function CabinetsSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** מה קרה לתבנית הזאת בשחרור, במילה. */
+function changeLabel(c: LibraryChange): string {
+  if (c.kind === 'added') return '· חדש';
+  if (c.kind === 'changed') return '· עודכן בגרסה';
+  return '· נערך כאן — סימון ידרוס את השינוי שלך';
+}
+
 /** גודל החבילה במילים של בני אדם. */
 function size(json: string): string {
   const kb = Math.round(json.length / 1024);
@@ -341,6 +435,8 @@ function summary(r: ImportResult): string {
   /* התנגשות זהות אינה שקטה: מי שקיבל שם או מק״ט חדש — נאמר כמה */
   if (r.renamed) parts.push(`${r.renamed} קיבלו שם פנוי`);
   if (r.recoded) parts.push(`${r.recoded} קיבלו מק״ט פנוי`);
+  /* חדר שנכנס בשם של חדר קיים אינו חדר שני — נאמר כמה אוחדו */
+  if (r.roomsMerged) parts.push(`${r.roomsMerged} חדרים אוחדו עם חדר קיים באותו שם`);
   return parts.length ? parts.join(' · ') : 'הכול כבר היה מעודכן';
 }
 

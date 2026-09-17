@@ -1,6 +1,7 @@
 import { MAX_BOARD_MM, MIN_BOARD_MM, unitProblem } from './feasible';
 import { glyphDef } from './glyphList';
 import { constructionCaps } from './construction';
+import { unitCells } from './zones';
 import { MATERIAL } from './standards';
 import { partThicknessMm } from '../costing/boards';
 import type { PartSettings } from '../costing/boards';
@@ -44,6 +45,52 @@ export function carcassMm(
   return ctx.parts
     ? partThicknessMm(u as PlacedUnit, 'carcass', ctx.parts, ctx.project)
     : MATERIAL.carcassMm;
+}
+
+/**
+ * עובי החזית של הארגז הזה, או אפס כשאין לו חזית.
+ *
+ * ארגז פתוח ונישה למכשיר אינם מקבלים תוספת, וגם מגירה פנימית
+ * אינה חזית: היא יושבת מאחורי הדלת.
+ */
+export function frontThicknessMm(
+  u: Pick<PlacedUnit, 'glyph'> & Partial<PlacedUnit>,
+  ctx: BuildContext = {},
+): number {
+  const hasFronts =
+    (u.doors ?? 0) > 0 ||
+    unitCells(u as PlacedUnit).some(
+      ({ content: c }) => c.kind === 'drawers' && c.drawerStyle !== 'inner',
+    );
+  if (!hasFronts) return 0;
+  return ctx.parts
+    ? partThicknessMm(u as PlacedUnit, 'front', ctx.parts, ctx.project)
+    : MATERIAL.frontMm;
+}
+
+/**
+ * העומק כפי שנמדד בשטח — מהקיר עד פני הדלת.
+ *
+ * מה שנשמר הוא תמיד עומק הגוף, כי זו המידה שממנה נחתכות הדפנות.
+ * מה שנמדד בשטח הוא הגוף ועוד החזית. ההמרה בין השניים ישבה בעורך
+ * בלבד, ולכן פעולת "עומק אחיד" כתבה עומק גוף לתוך שדה שהבטיח
+ * "כולל חזית": מי שבחר 45 ס״מ ראה אחר כך 46.8 בעריכה המהירה.
+ * שתי הדרכים עוברות מכאן, ולכן הן אינן יכולות לא להסכים.
+ */
+export function overallDepthMm(
+  u: Pick<PlacedUnit, 'glyph' | 'depthMm'> & Partial<PlacedUnit>,
+  ctx: BuildContext = {},
+): number {
+  return u.depthMm + frontThicknessMm(u, ctx);
+}
+
+/** הדרך ההפוכה: מהעומק שנמדד בשטח אל עומק הגוף שנשמר. */
+export function bodyDepthMm(
+  overallMm: number,
+  u: Pick<PlacedUnit, 'glyph'> & Partial<PlacedUnit>,
+  ctx: BuildContext = {},
+): number {
+  return Math.max(overallMm - frontThicknessMm(u, ctx), 0);
 }
 
 /** מה שאי אפשר לבנות, במשפט אחד — או `null` כשהכול תקין. */

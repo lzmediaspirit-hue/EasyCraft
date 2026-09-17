@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo, wallsRepo } from '../projects/projectsRepo';
 import { WallElevation } from './WallElevation';
 import { blocked } from './collision';
+import { overallDepthMm } from '../../catalog/saveGate';
 import { nudge } from './dragSolve';
 import { partsOf } from '../../costing/boards';
 import { axisLabel } from './axisLock';
@@ -760,7 +761,15 @@ export function DesignScreen({
           כאן הן תמיד באותו מקום, על הגבול שבין הציור ללוח, קרוב
           לאגודל ובלי להסתיר מילימטר מהקיר.
         */}
-        <div className="relative flex shrink-0 items-center">
+        {/*
+          שורת פעולות אמיתית, ולא כפתורים שמרחפים מעל השורה.
+
+          הפעולות ישבו במיקום מוחלט בתוך שורה שכל תוכנה הוא ידית
+          הגרירה. במחשב הידית מוסתרת, ולכן השורה התמוטטה לגובה
+          אפס — והעיגולים נחתכו בגבול העמודה שגוללת. עכשיו הם
+          תופסים מקום משלהם, בגובה מפורש, ולכן הם נראים בכל רוחב.
+        */}
+        <div className="flex min-h-12 shrink-0 items-center gap-2 px-4">
         {/* הגבול בין הציור ללוח, והידית שמזיזה אותו */}
         <div
           role="separator"
@@ -793,7 +802,7 @@ export function DesignScreen({
         >
           <span className="h-1.5 w-12 rounded-full bg-stone-300" />
         </div>
-        <span className="absolute end-4 flex items-center gap-1.5">
+        <span className="ms-auto flex shrink-0 items-center gap-1.5">
           {/*
             הסתרה, ולא מחיקה: ארגז מוסתר ממשיך להיספר בחומרים,
             במחיר ובניסור — הוא פשוט יורד מהתמונה כדי שאפשר יהיה
@@ -1228,7 +1237,14 @@ export function DesignScreen({
 
       {sheet === 'depth' && (
         <DepthSheet
-          currentMm={selected?.depthMm ?? units[0]?.depthMm ?? 580}
+          /* אותה מידה שהשדה מבטיח: עומק כולל חזית, כמו בעריכה המהירה */
+          currentMm={
+            selected
+              ? overallDepthMm(selected, { parts, project })
+              : units[0]
+                ? overallDepthMm(units[0], { parts, project })
+                : 580
+          }
           onClose={closeSheet}
           onApply={async (mm, onlyFloor) => {
             await unitsRepo.setDepthForProject(projectId, mm, onlyFloor);

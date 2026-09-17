@@ -818,7 +818,7 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
     /* אותה הערה על שתי פינות היא אותה הערה — פעם אחת מספיקה */
     dropped: [...new Set(dropped)],
     notes: [...new Set(notes)],
-    score: scoreOf(units, input.appliances),
+    score: scoreOf(units, input.appliances, input.plan),
   };
 }
 
@@ -901,35 +901,65 @@ function islandFor(input: AutoInput, layout: LayoutKind): Placement | null {
  * הגרסה החסכונית תקבל ציון נמוך יותר, וזה נכון: היא ויתור מדעת,
  * ולא מטבח טוב יותר.
  */
-function scoreOf(units: Placement[], want: Appliances): Score {
+function scoreOf(units: Placement[], want: Appliances, plan: PlanWall[]): Score {
   const floor = units.filter((u) => !u.free && u.level !== 'wall');
   const runMm = floor.reduce((n, u) => n + u.widthMm, 0);
 
-  /* משולש העבודה — נמדד לאורך הקיר, וקירות שונים אינם משווים */
+  /*
+   * משולש העבודה, בקואורדינטות החדר.
+   *
+   * עד כאן שתי תחנות על קירות שונים נמדדו כסכום הקואורדינטות
+   * המקומיות שלהן — שתי מידות שמתחילות בשתי נקודות שונות. בחדר L
+   * זה נתן 350+1,575 = 1,925 מ״מ למרחק שבפועל הוא כ-3,975 באוויר
+   * וכ-5,225 במסלול דרך הפינה. סכום כזה אינו אף אחד מהשניים.
+   *
+   * מה שנמדד עכשיו מוגדר במפורש: המרחק הישר בין מרכזי התחנות
+   * ברצפת החדר, כפי שמודדים משולש עבודה. אותה מערכת צירים שבה
+   * נמדדת ההתנגשות, ולכן שני המספרים מדברים על אותו חדר.
+   */
   const centre = (role: Role) => {
     const u = floor.find((x) => x.role === role);
-    return u ? { wall: u.wallId, at: u.xMm + u.widthMm / 2 } : null;
+    if (!u) return null;
+    const p = plan.find((q) => q.wall.id === u.wallId);
+    if (!p) return null;
+    const a = rad(p.headingDeg);
+    const at = u.xMm + u.widthMm / 2;
+    return { x: p.start.x + Math.cos(a) * at, y: p.start.y + Math.sin(a) * at };
   };
   const pts = [centre('sink'), centre('hob'), centre('fridge')].filter((v) => v !== null);
   const legs: number[] = [];
   for (let i = 0; i < pts.length; i++) {
     for (let j = i + 1; j < pts.length; j++) {
-      const a = pts[i]!;
-      const b = pts[j]!;
-      /* על קירות שונים אין מדידה ישרה; ההערכה היא סכום המרחקים לפינה */
-      legs.push(a.wall === b.wall ? Math.abs(a.at - b.at) : a.at + b.at);
+      legs.push(Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.y - pts[j]!.y));
     }
   }
   const inRange = legs.filter((l) => l >= TRIANGLE.minLegMm && l <= TRIANGLE.maxLegMm).length;
   const triangle = legs.length ? inRange / legs.length : 0;
 
-  /* משטח ההכנה: הרצף הארוך ביותר של ארגזים שאינם מכשיר */
+  /*
+   * משטח ההכנה: הרצף הארוך ביותר של משטח *רציף*.
+   *
+   * החישוב הקודם חיבר רוחבים עוקבים ברשימה בלי לבדוק מה ביניהם,
+   * ולכן קיר 3,500 עם דלת ברוחב 900 באמצע דיווח על רצף הכנה של
+   * 1,200 מ״מ — 600 מצד אחד של הדלת ו-600 מהצד השני. רצף נשבר
+   * במרווח בין הארגזים, בפתח שבקיר, ובמכשיר.
+   */
   const appliance: Role[] = ['sink', 'hob', 'oven', 'fridge', 'dishwasher'];
   let prepMm = 0;
   for (const wallId of new Set(floor.map((u) => u.wallId))) {
+    const wall = plan.find((q) => q.wall.id === wallId)?.wall;
+    const opens = (wall?.features ?? []).filter((f) => f.kind === 'door' || f.kind === 'window');
     let run = 0;
+    let end: number | null = null;
     for (const u of floor.filter((x) => x.wallId === wallId).sort((a, b) => a.xMm - b.xMm)) {
-      run = appliance.includes(u.role) ? 0 : run + u.widthMm;
+      const gap = end === null || Math.abs(u.xMm - end) > 1;
+      /* פתח בין הארגז הקודם לזה — אין רצף מעליו */
+      const cut =
+        end !== null &&
+        opens.some((f) => f.xMm < u.xMm && f.xMm + f.widthMm > end!);
+      run = appliance.includes(u.role) || gap || cut ? u.widthMm : run + u.widthMm;
+      if (appliance.includes(u.role)) run = 0;
+      end = u.xMm + u.widthMm;
       prepMm = Math.max(prepMm, run);
     }
   }

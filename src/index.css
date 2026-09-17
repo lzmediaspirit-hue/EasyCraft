@@ -132,6 +132,10 @@
     height: auto !important;
     flex: 1;
   }
+  /*
+   * הידית מוסתרת, אבל השורה שהיא יושבת בה נשארת: הפעולות
+   * שלצידה הן תוכן אמיתי בשורה, ולכן יש לה גובה גם בלעדיה.
+   */
   .planner-properties [role='separator'] {
     display: none;
   }

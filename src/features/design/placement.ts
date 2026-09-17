@@ -1,4 +1,6 @@
 import { alongWallMm, intoRoomMm } from '../../db/types';
+import { glyphDef } from '../../catalog/glyphList';
+import { MATERIAL } from '../../catalog/standards';
 import type { PlacedUnit, WallFeature } from '../../db/types';
 import type { PlanWall } from './plan';
 
@@ -69,6 +71,45 @@ export function unitBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
     cx: p.start.x + dir.x * (u.xMm + along / 2) + normal.x * (into / 2 + off),
     cz: p.start.y + dir.z * (u.xMm + along / 2) + normal.z * (into / 2 + off),
     facing: rad(wallFacingDeg(p.headingDeg, u.rotationDeg)),
+  };
+}
+
+/**
+ * עובי החזית הסגורה שבולטת לפני גוף הארון.
+ *
+ * `depthMm` הוא גוף הארון, והחזית יושבת לפניו — כך מודד העורך,
+ * וכך נחתכות הדפנות. אבל מי שבדק התנגשות בדק את הגוף בלבד, ולכן
+ * שני ארגזים שעומדים זה מול זה עם מרווח של 25 מ״מ בין הגופים
+ * עברו, בשעה ששתי החזיתות שלהם חופפות ב-11. מה שתופס מקום בחדר
+ * הוא מה שיש בו, ולא מה שנוח למדוד.
+ */
+export function frontOverhangMm(u: Pick<PlacedUnit, 'glyph' | 'doors' | 'drawers' | 'zones' | 'opening'>): number {
+  const def = glyphDef(u.glyph);
+  if (def.standalone || def.noCarcass) return 0;
+  /* דלת נגררת רצה בתוך המסילה ואינה בולטת */
+  if (u.opening === 'sliding') return 0;
+  const hasFront = (u.doors ?? 0) > 0 || (u.drawers ?? 0) > 0 ||
+    (u.zones ?? []).some((z) => z.kind === 'drawers');
+  return hasFront ? MATERIAL.frontMm : 0;
+}
+
+/**
+ * הגוף כפי שהוא תופס מקום בחדר — כולל מה שבולט ממנו פיזית.
+ *
+ * זו התיבה שבדיקת ההתנגשות שואלת עליה. `unitBox` נשאר הגוף עצמו,
+ * כי זה מה שנמדד בסרגל ובחזית.
+ */
+export function solidBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
+  const b = unitBox(u, plan);
+  if (!b) return null;
+  const front = frontOverhangMm(u);
+  if (front <= 0) return b;
+  const f = { x: Math.cos(b.facing), z: Math.sin(b.facing) };
+  return {
+    ...b,
+    d: b.d + front,
+    cx: b.cx + f.x * (front / 2),
+    cz: b.cz + f.z * (front / 2),
   };
 }
 

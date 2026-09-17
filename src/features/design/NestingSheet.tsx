@@ -2,7 +2,7 @@ import { Stat } from '../../ui/Stat';
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { projectsRepo, unitsRepo } from '../projects/projectsRepo';
-import { productionGap } from '../../catalog/construction';
+import { productionGap } from '../../catalog/production';
 import { Sheet } from '../../ui/Sheet';
 import { cm, unitLabel } from '../../ui/units';
 import type { NestResult } from '../../costing/nesting';

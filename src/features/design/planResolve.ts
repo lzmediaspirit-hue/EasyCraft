@@ -2,6 +2,10 @@ import { checkUnit, type BuildContext } from '../../catalog/saveGate';
 import { matchCatalog, roleCapable, ROLE_OF_KEY } from './planMatch';
 import { unitSpec, topMm } from '../projects/unitSpec';
 import type { Placement } from './autoPlan';
+import { blocked, unitsClash } from './collision';
+import { buildPlan } from './plan';
+import { solidBox, unitBox } from './placement';
+import { alongWallMm } from '../../db/types';
 import type {
   CatalogItem,
   PlacedUnit,
@@ -28,7 +32,7 @@ import type {
 
 /** מה מנע מהארגז הזה להיות מונח, ובאיזו חומרה. */
 export interface PlanIssue {
-  kind: 'missing' | 'capability' | 'window' | 'ceiling' | 'build';
+  kind: 'missing' | 'capability' | 'window' | 'ceiling' | 'build' | 'wall' | 'bounds' | 'overlap';
   /** שם התפקיד כפי שהמשתמש רואה אותו */
   what: string;
   text: string;
@@ -162,5 +166,81 @@ export function resolvePlan(input: ResolveInput): ResolvedPlan {
     units.push({ placement: p, item, unit });
   }
 
+  issues.push(...geometryIssues(units, walls, name));
   return { units, issues };
+}
+
+/**
+ * הבדיקה שאי אפשר לעשות על ארגז אחד.
+ *
+ * עד כאן כל יחידה נבדקה לעצמה — מידות, החלון שבקיר שלה, התקרה
+ * מעליה — ולכן הצעה שלמה עברה גם כשהארגזים חדרו זה לזה ובלעו
+ * עמוד. `applyPlan` החזיר הצלחה ושמר שמונה־עשרה יחידות, וארבע
+ * מהן סומנו כמתנגשות בידי אותו בודק התנגשויות שהאפליקציה עצמה
+ * מריצה על החדר.
+ *
+ * מה שנבדק כאן הוא ההצעה כגוף אחד, על הגופים הפתורים בפועל:
+ * שהקיר קיים, שהיחידה נמצאת עליו, שאין עמוד או מדרגה במקומה,
+ * ושאין שתי יחידות באותו נפח. זו אותה שאלה שנשאלת בגרירה
+ * ובמבט העל, ולכן אותה פונקציה — הצעה אינה יכולה להיות חוקית
+ * לפי מדד אחד ופסולה לפי אחר.
+ */
+function geometryIssues(
+  units: ResolvedUnit[],
+  walls: Wall[],
+  name: (p: Placement) => string,
+): PlanIssue[] {
+  const out: PlanIssue[] = [];
+  const byWall = new Map(walls.map((w) => [w.id, w]));
+  const placed = units.map((r) => r.unit);
+  const plan = buildPlan(walls, placed);
+
+  for (const { placement, unit } of units) {
+    const what = name(placement);
+    const wall = byWall.get(placement.wallId);
+    if (!wall) {
+      out.push({ kind: 'wall', what, text: `${what} שויך לקיר שאינו קיים בפרויקט.` });
+      continue;
+    }
+    if (!placement.free) {
+      /* הגבולות נמדדים על מה שהיחידה תופסת בפועל, כולל סיבוב */
+      const along = alongWallMm(unit);
+      if (unit.xMm < 0) {
+        out.push({ kind: 'bounds', what, text: `${what} מתחיל לפני תחילת הקיר.` });
+        continue;
+      }
+      if (unit.xMm + along > wall.lengthMm + 1) {
+        out.push({
+          kind: 'bounds',
+          what,
+          text: `${what} חורג מקצה הקיר: ${Math.round(unit.xMm + along)} מ״מ מתוך ${wall.lengthMm}.`,
+        });
+        continue;
+      }
+    }
+    const box = solidBox(unit, plan);
+    if (!box) continue;
+    /* עמוד, מדרגה ופתח — הגופים שאי אפשר לבנות לתוכם */
+    if (blocked(unit, unitBox(unit, plan) ?? box, [], plan)) {
+      out.push({ kind: 'overlap', what, text: `${what} עומד על מבנה שאי אפשר לבנות לתוכו.` });
+    }
+  }
+
+  /* ואז זה מול זה: אותו חוק פיזיקלי של הגרירה, על היחידות הפתורות */
+  const solids = units
+    .map((r) => ({ r, box: solidBox(r.unit, plan) }))
+    .filter((x): x is { r: ResolvedUnit; box: NonNullable<ReturnType<typeof solidBox>> } => !!x.box);
+  for (let i = 0; i < solids.length; i++) {
+    for (let j = i + 1; j < solids.length; j++) {
+      const a = solids[i];
+      const b = solids[j];
+      if (!unitsClash({ unit: a.r.unit, box: a.box }, { unit: b.r.unit, box: b.box })) continue;
+      out.push({
+        kind: 'overlap',
+        what: name(a.r.placement),
+        text: `${name(a.r.placement)} ו-${name(b.r.placement)} תופסים את אותו מקום.`,
+      });
+    }
+  }
+  return out;
 }
