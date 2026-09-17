@@ -126,10 +126,10 @@ const missing = [...needFinishes].filter((id) => !finishes.some((f) => f.id === 
 writeFileSync(
   OUT,
   HEAD +
-    `export const SHIPPED_LIBRARY: ShippedItem[] = ${JSON.stringify(items, null, 2)};\n` +
+    `export const SHIPPED_LIBRARY: ShippedItem[] = ${rows(items)};\n` +
     DEPS_DOC +
-    `export const SHIPPED_MATERIALS: ShippedMaterial[] = ${JSON.stringify(materials, null, 2)};\n` +
-    `export const SHIPPED_FINISHES: ShippedFinish[] = ${JSON.stringify(finishes, null, 2)};\n`,
+    `export const SHIPPED_MATERIALS: ShippedMaterial[] = ${rows(materials)};\n` +
+    `export const SHIPPED_FINISHES: ShippedFinish[] = ${rows(finishes)};\n`,
 );
 console.log(`${items.length} ארגזים נכנסו ל-src/catalog/shipped.ts`);
 console.log(`${materials.length} לוחות ו-${finishes.length} גוונים נכנסו איתם`);
@@ -141,6 +141,18 @@ if (missing) {
   );
 }
 console.log('הרץ npm run typecheck ואז npm run build:single');
+
+/**
+ * טבלה, שורה בשורה.
+ *
+ * `JSON.stringify` עם הזחה פורס כל שדה לשורה משלו, ושמונים ארגזים
+ * הפכו לשלושת אלפים שורות שאי אפשר לקרוא ואי אפשר להשוות ביניהן
+ * בדיף. ארגז הוא שורה: מה שהשתנה בין שתי גרסאות נראה מיד.
+ */
+function rows(list) {
+  if (!list.length) return '[]';
+  return `[\n${list.map((r) => `  ${JSON.stringify(r)}`).join(',\n')}\n]`;
+}
 
 /** שורה שמוכנה לקוד: בלי חותמות הזמן שנקבעות בכל מכשיר מחדש */
 function strip(row) {

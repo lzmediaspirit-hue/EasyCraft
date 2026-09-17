@@ -37,7 +37,7 @@ const KIND_LABELS: Record<OpeningKind, string> = {
   window: 'כנף החלון',
 };
 
-export function openingLabel(kind: OpeningKind): string {
+function openingLabel(kind: OpeningKind): string {
   return KIND_LABELS[kind];
 }
 
