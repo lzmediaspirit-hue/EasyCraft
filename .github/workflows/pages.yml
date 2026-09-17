@@ -36,6 +36,8 @@ jobs:
   # הן צריכות שרת פיתוח ודפדפן — ולכן זו משרה נפרדת.
   contract:
     runs-on: ubuntu-latest
+    # שער שנתקע גרוע משער שנופל: הוא חוסם פרסום בשקט, לשעות
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,7 +47,9 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
-      - run: npx playwright install --with-deps chromium
+      # בלי `--with-deps`: הוא מריץ apt, ובמכונה של GitHub הספריות
+      # כבר שם — בריצה הראשונה הוא נתקע שם עשרים וחמש דקות
+      - run: npx playwright install chromium
       # שרת הפיתוח והבדיקות באותו שלב: תהליך רקע אינו שורד מעבר שלב
       - name: בדיקות חוזה מול שרת פיתוח
         run: |
