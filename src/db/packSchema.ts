@@ -18,6 +18,15 @@ import type { CatalogItem, Finish, Material, Room } from './types';
 type Check = (v: unknown) => boolean;
 
 const str: Check = (v) => typeof v === 'string' && v.trim() !== '';
+/*
+ * טקסט חופשי שמותר לו להיות ריק.
+ *
+ * `str` דורש תוכן, וזה נכון לשם ולמזהה. אבל שדה תיאור שלא מולא
+ * נשמר כמחרוזת ריקה, ואז `str` פסל אותו — והאפליקציה דחתה קובץ
+ * שהיא עצמה ייצאה. "לא מילאתי" ו"אין שדה כזה" הם אותו דבר, ושניהם
+ * תקינים.
+ */
+const text: Check = (v) => typeof v === 'string';
 const num: Check = (v) => typeof v === 'number' && Number.isFinite(v);
 const bool: Check = (v) => typeof v === 'boolean';
 const time: Check = (v) => num(v) && (v as number) >= 0;
@@ -125,12 +134,12 @@ const ENTITY: Record<string, Check> = { id: str, createdAt: time, updatedAt: tim
 const SCHEMA: Record<string, TableSpec> = {
   materials: {
     need: { ...ENTITY, name: str, sheetWidthMm: size, sheetHeightMm: size, sortOrder: order },
-    may: { core: str, coreColor: str, thicknessMm: size, roles: listOf(oneOf(...PART_ROLES)) },
+    may: { core: str, coreColor: text, thicknessMm: size, roles: listOf(oneOf(...PART_ROLES)) },
   },
   finishes: {
     need: { ...ENTITY, name: str, hex: str, sortOrder: order },
     may: {
-      texture: str,
+      texture: text,
       hasGrain: bool,
       /* מחיר לכל לוח: מזהה הלוח ← מספרים. אובייקט פגום כאן הוא מחיר שקרי */
       prices: mapOf(
@@ -145,7 +154,7 @@ const SCHEMA: Record<string, TableSpec> = {
   },
   rooms: {
     need: { ...ENTITY, label: str, groups: listOf(str), sortOrder: order },
-    may: { hint: str, icon: str, isBuiltin: bool, hiddenAt: time },
+    may: { hint: text, icon: str, isBuiltin: bool, hiddenAt: time },
   },
   catalog: {
     /*
@@ -184,11 +193,11 @@ const SCHEMA: Record<string, TableSpec> = {
           {
             id: str,
             specId: str,
-            supplier: str,
-            model: str,
-            unit: str,
-            note: str,
-            replaces: str,
+            supplier: text,
+            model: text,
+            unit: text,
+            note: text,
+            replaces: text,
             factoryPrice: num,
             consumerPrice: num,
           },
@@ -199,7 +208,7 @@ const SCHEMA: Record<string, TableSpec> = {
       shelves: count,
       socleMm: mm,
       counterMm: mm,
-      note: str,
+      note: text,
       carcassFinishId: str,
       frontFinishId: str,
       exposedFinishId: str,

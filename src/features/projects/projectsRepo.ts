@@ -413,6 +413,15 @@ export const unitsRepo = {
         updatedAt: now + i,
       } as PlacedUnit);
     }
+    /*
+     * גם קבוצה עוברת בשער, ולפני הכתיבה ולא באמצעה: קבוצה שחלק
+     * ממנה נכתב וחלק נפסל היא פריט מורכב שחסר לו חלק.
+     */
+    const ctx = await buildContext(projectId);
+    for (const u of out) {
+      const why = checkUnit(u, ctx);
+      if (why) throw new BuildError(`${u.name}: ${why}`);
+    }
     if (out.length) await db.units.bulkAdd(out);
     return out;
   },
@@ -493,6 +502,16 @@ export const unitsRepo = {
       createdAt: now,
       updatedAt: now,
     };
+    /*
+     * אותו שער שחל על עריכה חל גם על הנחה.
+     *
+     * `update` בדק, `add` לא — ולכן ארגז שאי אפשר לבנות נכנס
+     * בדלת הראשונה ונעצר רק בדלת השנייה. מי שהניח ארגז ברוחב
+     * 50 מ״מ דרך התכנון האוטומטי קיבל אותו שמור, ורשימת החיתוך
+     * יצאה ממנו. הבדיקה כאן היא אותה בדיקה, באותו הקשר חומר.
+     */
+    const why = checkUnit(unit, await buildContext(projectId));
+    if (why) throw new BuildError(why);
     await db.units.add(unit);
     return unit;
   },

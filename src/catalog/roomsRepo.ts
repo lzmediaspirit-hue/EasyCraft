@@ -82,7 +82,8 @@ export const roomsRepo = {
     await db.rooms.add({
       id,
       label: input.label.trim(),
-      hint: input.hint?.trim() || '',
+      /* תיאור שלא מולא אינו נשמר כמחרוזת ריקה אלא לא נשמר */
+      ...(input.hint?.trim() ? { hint: input.hint.trim() } : {}),
       icon: input.icon || 'custom',
       groups: input.groups?.length ? input.groups : CUSTOM_ROOM_DEF.groups,
       sortOrder: top + 10,
