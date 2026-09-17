@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { settingsRepo } from '../../materials/materialsRepo';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { Page, ScreenHeader } from '../../ui/Page';
 import { Field, inputClass } from '../../ui/Field';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { unitLabel } from '../../ui/units';
@@ -51,7 +51,7 @@ export function DefaultsScreen() {
   );
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       <ScreenHeader title="ברירות מחדל לפרויקט" subtitle="המידות שחוזרות בכל עבודה" />
 
       <main className="flex-1 space-y-6 px-5 pt-4 pb-10">
@@ -172,6 +172,6 @@ export function DefaultsScreen() {
           </p>
         </section>
       </main>
-    </div>
+    </Page>
   );
 }

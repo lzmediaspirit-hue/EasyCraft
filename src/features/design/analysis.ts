@@ -36,7 +36,6 @@ export function analyzeWall(wall: Wall, units: PlacedUnit[]): WallAnalysis {
   return { floorUsedMm, wallUsedMm, freeMm: wall.lengthMm - floorUsedMm };
 }
 
-
 /** המיקום הפנוי הבא במפלס מסוים — כדי שארגז חדש יינחת צמוד לשורה. */
 export function nextFreeX(units: PlacedUnit[], level: PlacedUnit['level']): number {
   const sameLine = units.filter((u) => (level === 'wall' ? u.level === 'wall' : u.level !== 'wall'));

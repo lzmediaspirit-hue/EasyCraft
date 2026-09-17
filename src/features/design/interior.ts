@@ -44,6 +44,30 @@ function clearHeight(bandMm: number, t: number): number {
 }
 
 /**
+ * מה שגוזר את הפנים מהגוף, פעם אחת לשתי הפונקציות.
+ *
+ * הרשימה והציור חייבים לומר את אותו מספר, ולכן הם אינם מחשבים
+ * אותו פעמיים: עובי הלוח, הגוף שמתכווץ בדופן זרה, הפינה המתה,
+ * והרוחב הנקי שנשאר — כולם כאן.
+ */
+function carcassInner(u: PlacedUnit, ctx: BuildContext) {
+  const t = carcassMm(u, ctx);
+  const ft = frontThicknessMm(u, ctx);
+  /* הגוף מתכווץ בעובי דופן זרה, בדיוק כמו בפירוק החלקים */
+  const e = u.exposed ?? {};
+  const carcassW = u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0);
+  const blind = blindWidthMm({ ...u, widthMm: carcassW });
+  return {
+    t,
+    blind,
+    innerW: Math.max(carcassW - 2 * t - blind, 0),
+    body: bodyHeightMm(u),
+    /* הפינה המתה יושבת בקצה החסום, ולכן הפנים מתחיל אחריה */
+    startMm: (blindSide(u) === 'blindStart' ? blind : 0) + t,
+  };
+}
+
+/**
  * המידות הפנימיות של הארגז הנבחר.
  *
  * הסדר הוא הסדר שבו נגר מודד: רוחב, ואז תא־תא מלמטה למעלה, ואז
@@ -66,14 +90,7 @@ export function interiorDims(u: PlacedUnit, ctx: BuildContext = {}): ClearSpan[]
     ];
   }
 
-  const t = carcassMm(u, ctx);
-  const ft = frontThicknessMm(u, ctx);
-  const body = bodyHeightMm(u);
-  const e = u.exposed ?? {};
-  /* הגוף מתכווץ בעובי דופן זרה, בדיוק כמו בפירוק החלקים */
-  const carcassW = u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0);
-  const blind = blindWidthMm({ ...u, widthMm: carcassW });
-  const innerW = Math.max(carcassW - 2 * t - blind, 0);
+  const { t, blind, innerW, body } = carcassInner(u, ctx);
   const back = u.backKind === 'none' ? 0 : MATERIAL.backMm;
 
   const out: ClearSpan[] = [
@@ -185,16 +202,8 @@ export function interiorCells(u: PlacedUnit, ctx: BuildContext = {}): InteriorCe
   const def = glyphDef(u.glyph);
   if (def.standalone || def.noCarcass) return [];
 
-  const t = carcassMm(u, ctx);
-  const ft = frontThicknessMm(u, ctx);
-  const body = bodyHeightMm(u);
+  const { t, innerW, body, startMm } = carcassInner(u, ctx);
   const socle = u.socleMm ?? 0;
-  const e = u.exposed ?? {};
-  const carcassW = u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0);
-  const blind = blindWidthMm({ ...u, widthMm: carcassW });
-  const innerW = Math.max(carcassW - 2 * t - blind, 0);
-  /* הפינה המתה יושבת בקצה החסום, ולכן הפנים מתחיל אחריה */
-  const startMm = (blindSide(u) === 'blindStart' ? blind : 0) + t;
 
   const out: InteriorCell[] = [];
   for (const { zone, top, bottom } of zoneBands(unitZones(u), body)) {

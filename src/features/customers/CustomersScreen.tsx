@@ -23,6 +23,7 @@ import {
   UsersIcon,
 } from '../../ui/icons';
 import { nav } from '../../nav/navigation';
+import { Page } from '../../ui/Page';
 
 /** מעל כמה לקוחות מוצג שדה חיפוש. מתחת לזה הוא רק רעש. */
 const SEARCH_THRESHOLD = 6;
@@ -66,7 +67,7 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
   }
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-stone-50/95 px-5 pt-6 pb-4 backdrop-blur">
         <div className="flex items-center gap-2.5">
           {archived && (
@@ -265,7 +266,7 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
           {toast}
         </div>
       )}
-    </div>
+    </Page>
   );
 }
 

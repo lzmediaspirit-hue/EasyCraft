@@ -37,8 +37,8 @@ export function WallToolsSheet({
 }) {
   const view = useViewOptions();
   /*
-   * המחוונים לפי הסדר שנקבע, ואחריהם מה שאינו מחוון — קו הגובה
-   * והאזהרות. השניים האחרונים אינם אריחים ואין להם מקום בסדר.
+   * המחוונים לפי הסדר שנקבע, ואחריהם מה שאינו מחוון — קו הגובה.
+   * הוא אינו אריח ואין לו מקום בסדר.
    */
   const stats = orderedStats(view);
   const labelOf = (key: ToggleKey) =>
@@ -87,8 +87,8 @@ export function WallToolsSheet({
             </Field>
           </div>
           <p className="mt-2 text-xs leading-snug text-stone-500">
-            הארגזים לא זזים כשהקיר משתנה. מי שחורג מהקיר החדש יסומן
-            באזהרה.
+            הארגזים לא זזים כשהקיר משתנה. מי שחורג מהקיר החדש נשאר
+            במקומו עד שתזיזו אותו.
           </p>
         </section>
 

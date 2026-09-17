@@ -6,7 +6,7 @@ import { customersRepo } from '../customers/customersRepo';
 import { stagesRepo, teamRepo } from '../../workflow/workflowRepo';
 import { useCurrentMember } from '../../workflow/useMember';
 import { ROLE_LABEL, canOwn, stageDef } from '../../workflow/stages';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { Page, ScreenHeader } from '../../ui/Page';
 import { nav } from '../../nav/navigation';
 import { ChevronIcon } from '../../ui/icons';
 import type { PlacedUnit, Wall } from '../../db/types';
@@ -118,7 +118,7 @@ export function TasksScreen() {
   };
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       <ScreenHeader
         title={me?.role === 'manager' ? 'תהליכים פתוחים' : 'המשימות שלי'}
         subtitle={me ? `${me.name} · ${ROLE_LABEL[me.role]}` : 'אף אחד לא מחובר'}
@@ -158,6 +158,6 @@ export function TasksScreen() {
           </section>
         )}
       </main>
-    </div>
+    </Page>
   );
 }

@@ -1,4 +1,4 @@
-import { GLYPHS, glyphDef, type GlyphDef } from './glyphList';
+import { glyphDef, type GlyphDef } from './glyphList';
 import type { RoomKind } from '../db/types';
 
 /**
@@ -41,6 +41,3 @@ export function commonGlyphs(room?: RoomKind): GlyphDef[] {
 export function isCommonGlyph(glyph: string, room?: RoomKind): boolean {
   return commonGlyphs(room).some((g) => g.key === glyph);
 }
-
-/** כמה איורים יש בסך הכול — לרשימה המלאה ולבדיקות. */
-export const GLYPH_COUNT = GLYPHS.length;

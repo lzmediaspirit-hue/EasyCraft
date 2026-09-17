@@ -619,8 +619,7 @@ export function DesignScreen({
               /*
                * הסיבוב חופשי גם כשהוא יוצר חפיפה: מי שמעמיד ארון
                * בפינה מסובב אותו קודם ומזיז אחר כך, וחסימה כאן
-               * הייתה נראית כמו כפתור שבור. החפיפה מסומנת בהתראות
-               * ובמבט העל.
+               * הייתה נראית כמו כפתור שבור. החפיפה נראית במבט העל.
                */
               onRotate={editable ? (id, patch) => patchUnit(id, patch, `rotate:${id}`) : undefined}
               /* גרירה בתלת־ממד עשויה לעבור לקיר שכן — הארגז עובר איתה */
@@ -657,7 +656,6 @@ export function DesignScreen({
             project={project}
             showHeight={view.heightLine}
             rulerPair={rulerPair}
-
             rulerAxis={rulerAxis}
             work={workMode}
             onSelect={(id) => {

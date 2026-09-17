@@ -7,7 +7,7 @@ import { SaleSheet } from './SaleSheet';
 import { roomDef } from '../../catalog/roomsRepo';
 import { CUSTOM_ROOM } from '../../db/types';
 import { nav } from '../../nav/navigation';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { Page, ScreenHeader } from '../../ui/Page';
 import { BoxesIcon, ChevronIcon, CopyIcon, PlusIcon, TagIcon, TrashIcon } from '../../ui/icons';
 import { stagesRepo, currentStage } from '../../workflow/workflowRepo';
 import { useCurrentMember } from '../../workflow/useMember';
@@ -37,7 +37,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
   const role = useEffectiveRole(me?.role);
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       <ScreenHeader
         title={customer?.name ?? ''}
         subtitle={customer?.city}
@@ -94,7 +94,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
           onClose={() => setSaleFor(null)}
         />
       )}
-    </div>
+    </Page>
   );
 }
 

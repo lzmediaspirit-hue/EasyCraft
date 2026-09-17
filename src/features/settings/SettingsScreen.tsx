@@ -5,7 +5,7 @@ import { MaterialSheet } from './MaterialSheet';
 import { FinishSheet } from './FinishSheet';
 import { CabinetsSheet } from './CabinetsSheet';
 import { ExtrasSection } from './ExtrasSection';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { Page, ScreenHeader } from '../../ui/Page';
 import { nav } from '../../nav/navigation';
 import { Field, NumField, PriceField, inputClass, selectOnFocus } from '../../ui/Field';
 import { displayUnit } from '../../ui/units';
@@ -53,7 +53,7 @@ export function SettingsScreen() {
   );
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       <ScreenHeader title="הגדרות" subtitle="צוות, גוונים, לוחות וחישוב" />
 
       <main className="flex-1 space-y-8 px-5 pt-5 pb-28">
@@ -444,7 +444,7 @@ export function SettingsScreen() {
           onClose={() => setEditingMaterial(null)}
         />
       )}
-    </div>
+    </Page>
   );
 }
 

@@ -52,22 +52,19 @@ export function isPriced(price: MaterialPrice | undefined): boolean {
 }
 
 /**
- * הצירוף קיים אצל הספק, גם אם עוד אין לו מחיר.
+ * מצב הצירוף: אין, יש בלי מחיר, או יש ומתומחר.
  *
  * הרשומה עצמה היא ההצהרה: מפתח קיים = הגוון מגיע על הלוח הזה. עד
  * עכשיו הזמינות נגזרה מהמחיר, ולכן גוון אמיתי שעוד לא תומחר נעלם
  * מהרשימה — והנגר לא הבין למה הלוח שיש לו במחסן אינו מוצע לו.
  */
-function isOffered(finish: Finish | undefined, materialId: string | undefined): boolean {
-  return !!finish && !!materialId && finish.prices?.[materialId] !== undefined;
-}
-
 function boardStatus(
   finish: Finish | undefined,
   materialId: string | undefined,
 ): BoardStatus {
-  if (!isOffered(finish, materialId)) return 'missing';
-  return isPriced(finish!.prices[materialId!]) ? 'priced' : 'unpriced';
+  const price = finish && materialId ? finish.prices?.[materialId] : undefined;
+  if (price === undefined) return 'missing';
+  return isPriced(price) ? 'priced' : 'unpriced';
 }
 
 /** המפרט המלא של הצירוף שנבחר. */

@@ -6,7 +6,7 @@ import { nav } from '../../nav/navigation';
 import { useCurrentMember } from '../../workflow/useMember';
 import { ROLE_LABEL } from '../../workflow/stages';
 import { MemberSheet } from './MemberSheet';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { Page, ScreenHeader } from '../../ui/Page';
 import { PlusIcon } from '../../ui/icons';
 import type { TeamMember, UserRole } from '../../db/types';
 
@@ -58,7 +58,7 @@ export function TeamScreen() {
 
   if (!isManager) {
     return (
-      <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+      <Page>
         <ScreenHeader title="החשבון שלי" subtitle={me?.name} action={signOut} />
         <main className="flex-1 px-5 pt-6">
           <div className="rounded-2xl border border-stone-200 bg-white p-4">
@@ -72,12 +72,12 @@ export function TeamScreen() {
             ניהול הצוות, פתיחת משתמשים ואיפוס סיסמאות פתוחים למנהל בלבד.
           </p>
         </main>
-      </div>
+      </Page>
     );
   }
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       <ScreenHeader
         title="הצוות"
         subtitle={`מחובר: ${me?.name ?? ''}`}
@@ -157,6 +157,6 @@ export function TeamScreen() {
           onClose={() => setEditing(null)}
         />
       )}
-    </div>
+    </Page>
   );
 }

@@ -4,7 +4,7 @@ import { projectsRepo } from '../projects/projectsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { consumptionRepo } from '../../materials/consumptionRepo';
 import { receiveOrder, stockRepo } from '../../materials/materialsRepo';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { Page, ScreenHeader } from '../../ui/Page';
 import { selectOnFocus } from '../../ui/Field';
 import { CheckIcon, PlusIcon } from '../../ui/icons';
 import type { ProjectCosting } from '../../costing/boards';
@@ -183,7 +183,7 @@ export function StockScreen() {
   );
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       {/* המחשבון יושב כאן כי ספירת מלאי היא חשבון: פלטות, מידות ופחתים */}
       <ScreenHeader
         title="מלאי לוחות"
@@ -438,7 +438,7 @@ export function StockScreen() {
           onClose={() => setOffcutsFor(null)}
         />
       )}
-    </div>
+    </Page>
   );
 }
 

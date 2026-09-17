@@ -24,10 +24,6 @@ const bus = subscribers();
 /** האם היסטוריית הדפדפן זמינה. בסביבות מוטמעות היא עלולה להיחסם. */
 let historyWorks = true;
 
-function emit() {
-  bus.notify();
-}
-
 export const nav = {
   push(route: Route) {
     stack = [...stack, route];
@@ -36,7 +32,7 @@ export const nav = {
     } catch {
       historyWorks = false;
     }
-    emit();
+    bus.notify();
   },
   back() {
     if (stack.length <= 1) return;
@@ -45,7 +41,7 @@ export const nav = {
       return;
     }
     stack = stack.slice(0, -1);
-    emit();
+    bus.notify();
   },
   /**
    * חוזר למסך הפתיחה ומאפס את המחסנית.
@@ -54,7 +50,7 @@ export const nav = {
    */
   reset() {
     stack = [{ name: 'customers' }];
-    emit();
+    bus.notify();
   },
   current(): Route {
     return stack[stack.length - 1];
@@ -67,15 +63,10 @@ export const nav = {
 window.addEventListener('popstate', () => {
   if (stack.length > 1) {
     stack = stack.slice(0, -1);
-    emit();
+    bus.notify();
   }
 });
 
 export function useRoute(): Route {
-  return useSyncExternalStore(
-    (cb) => {
-      return bus.subscribe(cb);
-    },
-    () => stack[stack.length - 1],
-  );
+  return useSyncExternalStore(bus.subscribe, () => stack[stack.length - 1]);
 }

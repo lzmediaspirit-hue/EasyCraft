@@ -542,15 +542,6 @@ export const UnlockIcon = icon(
 /** שמירה לספרייה — סימנייה. */
 export const BookmarkIcon = icon(<path d="M6 4h12v16l-6-4-6 4z" />);
 
-/** משולש אזהרה — מה שלא ייבנה או לא ייפתח. */
-export const WarnIcon = icon(
-  <>
-    <path d="M12 4 2.5 20h19L12 4Z" />
-    <path d="M12 10v4.5M12 17.2v.1" />
-  </>,
-  { width: 1.8 },
-);
-
 /** מחשבון מהיר. */
 export const KeypadIcon = icon(
   <path d="M5 9h14M12 5v8M6 18h5M15.5 16.5l3 3M18.5 16.5l-3 3" />,

@@ -2,6 +2,7 @@ import './_exit.mjs';
 /* שכבה 24א: גרירות, מגז פתוח, מחיקת פרויקט, עריכה מתקדמת */
 import { chromium } from 'playwright';
 import { BOX, addBox, setup } from './mk.mjs';
+const SP = new URL('shots/', import.meta.url).pathname;
 let fail = 0;
 const ok = (n, c, g = '') => { if (c) console.log('PASS ', n); else { fail++; console.log('FAIL ', n, g); } };
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -79,7 +80,7 @@ if (await tile.count()) {
 await page.locator('[data-unit-id]').first().click(); await page.waitForTimeout(800);
 const shot = async (tag) => {
   const svg = page.locator('svg').filter({ has: page.locator('[data-unit-id]') }).first();
-  await svg.screenshot({ path: `L75-${tag}.png` });
+  await svg.screenshot({ path: `${SP}L75-${tag}.png` });
   return svg.innerHTML();
 };
 const closed = await shot('1-hob-drawers');

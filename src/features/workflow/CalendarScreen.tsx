@@ -4,7 +4,7 @@ import { projectsRepo } from '../projects/projectsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { stagesRepo, teamRepo } from '../../workflow/workflowRepo';
 import { stageDef } from '../../workflow/stages';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { Page, ScreenHeader } from '../../ui/Page';
 import { nav } from '../../nav/navigation';
 import { ScheduleInstallSheet } from './ScheduleInstallSheet';
 import { ChevronIcon, PlusIcon } from '../../ui/icons';
@@ -67,7 +67,7 @@ export function CalendarScreen() {
   };
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       <ScreenHeader title="לוח התקנות" subtitle="מה נקבע, ומתי" />
 
       <main className="flex-1 px-5 pb-10">
@@ -191,6 +191,6 @@ export function CalendarScreen() {
       {scheduling && selected && (
         <ScheduleInstallSheet date={selected} onClose={() => setScheduling(false)} />
       )}
-    </div>
+    </Page>
   );
 }

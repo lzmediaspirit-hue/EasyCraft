@@ -12,7 +12,7 @@ import { useCurrentMember } from '../../workflow/useMember';
 import { ROLE_LABEL, STAGES, canOwn, stageDef } from '../../workflow/stages';
 import { StageSheet } from './StageSheet';
 import { AttachmentsSection } from './AttachmentsSection';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { Page, ScreenHeader } from '../../ui/Page';
 import { nav } from '../../nav/navigation';
 import { CheckIcon } from '../../ui/icons';
 import type { ProjectStage, StageKey } from '../../db/types';
@@ -49,7 +49,7 @@ export function WorkflowScreen({ projectId }: { projectId: string }) {
   const memberName = (id?: string) => team?.find((m) => m.id === id)?.name;
 
   return (
-    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
+    <Page>
       <ScreenHeader
         title={project.name}
         subtitle={customer ? `${customer.name} · תהליך העבודה` : 'תהליך העבודה'}
@@ -108,7 +108,7 @@ export function WorkflowScreen({ projectId }: { projectId: string }) {
           onClose={() => setOpenStage(null)}
         />
       )}
-    </div>
+    </Page>
   );
 }
 

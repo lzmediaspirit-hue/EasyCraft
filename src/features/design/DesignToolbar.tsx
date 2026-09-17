@@ -29,7 +29,7 @@ import {
   WallsIcon,
 } from '../../ui/icons';
 import { QuickCalcButton } from '../../ui/QuickCalc';
-import { ScreenHeader } from '../../ui/ScreenHeader';
+import { ScreenHeader } from '../../ui/Page';
 import type { useDesignView } from './designView';
 import type { PlacedUnit, Project, UserRole, Wall } from '../../db/types';
 import type { SheetName } from './sheets';

@@ -1,6 +1,18 @@
 import { nav } from '../nav/navigation';
 import { BackIcon } from './icons';
 
+/**
+ * המעטפת של מסך שלם.
+ *
+ * אותו `<div>` בדיוק פתח תשעה מסכים, ומחרוזת שחוזרת תשע פעמים היא
+ * תשע הזדמנויות שהיא תשתנה בשמונה מהן. `app-page` היא מה שגרסת
+ * המחשב נתלית בו, וגובה מלא ורקע הם מה שמונע פס לבן בגלילה —
+ * שלושתם החלטה אחת, ולכן הם יושבים במקום אחד.
+ */
+export function Page({ children }: { children: React.ReactNode }) {
+  return <div className="app-page flex min-h-dvh flex-col bg-stone-50">{children}</div>;
+}
+
 /** כותרת מסך עם כפתור חזרה קטן. */
 export function ScreenHeader({
   title,

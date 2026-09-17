@@ -67,7 +67,6 @@ export function WallIso({
   /** הקיר שעובדים עליו כרגע, מסומן בציור */
   activeWallId: string;
   selectedId: string | null;
-  /** מה שאזהרה מדברת עליו — מודלק יחד, ראה `WallElevation` */
   onSelect: (id: string | null) => void;
   /**
    * הזזת ארגז אל מקום אחר — ואולי אל קיר אחר.
