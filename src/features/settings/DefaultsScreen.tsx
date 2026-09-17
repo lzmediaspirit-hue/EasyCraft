@@ -51,7 +51,7 @@ export function DefaultsScreen() {
   );
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       <ScreenHeader title="ברירות מחדל לפרויקט" subtitle="המידות שחוזרות בכל עבודה" />
 
       <main className="flex-1 space-y-6 px-5 pt-4 pb-10">

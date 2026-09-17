@@ -159,3 +159,90 @@
     grid-column: 3;
   }
 }
+
+/*
+ * רוחב העמוד.
+ *
+ * כל מסך נבנה לטלפון, וכל מסך נשא את אותה מעטפת ברוחב 512. במחשב
+ * זה נראה בדיוק כמו טלפון גדול: עמודה צרה באמצע ושני שוליים ריקים
+ * לצידה. מסך ההדמיה כבר התרחב, והשאר לא — ולכן "אין גרסת מחשב"
+ * היה תיאור מדויק של רוב האפליקציה.
+ *
+ * הרוחב יושב כאן ולא בכל מסך בנפרד, כי הוא החלטה אחת.
+ */
+.app-page {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 32rem;
+}
+
+/*
+ * רשימת כרטיסים נפרסת לרוחב במקום להימתח.
+ *
+ * כרטיס לקוח ברוחב 90 ס״מ הוא שורה ארוכה שקשה לסרוק בעין. באותו
+ * מקום נכנסים שניים או שלושה זה לצד זה, וזה מה שהופך רשימה ארוכה
+ * למשהו שרואים במבט אחד.
+ */
+@media (min-width: 1024px) {
+  .app-page {
+    max-width: 64rem;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    gap: 0.75rem;
+    align-items: start;
+  }
+  .card-grid > * + * {
+    margin-block-start: 0;
+  }
+}
+
+/*
+ * הגיליון.
+ *
+ * בטלפון הוא עולה מלמטה לרוחב המסך. במחשב הוא נשאר ברוחב טלפון
+ * באמצע מסך ריק — וטופס בניית ארגז, שיש בו שם, חדר, מידות, פנים
+ * וגוונים, נדחס לעמודה אחת ארוכה שצריך לגלול בה הרבה.
+ */
+.app-sheet {
+  max-width: 32rem;
+}
+
+@media (min-width: 1024px) {
+  .app-sheet {
+    max-width: 56rem;
+    border-radius: 1.5rem;
+  }
+  /*
+   * ובטופס הרחב, השדות בשתי עמודות: מה שהיה גלילה ארוכה נכנס
+   * למסך אחד, והתצוגה המקדימה נשארת מול העין בזמן שמכווננים.
+   */
+  .cabinet-form {
+    display: grid;
+    grid-template-columns: 22rem minmax(0, 1fr);
+    gap: 0 1.75rem;
+    align-items: start;
+  }
+  .cabinet-form > .cabinet-preview {
+    grid-column: 1;
+    position: sticky;
+    top: 0;
+    flex-direction: column;
+    min-height: 16rem;
+  }
+  .cabinet-form > .cabinet-preview svg {
+    width: 100%;
+    height: 11rem;
+  }
+  .cabinet-form > :not(.cabinet-preview) {
+    grid-column: 2;
+  }
+  /* הרווח בין השדות הוא של הרשת, ולא של ה-margin שמתאים לעמודה אחת */
+  .cabinet-form > * + * {
+    margin-block-start: 0;
+  }
+  .cabinet-form > :not(.cabinet-preview) ~ :not(.cabinet-preview) {
+    margin-block-start: 1.25rem;
+  }
+}

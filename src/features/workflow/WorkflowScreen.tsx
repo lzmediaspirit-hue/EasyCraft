@@ -49,7 +49,7 @@ export function WorkflowScreen({ projectId }: { projectId: string }) {
   const memberName = (id?: string) => team?.find((m) => m.id === id)?.name;
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       <ScreenHeader
         title={project.name}
         subtitle={customer ? `${customer.name} · תהליך העבודה` : 'תהליך העבודה'}

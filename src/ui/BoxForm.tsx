@@ -65,8 +65,8 @@ export function BoxForm({
   const [lastCounter, setLastCounter] = useState(value.counterMm || KITCHEN.counterH);
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-4 rounded-2xl bg-stone-50 p-4">
+    <div className="cabinet-form space-y-5">
+      <div className="cabinet-preview flex items-center gap-4 rounded-2xl bg-stone-50 p-4">
         <span className="shrink-0 text-stone-500">
           <GlyphPreview
             glyph={value.glyph}

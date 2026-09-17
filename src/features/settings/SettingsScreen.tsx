@@ -53,7 +53,7 @@ export function SettingsScreen() {
   );
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       <ScreenHeader title="הגדרות" subtitle="צוות, גוונים, לוחות וחישוב" />
 
       <main className="flex-1 space-y-8 px-5 pt-5 pb-28">

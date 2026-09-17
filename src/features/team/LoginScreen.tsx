@@ -65,7 +65,7 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center bg-stone-50 px-6">
+    <div className="app-page flex min-h-dvh flex-col justify-center bg-stone-50 px-6">
       <div className="mb-8 text-center">
         <span className="mx-auto grid size-16 place-items-center rounded-2xl bg-oak-100 text-oak-600">
           <BoxesIcon className="size-8" />

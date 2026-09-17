@@ -67,7 +67,7 @@ export function CalendarScreen() {
   };
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       <ScreenHeader title="לוח התקנות" subtitle="מה נקבע, ומתי" />
 
       <main className="flex-1 px-5 pb-10">

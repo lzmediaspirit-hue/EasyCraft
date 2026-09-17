@@ -66,7 +66,7 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-stone-50/95 px-5 pt-6 pb-4 backdrop-blur">
         <div className="flex items-center gap-2.5">
           {archived && (
@@ -234,7 +234,7 @@ export function CustomersScreen({ archived = false }: { archived?: boolean } = {
       </main>
 
       {customers !== undefined && customers.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-lg bg-gradient-to-t from-stone-50 via-stone-50 to-transparent px-5 pt-8 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        <div className="app-page fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-stone-50 via-stone-50 to-transparent px-5 pt-8 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           <button
             onClick={() => setSheetOpen(true)}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"

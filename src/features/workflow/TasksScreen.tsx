@@ -118,7 +118,7 @@ export function TasksScreen() {
   };
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       <ScreenHeader
         title={me?.role === 'manager' ? 'תהליכים פתוחים' : 'המשימות שלי'}
         subtitle={me ? `${me.name} · ${ROLE_LABEL[me.role]}` : 'אף אחד לא מחובר'}

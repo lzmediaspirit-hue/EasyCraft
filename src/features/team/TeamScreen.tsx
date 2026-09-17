@@ -58,7 +58,7 @@ export function TeamScreen() {
 
   if (!isManager) {
     return (
-      <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+      <div className="app-page flex min-h-dvh flex-col bg-stone-50">
         <ScreenHeader title="החשבון שלי" subtitle={me?.name} action={signOut} />
         <main className="flex-1 px-5 pt-6">
           <div className="rounded-2xl border border-stone-200 bg-white p-4">
@@ -77,7 +77,7 @@ export function TeamScreen() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       <ScreenHeader
         title="הצוות"
         subtitle={`מחובר: ${me?.name ?? ''}`}
@@ -140,7 +140,7 @@ export function TeamScreen() {
         </p>
       </main>
 
-      <div className="sticky bottom-0 mx-auto w-full max-w-lg px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      <div className="app-page sticky bottom-0 px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <button
           onClick={() => setEditing('new')}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"

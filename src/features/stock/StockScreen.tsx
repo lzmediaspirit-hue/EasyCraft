@@ -183,7 +183,7 @@ export function StockScreen() {
   );
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       {/* המחשבון יושב כאן כי ספירת מלאי היא חשבון: פלטות, מידות ופחתים */}
       <ScreenHeader
         title="מלאי לוחות"

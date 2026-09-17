@@ -106,7 +106,7 @@ export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack
 
         aria-modal="true"
         aria-label={title}
-        className={`relative mx-auto flex w-full max-w-lg animate-sheet-in flex-col rounded-t-3xl bg-white shadow-2xl ${
+        className={`app-sheet relative mx-auto flex w-full animate-sheet-in flex-col rounded-t-3xl bg-white shadow-2xl ${
           tall ? 'h-[86dvh]' : 'max-h-[86dvh]'
         }`}
       >

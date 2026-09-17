@@ -37,7 +37,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
   const role = useEffectiveRole(me?.role);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-stone-50">
+    <div className="app-page flex min-h-dvh flex-col bg-stone-50">
       <ScreenHeader
         title={customer?.name ?? ''}
         subtitle={customer?.city}
@@ -48,7 +48,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
         {projects === undefined ? null : projects.length === 0 ? (
           <EmptyState onAdd={() => setWizardOpen(true)} />
         ) : (
-          <ul className="space-y-3 pt-3">
+          <ul className="card-grid space-y-3 pt-3">
             {projects.map((project) => (
               <ProjectCard
                 key={project.id}
@@ -64,7 +64,7 @@ export function ProjectsScreen({ customerId }: { customerId: string }) {
         )}
       </main>
 
-      <div className="sticky bottom-0 mx-auto w-full max-w-lg px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      <div className="app-page sticky bottom-0 px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <button
           onClick={() => setWizardOpen(true)}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-oak-600 py-4 text-base font-semibold text-white shadow-lg shadow-oak-900/15 transition-colors hover:bg-oak-700"
