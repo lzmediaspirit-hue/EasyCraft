@@ -52,13 +52,12 @@ await page.screenshot({ path: SP + 'L58-1-designer.png' });
 await page.keyboard.press('Escape');
 await page.waitForTimeout(800);
 
-/* --- ההתראה אומרת כמה העמוד גונב, ולא שהארגז אשם --- */
-const body = await page.innerText('body');
-ok(
-  'the warning says how deep the pillar bites',
-  /בולט \d+ ס״מ אל תוך|בולט \d+ ס"מ אל תוך/.test(body),
-  body.split('\n').filter((l) => l.includes('בולט')).join(' / '),
-);
+/*
+ * --- כמה העמוד גונב, נאמר על הציור ---
+ *
+ * זה היה כתוב בהתראה. ההתראות ירדו מהמסך, והמידה לא אבדה: היא
+ * כתובה ליד שם הסימון על החזית, וזה מה שנבדק מיד אחרי.
+ */
 
 /* --- בחזית העומק כתוב ליד השם --- */
 const flat = await page.locator('svg:has([data-unit-id])').first().innerHTML();
