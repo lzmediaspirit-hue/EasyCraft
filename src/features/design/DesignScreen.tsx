@@ -65,16 +65,12 @@ import { AISLE } from '../../catalog/kitchenRules';
 import type { CatalogItem, FreePlacement, PlacedUnit, Project, UserRole } from '../../db/types';
 import { useMaterialsAndFinishes } from '../../materials/useMaterials';
 
-
-/** גובה הלוח נשאר בתחום שמשאיר את הקיר גלוי ואת הלוח שימושי. */
 /*
  * ברירות מחדל יציבות.
  *
  * `?? []` בתוך ה-JSX יוצר מערך חדש בכל ציור, וכל מי שמקבל אותו
  * מחשב הכול מחדש גם כששום דבר לא השתנה. קבוע אחד פותר את זה.
  */
-const NO_FLAGS = new Set<string>();
-
 const NO_UNITS: PlacedUnit[] = [];
 const NO_HEX: Record<string, string> = {};
 
@@ -332,13 +328,6 @@ export function DesignScreen({
     () => (wall ? analyzeWall(wall, units) : null),
     [wall, units],
   );
-  /*
-   * אזהרות התכנון ירדו מהמסך לבקשת הבעלים — הכפתור, הרשימה
-   * והגיליון. הבדיקות הגאומטריות עצמן נשארו במקומן: שער השמירה
-   * עדיין מונע ארגז שאינו נכנס, והתכנון האוטומטי עדיין מדרג
-   * פריסה. מה שירד הוא ההצגה, לא הבדיקה.
-   */
-  const flaggedIds = NO_FLAGS;
   /*
    * המקור למחוונים: הקיר שעובדים עליו, או כל הקירות יחד. שניהם
    * נבנים מאותה בדיקה, ולכן אין סיכוי שהמספרים יסתרו זה את זה.
@@ -611,7 +600,6 @@ export function DesignScreen({
               units={allUnits ?? NO_UNITS}
               activeWallId={wall.id}
               selectedId={selectedId}
-              flagged={flaggedIds}
               /* בחירה בתלת־ממד עשויה ליפול על קיר אחר — עוברים אליו */
               onSelect={(id) => {
                 const picked = (allUnits ?? NO_UNITS).find((u) => u.id === id);
@@ -666,7 +654,6 @@ export function DesignScreen({
             allUnits={allUnits ?? NO_UNITS}
             plan={plan}
             selectedId={selectedId}
-            flagged={flaggedIds}
             project={project}
             showHeight={view.heightLine}
             rulerPair={rulerPair}

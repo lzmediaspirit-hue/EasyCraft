@@ -161,31 +161,13 @@ for (let i = 0; i < 4 && (await count()) > 0; i++) {
 ok('ביטול מרוקן את מה שהתכנון הניח', (await count()) === 0, `${await count()}`);
 await page.screenshot({ path: SP + 'L82-6-undo.png' });
 
-/* 7 — פינה מתה: התראה כשהיא צרה מכדי שהדלת תיפתח */
-const corner = await page.evaluate(async () => {
-  const v = '?v=' + Date.now();
-  const A = await import('/src/features/design/analysis.ts' + v);
-  const base = {
-    id: 'a', projectId: 'p', wallId: 'w1', catalogItemId: 'k', name: 'ארון פינה',
-    glyph: 'blindEnd', corner: 'blindEnd', level: 'floor',
-    xMm: 2000, yMm: 0, widthMm: 1000, heightMm: 860, depthMm: 600,
-    createdAt: 0, updatedAt: 0,
-  };
-  const wall = { id: 'w1', projectId: 'p', name: 'w1', lengthMm: 3000, heightMm: 2600, features: [], createdAt: 0, updatedAt: 0 };
-  const nb = [{ ...base, id: 'b', wallId: 'w2', glyph: 'doors', corner: undefined, xMm: 675, widthMm: 600 }];
-  const say = (blindMm, neighbours) =>
-    A.analyzeWall(wall, [{ ...base, blindMm }], [], neighbours).warnings.map((x) => x.text).join(' | ');
-  return {
-    tooNarrow: say(300, { start: [], end: nb }),
-    wideEnough: say(675, { start: [], end: nb }),
-    noNeighbour: say(300, { start: [], end: [] }),
-  };
-});
-ok('פינה מתה צרה מדי מקבלת התראה', /תיפתח/.test(corner.tooNarrow), corner.tooNarrow);
-ok('פינה מתה נכונה שקטה', !/תיפתח/.test(corner.wideEnough), corner.wideEnough);
-ok('בלי קיר ניצב אין התראה', !/תיפתח/.test(corner.noNeighbour), corner.noNeighbour);
-
-/* 8 — ארון הפינה שהתכנון מניח אינו מייצר את ההתראה הזאת */
+/*
+ * 7 — ארון הפינה שהתכנון מניח: עומק חסימה אמיתי.
+ *
+ * כאן ישבה גם ההתראה "הדלת לא תיפתח" על פינה מתה צרה. היא ירדה
+ * מהמסך עם שאר ההתראות, ומה שנשאר הוא הדבר שבאמת מגן על הנגר:
+ * התכנון האוטומטי אינו מציע מלכתחילה פינה שאי אפשר לפתוח.
+ */
 const planned = await page.evaluate(async () => {
   const v = '?v=' + Date.now();
   const A = await import('/src/features/design/autoPlan.ts' + v);
@@ -210,7 +192,6 @@ ok('ארון פינה מקבל עומק חסימה אמיתי',
   planned.out.length > 0 && planned.out.every((c) => c.blind >= planned.need && c.blind <= c.w * 0.7),
   JSON.stringify(planned));
 
-/* 9 — התכנון האוטומטי אינו מוצע בחדר שאינו מטבח */
 ok('בלי שגיאות בדפדפן', errs.length === 0, errs.slice(0, 3).join(' | '));
 
 await browser.close();

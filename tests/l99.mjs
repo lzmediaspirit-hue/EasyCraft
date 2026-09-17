@@ -10,7 +10,6 @@ const out = await page.evaluate(async () => {
   const v = '?v=' + Date.now();
   const B = await import('/src/costing/boards.ts' + v);
   const W = await import('/src/workflow/unitWork.ts' + v);
-  const A = await import('/src/features/design/analysis.ts' + v);
   const BK = await import('/src/db/cabinetPack.ts' + v);
   const M = await import('/src/materials/materialsRepo.ts' + v);
 
@@ -59,13 +58,14 @@ const out = await page.evaluate(async () => {
   const noBack = unit({ backKind: 'none', work: { tracks: { carcass: 'assembled', fronts: 'assembled' } } });
   ok('ארגז בלי גב שהורכב = מורכב', W.workTone(noBack) === 'done', W.workTone(noBack));
 
-  /* --- 14. חריגה מהקיר לפי מיקום ולא לפי סכום --- */
-  const wall = { id: 'w1', projectId: 'p1', index: 0, name: 'קיר', lengthMm: 3000, heightMm: 2600, features: [], createdAt: 0, updatedAt: 0 };
-  const far = A.analyzeWall(wall, [unit({ xMm: 2800, widthMm: 600 })]);
-  ok('ארגז שחורג מקצה הקיר מתריע', far.warnings.some((w) => w.text.includes('חורגים')), JSON.stringify(far.warnings.map((w) => w.text)));
-  ok('וההתראה מצביעה עליו', far.warnings.some((w) => w.unitIds.includes('u1')));
-  const inside = A.analyzeWall(wall, [unit({ xMm: 0, widthMm: 600 })]);
-  ok('ארגז שנכנס אינו מתריע', !inside.warnings.length, JSON.stringify(inside.warnings.map((w) => w.text)));
+  /*
+   * --- 14. חריגה מהקיר ---
+   *
+   * הבדיקה הזאת קראה את `analyzeWall(...).warnings`. ההתראות ירדו
+   * מהמסך, ואיתן החישוב שייצר אותן; מה שבאמת מגן על התכנון הוא
+   * שער השמירה — `planResolve` פוסל ארגז שאינו נכנס לקיר — והוא
+   * נבדק ב-l156. `analyzeWall` נשארה למחוונים בלבד.
+   */
 
   /* --- 3. חבילה פגומה נדחית --- */
   const noCatalog = JSON.stringify({ app: 'easycraft', format: 3, kind: 'library', tables: { finishes: [] } });

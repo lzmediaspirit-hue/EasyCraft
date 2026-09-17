@@ -7,8 +7,7 @@ import './_exit.mjs';
  *   • דלת נגררת אינה סוחפת דבר.
  *   • מה שאין עליו נתון מדווח כחסר — ולא מנוחש.
  *   • דלת חדר שנפתחת פנימה חוסמת ארון, ודלת נגררת לא.
- *   • האזהרות מסודרות לפי חומרה, ואינן מאחורי מתג תצוגה.
- *   • לחיצה על אזהרה מדליקה את שני העצמים על הציור.
+ *   • ואין גיליון אזהרות ואין אייקון שפותח אותו — הם ירדו.
  */
 import { chromium } from 'playwright';
 import { BOX, addNamed, setup } from './mk.mjs';
@@ -128,7 +127,7 @@ ok('and asks for the hinge side', /צירים/.test(model.doorInMissing ?? ''), 
 /* ------------------------------------------------------------------ */
 
 const clash = await page.evaluate(async () => {
-  const { openingWarnings } = await import('/src/features/design/analysis.ts');
+  const E = await import('/src/features/design/envelope.ts');
   const feature = (swing) => ({
     id: 'f1', kind: 'door', xMm: 0, yMm: 0, widthMm: 900, heightMm: 2100, swing, hingeSide: 'start',
   });
@@ -147,18 +146,27 @@ const clash = await page.evaluate(async () => {
     free: { xMm: 400, zMm: 700, headingDeg: 0 },
     createdAt: 0, updatedAt: 0,
   };
-  const run = (swing) => openingWarnings([island], planOf(swing));
-  const inward = run('in');
+  const run = (swing) => {
+    const plan = planOf(swing);
+    return E.envelopeClashes(E.roomEnvelopes([island], plan), [island], plan);
+  };
+  const doorClash = (swing) =>
+    run(swing).filter((c) => c.envelope.kind === 'roomDoor');
   return {
-    inward: inward.map((w) => ({ text: w.text, level: w.level, units: w.unitIds, feats: w.featureIds })),
-    slide: run('slide').filter((w) => w.level === 'warn').length,
+    inward: doorClash('in').map((c) => ({
+      owner: E.envelopeOwnerLabel(c.envelope),
+      ownerId: c.envelope.ownerId,
+      blockerId: c.blockerId,
+      blockerName: c.blockerName,
+    })),
+    slide: doorClash('slide').length,
   };
 });
 
-const blockRow = clash.inward.find((w) => w.level === 'warn' && /דלת החדר/.test(w.text));
+const blockRow = clash.inward[0];
 ok('an inward room door reports the cabinet in its way', !!blockRow, JSON.stringify(clash.inward.slice(0, 2)));
-ok('and names both objects', !!blockRow && blockRow.units.length > 0 && blockRow.feats.length > 0,
-  blockRow ? `${blockRow.units.join(',')} + ${blockRow.feats.join(',')}` : '');
+ok('and names both objects', !!blockRow && !!blockRow.ownerId && blockRow.blockerId === 'u1',
+  blockRow ? `${blockRow.owner} ← ${blockRow.blockerName}` : '');
 ok('a sliding room door reports nothing', clash.slide === 0, String(clash.slide));
 
 /* ------------------------------------------------------------------ */
@@ -167,11 +175,11 @@ ok('a sliding room door reports nothing', clash.slide === 0, String(clash.slide)
 
 await setup(page, { name: 'מעטפת בע״מ' });
 await page.waitForTimeout(900);
-/* דלת אחת בלי צד צירים — וזו השאלה הפתוחה שהגיליון אמור לומר עליה */
+/* ארגז רגיל על הקיר */
 await addNamed(page, BOX.doors1);
 await page.waitForTimeout(900);
 
-/* ארגז שחורג מהקיר — אזהרה שאינה תלויה בשום מתג תצוגה */
+/* ואז נדחף אל מחוץ לקיר, ישר במסד */
 await page.evaluate(async () => {
   const { db } = await import('/src/db/db.ts');
   const u = (await db.units.toArray())[0];
@@ -180,30 +188,16 @@ await page.evaluate(async () => {
 await page.waitForTimeout(900);
 
 /*
- * האייקון בכותרת ולא בלוח הנתונים — ולכן הוא על המסך גם כשארגז
- * נבחר והעורך פתוח, וזה בדיוק הרגע שבו הוא נחוץ.
+ * ומה שירד: אין יותר גיליון בדיקת תכנון ואין אייקון שפותח אותו.
+ *
+ * הבעלים ביקש שלא יראה שום התראה, ולכן מה שנבדק כאן הוא ההיעדר:
+ * ארגז שנדחף אל מחוץ לקיר אינו מעלה שלט. הבדיקה הגאומטרית עצמה
+ * לא ירדה — `planResolve` פוסל שמירה כזאת, וזה נבדק ב-l156.
  */
-const badge = page.getByRole('button', { name: /בדיקת התכנון/ });
-ok('the warning icon stays on screen with the editor open', (await badge.count()) > 0);
-await badge.click();
-await page.waitForTimeout(800);
-const sheetText = await dlg().innerText();
-ok('the sheet sorts by severity', /לא ייבנה/.test(sheetText), sheetText.split('\n').slice(0, 5).join(' | '));
-/*
- * ואין יותר "חסרים נתונים" שמקורו בארון: הקטגוריה נשארת לפתחים
- * בקיר, שעדיין נשאלים לאיזה צד הם נפתחים.
- */
-ok('and the cabinet contributes no missing-data row',
-  !/צד הצירים של הדלת/.test(sheetText), '');
-
-/* לחיצה על שורה מדליקה את העצמים על הציור */
-await dlg().getByRole('button', { name: /חורגים|יוצאים/ }).first().click();
-await page.waitForTimeout(700);
-/* הקו יושב על הקבוצה, והמלבנים יורשים אותו ממנה */
-const flags = await page.evaluate(
-  () => document.querySelectorAll('g[stroke="#f59e0b"] rect').length,
-);
-ok('the flagged object is lit on the drawing', flags > 0, String(flags));
+ok('the plan-check button is gone',
+  (await page.getByRole('button', { name: /בדיקת התכנון/ }).count()) === 0);
+ok('and nothing on screen warns about the overflow',
+  !/חורגים מהקיר/.test(await page.innerText('body')), '');
 
 /* והמתג הישן ירד מ"מה מוצג" */
 const toggles = await page.evaluate(async () => {

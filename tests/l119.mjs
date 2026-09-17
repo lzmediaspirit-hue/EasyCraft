@@ -4,7 +4,7 @@ import './_exit.mjs';
  *
  * E03 — עמוד שנבלע כולו בתוך ארגז חופשי הוא התנגשות, לא הכלה.
  * E04 — ארגז חופשי שעומד בפתח חוסם אותו.
- * E05 — חריגה משני קצות הקיר ומגובהו נאמרת, ולכל תפקיד.
+ * E05 — ומה שירד: אין על כך התראה על המסך, בשום תפקיד.
  */
 import { chromium } from 'playwright';
 import { BOX, addNamed, setup } from './mk.mjs';
@@ -26,7 +26,6 @@ const r = await page.evaluate(async () => {
   const C = await import('/src/features/design/collision.ts' + v);
   const P = await import('/src/features/design/placement.ts' + v);
   const PL = await import('/src/features/design/plan.ts' + v);
-  const A = await import('/src/features/design/analysis.ts' + v);
 
   const wallWith = (features) => ({
     id: 'w1', projectId: 'p1', index: 0, lengthMm: 3000, heightMm: 2600,
@@ -90,15 +89,6 @@ const r = await page.evaluate(async () => {
   /* וארגז רגיל על אותו קיר, מול החלון — נחסם כבר קודם */
   const onWall = unit({ id: 'wall-1', xMm: 900, yMm: 1000, heightMm: 700, level: 'wall', depthMm: 320 });
 
-  /* --- E05: אזהרות --- */
-  const plain = wallWith([]);
-  const outStart = A.analyzeWall(plain, [unit({ xMm: -50 })]);
-  const outEnd = A.analyzeWall(plain, [unit({ xMm: 2800, widthMm: 600 })]);
-  const tooTall = A.analyzeWall(plain, [unit({ xMm: 0, yMm: 2300, heightMm: 700, level: 'wall' })]);
-  const belowFloor = A.analyzeWall(plain, [unit({ xMm: 0, yMm: -40 })]);
-  const fine = A.analyzeWall(plain, [unit({ xMm: 100 })]);
-
-  const texts = (a) => a.warnings.map((w) => w.text);
   return {
     swallow: hits(swallow, pillarWall),
     partial: hits(partial, pillarWall),
@@ -107,12 +97,6 @@ const r = await page.evaluate(async () => {
     inFront: hits(inFront, winWall),
     belowSill: hits(belowSill, winWall),
     onWall: hits(onWall, winWall),
-    outStart: texts(outStart),
-    outStartIds: outStart.warnings.flatMap((w) => w.unitIds),
-    outEnd: texts(outEnd),
-    tooTall: texts(tooTall),
-    belowFloor: texts(belowFloor),
-    fine: texts(fine),
   };
 });
 
@@ -125,16 +109,15 @@ ok('a free cabinet standing in a window is blocked', r.inFront === true, String(
 ok('below the sill is still allowed', r.belowSill === false, String(r.belowSill));
 ok('an attached cabinet over the same window is blocked', r.onWall === true, String(r.onWall));
 
-ok('a cabinet starting before the wall is warned about', r.outStart.some((t) => /מתחילת הקיר/.test(t)), JSON.stringify(r.outStart));
-ok('and the warning points at it', r.outStartIds.includes('u1'), JSON.stringify(r.outStartIds));
-ok('the far end still warns', r.outEnd.some((t) => /חורגים מהקיר/.test(t)), JSON.stringify(r.outEnd));
-ok('a cabinet above the ceiling is warned about', r.tooTall.some((t) => /גובה הקיר/.test(t)), JSON.stringify(r.tooTall));
-ok('and one below the floor', r.belowFloor.some((t) => /מתחת לרצפה/.test(t)), JSON.stringify(r.belowFloor));
-ok('a cabinet inside the room says nothing', r.fine.length === 0, JSON.stringify(r.fine));
-
 /* ------------------------------------------------------------------ */
-/* E05 — מי רואה את ההתראה                                             */
+/* E05 — ואין על כך התראה על המסך                                      */
 /* ------------------------------------------------------------------ */
+/*
+ * ההתראות ירדו מהמסך לבקשת הבעלים, ולכן מה שנבדק כאן התהפך: ארגז
+ * שנדחף אל מחוץ לקיר אינו מייצר שום שלט, לא אצל המנהל ולא אצל
+ * הנגר. הבדיקה הגאומטרית עצמה לא ירדה — `planResolve` עדיין פוסל
+ * שמירה כזאת, וזה נבדק ב-l156 — ומה שנבדק כאן הוא השקט.
+ */
 
 const btn = (re) => page.getByRole('button', { name: re }).first();
 
@@ -144,7 +127,7 @@ await page.waitForTimeout(700);
 await btn(/סיום עריכה/).click().catch(() => {});
 await page.waitForTimeout(400);
 
-/* הארגז נדחף אל מחוץ לקיר — זו העובדה שההתראה מדברת עליה */
+/* הארגז נדחף אל מחוץ לקיר — בעקיפת שער השמירה, ישר אל המסד */
 await page.evaluate(async () => {
   const v = '?v=' + Date.now();
   const { db } = await import('/src/db/db.ts' + v);
@@ -160,7 +143,8 @@ await page.waitForTimeout(900);
 await btn(/^מטבח/).click();
 await page.waitForTimeout(1600);
 const asManager = await page.innerText('body');
-ok('the manager sees the overflow warning', /חורגים מהקיר/.test(asManager), JSON.stringify(asManager.slice(-200)));
+ok('the manager sees no overflow warning', !/חורגים מהקיר/.test(asManager), JSON.stringify(asManager.slice(-200)));
+ok('and no plan-check button either', (await page.getByRole('button', { name: /בדיקת התכנון/ }).count()) === 0);
 
 /* אותו קיר בדיוק, אצל נגר */
 await page.evaluate(async () => {
@@ -176,7 +160,7 @@ await page.waitForTimeout(900);
 await btn(/^מטבח/).click();
 await page.waitForTimeout(1600);
 const asCarpenter = await page.innerText('body');
-ok('and so does the carpenter', /חורגים מהקיר/.test(asCarpenter), JSON.stringify(asCarpenter.slice(-260)));
+ok('nor does the carpenter', !/חורגים מהקיר/.test(asCarpenter), JSON.stringify(asCarpenter.slice(-260)));
 ok('who still cannot add a cabinet', !/הוספת ארגז/.test(asCarpenter));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' | '));

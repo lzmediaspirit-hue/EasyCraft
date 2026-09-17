@@ -61,8 +61,9 @@ const model = await page.evaluate(async () => {
 ok('לקטגוריה יש שם', model.label === 'מכשירי חשמל', model.label);
 ok('והיא בסדר ברירת המחדל', model.inFallback);
 ok('כל חדר מובנה מציג אותה', model.roomsMissing.length === 0, model.roomsMissing.join());
-ok('שבעה מכשירים', model.names.length === 7, model.names.join());
-for (const want of ['תנור', 'מיקרוגל', 'תנור ומיקרוגל', 'מקרר', 'מדיח', 'קולט אדים', 'כיריים']) {
+ok('שישה מכשירים', model.names.length === 6, model.names.join());
+/* הכיריים ירדו לבקשת הבעלים: `hob` שנשאר הוא ארגז הכיריים, לא המכשיר */
+for (const want of ['תנור', 'מיקרוגל', 'תנור ומיקרוגל', 'מקרר', 'מדיח', 'קולט אדים']) {
   ok(`"${want}" בקטגוריה`, model.names.includes(want));
 }
 ok('כולם מכשיר שנקנה שלם ולא גוף שנחתך', model.allStandalone);
@@ -84,7 +85,7 @@ await tab.first().click();
 await page.waitForTimeout(600);
 
 const shown = (await dlg().getByRole('button').allTextContents()).map((t) => t.trim());
-for (const want of ['תנור', 'מיקרוגל', 'קולט אדים', 'מקרר', 'מדיח', 'כיריים']) {
+for (const want of ['תנור', 'מיקרוגל', 'קולט אדים', 'מקרר', 'מדיח']) {
   ok(`"${want}" מוצג`, shown.some((t) => t.startsWith(want)), '');
 }
 /* והם אינם כפולים בקטגוריות הישנות */
