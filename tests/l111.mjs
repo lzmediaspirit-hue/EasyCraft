@@ -25,6 +25,8 @@ const lib = await page.evaluate(async () => {
   const v = '?v=' + Date.now();
   const { catalogRepo } = await import('/src/catalog/catalogRepo.ts' + v);
   const { db } = await import('/src/db/db.ts' + v);
+  const { SHIPPED_LIBRARY } = await import('/src/catalog/shipped.ts' + v);
+  const { SHIPPED_PRODUCTS } = await import('/src/catalog/products.ts' + v);
   const all = await catalogRepo.all();
   const rows = await db.catalog.toArray();
   return {
@@ -46,25 +48,69 @@ const lib = await page.evaluate(async () => {
     ).size,
     common: all.filter((i) => i.common).length,
     groups: [...new Set(all.map((i) => i.group))].sort(),
-    sample: all.find((i) => i.code === 'B-137'),
+    /*
+     * הכמות הנכונה אינה מספר כתוב אלא מה שיש בקוד: הספרייה
+     * מוחלפת, ומספר שנכתב ביד מתיישן בדיוק ברגע שהיא מוחלפת.
+     */
+    shipped: SHIPPED_LIBRARY.length + SHIPPED_PRODUCTS.length,
+    /* ארגז שנבנה בנגרייה — לא תבנית שנכתבה בקוד */
+    sample: all.find((i) => i.name === 'ארון כיריים עם מגירות'),
   };
 });
-/* 61 של הנגרייה, ולצדם שני המוצרים של האפליקציה: אי ומדף */
-ok('נזרעו 61 הארגזים של הנגרייה ושני המוצרים', lib.n === 63, String(lib.n));
-ok('אין ארגז מוסתר בספרייה שנזרעה', lib.hidden === 0 && lib.rows === 63, `${lib.hidden} מוסתרים מתוך ${lib.rows}`);
+ok('נזרעה הספרייה של הנגרייה ולצדה מוצרי המערכת', lib.n === lib.shipped, `${lib.n}/${lib.shipped}`);
+ok('אין ארגז מוסתר בספרייה שנזרעה', lib.hidden === 0 && lib.rows === lib.shipped, `${lib.hidden} מוסתרים מתוך ${lib.rows}`);
 ok('אין כפילות מזהים', lib.ids === lib.n, `${lib.ids}/${lib.n}`);
 ok('אין כפילות מק״טים', lib.codes === lib.n, `${lib.codes}/${lib.n}`);
 ok('אין אותו ארגז פעמיים', lib.twins === lib.n, `${lib.twins}/${lib.n}`);
 ok('כל הארגזים נגישים מהספרייה הקלאסית', lib.common === lib.n, `${lib.common}/${lib.n}`);
-ok('כל הקטגוריות מיוצגות', lib.groups.join() === 'base,island,panel,shelf,storage,tall,upper', lib.groups.join());
+ok('שלוש הקטגוריות שכל חדר בנוי מהן קיימות',
+  ['base', 'upper', 'tall'].every((g) => lib.groups.includes(g)), lib.groups.join());
 /* ארגז שנבנה בנגרייה שמר את המבנה שלו, ולא רק את המידות */
 ok('ארגז הכיריים שמר את האזורים שלו',
-  lib.sample?.zones?.length === 2 && lib.sample.zones[0].drawers === 3,
+  lib.sample?.zones?.length === 1 && lib.sample.zones[0].drawers === 3,
   JSON.stringify(lib.sample?.zones));
 ok('ואת המסילות החסרות', lib.sample?.rails?.back === false && lib.sample?.rails?.top === false,
   JSON.stringify(lib.sample?.rails));
 
-/* --- חדרים: ארבעה, ובהם חדר שירות --- */
+/*
+ * קטגוריה שיש בה ארגזים חייבת להיות בסדר הכרטיסיות של החדר.
+ *
+ * `groups` של חדר הוא סדר, והמסך מסנן לפיו — ולכן קטגוריה שאינה
+ * כתובה שם נעלמת מהחדר גם כשיש בה ארגזים. ככה נעלמו העמודות
+ * מחדר השינה ומהסלון כשהספרייה הוחלפה.
+ */
+const unreachable = await page.evaluate(async () => {
+  const v = '?v=' + Date.now();
+  const { catalogRepo } = await import('/src/catalog/catalogRepo.ts' + v);
+  const { roomsRepo } = await import('/src/catalog/roomsRepo.ts' + v);
+  const [items, rooms] = await Promise.all([catalogRepo.all(), roomsRepo.all()]);
+  const lost = [];
+  for (const r of rooms) {
+    const here = items.filter((i) => i.group !== 'panel' && i.rooms.includes(r.id));
+    for (const g of new Set(here.map((i) => i.group))) {
+      if (!r.groups.includes(g)) lost.push(`${r.label}/${g}`);
+    }
+  }
+  return lost;
+});
+ok('כל קטגוריה שיש בה ארגזים נגישה מהחדר שלה', unreachable.length === 0, unreachable.join(' · '));
+
+/*
+ * ארגז תלוי נולד תלוי.
+ *
+ * `level: 'wall'` אומר שהוא על הקיר, ו-`defaultYMm: 0` אומר שהוא על
+ * הרצפה — ושניהם יחד הם ארגז עליון שנוחת על התחתון שמתחתיו. ככה
+ * הגיעו קולט האדים, ארון התצוגה והמזנון התלוי בספרייה החדשה.
+ */
+const grounded = await page.evaluate(async () => {
+  const { catalogRepo } = await import('/src/catalog/catalogRepo.ts?v=' + Date.now());
+  return (await catalogRepo.all())
+    .filter((i) => i.level === 'wall' && !(i.defaultYMm > 0))
+    .map((i) => `${i.name} (${i.code})`);
+});
+ok('ארגז תלוי אינו נולד על הרצפה', grounded.length === 0, grounded.join(' · '));
+
+/* --- החדרים, ובהם חדר שירות --- */
 const rooms = await page.evaluate(async () => {
   const { roomsRepo } = await import('/src/catalog/roomsRepo.ts?v=' + Date.now());
   const all = await roomsRepo.all();

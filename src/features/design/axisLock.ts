@@ -42,7 +42,7 @@ export const LONG_PRESS_SLOP_PX = 10;
  * לפני זה אין כיוון ואין מה לנחש: תנועה של שלושה פיקסלים אינה
  * אומרת "לגובה" יותר מ"לרוחב". עד שהמרחק נעבר הארגז אינו זז.
  */
-export const AXIS_PICK_PX = 12;
+const AXIS_PICK_PX = 12;
 
 /** הצירים שאפשר להינעל אליהם. `along` הוא לאורך הקיר. */
 export type Axis = 'along' | 'x' | 'z' | 'y';

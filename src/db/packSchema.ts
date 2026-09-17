@@ -122,7 +122,7 @@ const partCheck: Check = shape(
 /** לכל שורה מזהה ותאריכי מעקב. טבלת ההגדרות היא היוצאת מן הכלל. */
 const ENTITY: Record<string, Check> = { id: str, createdAt: time, updatedAt: time };
 
-export const SCHEMA: Record<string, TableSpec> = {
+const SCHEMA: Record<string, TableSpec> = {
   materials: {
     need: { ...ENTITY, name: str, sheetWidthMm: size, sheetHeightMm: size, sortOrder: order },
     may: { core: str, coreColor: str, thicknessMm: size, roles: listOf(oneOf(...PART_ROLES)) },

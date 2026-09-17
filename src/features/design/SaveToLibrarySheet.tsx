@@ -4,6 +4,8 @@ import { catalogRepo } from '../../catalog/catalogRepo';
 import { roomsRepo } from '../../catalog/roomsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
+import { SaveError, useSaveGuard } from '../../ui/saveGuard';
+import { freeCabinetName } from '../../catalog/names';
 import { Pill } from '../../ui/Pill';
 import { cm } from '../../ui/units';
 import { reusableSpec } from '../../db/types';
@@ -42,8 +44,16 @@ export function SaveToLibrarySheet({
   const source = useLiveQuery(() => catalogRepo.get(unit.catalogItemId), [unit.catalogItemId]);
   const canUpdate = source !== undefined && !source.isBuiltin;
   const [mode, setMode] = useState<'update' | 'new'>('new');
-  const [name, setName] = useState(unit.name);
-  const [saving, setSaving] = useState(false);
+  /*
+   * השם המוצע.
+   *
+   * הארגז שעל הקיר נושא את שם הפריט שממנו נולד, ולכן "שמירה כארגז
+   * חדש" הציעה שם שכבר תפוס — ונדחתה בכל פעם. כאן מוצע שם פנוי,
+   * ומרגע שהוקלד משהו הוא מה שקובע.
+   */
+  const inLibrary = useLiveQuery(() => catalogRepo.all(), [], []);
+  const [typed, setTyped] = useState<string | null>(null);
+  const guard = useSaveGuard();
 
   /*
    * לאילו חדרים הארגז שייך — שאלה, ולא ניחוש.
@@ -57,11 +67,11 @@ export function SaveToLibrarySheet({
   const chosen = picked ?? source?.rooms ?? (projectRoom ? [projectRoom] : []);
 
   const target = canUpdate && mode === 'update' ? source : undefined;
+  /* עדכון שומר את השם שיש; ארגז חדש מקבל שם פנוי */
+  const name = typed ?? (target ? unit.name : freeCabinetName(unit.name, inLibrary.map((i) => i.name)));
 
-  async function save() {
-    if (saving) return;
-    setSaving(true);
-
+  function save() {
+    return guard.run(async () => {
     await catalogRepo.saveCustom({
       /*
        * תיאור הבנייה נלקח מרשימה אחת משותפת. קודם הועתקו כאן שדות
@@ -99,6 +109,7 @@ export function SaveToLibrarySheet({
 
     });
     onClose();
+    });
   }
 
   return (
@@ -106,10 +117,13 @@ export function SaveToLibrarySheet({
       title="שמירה לספרייה"
       onClose={onClose}
       footer={
-        <PrimaryButton disabled={saving || !name.trim()} onClick={save}>
+        <>
+        <SaveError text={guard.error} />
+        <PrimaryButton disabled={guard.busy || !name.trim()} onClick={save}>
 
           {target ? 'עדכון הפריט' : 'שמירה כארגז חדש'}
         </PrimaryButton>
+        </>
       }
     >
       <div className="space-y-5">
@@ -146,7 +160,7 @@ export function SaveToLibrarySheet({
           <input
             autoFocus
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setTyped(e.target.value)}
             onFocus={selectOnFocus}
             className={inputClass}
           />

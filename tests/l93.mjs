@@ -1,7 +1,7 @@
 import './_exit.mjs';
 /** משימה 93: עריכה מתקדמת — פס לד, גב וקושרות. */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const SP = new URL('shots/', import.meta.url).pathname;
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -42,7 +42,7 @@ const parts = () => page.evaluate(async () => {
 
 await setup(page, { name: 'שכבה 93', walls: 'קיר יחיד' });
 await page.waitForTimeout(700);
-await addNamed(page, /^ארגז שתי דלתות/);
+await addNamed(page, BOX.doors2);
 await page.waitForTimeout(800);
 await page.locator('[data-unit-id]').first().click();
 await page.waitForTimeout(700);

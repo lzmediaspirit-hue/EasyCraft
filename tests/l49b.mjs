@@ -1,6 +1,6 @@
 import './_exit.mjs';
 import { chromium } from 'playwright';
-import { setup } from './mk.mjs';
+import { BOX, TAB, addBox, setup } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const page = await b.newPage({ viewport: { width: 400, height: 840 }, deviceScaleFactor: 2 });
@@ -12,26 +12,15 @@ const shot = (n) => page.screenshot({ path: `${SP}/L49B-${n}.png`, fullPage: tru
 const btn = (re) => page.getByRole('button', { name: re }).first();
 const dlg = () => page.getByRole('dialog').last();
 
-async function add(name, tab) {
-  while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
-  await btn(/הוספת ארגז/).click(); await page.waitForTimeout(600);
-  /* הספרייה נפתחת ישר בחדר של הפרויקט, ולכן בוחר החדרים אינו תמיד שם */
-  const room = dlg().getByRole('button', { name: /^מטבח/ });
-  if (await room.count()) { await room.click(); await page.waitForTimeout(600); }
-  if (tab) { await dlg().getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(500); }
-  await dlg().getByRole('button', { name: new RegExp('^' + name) }).first().click();
-  await page.waitForTimeout(800);
-  await page.getByRole('button', { name: 'סיום עריכה' }).first().click().catch(() => {});
-  await page.waitForTimeout(400);
-}
 
 await setup(page, { name: 'תצוגה בע״מ' });
-await add('ארגז כיור');
-await add('ארגז 3 מגירות');
-await add('ארגז דלת ומגירה');
-await add('מקרר', 'עמודות');
-await add('עליון שתי דלתות', 'עליונים');
-await add('עליון ויטרינה', 'עליונים');
+await addBox(page, BOX.sink);
+await addBox(page, BOX.drawers);
+await addBox(page, BOX.ovenDrawer);
+/* המכשיר נבדק כאן כי הוא מצויר אחרת מארגז: פני מכשיר, בלי גוף */
+await addBox(page, BOX.fridge, { tab: TAB.tall });
+await addBox(page, BOX.upper, { tab: TAB.upper });
+await addBox(page, BOX.upperLift, { tab: TAB.upper });
 await shot('1-front');
 
 await btn(/הסתרת חזיתות/).click(); await page.waitForTimeout(700);

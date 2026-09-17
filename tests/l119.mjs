@@ -7,7 +7,7 @@ import './_exit.mjs';
  * E05 — חריגה משני קצות הקיר ומגובהו נאמרת, ולכל תפקיד.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -139,7 +139,7 @@ ok('a cabinet inside the room says nothing', r.fine.length === 0, JSON.stringify
 const btn = (re) => page.getByRole('button', { name: re }).first();
 
 await setup(page, { name: 'התראות בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(700);
 await btn(/סיום עריכה/).click().catch(() => {});
 await page.waitForTimeout(400);

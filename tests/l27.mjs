@@ -1,6 +1,6 @@
 import './_exit.mjs';
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const page = await b.newPage({ viewport: { width: 400, height: 840 }, deviceScaleFactor: 2 });
@@ -13,7 +13,7 @@ const dlg = () => page.getByRole('dialog').last();
 const ok = (l, c, e = '') => console.log(`${c ? 'PASS' : 'FAIL'}  ${l}${e ? ' — ' + e : ''}`);
 
 await setup(page, { name: 'קושרות בע״מ' });
-await addNamed(page, /^ארגז שתי דלתות/);
+await addNamed(page, BOX.doors2);
 await page.waitForTimeout(400);
 
 /* מרחיבים ל-240 ומגדירים 4 דלתות */

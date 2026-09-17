@@ -9,7 +9,7 @@ import './_exit.mjs';
  *       בסופה. זו הסיבה שעשרים ארגזים על הקיר האטו את התנועה.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -39,7 +39,7 @@ const rows = () =>
   });
 
 await setup(page, { name: 'תנועה בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(700);
 await btn(/סיום עריכה/).click().catch(() => {});
 await page.waitForTimeout(500);

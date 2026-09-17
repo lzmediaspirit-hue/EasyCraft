@@ -35,14 +35,14 @@ const shown = async () =>
     .filter((t) => t.trim());
 
 /* --- שם מלא של ארגז שיושב במטבח --- */
-await box.fill('ארגז תנור ומגירה');
+await box.fill('ארון תנור עם מגירה');
 await page.waitForTimeout(500);
 let body = await dlg().innerText();
-ok('נמצא הארגז המבוקש', body.includes('ארגז תנור ומגירה'), body.slice(0, 120).replace(/\n/g, ' · '));
+ok('נמצא הארגז המבוקש', body.includes('ארון תנור עם מגירה'), body.slice(0, 120).replace(/\n/g, ' · '));
 ok('ונאמר שהוא אחד', /ארגז אחד בכל הספרייה/.test(body), (body.match(/.*בכל הספרייה/) ?? [''])[0]);
 
 /* --- חיפוש חלקי מחזיר כמה, והוא חוצה חדרים --- */
-await box.fill('ארגז');
+await box.fill('ארון');
 await page.waitForTimeout(500);
 body = await dlg().innerText();
 const many = (body.match(/(\d+) ארגזים בכל הספרייה/) ?? [])[1];
@@ -55,9 +55,9 @@ body = await dlg().innerText();
 ok('מוצא מכשיר מקטגוריה אחרת', body.includes('מקרר'), body.slice(0, 100).replace(/\n/g, ' · '));
 
 /* --- רווח כפול וגרש לא מכשילים --- */
-await box.fill('ארגז  תנור  ומגירה');
+await box.fill('ארון  תנור  עם  מגירה');
 await page.waitForTimeout(500);
-ok('רווח כפול אינו מכשיל', (await dlg().innerText()).includes('ארגז תנור ומגירה'));
+ok('רווח כפול אינו מכשיל', (await dlg().innerText()).includes('ארון תנור עם מגירה'));
 
 /* --- שם שאינו קיים --- */
 await box.fill('זגוגית מרחפת');
@@ -71,9 +71,9 @@ body = await dlg().innerText();
 ok('הניקוי מחזיר את הספרייה', !body.includes('אין ארגז בשם הזה'), body.slice(0, 80).replace(/\n/g, ' · '));
 
 /* --- ומהחיפוש אפשר להוסיף ארגז לקיר --- */
-await box.fill('ארגז תנור ומגירה');
+await box.fill('ארון תנור עם מגירה');
 await page.waitForTimeout(500);
-await dlg().locator('div.relative > button').filter({ hasText: /ארגז תנור ומגירה/ }).first().click();
+await dlg().locator('div.relative > button').filter({ hasText: /ארון תנור עם מגירה/ }).first().click();
 await page.waitForTimeout(1000);
 const placed = await page.evaluate(async () => {
   const dbh = await new Promise((res, rej) => {
@@ -86,7 +86,7 @@ const placed = await page.evaluate(async () => {
     g.onsuccess = () => res(g.result.map((u) => u.name));
   });
 });
-ok('הוספה מתוך החיפוש מניחה את הארגז', placed.includes('ארגז תנור ומגירה'), JSON.stringify(placed));
+ok('הוספה מתוך החיפוש מניחה את הארגז', placed.includes('ארון תנור עם מגירה'), JSON.stringify(placed));
 
 await browser.close();
 for (const e of errs) out.push(e);

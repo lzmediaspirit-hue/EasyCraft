@@ -1,10 +1,11 @@
+import type { RoomKind } from '../db/types';
 import type { ShippedItem } from './shipped';
 
 /**
  * מוצרים שמגיעים עם האפליקציה עצמה.
  *
- * הספרייה ב-`shipped.ts` היא של הנגרייה והיא נכתבת בכלי; שני אלה
- * הם חלק מהאפליקציה, ולכן הם חיים כאן ונוסעים לצד כל ספרייה.
+ * הספרייה ב-`shipped.ts` היא של הנגרייה והיא נכתבת בכלי; אלה
+ * חלק מהאפליקציה, ולכן הם חיים כאן ונוסעים לצד כל ספרייה.
  *
  * המזהה והמק״ט קבועים ולא אקראיים, וזה מה שמונע שכפול: זריעה
  * שנייה, ייבוא חוזר או סנכרון מוצאים את אותו מזהה ומעדכנים אותו
@@ -19,7 +20,24 @@ import type { ShippedItem } from './shipped';
  * שלא היה", ובלי לשחזר את כל ספריית ההדגמה ובלי להחזיר מה שנמחק
  * בכוונה. כשמוסיפים מוצר מערכת חדש — מעלים את המספר.
  */
-export const PRODUCTS_GENERATION = 1;
+export const PRODUCTS_GENERATION = 2;
+
+/**
+ * הלוחות הבודדים: מזהה, מק״ט, שם, רוחב, רוחבים, גובה, עובי.
+ *
+ * דופן, מדף, גב, חיפוי, קרניז וסוקל אינם ארגז שנבנה בנגרייה אלא
+ * לוח שנחתך ומורכב, והם אותם שישה בכל נגרייה. הם יושבים במדור
+ * "דפנות ולוחות" שלהם, ולא בספרייה של אף חדר — ולכן הם חלק
+ * מהאפליקציה, כמו האי והמדף.
+ */
+const BOARDS: [string, string, string, number, number[], number, number][] = [
+  ['panel-side', 'P-101', 'דופן צד', 580, [400, 450, 500, 560, 580, 600, 650], 720, 18],
+  ['panel-shelf', 'P-102', 'מדף בודד', 800, [300, 400, 500, 600, 800, 1000, 1200], 300, 18],
+  ['panel-back', 'P-103', 'לוח גב', 600, [400, 500, 600, 800, 900, 1200], 720, 5],
+  ['panel-cover', 'P-104', 'חיפוי קיר', 1200, [600, 900, 1200, 1500, 1800, 2400], 2400, 18],
+  ['panel-cornice', 'P-105', 'קרניז', 2000, [1000, 1500, 2000, 2500, 3000], 60, 18],
+  ['panel-plinth', 'P-106', 'סוקל', 2000, [1000, 1500, 2000, 2500, 3000], 150, 18],
+];
 
 export const SHIPPED_PRODUCTS: ShippedItem[] = [
   {
@@ -68,4 +86,99 @@ export const SHIPPED_PRODUCTS: ShippedItem[] = [
     sortOrder: 1010,
     note: 'עובי המדף הוא גובהו. הרוחב והעומק הם הלוח עצמו.',
   },
+
+  /*
+   * תנור, מקרר ומדיח.
+   *
+   * מכשיר חשמלי נכנס למטבח מוכן: אין לו דפנות שנחתכות, אין לו מדפים
+   * וגב, ואין לו מגירות שמזמינים — מה שנקבע לו הוא המידה והמקום.
+   * לכן הוא מוצר של המערכת ולא ארגז של הנגרייה, והוא אינו נספר
+   * בייצור. הארגז שנבנה *סביבו* — עמודת תנור, ארון תנור תחתון —
+   * הוא ארגז לכל דבר, והוא כן נספר.
+   *
+   * המזהים הם אלה שהיו להם כשהגיעו בתוך הספרייה, כדי שמכשיר שכבר
+   * יש לו אותם יזהה את אותה שורה במקום לקבל עותק שני.
+   */
+  {
+    id: 'k-base-oven',
+    code: 'B-110',
+    rooms: ['kitchen'],
+    group: 'base',
+    name: 'תנור',
+    glyph: 'oven',
+    level: 'floor',
+    defaultWidthMm: 600,
+    widthOptionsMm: [600],
+    defaultHeightMm: 720,
+    defaultDepthMm: 580,
+    defaultYMm: 150,
+    socleMm: 150,
+    counterMm: 30,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1020,
+    note: 'נישת תנור בילד אין: כ-560×590 מ״מ',
+  },
+  {
+    id: 'k-base-dw',
+    code: 'B-109',
+    rooms: ['kitchen'],
+    group: 'base',
+    name: 'מדיח',
+    glyph: 'dishwasher',
+    level: 'floor',
+    defaultWidthMm: 600,
+    widthOptionsMm: [300, 450, 600, 750, 900],
+    defaultHeightMm: 870,
+    defaultDepthMm: 580,
+    defaultYMm: 0,
+    socleMm: 0,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1030,
+    note: 'נישת מדיח: רוחב 600, גובה 820 מ״מ',
+  },
+  {
+    id: 'k-tall-fridge',
+    code: 'T-103',
+    rooms: ['kitchen'],
+    group: 'tall',
+    name: 'מקרר',
+    glyph: 'fridge',
+    level: 'tall',
+    defaultWidthMm: 700,
+    widthOptionsMm: [600, 700, 800, 900],
+    defaultHeightMm: 2050,
+    defaultDepthMm: 650,
+    defaultYMm: 150,
+    socleMm: 150,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1040,
+    note: 'לבדוק עומק המקרר בפועל — לרוב 650–700 מ״מ',
+  },
+
+  /* הלוחות הבודדים — ראה `BOARDS` מתחת */
+  ...BOARDS.map(([id, code, name, w, widths, h, d], n) => ({
+    id,
+    code,
+    rooms: ['kitchen', 'living', 'bedroom'] as RoomKind[],
+    group: 'panel' as const,
+    name,
+    /* לוח מונח: אין לו דפנות, תחתית, גב או רגליים */
+    glyph: 'plain',
+    level: 'floor' as const,
+    defaultWidthMm: w,
+    widthOptionsMm: widths,
+    defaultHeightMm: h,
+    defaultDepthMm: d,
+    defaultYMm: 0,
+    socleMm: 0,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1100 + n * 10,
+  })),
 ];

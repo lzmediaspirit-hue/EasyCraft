@@ -21,14 +21,21 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src/catalog/shipped.ts');
 
 /** שדות שאינם שייכים לקוד: הם נקבעים מחדש בכל מכשיר. */
-const PER_DEVICE = ['createdAt', 'updatedAt', 'hiddenAt'];
+const PER_DEVICE = ['createdAt', 'updatedAt', 'hiddenAt', 'workshopId', 'rev', 'sourceId'];
 
 const HEAD = `import type { CatalogItem, Finish, Material } from '../db/types';
 
 /** פריט ספרייה מוכן, לפני שנזרע — חותמות הזמן נקבעות בזריעה עצמה. */
-export type ShippedItem = Omit<CatalogItem, 'createdAt' | 'updatedAt'>;
-export type ShippedMaterial = Omit<Material, 'createdAt' | 'updatedAt'>;
-export type ShippedFinish = Omit<Finish, 'createdAt' | 'updatedAt'>;
+/*
+ * פריט שמגיע עם האפליקציה.
+ *
+ * הבעלות והגרסה אינן חלק ממנו: הן נקבעות ברגע שהוא נזרע אל נגרייה
+ * מסוימת. רשימה שנושאת בעלות הייתה טוענת שהיא שייכת למישהו עוד
+ * לפני שהותקנה.
+ */
+export type ShippedItem = Omit<CatalogItem, 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'>;
+export type ShippedMaterial = Omit<Material, 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'>;
+export type ShippedFinish = Omit<Finish, 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'>;
 
 /**
  * הספרייה שמגיעה עם האפליקציה, כשהיא נבנתה בנגרייה ולא נכתבה בקוד.
@@ -119,10 +126,10 @@ const missing = [...needFinishes].filter((id) => !finishes.some((f) => f.id === 
 writeFileSync(
   OUT,
   HEAD +
-    `export const SHIPPED_LIBRARY: ShippedItem[] = ${JSON.stringify(items, null, 2)};\n` +
+    `export const SHIPPED_LIBRARY: ShippedItem[] = ${rows(items)};\n` +
     DEPS_DOC +
-    `export const SHIPPED_MATERIALS: ShippedMaterial[] = ${JSON.stringify(materials, null, 2)};\n` +
-    `export const SHIPPED_FINISHES: ShippedFinish[] = ${JSON.stringify(finishes, null, 2)};\n`,
+    `export const SHIPPED_MATERIALS: ShippedMaterial[] = ${rows(materials)};\n` +
+    `export const SHIPPED_FINISHES: ShippedFinish[] = ${rows(finishes)};\n`,
 );
 console.log(`${items.length} ארגזים נכנסו ל-src/catalog/shipped.ts`);
 console.log(`${materials.length} לוחות ו-${finishes.length} גוונים נכנסו איתם`);
@@ -134,6 +141,18 @@ if (missing) {
   );
 }
 console.log('הרץ npm run typecheck ואז npm run build:single');
+
+/**
+ * טבלה, שורה בשורה.
+ *
+ * `JSON.stringify` עם הזחה פורס כל שדה לשורה משלו, ושמונים ארגזים
+ * הפכו לשלושת אלפים שורות שאי אפשר לקרוא ואי אפשר להשוות ביניהן
+ * בדיף. ארגז הוא שורה: מה שהשתנה בין שתי גרסאות נראה מיד.
+ */
+function rows(list) {
+  if (!list.length) return '[]';
+  return `[\n${list.map((r) => `  ${JSON.stringify(r)}`).join(',\n')}\n]`;
+}
 
 /** שורה שמוכנה לקוד: בלי חותמות הזמן שנקבעות בכל מכשיר מחדש */
 function strip(row) {

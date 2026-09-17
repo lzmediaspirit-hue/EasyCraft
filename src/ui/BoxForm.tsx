@@ -1,4 +1,7 @@
-import { GLYPH_FAMILIES, glyphDef, glyphsOf } from '../catalog/glyphList';
+import { GLYPH_FAMILIES, glyphsOf } from '../catalog/glyphList';
+import { constructionCaps } from '../catalog/construction';
+import { useState } from 'react';
+import { KITCHEN } from '../catalog/standards';
 import { limitsFor } from '../catalog/saveGate';
 import { GlyphPreview } from '../catalog/GlyphPreview';
 import { Field, Chip, NumField, inputClass, selectOnFocus } from './Field';
@@ -47,15 +50,19 @@ export function BoxForm({
    */
   composed?: boolean;
 }) {
-  const caps = glyphDef(value.glyph);
+  const caps = constructionCaps(value.glyph);
   /*
    * מכשיר חשמלי נקנה שלם, ולכן אין בו מה לבנות: סוקל, משטח, דלתות
    * ומדפים הם שאלות על ארגז. מה שכן נשאל עליו הוא המידה שלו ואיפה
    * הוא עומד — וזה בדיוק מה שהנגר מודד בקטלוג של היצרן.
    */
   const bought = !!caps.standalone;
+  /* גוף ארון — מה שיש לו רגליים בתוך הגובה. לוח בודד ומכשיר אינם כאלה */
+  const body = !bought && !caps.noCarcass;
   /* הגבולות והתוויות של שדות המידה נגזרים ממה שהמוצר הוא */
   const limits = limitsFor(value.glyph);
+  /* העובי שנבחר, כדי שכיבוי המשטח לא ימחק אותו */
+  const [lastCounter, setLastCounter] = useState(value.counterMm || KITCHEN.counterH);
 
   return (
     <div className="space-y-5">
@@ -241,34 +248,84 @@ export function BoxForm({
           המרחק מהרצפה לתקרה שלו, ובשני זה עובי הלוח. מינימום של
           50 מ״מ שהוחל על שניהם הפך מדף של 30 ל-50 בלי לומר מילה
           — הטופס "תיקן" מידה תקינה לגמרי.
+
+          ובארגז נשאלת דווקא מידת הגוף. הגובה השמור הוא גוף ועוד
+          רגליים, ולכן שדה שמראה את הסכום ומעליו שדה רגליים נפרד
+          הופך כל שינוי ברגליים לשינוי שקט בגוף: מי שהעלה רגליים
+          מ-100 ל-150 קיצר את הארון בחמישה ס״מ בלי לבקש.
         */}
         <NumField
-          label={limits.heightLabel}
-          value={value.heightMm}
+          label={body ? 'גובה גוף' : limits.heightLabel}
+          value={body ? value.heightMm - value.socleMm : value.heightMm}
           minMm={limits.minHeightMm}
           maxMm={limits.maxHeightMm}
           inMm={limits.heightInMm}
-          onChange={(v) => onChange({ heightMm: v })}
+          onChange={(v) => onChange({ heightMm: body ? v + value.socleMm : v })}
         />
         <NumField label="עומק" value={value.depthMm} minMm={limits.minDepthMm}
           onChange={(v) => onChange({ depthMm: v })} />
-        <NumField
-          label="גובה מהרצפה"
-          value={value.yMm}
-          onChange={(v) => onChange({ yMm: v })}
-        />
         {/* סוקל ומשטח הם חלקים שנחתכים, ולמכשיר קנוי אין כאלה */}
         {!bought && (
-          <>
-            <NumField label="סוקל" value={value.socleMm} onChange={(v) => onChange({ socleMm: v })} />
-            <NumField
-              label="משטח עבודה"
-              value={value.counterMm}
-              onChange={(v) => onChange({ counterMm: v })}
-            />
-          </>
+          <NumField
+            label="גובה רגליים"
+            value={value.socleMm}
+            onChange={(v) =>
+              /* הגוף נשאר כפי שהוא, והגובה השמור נספר מחדש. רגליים מעמידות על הרצפה */
+              onChange({ socleMm: v, heightMm: value.heightMm - value.socleMm + v, ...(v > 0 ? { yMm: 0 } : {}) })
+            }
+          />
+        )}
+        {/*
+          רגליים מעמידות את הארגז על הרצפה, ולכן "גובה מהרצפה" הוא
+          שאלה רק כשאין להן. שני שדות שסותרים זה את זה באותו מסך
+          הם שאלה שאין לה תשובה נכונה.
+        */}
+        {(bought || value.socleMm === 0) && (
+          <NumField label="גובה מהרצפה" value={value.yMm} onChange={(v) => onChange({ yMm: v })} />
         )}
       </div>
+
+      {/*
+        משטח עבודה — יש או אין, ואז כמה עבה.
+        מספר לבדו אינו אומר מה הכבוי שלו: אפס נראה כמו שדה שלא
+        מולא, ומי שרצה להוריד משטח לא ידע שזה מה שהוא עושה. העובי
+        האחרון נזכר, כדי שכיבוי והדלקה לא ימחקו מידה שנבחרה.
+      */}
+      {!bought && (
+        <Field group label="משטח עבודה">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip
+              active={value.counterMm > 0}
+              onClick={() => onChange({ counterMm: value.counterMm > 0 ? value.counterMm : lastCounter })}
+            >
+              יש
+            </Chip>
+            <Chip
+              active={value.counterMm === 0}
+              onClick={() => {
+                if (value.counterMm > 0) setLastCounter(value.counterMm);
+                onChange({ counterMm: 0 });
+              }}
+            >
+              אין
+            </Chip>
+          </div>
+          {value.counterMm > 0 && (
+            <div className="mt-3 max-w-40">
+              <NumField
+                label="עובי המשטח"
+                inMm
+                minMm={1}
+                value={value.counterMm}
+                onChange={(v) => {
+                  setLastCounter(v);
+                  onChange({ counterMm: v });
+                }}
+              />
+            </div>
+          )}
+        </Field>
+      )}
     </div>
   );
 }

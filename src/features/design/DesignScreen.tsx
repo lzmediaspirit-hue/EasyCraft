@@ -32,6 +32,8 @@ import { orderedStats, useViewOptions } from './viewOptions';
 import { useDesignView } from './designView';
 import { StatGrid, roomStats as roomStatsOf, statTile, wallStats } from './StatGrid';
 import { DesignToolbar } from './DesignToolbar';
+import { DesktopLibrary } from './DesktopLibrary';
+import { useMedia } from '../../ui/useMedia';
 import type { SheetName } from './sheets';
 import { readPref, writePref } from '../../ui/prefs';
 import { clamp, cm } from '../../ui/units';
@@ -116,6 +118,8 @@ export function DesignScreen({
    * שייכת לרגע ההסתכלות ולא לפרויקט — ומכאן עוברת הבקשה בלבד.
    */
   const [fitAt, setFitAt] = useState<number | undefined>(undefined);
+  /* ספריית המחשב קיימת רק כשיש לה מקום — ראו התנאי בפריסה למטה */
+  const wide = useMedia('(min-width: 1200px)');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** מה שהמקלדת הזיזה כרגע — נאמר ונעלם, כמו מחוון הגרירה */
   const [keyAxis, setKeyAxis] = useState<string | null>(null);
@@ -599,7 +603,7 @@ export function DesignScreen({
   if (!project || !walls || !wall) return null;
 
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-lg flex-col overflow-hidden bg-stone-50">
+    <div className="planner-workspace mx-auto flex h-dvh w-full max-w-lg flex-col overflow-hidden bg-stone-50">
       <DesignToolbar
         project={project}
         walls={walls}
@@ -629,7 +633,16 @@ export function DesignScreen({
         כלפי מעלה באמת מכסה את הקיר — וזו הנקודה: לוח הגדרות ארוך
         צריך מקום, וקיר שכבר בנוי אפשר להסתיר לרגע.
       */}
-      <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
+      {/*
+        הספרייה כפאנל קבוע. היא אינה מוסתרת ב-CSS אלא פשוט אינה
+        קיימת מתחת ל-1200 פיקסל: פאנל מוסתר עדיין נבנה, עדיין שואל
+        את המסד, ועדיין נמצא ב-DOM.
+      */}
+      {editable && wide && (
+        <DesktopLibrary roomKind={project.roomKind} onAdd={addItem} />
+      )}
+
+      <div className="planner-canvas min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-2">
         <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white p-2">
           {/* מה שהמקלדת הזיזה עכשיו, ובאיזה ציר */}
           {keyAxis && (
@@ -730,6 +743,11 @@ export function DesignScreen({
         </div>
       </div>
 
+      {/*
+        לוח המאפיינים. `display: contents` בנייד משאיר אותו בדיוק
+        כפי שהיה — הוא נעשה עמודה משלו רק במסך רחב.
+      */}
+      <div className="planner-properties">
       {selected && editable ? (
         <>
         {/*
@@ -1095,6 +1113,7 @@ export function DesignScreen({
           </div>
         </>
       )}
+      </div>
 
       {/*
         הארגז נמצא לפני הפתיחה ולא נכפה בסימן קריאה: ארגז יכול

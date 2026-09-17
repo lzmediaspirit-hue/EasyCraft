@@ -16,7 +16,7 @@ import type { PlacedUnit } from '../db/types';
  */
 
 /** החלל הפנוי הקטן ביותר שעדיין אומר "ארגז" ולא "שני לוחות". */
-export const MIN_INNER_MM = 60;
+const MIN_INNER_MM = 60;
 
 /** הגובה הקטן ביותר שאפשר לבנות בו את הארגז הזה, כולל הרגליים. */
 export function minHeightMm(u: Pick<PlacedUnit, 'glyph' | 'socleMm'>, t: number): number {

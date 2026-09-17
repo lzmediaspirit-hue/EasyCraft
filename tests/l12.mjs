@@ -1,5 +1,6 @@
 import './_exit.mjs';
 import { chromium } from 'playwright';
+import { BOX } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const page = await b.newPage({ viewport: { width: 400, height: 840 }, deviceScaleFactor: 2 });
@@ -79,7 +80,7 @@ ok('calc button renamed', await page.getByRole('button', { name: 'חישוב' })
 ok('nesting button exists', await page.getByRole('button', { name: /ניסור/ }).count() > 0);
 
 await btn('הוספת ארגז').click(); await page.waitForTimeout(500);
-await btn(/^ארגז שתי דלתות/).click(); await page.waitForTimeout(900);
+await btn(BOX.doors2).click(); await page.waitForTimeout(900);
 const u = await page.evaluate(() => new Promise((res) => {
   const o = indexedDB.open('easycraft');
   o.onsuccess = () => { const t = o.result.transaction('units','readonly').objectStore('units').getAll();

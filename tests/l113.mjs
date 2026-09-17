@@ -4,7 +4,7 @@ import './_exit.mjs';
  *
  * תנור, מקרר ומדיח נכנסים למטבח מוכנים: אין להם דפנות שנחתכות, אין
  * להם מדפים וגב, ואין להם מגירות שמזמינים. מה שנקבע להם הוא המידה
- * והמקום. ארגז שנבנה סביב מכשיר — "ארגז תנור ומגירה" — הוא ארגז
+ * והמקום. ארגז שנבנה סביב מכשיר — "ארון תנור עם מגירה" — הוא ארגז
  * לכל דבר, ונספר.
  */
 import { chromium } from 'playwright';
@@ -96,14 +96,25 @@ ok(
   JSON.stringify(r.cabSolids.slice(0, 10)),
 );
 
-/* הספרייה: המכשיר בשמו, והארגז בשמו */
+/*
+ * המכשיר בשמו, והארגז בשמו.
+ *
+ * המכשיר אינו יושב בספרייה אלא במוצרי המערכת: הספרייה היא של
+ * הנגרייה ומוחלפת כשהיא מוחלפת, והמכשירים נוסעים לצידה. הארגז
+ * שנבנה סביב המכשיר הוא ארגז של הספרייה, ושם הוא נבדק.
+ */
 const lib = await page.evaluate(async () => {
-  const { SHIPPED_LIBRARY } = await import('/src/catalog/shipped.ts?v=' + Date.now());
-  const names = SHIPPED_LIBRARY.map((i) => i.name);
+  const bust = '?v=' + Date.now();
+  const { SHIPPED_LIBRARY } = await import('/src/catalog/shipped.ts' + bust);
+  const { SHIPPED_PRODUCTS } = await import('/src/catalog/products.ts' + bust);
+  const names = [...SHIPPED_LIBRARY, ...SHIPPED_PRODUCTS].map((i) => i.name);
   const dup = names.filter((n, i) => names.indexOf(n) !== i);
-  return { names, dup: [...new Set(dup)] };
+  return { names, products: SHIPPED_PRODUCTS.map((i) => i.name), dup: [...new Set(dup)] };
 });
-for (const n of ['תנור', 'מקרר', 'מדיח', 'ארגז תנור ומגירה', 'ארגז פתוח עם רגליים']) {
+for (const n of ['תנור', 'מקרר', 'מדיח']) {
+  ok(`"${n}" הוא מוצר של המערכת`, lib.products.includes(n), lib.products.join(' · '));
+}
+for (const n of ['ארון תנור עם מגירה', 'ארון תנור תחתון']) {
   ok(`"${n}" קיים בספרייה`, lib.names.includes(n));
 }
 /*

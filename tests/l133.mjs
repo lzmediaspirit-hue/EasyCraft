@@ -11,7 +11,7 @@ import './_exit.mjs';
  *   • לחיצה על אזהרה מדליקה את שני העצמים על הציור.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -149,7 +149,8 @@ ok('a sliding room door reports nothing', clash.slide === 0, String(clash.slide)
 
 await setup(page, { name: 'מעטפת בע״מ' });
 await page.waitForTimeout(900);
-await addNamed(page, /^ארגז/);
+/* דלת אחת בלי צד צירים — וזו השאלה הפתוחה שהגיליון אמור לומר עליה */
+await addNamed(page, BOX.doors1);
 await page.waitForTimeout(900);
 
 /* ארגז שחורג מהקיר — אזהרה שאינה תלויה בשום מתג תצוגה */

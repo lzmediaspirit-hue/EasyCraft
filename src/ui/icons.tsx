@@ -141,6 +141,58 @@ const UtilityIcon = icon(
   { size: 32, width: 1.6 },
 );
 
+/** אמבטיה: כיור עם ברז, ומראה מעליו. */
+const BathroomIcon = icon(
+  <>
+    <path d="M7 19h18v4a4 4 0 0 1-4 4H11a4 4 0 0 1-4-4z" />
+    <path d="M5 19h22" />
+    <path d="M11 15V7a3 3 0 0 1 6 0v1" />
+    <rect x="19" y="4" width="8" height="8" rx="1" />
+  </>,
+  { size: 32, width: 1.6 },
+);
+
+/** חדר ארונות: מוט תלייה וקולבים. */
+const ClosetIcon = icon(
+  <>
+    <rect x="4" y="4" width="24" height="24" rx="1" />
+    <path d="M7 10h18" />
+    <path d="M12 10v3M12 13l-2.5 4h5zM20 10v3M20 13l-2.5 4h5z" />
+  </>,
+  { size: 32, width: 1.6 },
+);
+
+/** חדר ילדים: מיטה נמוכה וצעצוע על מדף. */
+const ChildrenIcon = icon(
+  <>
+    <path d="M4 22h16v6H4zM4 22v-4h12a4 4 0 0 1 4 4" />
+    <path d="M4 28v-2M20 28v-2" />
+    <path d="M22 4h6v6h-6z" />
+    <circle cx="25" cy="15" r="2.5" />
+  </>,
+  { size: 32, width: 1.6 },
+);
+
+/** כניסה לבית: דלת עם ידית ומדרגה. */
+const EntranceIcon = icon(
+  <>
+    <path d="M9 4h14v22H9z" />
+    <circle cx="19.5" cy="15" r="1.2" />
+    <path d="M5 26h22v2H5z" />
+  </>,
+  { size: 32, width: 1.6 },
+);
+
+/** משרד: שולחן עבודה ומדף מעליו. */
+const OfficeIcon = icon(
+  <>
+    <path d="M4 18h24v3H4zM7 21v7M25 21v7" />
+    <rect x="9" y="8" width="14" height="6" rx="1" />
+    <path d="M4 5h24" />
+  </>,
+  { size: 32, width: 1.6 },
+);
+
 const CustomRoomIcon = icon(
   <>
     <path d="M4 13 16 4l12 9v15H4z" />
@@ -158,6 +210,11 @@ export const ROOM_ICONS: Record<string, (p: P) => React.ReactElement> = {
   living: LivingIcon,
   bedroom: BedroomIcon,
   utility: UtilityIcon,
+  bathroom: BathroomIcon,
+  closet: ClosetIcon,
+  children: ChildrenIcon,
+  entrance: EntranceIcon,
+  office: OfficeIcon,
   custom: CustomRoomIcon,
 };
 

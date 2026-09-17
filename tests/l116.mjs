@@ -10,7 +10,7 @@ import './_exit.mjs';
  * בו, ושתי חבילות שונות דיווחו על אותה מהדורה.
  */
 import { chromium } from 'playwright';
-import { setup, addNamed } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -23,7 +23,7 @@ const ok = (name, cond, extra = '') =>
   out.push(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ' | ' + extra : ''}`);
 
 await setup(page, { name: 'ארגזים בע״מ' });
-await addNamed(page, /^ארגז/);
+await addNamed(page, BOX.any);
 await page.waitForTimeout(600);
 
 const r = await page.evaluate(async () => {

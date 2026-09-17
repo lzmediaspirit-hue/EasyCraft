@@ -52,14 +52,19 @@ await sheet.getByRole('button', { name: 'עליונים' }).click();
 await page.waitForTimeout(500);
 await sheet.getByRole('button', { name: 'מועדף', exact: true }).click();
 await page.waitForTimeout(250);
-/* חדר שינה בלבד — כל שאר החדרים מכובים, יהיו אשר יהיו */
-for (const room of ['מטבח', 'סלון', 'חדר שירות']) {
-  const chip = sheet.getByRole('button', { name: room, exact: true });
-  if ((await chip.count()) && (await chip.getAttribute('aria-pressed')) === 'true') await chip.click();
-  await page.waitForTimeout(200);
+/*
+ * חדר שינה בלבד — כל שאר החדרים מכובים, יהיו אשר יהיו.
+ *
+ * עוברים על השבבים שיש בפועל ולא על רשימת שמות כתובה: החדרים הם
+ * נתונים, ורשימה כתובה משאירה דלוק את כל מי שנוסף מאז שנכתבה.
+ */
+const chips = sheet.getByRole('group', { name: 'באילו חדרים יופיע' }).getByRole('button');
+for (let i = 0; i < (await chips.count()); i++) {
+  const chip = chips.nth(i);
+  const on = (await chip.getAttribute('aria-pressed')) === 'true';
+  const wanted = (await chip.innerText()).trim() === 'חדר שינה';
+  if (on !== wanted) { await chip.click(); await page.waitForTimeout(150); }
 }
-const bed = sheet.getByRole('button', { name: 'חדר שינה', exact: true });
-if ((await bed.getAttribute('aria-pressed')) !== 'true') await bed.click();
 await page.waitForTimeout(300);
 await sheet.getByRole('button', { name: /שמירה|הוספה/ }).last().click();
 await page.waitForTimeout(1000);
@@ -117,15 +122,28 @@ const dedupe = await page.evaluate(async (code) => {
   const ok2 = (name, cond, extra = '') => res.push(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ' | ' + extra : ''}`);
   const before = (await catalogRepo.all()).length;
 
-  /* שמירה חדשה תחת מק״ט קיים — מעדכנת ולא מוסיפה */
-  const again = await catalogRepo.saveCustom({
-    rooms: ['bedroom'], group: 'upper', name: 'QA אותו מק״ט', glyph: 'doors',
-    level: 'wall', defaultWidthMm: 800, widthOptionsMm: [800],
-    defaultHeightMm: 700, defaultDepthMm: 320, defaultYMm: 1500, code,
-  });
+  /*
+   * שמירה חדשה תחת מק״ט תפוס נעצרת.
+   *
+   * קודם היא עדכנה בשקט את הארגז שנושא אותו: מי ששמר ארגז חדש
+   * והקליד מק״ט קיים מחק בכך ארגז אחר בלי שנאמר לו דבר.
+   */
+  const owner = (await catalogRepo.all()).find((i) => i.code === code);
+  let why = null;
+  try {
+    await catalogRepo.saveCustom({
+      rooms: ['bedroom'], group: 'upper', name: 'QA אותו מק״ט', glyph: 'doors',
+      level: 'wall', defaultWidthMm: 800, widthOptionsMm: [800],
+      defaultHeightMm: 700, defaultDepthMm: 320, defaultYMm: 1500, code,
+    });
+  } catch (e) {
+    why = String(e.message ?? e);
+  }
   const after = await catalogRepo.all();
-  ok2('שמירה תחת מק״ט קיים אינה מוסיפה ארגז', after.length === before, `${before} → ${after.length}`);
-  ok2('והיא מעדכנת את הארגז שנושא אותו', after.find((i) => i.id === again)?.name === 'QA אותו מק״ט');
+  ok2('שמירה תחת מק״ט תפוס נדחית', !!why, String(why));
+  ok2('ואינה מוסיפה ארגז', after.length === before, `${before} → ${after.length}`);
+  ok2('והארגז שנושא אותו לא נגע',
+    after.find((i) => i.id === owner?.id)?.name === owner?.name, owner?.name);
 
   /* ייבוא חוזר של אותה ספרייה במזהים אחרים — גם הוא אינו משכפל */
   const pack = await exportCabinets();
