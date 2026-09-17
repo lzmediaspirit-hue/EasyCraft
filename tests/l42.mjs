@@ -75,15 +75,43 @@ if (await dlg().getByRole('button', { name: /^מטבח/ }).count())
   { await dlg().getByRole('button', { name: /^מטבח/ }).click(); await page.waitForTimeout(400); }
 await dlg().locator('div.relative > button').filter({ hasText: /\S/ }).nth(0).click();
 await page.waitForTimeout(900);
+/*
+ * ברירת המחדל היא תשובה לשאלה שלא נענתה, ולא דריסה של תשובה שכן.
+ *
+ * כאן היא דרסה: ארגז ספרייה עם רגליים משלו קיבל את גובה העסק,
+ * והגובה השמור הוא גוף ועוד רגליים — כך שהחלפת 100 ב-120 לא
+ * שינתה רגליים אלא קיצרה את הגוף בשני ס״מ, בשקט. ארגז ששתק
+ * מקבל את ברירת המחדל; ארגז שאמר, נשמע.
+ */
 let u = (await table('units'))[0];
-ok(u.socleMm === 120, 'ארגז חדש מקבל את גובה הרגליים שהוגדר', String(u.socleMm));
+const own = await page.evaluate(async (id) => {
+  const { catalogRepo } = await import('/src/catalog/catalogRepo.ts?v=' + Date.now());
+  return (await catalogRepo.get(id))?.socleMm ?? null;
+}, u.catalogItemId);
+ok(u.socleMm === own, 'הרגליים של הארגז הן שלו, ולא של ברירת המחדל', `${u.socleMm} מול ${own}`);
+
+/* וארגז שאין לו רגליים משלו כן מקבל את מה שהוגדר בעסק */
+const silent = await page.evaluate(async () => {
+  const { unitsRepo, wallsRepo } = await import('/src/features/projects/projectsRepo.ts?v=' + Date.now());
+  const { catalogRepo } = await import('/src/catalog/catalogRepo.ts?v=' + Date.now());
+  const { db } = await import('/src/db/db.ts?v=' + Date.now());
+  const proj = (await db.projects.toArray())[0];
+  const wall = (await wallsRepo.listForProject(proj.id))[0];
+  const base = (await catalogRepo.all()).find((i) => i.level === 'floor' && i.socleMm);
+  const added = await unitsRepo.add(proj.id, wall.id, { ...base, socleMm: undefined }, 1200);
+  const socle = added.socleMm;
+  await unitsRepo.remove(added.id);
+  return socle;
+});
+ok(silent === 120, 'ארגז בלי רגליים משלו מקבל את ברירת המחדל', String(silent));
 
 await page.getByRole('button', { name: /הצמדה לרצפה/ }).click(); await page.waitForTimeout(700);
 u = (await table('units'))[0];
 ok(u.socleMm === 0 && !u.floorLocked, 'ביטול ההצמדה מאפס רגליים', `${u.socleMm}/${u.floorLocked}`);
 await page.getByRole('button', { name: /הצמדה לרצפה/ }).click(); await page.waitForTimeout(700);
 u = (await table('units'))[0];
-ok(u.socleMm === 120 && u.floorLocked, 'החזרת ההצמדה מחזירה את הרגליים', `${u.socleMm}/${u.floorLocked}`);
+/* בדיוק מה שהוסר, ולא גובה ברירת המחדל: המתג הפיך */
+ok(u.socleMm === own && u.floorLocked, 'החזרת ההצמדה מחזירה בדיוק את הרגליים שהיו', `${u.socleMm}/${u.floorLocked}`);
 
 /* --- סוג הגב יצא מההדמיה --- */
 await page.getByRole('button', { name: /הסתרת חזיתות/ }).click(); await page.waitForTimeout(700);
