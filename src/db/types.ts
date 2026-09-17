@@ -1362,6 +1362,13 @@ export interface Settings {
    * את מה שהנגר אישר. ראה `catalog/libraryRelease.ts`.
    */
   libraryRelease?: number;
+  /**
+   * איזה דור של חדרים מובנים הנגרייה הזאת כבר קיבלה.
+   *
+   * בלעדיו חדר מובנה שנוסף אחרי ההתקנה לא היה מגיע לעולם: זריעת
+   * החדרים רצה רק לטבלה ריקה. ראה `roomsRepo.addBuiltinRooms`.
+   */
+  roomsGeneration?: number;
   updatedAt: number;
 }
 

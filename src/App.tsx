@@ -10,7 +10,7 @@ import { TasksScreen } from './features/workflow/TasksScreen';
 import { TeamScreen } from './features/team/TeamScreen';
 import { StockScreen } from './features/stock/StockScreen';
 import { addSystemProducts, seedCatalog } from './catalog/catalogRepo';
-import { seedRooms } from './catalog/roomsRepo';
+import { addBuiltinRooms, seedRooms } from './catalog/roomsRepo';
 import { seedMaterials } from './materials/materialsRepo';
 import { seedAdmin } from './workflow/auth';
 import { ensureWorkshop } from './db/rows';
@@ -34,8 +34,12 @@ export default function App() {
   useEffect(() => {
     ensureWorkshop()
       .then(() => Promise.all([seedCatalog(), seedRooms(), seedMaterials(), seedAdmin()]))
-      /* מוצרי מערכת שנוספו אחרי ההתקנה — אחרי הזריעה, ורק מה שחסר */
-      .then(() => addSystemProducts())
+      /*
+       * מה שנוסף אחרי ההתקנה — אחרי הזריעה, ורק מה שחסר.
+       * מוצרי מערכת וחדרים מובנים כאחד: שניהם נחסמו על ידי סימון
+       * "כבר נזרע", ולכן התקנה ותיקה נשארה בלעדיהם.
+       */
+      .then(() => Promise.all([addSystemProducts(), addBuiltinRooms()]))
       .finally(() => setReady(true));
   }, []);
 

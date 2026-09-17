@@ -2,8 +2,10 @@ import { liveQuery } from 'dexie';
 
 import { db } from '../db/db';
 import { CUSTOM_ROOM, type CatalogGroup, type Room, type RoomKind } from '../db/types';
-import { CUSTOM_ROOM_DEF, SEED_ROOMS, type SeedRoom } from './rooms';
+import { CUSTOM_ROOM_DEF, ROOMS_GENERATION, SEED_ROOMS, type SeedRoom } from './rooms';
 import { allMine, eraseIds, mine, onlyMine, owned, patchRow } from '../db/rows';
+import { settingsRepo } from '../materials/materialsRepo';
+import { workshopId } from '../db/workshop';
 
 /**
  * החדרים — נתונים, לא רשימה בקוד.
@@ -74,6 +76,63 @@ async function runSeed(): Promise<void> {
       }
     });
   });
+}
+
+/**
+ * חדרים מובנים שנוספו אחרי ההתקנה.
+ *
+ * הזריעה רצה פעם אחת בטבלה ריקה, ולכן מי שהתקין כשהיו ארבעה
+ * חדרים — מטבח, סלון, חדר שינה וחדר שירות — נשאר איתם לתמיד.
+ * חמשת החדרים שנוספו מאוחר יותר לא הגיעו אליו, והארגזים ששויכו
+ * אליהם לא הופיעו בשום רשימה: הספרייה מציגה ארגזים דרך כרטיס
+ * חדר, וחדר שאינו קיים אינו מציג דבר.
+ *
+ * שדרוג ממוקד, כמו במוצרי המערכת: רק חדר מובנה שהדור שלו חדש
+ * מהדור שהנגרייה קיבלה, ורק כזה שמעולם לא היה כאן. שני דברים
+ * שהוא אינו עושה — הוא אינו דורס חדר קיים, ואינו מחזיר חדר
+ * שנמחק בכוונה.
+ */
+let adding: Promise<number> | null = null;
+
+export function addBuiltinRooms(): Promise<number> {
+  /*
+   * פעם אחת להרצה. `App` נטען פעמיים במצב הפיתוח של React, ושתי
+   * קריאות במקביל ראו את אותם חדרים חסרים ושתיהן הוסיפו אותם —
+   * השנייה נפלה על מפתח כפול.
+   */
+  adding ??= runAdd();
+  return adding;
+}
+
+async function runAdd(): Promise<number> {
+  const settings = await settingsRepo.get();
+  if ((settings.roomsGeneration ?? 0) >= ROOMS_GENERATION) return 0;
+
+  const marks = await db.tombstones
+    .where('[workshopId+table]')
+    .equals([workshopId(), 'rooms'])
+    .toArray();
+  const erased = new Set(marks.map((m) => m.rowId));
+
+  const now = Date.now();
+  /*
+   * הקריאה והכתיבה בטרנזקציה אחת: בין "מה חסר" לבין "הוסף" אסור
+   * שמישהו אחר יוסיף. חדר מוסתר קיים בטבלה, ולכן הוא אינו חסר —
+   * הוא הוסר במפורש, וזו תשובה.
+   */
+  const added = await db.transaction('rw', db.rooms, async () => {
+    const here = new Set((await allMine(db.rooms)).map((r) => r.id));
+    const missing = SEED_ROOMS.filter((r) => !here.has(r.id) && !erased.has(r.id)).map((r) => ({
+      ...r,
+      ...owned(),
+      createdAt: now,
+      updatedAt: now,
+    }));
+    if (missing.length) await db.rooms.bulkAdd(missing);
+    return missing.length;
+  });
+  await settingsRepo.save({ roomsGeneration: ROOMS_GENERATION });
+  return added;
 }
 
 export const roomsRepo = {
