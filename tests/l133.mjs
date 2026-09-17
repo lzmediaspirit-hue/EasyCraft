@@ -149,7 +149,8 @@ ok('a sliding room door reports nothing', clash.slide === 0, String(clash.slide)
 
 await setup(page, { name: 'מעטפת בע״מ' });
 await page.waitForTimeout(900);
-await addNamed(page, BOX.any);
+/* דלת אחת בלי צד צירים — וזו השאלה הפתוחה שהגיליון אמור לומר עליה */
+await addNamed(page, BOX.doors1);
 await page.waitForTimeout(900);
 
 /* ארגז שחורג מהקיר — אזהרה שאינה תלויה בשום מתג תצוגה */

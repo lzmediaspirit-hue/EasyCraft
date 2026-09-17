@@ -1,3 +1,4 @@
+import type { RoomKind } from '../db/types';
 import type { ShippedItem } from './shipped';
 
 /**
@@ -20,6 +21,23 @@ import type { ShippedItem } from './shipped';
  * בכוונה. כשמוסיפים מוצר מערכת חדש — מעלים את המספר.
  */
 export const PRODUCTS_GENERATION = 2;
+
+/**
+ * הלוחות הבודדים: מזהה, מק״ט, שם, רוחב, רוחבים, גובה, עובי.
+ *
+ * דופן, מדף, גב, חיפוי, קרניז וסוקל אינם ארגז שנבנה בנגרייה אלא
+ * לוח שנחתך ומורכב, והם אותם שישה בכל נגרייה. הם יושבים במדור
+ * "דפנות ולוחות" שלהם, ולא בספרייה של אף חדר — ולכן הם חלק
+ * מהאפליקציה, כמו האי והמדף.
+ */
+const BOARDS: [string, string, string, number, number[], number, number][] = [
+  ['panel-side', 'P-101', 'דופן צד', 580, [400, 450, 500, 560, 580, 600, 650], 720, 18],
+  ['panel-shelf', 'P-102', 'מדף בודד', 800, [300, 400, 500, 600, 800, 1000, 1200], 300, 18],
+  ['panel-back', 'P-103', 'לוח גב', 600, [400, 500, 600, 800, 900, 1200], 720, 5],
+  ['panel-cover', 'P-104', 'חיפוי קיר', 1200, [600, 900, 1200, 1500, 1800, 2400], 2400, 18],
+  ['panel-cornice', 'P-105', 'קרניז', 2000, [1000, 1500, 2000, 2500, 3000], 60, 18],
+  ['panel-plinth', 'P-106', 'סוקל', 2000, [1000, 1500, 2000, 2500, 3000], 150, 18],
+];
 
 export const SHIPPED_PRODUCTS: ShippedItem[] = [
   {
@@ -141,4 +159,26 @@ export const SHIPPED_PRODUCTS: ShippedItem[] = [
     sortOrder: 1040,
     note: 'לבדוק עומק המקרר בפועל — לרוב 650–700 מ״מ',
   },
+
+  /* הלוחות הבודדים — ראה `BOARDS` מתחת */
+  ...BOARDS.map(([id, code, name, w, widths, h, d], n) => ({
+    id,
+    code,
+    rooms: ['kitchen', 'living', 'bedroom'] as RoomKind[],
+    group: 'panel' as const,
+    name,
+    /* לוח מונח: אין לו דפנות, תחתית, גב או רגליים */
+    glyph: 'plain',
+    level: 'floor' as const,
+    defaultWidthMm: w,
+    widthOptionsMm: widths,
+    defaultHeightMm: h,
+    defaultDepthMm: d,
+    defaultYMm: 0,
+    socleMm: 0,
+    counterMm: 0,
+    common: true,
+    isBuiltin: true,
+    sortOrder: 1100 + n * 10,
+  })),
 ];

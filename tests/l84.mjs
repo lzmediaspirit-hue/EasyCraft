@@ -1,7 +1,7 @@
 import './_exit.mjs';
 /** משימות 84–92: גובה תקן, עמוד עד התקרה, חסימת מפתחים, דלת מדומה, סרגל, ספרייה, שכפול. */
 import { chromium } from 'playwright';
-import { setup, addUnit } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 
 const SP = new URL('shots/', import.meta.url).pathname;
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -32,12 +32,24 @@ const walls = () => page.evaluate(async () => {
 await setup(page, { name: 'שכבה 84', walls: 'קיר יחיד' });
 await page.waitForTimeout(700);
 
-/* ---------- 84: גובה ארגז תחתון 88 ס"מ כולל רגליים ---------- */
-await addUnit(page, 0);
+/* ---------- 84: הרגליים בתוך גובה הארגז, ולא מתחתיו ---------- */
+await addNamed(page, BOX.doors1);
 await page.waitForTimeout(700);
 let us = await units();
-ok('ארגז תחתון בגובה 880 כולל רגליים', us[0]?.heightMm === 880, `${us[0]?.name} ${us[0]?.heightMm}`);
-ok('הרגליים בתוך הגובה', us[0]?.socleMm === 100, String(us[0]?.socleMm));
+/*
+ * הגובה הנכון הוא מה שכתוב בספרייה, ולא מספר שנכתב כאן: הספרייה
+ * היא של הנגרייה, והוא זה שקובע כמה גבוה הארגז שלו. מה שנבדק הוא
+ * שההנחה אינה מוסיפה את הרגליים מעל הגובה אלא סופרת אותן בתוכו.
+ */
+const spec = await page.evaluate(async (name) => {
+  const { catalogRepo } = await import('/src/catalog/catalogRepo.ts?v=' + Date.now());
+  const i = (await catalogRepo.all()).find((x) => x.name === name);
+  return { h: i?.defaultHeightMm, socle: i?.socleMm };
+}, us[0]?.name);
+ok('הארגז נולד בגובה שכתוב בספרייה', us[0]?.heightMm === spec.h, `${us[0]?.name} ${us[0]?.heightMm} / ${spec.h}`);
+ok('הרגליים בתוך הגובה ולא מתחתיו',
+  us[0]?.socleMm === spec.socle && spec.socle > 0 && us[0]?.yMm === 0,
+  `רגליים ${us[0]?.socleMm} · תחתית ${us[0]?.yMm}`);
 
 /* ---------- 87: ארגז ללא דלתות לא מצויר עם דלת ---------- */
 /*

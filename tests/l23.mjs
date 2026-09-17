@@ -1,6 +1,6 @@
 import './_exit.mjs';
 import { chromium } from 'playwright';
-import { setup, addUnit } from './mk.mjs';
+import { BOX, addNamed, setup } from './mk.mjs';
 const SP = new URL('shots/', import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const page = await b.newPage({ viewport: { width: 400, height: 840 }, deviceScaleFactor: 2 });
@@ -12,7 +12,7 @@ const btn = (re) => page.getByRole('button', { name: re }).first();
 const ok = (l, c, e = '') => console.log(`${c ? 'PASS' : 'FAIL'}  ${l}${e ? ' — ' + e : ''}`);
 
 await setup(page, { name: 'עריכה בע״מ' });
-await addUnit(page, 3); /* ארגז מגירות */
+await addNamed(page, BOX.drawers);
 await page.waitForTimeout(400);
 const front = await page.innerText('body');
 ok('fronts view: no carcass finish row', !/גוף\n/.test(front) || !front.includes('גב\n'), '');
@@ -30,7 +30,7 @@ await btn(/^פנים/).click(); await page.waitForTimeout(600);
 
 /* גובה דלת — על ארגז דלתות */
 await page.getByRole('button', { name: 'סיום עריכה' }).first().click(); await page.waitForTimeout(300);
-await addUnit(page, 0);
+await addNamed(page, BOX.doors1);
 await page.waitForTimeout(500);
 /* "גובה הדלת" ירד: הדלת תמיד בגובה מה שהיא מכסה */
 ok('no door height control', (await page.getByRole('button', { name: 'גובה הדלת' }).count()) === 0);

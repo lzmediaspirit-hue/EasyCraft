@@ -95,6 +95,21 @@ const unreachable = await page.evaluate(async () => {
 });
 ok('כל קטגוריה שיש בה ארגזים נגישה מהחדר שלה', unreachable.length === 0, unreachable.join(' · '));
 
+/*
+ * ארגז תלוי נולד תלוי.
+ *
+ * `level: 'wall'` אומר שהוא על הקיר, ו-`defaultYMm: 0` אומר שהוא על
+ * הרצפה — ושניהם יחד הם ארגז עליון שנוחת על התחתון שמתחתיו. ככה
+ * הגיעו קולט האדים, ארון התצוגה והמזנון התלוי בספרייה החדשה.
+ */
+const grounded = await page.evaluate(async () => {
+  const { catalogRepo } = await import('/src/catalog/catalogRepo.ts?v=' + Date.now());
+  return (await catalogRepo.all())
+    .filter((i) => i.level === 'wall' && !(i.defaultYMm > 0))
+    .map((i) => `${i.name} (${i.code})`);
+});
+ok('ארגז תלוי אינו נולד על הרצפה', grounded.length === 0, grounded.join(' · '));
+
 /* --- החדרים, ובהם חדר שירות --- */
 const rooms = await page.evaluate(async () => {
   const { roomsRepo } = await import('/src/catalog/roomsRepo.ts?v=' + Date.now());

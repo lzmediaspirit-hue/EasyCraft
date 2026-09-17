@@ -71,8 +71,13 @@ ok('the island switch is gone from advanced editing', (await page.getByRole('but
 await btn(/סיום עריכה/).click().catch(() => {});
 await page.waitForTimeout(600);
 
-/** מוסיף פריט לפי שם, דרך החיפוש שבספרייה */
-async function addFromLibrary(name) {
+/**
+ * מוסיף פריט לפי שם מדויק, דרך החיפוש שבספרייה.
+ *
+ * `pick` הוא השם ואחריו הרוחב, כפי שהכפתור נקרא: "אי" לבדו הוא
+ * גם תחילתו של "אי מגירות לחדר ארונות", והחיפוש חוצה חדרים.
+ */
+async function addFromLibrary(name, pick = new RegExp('^' + name)) {
   await btn(/סיום עריכה/).click().catch(() => {});
   await page.waitForTimeout(400);
   await btn(/הוספת ארגז/).click();
@@ -80,20 +85,20 @@ async function addFromLibrary(name) {
   const dlg = page.getByRole('dialog').last();
   await dlg.getByLabel('חיפוש ארגז לפי שם').fill(name);
   await page.waitForTimeout(600);
-  await dlg.getByRole('button', { name: new RegExp('^' + name) }).first().click();
+  await dlg.getByRole('button', { name: pick }).first().click();
   await page.waitForTimeout(1000);
   await btn(/סיום עריכה/).click().catch(() => {});
   await page.waitForTimeout(500);
 }
 
 /* --- האי מגיע מהספרייה, כתבנית --- */
-await addFromLibrary('אי');
+await addFromLibrary('אי', /^אי\s*\d/);
 let onFloor = await islands();
 ok('adding the island template lands it in the room', onFloor.length === 1, JSON.stringify(onFloor[0]?.free));
 ok('and it did not take a place on the wall', onFloor[0]?.free?.zMm !== undefined);
 
 /* --- אפשר להוסיף עוד מופע, והתבנית אינה משתכפלת --- */
-await addFromLibrary('אי');
+await addFromLibrary('אי', /^אי\s*\d/);
 onFloor = await islands();
 ok('a second instance can be added', onFloor.length === 2, String(onFloor.length));
 const templates = await page.evaluate(async () => {
