@@ -95,14 +95,11 @@ export const GLYPHS: GlyphDef[] = [
   { key: 'dishwasher', family: 'appliance', label: 'מדיח', appliance: true, standalone: true },
   { key: 'hood', family: 'appliance', label: 'קולט אדים', appliance: true, standalone: true },
   /*
-   * מיקרוגל וכיריים כמכשיר, ולא כארגז שנבנה סביבם.
-   *
-   * `hob` הקיים הוא ארגז הכיריים — גוף שנחתך, עם משטח וחיתוך —
-   * ולכן הוא אינו `standalone`, ואי אפשר לתאר בו את הכיריים
-   * עצמן. `cooktop` הוא המכשיר: לוח שמונח במשטח ונקנה שלם.
+   * מיקרוגל כמכשיר, ולא כארגז שנבנה סביבו. `hob` הקיים הוא
+   * *ארגז* הכיריים — גוף שנחתך, עם משטח וחיתוך — ולכן הוא אינו
+   * `standalone` ואינו מתאר את המכשיר.
    */
   { key: 'micro', family: 'appliance', label: 'מיקרוגל', appliance: true, standalone: true },
-  { key: 'cooktop', family: 'appliance', label: 'כיריים', appliance: true, standalone: true },
   { key: 'pantry', label: 'מזווה', shelves: true },
   { key: 'hang', label: 'תלייה' },
   { key: 'hangDouble', label: 'תלייה כפולה' },

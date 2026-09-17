@@ -1,6 +1,6 @@
 import { DRAWER, MATERIAL, drawerDepth } from '../../catalog/standards';
 import { glyphDef } from '../../catalog/glyphList';
-import { blindWidthMm, unitFronts, unitZones, zoneBands, zoneColumns, ZONE_LABELS } from '../../catalog/zones';
+import { blindSide, blindWidthMm, unitFronts, unitZones, zoneBands, zoneColumns, ZONE_LABELS } from '../../catalog/zones';
 import { carcassMm, frontThicknessMm, type BuildContext } from '../../catalog/saveGate';
 import { bodyHeightMm } from '../../db/types';
 import type { PlacedUnit } from '../../db/types';
@@ -146,6 +146,66 @@ export function interiorDims(u: PlacedUnit, ctx: BuildContext = {}): ClearSpan[]
       mm: f.toMm - f.fromMm,
       note: f.doors > 1 ? `${f.doors} דלתות` : undefined,
     });
+  }
+  return out;
+}
+
+/**
+ * תא פנימי אחד, במקום שהוא תופס על החזית.
+ *
+ * `interiorDims` נותנת רשימה לקריאה; זו נותנת גאומטריה לציור.
+ * שתיהן נגזרות מאותו מפרט — אותו עובי לוח, אותם אזורים, אותה
+ * פינה מתה — ולכן המספר שעל הציור והמספר שברשימה הם אותו מספר.
+ *
+ * המידות הן ביחס לארגז עצמו: `xMm` מתחילתו לאורך הקיר, ו-`yMm`
+ * מתחתיתו כלפי מעלה. המסך מוסיף את מיקום הארגז.
+ */
+export interface InteriorCell {
+  xMm: number;
+  yMm: number;
+  /** הרוחב הנקי בין הדפנות, או בין המחיצות בתא מחולק */
+  widthMm: number;
+  /** הגובה הנקי: גובה האזור פחות הלוח שמפריד אותו מהבא */
+  heightMm: number;
+}
+
+/**
+ * התאים הנקיים של ארגז, לציור על החזית.
+ *
+ * מכשיר שנקנה שלם ולוח בודד מוחזרים ריקים: אין להם פנים שנבנה
+ * כאן, ומידה פנימית עליהם הייתה המצאה.
+ */
+export function interiorCells(u: PlacedUnit, ctx: BuildContext = {}): InteriorCell[] {
+  const def = glyphDef(u.glyph);
+  if (def.standalone || def.noCarcass) return [];
+
+  const t = carcassMm(u, ctx);
+  const ft = frontThicknessMm(u, ctx);
+  const body = bodyHeightMm(u);
+  const socle = u.socleMm ?? 0;
+  const e = u.exposed ?? {};
+  const carcassW = u.widthMm - (e.start ? ft : 0) - (e.end ? ft : 0);
+  const blind = blindWidthMm({ ...u, widthMm: carcassW });
+  const innerW = Math.max(carcassW - 2 * t - blind, 0);
+  /* הפינה המתה יושבת בקצה החסום, ולכן הפנים מתחיל אחריה */
+  const startMm = (blindSide(u) === 'blindStart' ? blind : 0) + t;
+
+  const out: InteriorCell[] = [];
+  for (const { zone, top, bottom } of zoneBands(unitZones(u), body)) {
+    const clearH = clearHeight(bottom - top, t);
+    if (clearH <= 0) continue;
+    /* הגבהים בציור נמדדים מלמעלה; התא נמדד מתחתית הגוף */
+    const yMm = socle + (body - bottom);
+    const cols = zoneColumns(zone);
+    if (cols.length > 1) {
+      const share = (innerW - (cols.length - 1) * t) / cols.length;
+      if (share <= 0) continue;
+      for (let i = 0; i < cols.length; i += 1) {
+        out.push({ xMm: startMm + i * (share + t), yMm, widthMm: share, heightMm: clearH });
+      }
+    } else {
+      out.push({ xMm: startMm, yMm, widthMm: innerW, heightMm: clearH });
+    }
   }
   return out;
 }

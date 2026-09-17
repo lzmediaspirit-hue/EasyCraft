@@ -79,6 +79,19 @@ export function isContainer(glyph: string): boolean {
   return CONTAINERS.has(glyph);
 }
 
+/**
+ * פתיחת עורך הפנים גם למה שאינו ארון — זמנית.
+ *
+ * `isContainer` נשאר מה שהוא: הוא קובע *איך מצוירים* הפנים, ומכשיר
+ * שנקנה שלם או לוח בודד אינם נחתכים לאזורים בציור. מה שהוא קבע גם
+ * הוא — ולא היה צריך — הוא אם *מותר לגעת*, ולכן הבעלים לא הצליח
+ * לערוך מוצר קיים לקראת העלאת ספרייה חדשה.
+ *
+ * הדגל הזה מפריד בין השניים. הוא נועד לרדת אחרי שהספרייה תתעדכן:
+ * שורה אחת ל-`false` מחזירה את המצב הקודם, בלי לחפש מה השתנה.
+ */
+export const EDIT_ANY_INTERIOR = true;
+
 /** ערכי פתיחה סבירים לתוכן, לפי הסוג והגובה שיש לו. */
 export function contentDefaults(kind: ZoneKind, heightMm: number): ZoneContent {
   if (kind === 'shelves') return { kind, shelves: Math.max(autoShelves(heightMm), 1) };

@@ -16,6 +16,7 @@ import { axesFor, longPress, pickAxis } from './axisLock';
 import type { GesturePhase } from './gesture';
 import type { Axis } from './axisLock';
 import { blocked } from './collision';
+import { interiorCells } from './interior';
 import { rad, unitBox, wallShadow } from './placement';
 import type { CornerZones, PlanWall } from './plan';
 import { outOfSight } from './designView';
@@ -74,6 +75,8 @@ type Props = {
   finishHex: Record<string, string>;
   /** מצב מדידה פעיל, והציר שנמדד */
   measure?: MeasureAxis | null;
+  /** המידות הפנימיות הנקיות, מצוירות בתוך התאים של כל הארגזים */
+  interior?: boolean;
   /** רוחב אזורי הפינה בשני קצות הקיר, שנתפסים בידי הקיר השכן */
   corners?: CornerZones;
   /** קו מידה אנכי לגובה הקיר */
@@ -127,6 +130,7 @@ export function WallElevation({
   inside,
   finishHex,
   measure,
+  interior = false,
   corners,
   showHeight,
   rulerPair,
@@ -876,6 +880,48 @@ export function WallElevation({
         ? shown.map((u) => (
             <g key={`measure-${u.id}`}>
               {measureOverlay(u, measure, flip, stroke, fontSize)}
+            </g>
+          ))
+        : null}
+
+      {/*
+        המידות הפנימיות, בתוך התאים עצמם.
+
+        המספר יושב במקום שהוא מתאר — לא ברשימה לצד הציור — ולכן
+        אין צורך להתאים בעיניים בין "תא 2" לבין התא. מה שנמדד הוא
+        הנקי: אחרי הדפנות, אחרי המדף שמפריד, ואחרי הפינה המתה.
+      */}
+      {interior
+        ? shown.map((u) => (
+            <g key={`interior-${u.id}`} pointerEvents="none">
+              {interiorCells(u, { parts }).map((c, i) => (
+                <g key={i}>
+                  <rect
+                    x={u.xMm + c.xMm}
+                    y={flip(u.yMm + c.yMm + c.heightMm)}
+                    width={c.widthMm}
+                    height={c.heightMm}
+                    fill="none"
+                    stroke="#0d9488"
+                    strokeWidth={stroke}
+                    strokeDasharray={`${stroke * 6} ${stroke * 4}`}
+                  />
+                  {/* המידה נכתבת רק כשיש לה מקום להיקרא בו */}
+                  {c.widthMm > fontSize * 4 && c.heightMm > fontSize * 1.6 ? (
+                    <text
+                      x={u.xMm + c.xMm + c.widthMm / 2}
+                      y={flip(u.yMm + c.yMm + c.heightMm / 2) + fontSize * 0.35}
+                      textAnchor="middle"
+                      fontSize={fontSize * 0.9}
+                      fill="#0f766e"
+                      fontWeight="600"
+                      direction="ltr"
+                    >
+                      {`${cm(c.widthMm)}×${cm(c.heightMm)}`}
+                    </text>
+                  ) : null}
+                </g>
+              ))}
             </g>
           ))
         : null}

@@ -27,7 +27,6 @@ import { BulkWorkSheet } from './BulkWorkSheet';
 import { ProjectFinishesSheet } from './ProjectFinishesSheet';
 import { FlowIcon } from '../../ui/icons';
 import { DepthSheet } from './DepthSheet';
-import { InteriorSheet } from './InteriorSheet';
 import { PlanView } from './PlanView';
 import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
@@ -44,17 +43,8 @@ import { ConfirmSheet } from '../../ui/ConfirmSheet';
 import { history, useHistory } from './history';
 import { preview, usePreview, withPreview } from './preview';
 import type { GesturePhase } from './gesture';
-import { buildPlan, cornerDepth, cornerZones, isComplexRoom, planUnits } from './plan';
-import {
-  WARN_ORDER,
-  analyzeWall,
-  fillSpan,
-  nextFreeX,
-  openingWarnings,
-  worstLevel,
-} from './analysis';
-import type { WallWarning } from './analysis';
-import { WarningsSheet, warnLevelTone } from './WarningsSheet';
+import { buildPlan, cornerDepth, cornerZones, isComplexRoom } from './plan';
+import { analyzeWall, fillSpan, nextFreeX } from './analysis';
 import { finishesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { customersRepo } from '../customers/customersRepo';
 import { syncConsumption } from '../../materials/consumptionSync';
@@ -83,6 +73,8 @@ import { useMaterialsAndFinishes } from '../../materials/useMaterials';
  * `?? []` בתוך ה-JSX יוצר מערך חדש בכל ציור, וכל מי שמקבל אותו
  * מחשב הכול מחדש גם כששום דבר לא השתנה. קבוע אחד פותר את זה.
  */
+const NO_FLAGS = new Set<string>();
+
 const NO_UNITS: PlacedUnit[] = [];
 const NO_HEX: Record<string, string> = {};
 
@@ -107,7 +99,7 @@ export function DesignScreen({
 }) {
   /* איך מסתכלים על הקיר — שבעה מצבים שהם דבר אחד */
   const design = useDesignView();
-  const { iso, inside, measure, rulerPair, rulerAxis, statsOpen, roomStats } =
+  const { iso, inside, interior, measure, rulerPair, rulerAxis, statsOpen, roomStats } =
     design.view;
 
   const [panelRatio, setPanelRatio] = useState(() => {
@@ -336,56 +328,17 @@ export function DesignScreen({
     return () => clearTimeout(t);
   }, [keyAxis]);
 
-  /*
-   * ההתנגשות נמדדת על התיבות במרחב החדר ולא על סימון אזור הפינה:
-   * הפינה פתוחה לכל ארגז, והשאלה היחידה היא אם שני ארונות באמת
-   * תופסים את אותו מקום.
-   */
-  const clashing = useMemo(() => {
-    if (!wall) return [];
-    const seen = new Map<string, { id: string; name: string }>();
-    for (const b of planUnits(plan, allUnits ?? NO_UNITS)) {
-      if (!b.clash || b.unit.wallId !== wall.id) continue;
-      seen.set(b.unit.id, { id: b.unit.id, name: b.unit.name });
-    }
-    return [...seen.values()];
-  }, [plan, wall, allUnits]);
-  /*
-   * הארגזים של הקירות משני צדי הקיר הזה. פינה מתה נמדדת מולם:
-   * מה שחוסם את הדלת הוא עומק השורה הניצבת, ולא מה שנוגע בפינה.
-   */
-  const neighbourUnits = useMemo(() => {
-    const at = (i: number) =>
-      walls?.[i] ? (allUnits ?? NO_UNITS).filter((u) => u.wallId === walls[i].id) : NO_UNITS;
-    return { start: at(wallIndex - 1), end: at(wallIndex + 1) };
-  }, [walls, allUnits, wallIndex]);
   const analysis = useMemo(
-    () => (wall ? analyzeWall(wall, units, clashing, neighbourUnits) : null),
-    [wall, units, clashing, neighbourUnits],
+    () => (wall ? analyzeWall(wall, units) : null),
+    [wall, units],
   );
   /*
-   * בדיקת הפתיחה נעשית על החדר ולא על הקיר: דלת החדר יושבת בקיר
-   * אחד והארון שחוסם אותה עומד על השני. קיר בודד לעולם לא היה
-   * רואה את זה.
+   * אזהרות התכנון ירדו מהמסך לבקשת הבעלים — הכפתור, הרשימה
+   * והגיליון. הבדיקות הגאומטריות עצמן נשארו במקומן: שער השמירה
+   * עדיין מונע ארגז שאינו נכנס, והתכנון האוטומטי עדיין מדרג
+   * פריסה. מה שירד הוא ההצגה, לא הבדיקה.
    */
-  const warnings = useMemo(
-    () => [
-      ...(analysis?.warnings ?? []),
-      ...openingWarnings(allUnits ?? NO_UNITS, plan),
-    ],
-    [analysis, allUnits, plan],
-  );
-  const worst = worstLevel(warnings);
-  /*
-   * שני העצמים שהאזהרה מדברת עליהם, מודלקים יחד על הציור.
-   * בחירה מסמנת אחד; אזהרה היא יחס בין שניים, ולכן היא מדליקה
-   * את שניהם — מה שנפתח ומה שעומד בדרך.
-   */
-  const [flagged, setFlagged] = useState<WallWarning | null>(null);
-  const flaggedIds = useMemo(
-    () => new Set([...(flagged?.unitIds ?? []), ...(flagged?.featureIds ?? [])]),
-    [flagged],
-  );
+  const flaggedIds = NO_FLAGS;
   /*
    * המקור למחוונים: הקיר שעובדים עליו, או כל הקירות יחד. שניהם
    * נבנים מאותה בדיקה, ולכן אין סיכוי שהמספרים יסתרו זה את זה.
@@ -626,8 +579,6 @@ export function DesignScreen({
         onCenter={centerWall}
         onFit={() => setFitAt(Date.now())}
         onClearSelection={() => setSelectedId(null)}
-        warnCount={warnings.length}
-        warnTone={worst ? warnLevelTone(worst) : null}
         onShowHidden={showHidden}
       />
 
@@ -696,6 +647,8 @@ export function DesignScreen({
                   : undefined
               }
               onBulk={editable ? runBulk : undefined}
+              measure={measure}
+              rulerPair={rulerPair}
               inside={inside}
               finishHex={finishHex ?? NO_HEX}
               project={project}
@@ -728,6 +681,7 @@ export function DesignScreen({
             }}
             inside={inside}
             measure={measure}
+            interior={interior}
             corners={corners}
             finishHex={finishHex ?? NO_HEX}
             parts={parts ?? undefined}
@@ -868,7 +822,6 @@ export function DesignScreen({
             unitsRepo.setChoiceForProject(projectId, role, choice)
           }
           onEdit={() => setSheet('edit')}
-          onInterior={() => setSheet('interior')}
           onClose={() => setSelectedId(null)}
         />
         </div>
@@ -980,59 +933,6 @@ export function DesignScreen({
               </>
             )}
 
-            {/*
-              ההתראות אינן מחוון אלא בעיה, ולכן הן מחוץ למחווני הקיר
-              ומוצגות גם כשהם סגורים: מחוון אפשר לא לראות, שקע
-              שנחסם — לא.
-
-              התראה מצביעה על ארגז, ולכן היא כפתור: לוחצים, והארגז
-              נבחר ומודלק על הציור יחד עם מה שהאזהרה מדברת עליו —
-              במקום לחפש לפי השם מי מבין הארגזים הוא זה.
-
-              התראה היא עובדה על התכנון, ולא מידע של המנהל. היא
-              הייתה מוצגת למנהל בלבד, וכך תכנת שעבד על הקיר ונגר
-              שבנה לפיו לא ראו שארגז חורג מהחדר — מי שלא רשאי
-              לשנות עדיין צריך לדעת.
-
-              והיא נשארת כאן, ככתב, ולא רק כאייקון בכותרת. האייקון
-              הוא מה שנשאר על המסך גם כשלוח העריכה פתוח ומכסה את
-              הרשימה; הרשימה היא מה שנקרא בלי ללחוץ. נגר שצריך
-              ללחוץ כדי לדעת ששקע נחסם יגלה את זה בהתקנה.
-            */}
-            {warnings.length > 0 && (
-              <ul className="mt-3 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                {/* מהחמור לקל: מה שלא ייבנה קודם למה שחסר בו נתון */}
-                {[...warnings]
-                  .sort((a, b) => WARN_ORDER.indexOf(a.level) - WARN_ORDER.indexOf(b.level))
-                  .map((w) => {
-                    /* המפתח כולל את העצמים: שני ארגזים באותו שם מייצרים
-                       בדיוק את אותו משפט, ובלעדיהם השני נעלם */
-                    const key = `${w.text}|${w.unitIds.join(',')}|${(w.featureIds ?? []).join(',')}`;
-                    const dot = (
-                      <span className={`mt-1.5 size-2 shrink-0 rounded-full ${warnLevelTone(w.level)}`} />
-                    );
-                    return w.unitIds.length > 0 || (w.featureIds ?? []).length > 0 ? (
-                      <li key={key}>
-                        <button
-                          onClick={() => {
-                            setFlagged(w);
-                            if (w.unitIds.length) setSelectedId(w.unitIds[0]);
-                          }}
-                          className="flex w-full items-start gap-1.5 rounded-lg px-1 py-0.5 text-start text-sm leading-snug text-amber-900 underline decoration-amber-300 underline-offset-2 transition-colors hover:bg-amber-100"
-                        >
-                          {dot}
-                          {w.text}
-                        </button>
-                      </li>
-                    ) : (
-                      <li key={key} className="flex items-start gap-1.5 px-1 text-sm leading-snug text-amber-900">
-                        {dot}
-                        {w.text}
-                      </li>
-                    );
-                  })}
-              </ul>
-            )}
 
             {statsOpen && units.length === 0 && (
               <p className="mt-6 text-center text-[15px] text-stone-500">
@@ -1176,21 +1076,6 @@ export function DesignScreen({
         />
       )}
 
-      {/*
-        הבדיקה אינה מחוון ואינה העדפת תצוגה, ולכן היא אינה מאחורי
-        מתג ואינה תלויה בתפקיד: תכנת שעובד על הקיר ונגר שבונה
-        לפיו צריכים לדעת שדלת לא תיפתח, גם כשאינם רשאים לשנות.
-      */}
-      {sheet === 'warnings' && (
-        <WarningsSheet
-          warnings={warnings}
-          onPick={(w) => {
-            setFlagged(w);
-            if (w.unitIds.length) setSelectedId(w.unitIds[0]);
-          }}
-          onClose={closeSheet}
-        />
-      )}
 
       {sheet === 'wallTools' && (
         <WallToolsSheet
@@ -1237,13 +1122,6 @@ export function DesignScreen({
         </Sheet>
       )}
 
-      {sheet === 'interior' && selected && (
-        <InteriorSheet
-          unit={selected}
-          build={{ parts: parts ?? undefined, project: project ?? undefined }}
-          onClose={closeSheet}
-        />
-      )}
 
       {sheet === 'depth' && (
         <DepthSheet

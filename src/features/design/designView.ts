@@ -19,6 +19,14 @@ export interface DesignView {
   inside: boolean;
   /** מידות על כל הארגזים, בציר שנבחר */
   measure: MeasureAxis | null;
+  /**
+   * המידות הפנימיות הנקיות, על כל הארגזים יחד.
+   *
+   * זו הייתה שאלה על ארגז אחד — כפתור בכותרת לוח העריכה, שפתח
+   * גיליון. נגר שמודד קיר שואל אותה על כולם בבת אחת, ולכן היא
+   * מתג תצוגה ולא מסך: התאים מצוירים על החזית עצמה.
+   */
+  interior: boolean;
   /** שני קצוות שנבחרו למדידת המרווח ביניהם */
   rulerPair: string[] | null;
   /** הציר שהסרגל מודד בו */
@@ -59,6 +67,7 @@ const INITIAL: DesignView = {
   iso: false,
   inside: false,
   measure: null,
+  interior: false,
   rulerPair: null,
   rulerAxis: 'w',
   snap: true,
@@ -97,6 +106,7 @@ export function useDesignView() {
       key:
         | 'iso'
         | 'inside'
+        | 'interior'
         | 'snap'
         | 'statsOpen'
         | 'wallsOpen'

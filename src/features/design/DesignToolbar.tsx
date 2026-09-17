@@ -27,7 +27,6 @@ import {
   UndoIcon,
   ToolsIcon,
   WallsIcon,
-  WarnIcon,
 } from '../../ui/icons';
 import { QuickCalcButton } from '../../ui/QuickCalc';
 import { ScreenHeader } from '../../ui/ScreenHeader';
@@ -65,8 +64,6 @@ export function DesignToolbar({
   onCenter,
   onFit,
   onClearSelection,
-  warnCount,
-  warnTone,
   onShowHidden,
 }: {
   project: Project;
@@ -91,12 +88,10 @@ export function DesignToolbar({
   onFit: () => void;
   onClearSelection: () => void;
   /** כמה בעיות יש בחדר, ומה החמורה שבהן — לאייקון הבדיקה */
-  warnCount: number;
-  warnTone: string | null;
   /** מחזיר לתצוגה את כל הארגזים שהוסתרו בפרויקט */
   onShowHidden: () => void;
 }) {
-  const { iso, inside, measure, rulerPair, rulerAxis, snap, wallsOpen, toolsOpen } =
+  const { iso, inside, interior, measure, rulerPair, rulerAxis, snap, wallsOpen, toolsOpen } =
     design.view;
   /*
    * המצב שרואים בו את הקיר — אחד משלושה, ולא מתג שמתאר את ההווה
@@ -137,31 +132,6 @@ export function DesignToolbar({
               className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-200/70 hover:text-oak-700 disabled:opacity-40"
             >
               <EyeIcon />
-            </button>
-          )}
-          {/*
-            הבדיקה — כאן, ולא בלוח הנתונים.
-
-            היא ישבה מתחת למחוונים, ולכן נעלמה ברגע שנבחר ארגז:
-            בדיוק כשהמשתמש עורך את מה שיצר את הבעיה. אייקון בכותרת
-            נשאר על המסך תמיד, נושא את המספר ואת צבע החומרה, ואינו
-            תלוי בתפקיד — תכנת ונגר רואים אותו כמו המנהל.
-          */}
-          {warnCount > 0 && (
-            <button
-              onClick={() => onSheet('warnings')}
-              aria-label={`בדיקת התכנון — ${warnCount} ממצאים`}
-              title="מה לא ייבנה ומה לא ייפתח"
-              className="relative rounded-full p-2 text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-stone-800"
-            >
-              <WarnIcon />
-              <span
-                className={`num absolute top-0.5 end-0.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold text-white ${
-                  warnTone ?? 'bg-stone-400'
-                }`}
-              >
-                {warnCount}
-              </span>
             </button>
           )}
           {/* סרגלי הכלים — שלוש שורות שאפשר לקפל כשלא עובדים */}
@@ -230,6 +200,40 @@ export function DesignToolbar({
           title="מרחק בין ארגז, חלון, דלת, עמוד או קצה הקיר"
         />
         {/*
+          לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
+          עומק וכיבוי. קודם היה בורר ציר בשורה נפרדת שגזל מקום
+          מהציור, ובטלפון הוא נחתך.
+        */}
+        <Tool
+          active={measure !== null}
+          onClick={design.cycleMeasure}
+          icon={<DimensionsIcon className="size-4" />}
+          label={
+            measure === null
+              ? 'מדידה'
+              : measure === 'w'
+                ? 'רוחב'
+                : measure === 'h'
+                  ? 'גובה'
+                  : 'עומק'
+          }
+          title="לחיצה נוספת מחליפה ציר"
+        />
+        {/*
+          המידות הפנימיות — של כל הארגזים יחד, על הציור.
+
+          זה היה כפתור בכותרת לוח העריכה, שפתח גיליון לארגז אחד:
+          מי שמדד קיר שלם פתח אותו שמונה פעמים. כאן זה מתג תצוגה,
+          והמספרים יושבים בתוך התאים עצמם.
+        */}
+        <Tool
+          active={interior}
+          onClick={() => design.toggle('interior')}
+          icon={<RulerIcon className="size-4" />}
+          label="מידות פנימיות"
+          title="הרוחב והגובה הנקיים בכל תא, בכל הארגזים"
+        />
+        {/*
           הציר נבחר לפני המדידה ולא נגזר ממנה: שני ארגזים זה על זה
           אפשר למדוד גם לרוחב וגם לגובה, ורק הנגר יודע מה הוא שאל.
         */}
@@ -248,12 +252,6 @@ export function DesignToolbar({
               {ax === 'w' ? 'רוחב' : 'גובה'}
             </button>
           ))}
-        <Tool
-          active={sheet === 'nesting'}
-          onClick={() => onSheet('nesting')}
-          icon={<NestIcon className="size-4" />}
-          label="ניסור"
-        />
         {editable && (
           <Tool
             active={sheet === 'depth'}
@@ -347,26 +345,6 @@ export function DesignToolbar({
             title="החזרת כל הארגזים המוסתרים לתצוגה"
           />
         )}
-        {/*
-          לחיצות חוזרות על אותו כפתור מחליפות ציר: רוחב, גובה,
-          עומק וכיבוי. קודם היה בורר ציר בשורה נפרדת שגזל מקום
-          מהציור, ובטלפון הוא נחתך.
-        */}
-        <Tool
-          active={measure !== null}
-          onClick={design.cycleMeasure}
-          icon={<DimensionsIcon className="size-4" />}
-          label={
-            measure === null
-              ? 'מדידה'
-              : measure === 'w'
-                ? 'רוחב'
-                : measure === 'h'
-                  ? 'גובה'
-                  : 'עומק'
-          }
-          title="לחיצה נוספת מחליפה ציר"
-        />
       </div>
 
       {/*
@@ -434,6 +412,12 @@ export function DesignToolbar({
           דגימת לוח ולא תווית מחיר: התווית אמרה "מחיר" למי שראה
           אותה, וזו בדיוק הפעולה השנייה בסרגל.
         */}
+        <Tool
+          active={sheet === 'nesting'}
+          onClick={() => onSheet('nesting')}
+          icon={<NestIcon className="size-4" />}
+          label="ניסור"
+        />
         <Tool
           active={sheet === 'finishes'}
           onClick={() => onSheet('finishes')}

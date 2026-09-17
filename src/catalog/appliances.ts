@@ -172,9 +172,8 @@ const GLYPH_TYPE: Record<string, ApplianceType> = {
   dishwasher: 'dishwasher',
   hood: 'hood',
   hob: 'hob',
-  /* המכשירים עצמם, להבדיל מהארגז שנבנה סביבם */
+  /* המכשיר עצמו, להבדיל מהארגז שנבנה סביבו */
   micro: 'micro',
-  cooktop: 'hob',
 };
 
 /**

@@ -274,18 +274,6 @@ function details(c: Ctx) {
       ];
     }
 
-    case 'cooktop': {
-      /* לוח שמונח במשטח: ארבעה מבערים, ובלי גוף שמתחתיו */
-      const r = Math.min(w, h) * 0.17;
-      return [
-        <rect key="plate" x={w * 0.06} y={h * 0.14} width={w * 0.88} height={h * 0.72}
-          rx={w * 0.03} strokeWidth={t} />,
-        ...[[0.3, 0.36], [0.7, 0.36], [0.3, 0.68], [0.7, 0.68]].map(([fx, fy], i) => (
-          <circle key={`b${i}`} cx={w * fx} cy={h * fy} r={r} strokeWidth={t} />
-        )),
-      ];
-    }
-
     case 'hood':
       return [
         <path key="p" d={`M ${w * 0.24} ${h} L ${w * 0.34} ${h * 0.3} L ${w * 0.66} ${h * 0.3} L ${w * 0.76} ${h} Z`}

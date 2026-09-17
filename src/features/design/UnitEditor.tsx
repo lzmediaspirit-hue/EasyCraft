@@ -5,7 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
 import { constructionCaps, floorToggle } from '../../catalog/construction';
-import { MAX_BODY_MM, doorCells, isContainer, unitCells } from '../../catalog/zones';
+import { EDIT_ANY_INTERIOR, MAX_BODY_MM, doorCells, isContainer, unitCells } from '../../catalog/zones';
 import { MATERIAL, drawerDepth } from '../../catalog/standards';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
 import { partChoice, partThicknessMm } from '../../costing/boards';
@@ -18,7 +18,7 @@ import { HardwareRows } from './HardwareRows';
 import { SaveToLibrarySheet } from './SaveToLibrarySheet';
 import { cm, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
-import { BookmarkIcon, CloseIcon, PencilIcon, RulerIcon } from '../../ui/icons';
+import { BookmarkIcon, CloseIcon, PencilIcon } from '../../ui/icons';
 import { BACK_KINDS, DRAWER_BOXES, RAIL_WIDTH_MM, bodyHeightMm, slabThicknessMm } from '../../db/types';
 import type {
   ExposedSides,
@@ -88,7 +88,6 @@ export function UnitEditor({
   onChange,
   onApplyChoiceAll,
   onEdit,
-  onInterior,
   onClose,
 }: {
   unit: PlacedUnit;
@@ -114,7 +113,6 @@ export function UnitEditor({
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
   onEdit: () => void;
   /** פותח את מידות הפנים של הארגז הנבחר */
-  onInterior: () => void;
   onClose: () => void;
 }) {
   const [axis, setAxis] = useState<Axis>('w');
@@ -192,7 +190,8 @@ export function UnitEditor({
   const led = unit.led ?? [];
   const rails = unit.rails ?? {};
   const backKind = unit.backKind ?? 'thin';
-  const container = isContainer(unit.glyph);
+  /* הציור עדיין מבחין בין ארון למכשיר; העריכה — זמנית — לא */
+  const container = EDIT_ANY_INTERIOR || isContainer(unit.glyph);
   /*
    * לארגז יש חזיתות אם יש לו דלתות או מגירות חיצוניות. ארגז פתוח
    * או נישה למכשיר לא צריכים גוון חזיתות, ולכן השורה לא מוצגת.
@@ -292,25 +291,6 @@ export function UnitEditor({
           className="touch-target grid place-items-center rounded-full p-2 text-stone-400 transition-colors hover:bg-oak-50 hover:text-oak-700"
         >
           <BookmarkIcon className="size-5" />
-        </button>
-        {/*
-          המידות הנקיות שבפנים: מה נכנס לתא, לא מה מידות הארגז.
-          שאלה שנגר שואל לפני כל הזמנה של סל, מגירה או מדף, ועד
-          כאן היא נענתה בחשבון בראש.
-
-          עם מילה, ולא אייקון בלבד. סרגל לבדו בשורה של ארבעה
-          אייקונים אינו נמצא — ובמסך הזה כבר יש "סרגל", שהוא כלי
-          אחר לגמרי: מדידת מרחק בין ארגזים. שני סרגלים בלי מילה
-          הם שני כפתורים שנראים אותו דבר ועושים דברים שונים.
-        */}
-        <button
-          onClick={onInterior}
-          aria-label="מידות פנימיות"
-          title="המידות הנקיות בפנים — מה שנכנס לתא"
-          className="touch-target flex items-center gap-1 rounded-full px-2.5 py-2 text-xs font-medium text-stone-500 transition-colors hover:bg-oak-50 hover:text-oak-700"
-        >
-          <RulerIcon className="size-5" />
-          <span className="whitespace-nowrap">מידות פנימיות</span>
         </button>
         <button
           onClick={onEdit}

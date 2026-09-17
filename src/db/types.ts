@@ -510,15 +510,6 @@ export interface PlacedUnit extends Entity {
   /** מנגנון פתיחת החזית */
   opening?: OpeningMech;
   /**
-   * הצד שהצירים יושבים בו, כשיש דלת אחת.
-   *
-   * הדלת נפתחת אל הצד הנגדי לצירים, ולכן זה מה שקובע לאן היא
-   * סוחפת. לשתי דלתות אין שאלה — הן נפתחות לשני הצדדים — ולדלת
-   * אחת בלי הנתון הזה אין דרך לדעת, וזה מדווח כנתון חסר ולא
-   * מנוחש.
-   */
-  hingeSide?: WallSide;
-  /**
    * מרווח הפתיחה שהיצרן נוקב בו, במ"מ.
    *
    * מגירה נשלפת כאורך המסילה, ודלת תנור נופלת קדימה כגובהה. אלה
@@ -785,8 +776,7 @@ export interface CatalogItem extends Entity {
   shelves?: number;
   zones?: Zone[];
   opening?: OpeningMech;
-  /** צד הצירים ומרווח הפתיחה — ראה `PlacedUnit` */
-  hingeSide?: WallSide;
+  /** מרווח הפתיחה — ראה `PlacedUnit` */
   openClearanceMm?: number;
   corner?: CornerKind;
   blindMm?: number;
@@ -897,7 +887,6 @@ export const REUSABLE_FIELDS = [
   'shelves',
   'zones',
   'opening',
-  'hingeSide',
   'openClearanceMm',
   'corner',
   'blindMm',

@@ -10,6 +10,8 @@ import { axesFor, axisLabel, longPress, pickAxis } from './axisLock';
 import type { Axis } from './axisLock';
 import type { GesturePhase } from './gesture';
 import { alongWallMm } from '../../db/types';
+import type { MeasureAxis } from './WallElevation';
+import { cm } from '../../ui/units';
 import type { PartSettings } from '../../costing/boards';
 
 import type { PlacedUnit, Project, Wall } from '../../db/types';
@@ -46,6 +48,8 @@ export function WallIso({
   onEdit,
   onBulk,
   inside,
+  measure = null,
+  rulerPair = null,
   finishHex,
   present = false,
   project,
@@ -104,6 +108,16 @@ export function WallIso({
   onBulk?: (ids: string[], action: 'delete' | 'hide' | 'library') => void;
   /** חזיתות מוסתרות — רואים את הגוף והמדפים */
   inside: boolean;
+  /**
+   * מידות הארגזים גם כאן, ולא רק בציור השטוח.
+   *
+   * נגר שמסתובב בחדר בתלת־ממד שואל את אותה שאלה ששאל על החזית —
+   * "כמה הארגז הזה" — ועד כאן היה צריך לחזור לדו־ממד בשבילה.
+   * הציר הוא אותו ציר שנבחר שם, ולכן המספר זהה בשתי התצוגות.
+   */
+  measure?: MeasureAxis | null;
+  /** הסרגל: שני הארגזים שנבחרו, והמרחק ביניהם */
+  rulerPair?: string[] | null;
   /** צבע התצוגה לכל גוון, לפי מזהה */
   finishHex: Record<string, string>;
   /**
@@ -998,6 +1012,102 @@ export function WallIso({
           })}
         </g>
       )}
+
+      {/*
+        מידות על הציור התלת־ממדי.
+
+        המספר יושב על תיבת המסך של הארגז — מה שהוא באמת תופס בעין
+        אחרי ההיטל — ולא על מידה שחושבה מחדש. הציר הוא הציר שנבחר
+        בסרגל הכלים, ולכן אותו ארגז מראה אותו מספר בשתי התצוגות.
+      */}
+      {measure && (
+        <g pointerEvents="none">
+          {units.filter((u) => !outOfSight(u)).map((u) => {
+            const b = screenBox(u.id);
+            if (!b) return null;
+            const mm =
+              measure === 'w' ? alongWallMm(u) : measure === 'h' ? u.heightMm : u.depthMm;
+            const w = (b.x1 - b.x0) * 0.8;
+            const h = stroke * 26;
+            const cx = (b.x0 + b.x1) / 2;
+            const cy = (b.y0 + b.y1) / 2;
+            /* תיבה קטנה מכדי לקרוא בה מספר אינה מקבלת אותו */
+            if (w < stroke * 40) return null;
+            return (
+              <g key={`m-${u.id}`}>
+                <rect
+                  x={cx - w / 2}
+                  y={cy - h / 2}
+                  width={w}
+                  height={h}
+                  rx={h * 0.28}
+                  fill="#ffffff"
+                  fillOpacity={0.88}
+                  stroke="#0f766e"
+                  strokeWidth={stroke * 0.9}
+                />
+                <text
+                  x={cx}
+                  y={cy + h * 0.32}
+                  textAnchor="middle"
+                  fontSize={h * 0.62}
+                  fill="#0f766e"
+                  fontWeight="600"
+                  direction="ltr"
+                >
+                  {cm(mm)}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+      )}
+
+      {/*
+        הסרגל: קו בין שני הארגזים שנבחרו, והמרחק ביניהם.
+
+        בתלת־ממד אין "לאורך הקיר" אחד — שני הארגזים יכולים לעמוד
+        על קירות שונים — ולכן מה שמוצג הוא המרחק בין מרכזיהם על
+        המסך, עם המידה האמיתית שנמדדה. הקו הוא מה שמראה *על מה*
+        מדובר; המספר הוא מה שנמדד.
+      */}
+      {rulerPair && rulerPair.length === 2 && (() => {
+        const [a, b] = rulerPair.map((id) => screenBox(id));
+        if (!a || !b) return null;
+        const p0 = { x: (a.x0 + a.x1) / 2, y: (a.y0 + a.y1) / 2 };
+        const p1 = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
+        const ua = units.find((u) => u.id === rulerPair[0]);
+        const ub = units.find((u) => u.id === rulerPair[1]);
+        if (!ua || !ub) return null;
+        /* המרחק הנקי בין הקצוות, באותו חשבון של הציור השטוח */
+        const lo = Math.min(ua.xMm + alongWallMm(ua), ub.xMm + alongWallMm(ub));
+        const hi = Math.max(ua.xMm, ub.xMm);
+        const gap = Math.max(hi - lo, 0);
+        return (
+          <g pointerEvents="none">
+            <line
+              x1={p0.x}
+              y1={p0.y}
+              x2={p1.x}
+              y2={p1.y}
+              stroke="#0f766e"
+              strokeWidth={stroke * 1.4}
+              strokeDasharray={`${stroke * 6} ${stroke * 4}`}
+            />
+            <text
+              x={(p0.x + p1.x) / 2}
+              y={(p0.y + p1.y) / 2 - stroke * 8}
+              textAnchor="middle"
+              fontSize={stroke * 18}
+              fill="#0f766e"
+              fontWeight="700"
+              direction="ltr"
+            >
+              {cm(gap)}
+            </text>
+          </g>
+        );
+      })()}
     </svg>
 
     {/*
