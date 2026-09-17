@@ -50,15 +50,27 @@ jobs:
       # בלי `--with-deps`: הוא מריץ apt, ובמכונה של GitHub הספריות
       # כבר שם — בריצה הראשונה הוא נתקע שם עשרים וחמש דקות
       - run: npx playwright install chromium
-      # שרת הפיתוח והבדיקות באותו שלב: תהליך רקע אינו שורד מעבר שלב
+      # שרת הפיתוח והבדיקות באותו שלב: תהליך רקע אינו שורד מעבר שלב.
+      #
+      # והפלט שלו מנותב לקובץ ונסגר. תהליך רקע שיורש את ה-stdout של
+      # השלב מחזיק את צינור הלוג פתוח, והמריץ ממתין לסגירתו — הבדיקות
+      # עברו, והשלב נשאר "רץ" עד לתקרת הזמן. זו לא הייתה תקיעה
+      # בבדיקות אלא בשורה הזאת.
       - name: בדיקות חוזה מול שרת פיתוח
         run: |
-          npm run dev &
+          npm run dev > /tmp/vite.log 2>&1 &
+          vite=$!
           for i in $(seq 1 60); do
             curl -sf -o /dev/null http://localhost:5173/ && break
             sleep 2
           done
-          npm run test:contract
+          # `bash -e` מפיל את השלב על הכישלון עצמו, ואז הלוג של
+          # השרת לא נקרא. התנאי שומר את הקוד כדי שיהיה מה לקרוא.
+          code=0
+          npm run test:contract || code=$?
+          kill "$vite" 2>/dev/null || true
+          [ "$code" -eq 0 ] || tail -40 /tmp/vite.log
+          exit "$code"
 
   build:
     needs: contract
