@@ -104,12 +104,20 @@ ok('a cabinet measures height in centimetres', rules.cabinetLimits.heightLabel =
 ok('a board measures thickness in millimetres', /עובי/.test(rules.shelfLimits.heightLabel) && rules.shelfLimits.heightInMm, JSON.stringify(rules.shelfLimits));
 ok('and it may be thinner than a cabinet', rules.shelfLimits.minHeightMm < 50, String(rules.shelfLimits.minHeightMm));
 
-ok('drawers become shelves under a door cabinet', rules.toDoors.kinds?.join() === 'shelves,shelves', JSON.stringify(rules.toDoors));
-ok('and the change is stated, not silent', /מדפים/.test(rules.toDoors.note ?? ''), String(rules.toDoors.note));
-ok('an open cabinet keeps shelves too', rules.toOpen.kinds?.join() === 'shelves,shelves', JSON.stringify(rules.toOpen));
+/*
+ * החלפת איור אינה המרה.
+ *
+ * גוף ארון הוא גוף ארון, והאיור הוא תמונה קטנה ברשימה: ארגז
+ * מגירות שקיבל איור של דלתות שומר את המגירות שלו. מה שבאמת מרוקן
+ * את הפנים הוא מעבר למוצר אחר — לוח בודד או מכשיר קנוי.
+ */
+ok('an icon change keeps the drawers', rules.toDoors.kinds === undefined, JSON.stringify(rules.toDoors));
+ok('and says nothing, because nothing changed', rules.toDoors.note === null, String(rules.toDoors.note));
+ok('an open icon keeps them too', rules.toOpen.kinds === undefined, JSON.stringify(rules.toOpen));
 ok('the same type converts nothing', rules.sameNote === null, String(rules.sameNote));
 ok('a single board has no inside at all', rules.toBoard.zones === 0, JSON.stringify(rules.toBoard));
-ok('columns inside a zone convert as well', rules.colKinds?.join() === 'shelves,shelves', JSON.stringify(rules.colKinds));
+ok('and it is stated, not silent', /פנים/.test(rules.toBoard.note ?? ''), String(rules.toBoard.note));
+ok('columns inside a zone are kept as well', rules.colKinds === undefined, JSON.stringify(rules.colKinds));
 
 /* ------------------------------------------------------------------ */
 /* המסך: R02 — עריכה מהירה                                             */
@@ -204,13 +212,15 @@ await page.waitForTimeout(700);
 await dlg().getByRole('button', { name: 'דלתות', exact: true }).first().click();
 await page.waitForTimeout(500);
 const convText = await dlg().innerText();
-ok('the form says the inside will change', /הומר|הומרו/.test(convText), convText.split('\n').find((l) => /הומר/.test(l)) ?? '');
+/* אין מה להודיע עליו: האיור הוא תמונה, והפנים נשאר */
+ok('the form promises no conversion', !/הומר|הומרו/.test(convText),
+  convText.split('\n').find((l) => /הומר/.test(l)) ?? '');
 await dlg().getByRole('button', { name: /עדכון הארגז/ }).click();
 await page.waitForTimeout(1100);
 
 const afterGlyph = await unit();
-ok('the type really changed', afterGlyph.glyph === 'doors', afterGlyph.glyph);
-ok('and the drawer zones did not survive it', !afterGlyph.zones?.some((z) => z.kind === 'drawers'), JSON.stringify(afterGlyph.zones?.map((z) => z.kind)));
+ok('the icon really changed', afterGlyph.glyph === 'doors', afterGlyph.glyph);
+ok('and the drawer zones survived it', afterGlyph.zones?.every((z) => z.kind === 'drawers'), JSON.stringify(afterGlyph.zones?.map((z) => z.kind)));
 
 const parts = await page.evaluate(async (id) => {
   const { db } = await import('/src/db/db.ts');
@@ -224,7 +234,7 @@ const parts = await page.evaluate(async (id) => {
     zero: list.filter((p) => p.widthMm <= 0 || p.heightMm <= 0).length,
   };
 }, before.id);
-ok('the cut list has no drawer parts left', parts.drawerParts === 0, String(parts.drawerParts));
+ok('and the cut list still holds them', parts.drawerParts > 0, String(parts.drawerParts));
 ok('and no part of zero size', parts.zero === 0, String(parts.zero));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' | '));

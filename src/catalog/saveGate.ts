@@ -1,5 +1,6 @@
 import { MAX_BOARD_MM, MIN_BOARD_MM, unitProblem } from './feasible';
 import { glyphDef } from './glyphList';
+import { constructionCaps } from './construction';
 import { MATERIAL } from './standards';
 import { partThicknessMm } from '../costing/boards';
 import type { PartSettings } from '../costing/boards';
@@ -145,7 +146,15 @@ export function convertZones(
   nextGlyph: string,
 ): Conversion {
   if (nextGlyph === u.glyph || !u.zones?.length) return { note: null };
-  const next = glyphDef(nextGlyph);
+  /*
+   * מה שהסוג החדש יודע לבנות — ולא מה שהאיור שלו מצייר.
+   *
+   * `glyphDef` כאן הפך החלפת איור להמרת תוכן: ארגז מגירות שקיבל
+   * איור של דלתות איבד את המגירות, כי `doors` אינו "מצייר" מגירות.
+   * גוף ארון הוא גוף ארון, ובו הכול נשאר; מה שבאמת מרוקן את הפנים
+   * הוא מעבר ללוח בודד או למכשיר קנוי, והוא נעצר למעלה.
+   */
+  const next = constructionCaps(nextGlyph);
   /* לוח בודד ומכשיר קנוי אינם מכילים תוכן: מה שהיה בפנים יורד */
   if (next.noCarcass || next.standalone) {
     return { zones: [], note: 'החלוקה הפנימית יורדת — למוצר הזה אין פנים.' };

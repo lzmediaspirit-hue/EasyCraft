@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { glyphDef } from '../../catalog/glyphList';
+import { constructionCaps } from '../../catalog/construction';
 import { MAX_BODY_MM, doorCells, isContainer, unitCells } from '../../catalog/zones';
 import { MATERIAL, drawerDepth } from '../../catalog/standards';
 import { finishesRepo, materialsRepo } from '../../materials/materialsRepo';
@@ -167,7 +168,8 @@ export function UnitEditor({
     onChange(patch);
   }
 
-  const caps = glyphDef(unit.glyph);
+  /* מה אפשר לבנות בארגז — ולא מה שהאיור שנבחר לו מצייר */
+  const caps = constructionCaps(unit.glyph);
   /* לוח בודד: מונח או עומד. ריק = ארגז אמיתי עם גוף */
   const flat = caps.noCarcass;
   const locked = unit.floorLocked ?? false;

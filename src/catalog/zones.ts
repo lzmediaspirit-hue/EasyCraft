@@ -1,6 +1,6 @@
 import { autoShelves } from './CabinetGlyph';
 import { clamp } from '../ui/units';
-import { glyphDef } from './glyphList';
+import { constructionCaps } from './construction';
 import type { CornerKind, PlacedUnit, Zone, ZoneColumn, ZoneContent, ZoneKind } from '../db/types';
 
 /** מה שצריך לדעת על ארגז כדי לחשב את הפינה המתה שלו. */
@@ -294,7 +294,7 @@ function derive(u: FlatSource): Zone[] {
    * ארון — מי שכן רוצה שם מדף יגדיר אותו, אבל הוא לא ייספר בחומרים
    * רק מפני שהצורה נראית כמו ארגז.
    */
-  const auto = glyphDef(u.glyph).shelves ? autoShelves(h) : 0;
+  const auto = constructionCaps(u.glyph).shelves ? autoShelves(h) : 0;
   const shelves = u.shelves ?? auto;
   return [
     {
