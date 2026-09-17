@@ -19,33 +19,37 @@ const ok = (name, cond, extra = '') =>
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ' — ' + extra : ''}`);
 const btn = (re) => page.getByRole('button', { name: re }).first();
 
-/** מעמיד שני ארגזים במידות שנתנו, ומחזיר כמה מהם סומנו כחודרים */
+/**
+ * מעמיד שני ארגזים במידות שנתנו, ומחזיר אם הם חודרים זה לזה.
+ *
+ * קודם זה נבדק דרך הטקסט "חודר לתוך ארון אחר" שהופיע על המסך.
+ * אזהרות התכנון ירדו מהממשק לבקשת הבעלים, והבדיקה הזאת מעולם לא
+ * הייתה על האזהרה אלא על החוזה שמתחתיה — ולכן היא שואלת אותו
+ * ישירות. זו גם בדיקה טובה יותר: היא אינה תלויה בניסוח.
+ *
+ * מה שנבדק הוא בדיוק מה שחוסם הנחה בגרירה ובשמירה: חפיפה שאינה
+ * הכלה. ארגז שנכנס *כולו* לתוך שני — מכשיר בתוך עמודה — הוא
+ * הנחה לגיטימית, ושניים שנוגעים בדיוק אינם חופפים.
+ */
 async function place(a, b) {
-  await page.evaluate(async ([pa, pb]) => {
-    const req = indexedDB.open('easycraft');
-    const dbh = await new Promise((res) => (req.onsuccess = () => res(req.result)));
-    const tx = dbh.transaction('units', 'readwrite');
-    const st = tx.objectStore('units');
-    const all = await new Promise((res) => {
-      const g = st.getAll();
-      g.onsuccess = () => res(g.result);
+  return page.evaluate(async ([pa, pb]) => {
+    const v = '?v=' + Date.now();
+    const { unitsClash } = await import('/src/features/design/collision.ts' + v);
+    const { solidBox } = await import('/src/features/design/placement.ts' + v);
+    const { buildPlan } = await import('/src/features/design/plan.ts' + v);
+    const wall = { id: 'w1', name: 'קיר', lengthMm: 4000, heightMm: 2600, features: [] };
+    const plan = buildPlan([wall], []);
+    const mk = (p, id) => ({
+      id, wallId: 'w1', projectId: 'p', name: id, glyph: 'doors', doors: 2,
+      level: 'floor', socleMm: 0, counterMm: 0, rotationDeg: 0, ...p,
     });
-    const base = all.find((u) => !u.id.endsWith('-b')) ?? all[0];
-    const one = { ...base, ...pa, free: undefined, rotationDeg: 0 };
-    const two = { ...base, id: base.id + '-b', ...pb, free: undefined, rotationDeg: 0 };
-    for (const u of all) if (u.id !== base.id) st.delete(u.id);
-    st.put(one);
-    st.put(two);
-    await new Promise((res) => (tx.oncomplete = res));
-    dbh.close();
+    const one = mk(pa, 'a');
+    const two = mk(pb, 'b');
+    const ba = solidBox(one, plan);
+    const bb = solidBox(two, plan);
+    if (!ba || !bb) return false;
+    return unitsClash({ unit: one, box: ba }, { unit: two, box: bb });
   }, [a, b]);
-  await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForTimeout(1400);
-  await btn(/בדיקה/).click();
-  await page.waitForTimeout(800);
-  await page.getByRole('button', { name: /מטבח/ }).first().click();
-  await page.waitForTimeout(1300);
-  return (await page.innerText('body')).includes('חודר לתוך ארון אחר');
 }
 
 await setup(page);
@@ -64,7 +68,14 @@ ok(
 await page.screenshot({ path: SP + 'L63-1-stacked.png' });
 
 /* --- ארגז שנכנס כולו לתוך השני: מכשיר בתוך עמודה --- */
-const tall = { xMm: 0, yMm: 0, widthMm: 600, heightMm: 2000, depthMm: 580 };
+/*
+ * הכלה דורשת חלל מוצהר, ולא רק "נכנס במידות": זו הדרישה שנקבעה
+ * ב-A06 — עמודה שמצהירה על נישה מכילה מכשיר, וארון מדפים מלא לא.
+ */
+const tall = {
+  xMm: 0, yMm: 0, widthMm: 600, heightMm: 2000, depthMm: 580,
+  zones: [{ id: 'z', heightMm: 2000, kind: 'empty' }],
+};
 const oven = { xMm: 20, yMm: 800, widthMm: 560, heightMm: 590, depthMm: 560 };
 ok('an appliance inside a tall unit is fine', !(await place(tall, oven)));
 await page.screenshot({ path: SP + 'L63-2-nested.png' });

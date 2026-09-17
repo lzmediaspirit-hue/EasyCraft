@@ -231,7 +231,7 @@ export function DesignToolbar({
           onClick={() => design.toggle('interior')}
           icon={<RulerIcon className="size-4" />}
           label="מידות פנימיות"
-          title="הרוחב והגובה הנקיים בכל תא, בכל הארגזים"
+          title="המידות הנקיות בכל תא, בכל הארגזים"
         />
         {/*
           הציר נבחר לפני המדידה ולא נגזר ממנה: שני ארגזים זה על זה
