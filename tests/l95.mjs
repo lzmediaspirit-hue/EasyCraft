@@ -73,15 +73,54 @@ for (const p of plans.perProposal) {
 }
 
 /* ---------- בחירה מניחה בפועל ---------- */
+/*
+ * ההשוואה היא מול ההצעה עצמה, ולא מול "נכנס משהו".
+ *
+ * קודם נקרא המסד אחרי 1500 מ״ש קבועות, והתנאי היה `count > 0`:
+ * קריאה באמצע ההנחה מצאה שישה ארגזים ודיווחה הצלחה. עכשיו
+ * ההמתנה היא לסימון "מוצג" — מה שהמסך אומר כשסיים — והבדיקה
+ * משווה מספר, קירות ומיקומים מדויקים מול ההצעה שנבחרה.
+ */
+const picked = plans.perProposal[0];
+const wanted = await page.evaluate(async () => {
+  const v = '?v=' + Date.now();
+  const { planKitchen, layoutFor } = await import('/src/features/design/autoPlan.ts' + v);
+  const { buildPlan } = await import('/src/features/design/plan.ts' + v);
+  const { wallsRepo } = await import('/src/features/projects/projectsRepo.ts' + v);
+  const { db } = await import('/src/db/db.ts' + v);
+  const proj = (await db.projects.toArray())[0];
+  const walls = await wallsRepo.listForProject(proj.id);
+  const plan = buildPlan(walls, []);
+  if (!layoutFor(plan)) return null;
+  const props = planKitchen({
+    walls, plan,
+    appliances: { fridge: true, oven: true, hob: true, microwave: false, dishwasher: true, hood: true },
+    seating: false, finish: 'standard',
+  });
+  const p = props[0];
+  return {
+    boxes: p.units.length,
+    at: p.units.map((u) => `${u.wallId}|${u.xMm}|${u.widthMm}`).sort(),
+  };
+});
+
 await cards.first().click();
-await page.waitForTimeout(1500);
+/* "מוצג" הוא מה שהמסך אומר כשההנחה הסתיימה — ולא זמן שעבר */
+await dlg().getByText('מוצג').first().waitFor({ state: 'visible', timeout: 20000 });
 const placed = await page.evaluate(async () => {
   const { db } = await import('/src/db/db.ts?v=' + Date.now());
   const us = await db.units.toArray();
-  return { count: us.length, walls: new Set(us.map((u) => u.wallId)).size };
+  return {
+    count: us.length,
+    walls: new Set(us.map((u) => u.wallId)).size,
+    at: us.map((u) => `${u.wallId}|${u.xMm}|${u.widthMm}`).sort(),
+  };
 });
-ok('ההצעה הונחה', placed.count > 0, JSON.stringify(placed));
-ok('הארגזים על כל הקירות', placed.walls === 3, JSON.stringify(placed));
+ok('ההצעה הונחה במלואה', !!wanted && placed.count === wanted.boxes,
+  `${placed.count} מול ${wanted?.boxes}`);
+ok('ובדיוק באותם מקומות', !!wanted && placed.at.join(';') === wanted.at.join(';'),
+  `${placed.at.length} מיקומים`);
+ok('הארגזים על כל הקירות', placed.walls === 3, JSON.stringify({ walls: placed.walls }));
 await page.screenshot({ path: SP + 'L95-2-applied.png' });
 
 console.log(`\n${pass} pass, ${fail} fail`);

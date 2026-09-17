@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { roomsRepo } from '../../catalog/roomsRepo';
-import { CabinetThumbnail, cabinetSize } from '../../catalog/CabinetThumbnail';
+import { CabinetThumbnail, ProductionGap, cabinetSize } from '../../catalog/CabinetThumbnail';
 import { GROUP_LABELS } from '../../catalog/rooms';
 import { cabinetNameKey } from '../../catalog/names';
 import type { CatalogItem, CatalogGroup } from '../../db/types';
@@ -88,6 +88,7 @@ export function DesktopLibrary({
             <CabinetThumbnail item={item} className="h-14 w-full text-stone-500" />
             <span className="text-[11px] leading-tight font-medium text-stone-800">{item.name}</span>
             <span className="num text-[10px] text-stone-400">{cabinetSize(item)}</span>
+            <ProductionGap item={item} className="w-full" />
           </button>
         ))}
       </div>

@@ -32,6 +32,17 @@ export type ShippedFinish = Omit<Finish, 'createdAt' | 'updatedAt' | 'workshopId
  * שהומצא כאן. `l111` סופרת מהקוד ולא ממספר כתוב, ו-`l146` מאמתת
  * את ההתאמה מול הגיליון: 76 מקוריים, שלוש הסרות, ותוספת אחת
  * מאושרת.
+ *
+ * שלושה גבהי התקנה שאינם מהגיליון, ומאושרים במפורש:
+ *
+ *   EC-047 "ארון לקולט אדים"  0 → 1500 מ״מ
+ *   EC-075 "ארון תצוגה עליון"  0 → 1500 מ״מ
+ *   EC-080 "מזנון טלוויזיה תלוי" 0 → 600 מ״מ
+ *
+ * הגיליון אינו נושא עמודת גובה התקנה כלל, ולכן אפס בו אינו
+ * "על הרצפה" אלא "לא נמדד". ארון תלוי שנוחת על הרצפה הוא באג
+ * שנראה מיד, ואלה המידות שבהן הם באמת נתלים. `l153` מאמת אותן
+ * כדי שלא ישתנו בשקט בייצוא הבא של הכלי.
  */
 export const SHIPPED_LIBRARY: ShippedItem[] = [
   {"id":"f3072627-f242-4d22-9056-ff08bbdd5b40","code":"EC-002","name":"ארון כיור דלתות","rooms":["bathroom"],"group":"base","level":"floor","glyph":"sink","doors":2,"drawers":0,"drawerCols":1,"shelves":0,"zones":[{"id":"main","heightMm":550,"kind":"empty"}],"drawerStyle":"outer","defaultWidthMm":800,"widthOptionsMm":[800],"defaultHeightMm":550,"defaultDepthMm":480,"defaultYMm":0,"socleMm":0,"counterMm":20,"backKind":"thin","drawerBox":"metal","note":"תבנית ארגז. מרווחי מכשיר, צנרת ופרזול ייעודי דורשים מידות יצרן לפני ייצור.","common":true,"isBuiltin":true,"sortOrder":0},

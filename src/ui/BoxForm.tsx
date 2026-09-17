@@ -6,6 +6,7 @@ import type { RoomKind } from '../db/types';
 import { KITCHEN } from '../catalog/standards';
 import { limitsFor } from '../catalog/saveGate';
 import { GlyphPreview } from '../catalog/GlyphPreview';
+import { ProductionGap } from '../catalog/CabinetThumbnail';
 import { Field, Chip, NumField, inputClass, selectOnFocus } from './Field';
 
 /** תיאור מלא של ארגז — משותף לפריט בספרייה ולארגז שכבר מונח על הקיר. */
@@ -116,6 +117,13 @@ export function BoxForm({
           חזית ופנים הארון, בפרופורציה של המידות שהזנת.
         </p>
       </div>
+
+      {/*
+        תצוגה יפה אינה אישור לייצור.
+        אם התבנית אינה כוללת את הנישה או הפרזול שהשם והאיור
+        מבטיחים — זה נאמר כאן, ליד התמונה עצמה.
+      */}
+      <ProductionGap item={{ glyph: value.glyph, name: value.name }} />
 
       <Field label="שם הארגז">
         <input

@@ -206,8 +206,37 @@ export function layoutsFor(plan: PlanWall[]): LayoutKind[] {
     const run = runOf(plan, k);
     if (run.length < (k === 'single' ? 1 : k === 'u' ? 3 : 2)) return false;
     if (k === 'galley') return aisleOf(run) >= AISLE.workMm;
-    return true;
+    /*
+     * פינה בזווית שאינה ישרה אינה נתמכת, ולכן אינה מוצעת.
+     *
+     * הפינה נבנית כאן על הנחה אחת: הקיר הבא ניצב, ולכן די להתחיל
+     * אותו במרחק עומק ארון. בחדר שנשרטט ביד בזווית פנימית של 45
+     * מעלות ההנחה אינה נכונה, והארונות נכנסו זה לתוך זה בכל הצעה
+     * — גם כשלא היה בקיר שום מכשול. ארון פינה בזווית חדה הוא גוף
+     * אחר, עם החזרה ועם חזית אחרת, ולא ארון מלבני שהוזז.
+     *
+     * עד שיהיה מודל אמיתי לפינה כזאת, מה שנכון לומר הוא שאין
+     * הצעה — ולא להציע מטבח שאי אפשר לבנות.
+     */
+    return squareCorners(run);
   });
+}
+
+/** כמה מעלות מותר לפינה לסטות מ-90 ועדיין להיחשב ישרה. */
+const CORNER_TOLERANCE_DEG = 5;
+
+/**
+ * האם כל המפגשים ברצף הזה הם פינות ישרות.
+ *
+ * הזווית נמדדת מהכיוונים בפועל ולא מהשדה השמור: קיר שנשרטט ביד
+ * מקבל כיוון מהנקודות שלו, ו-`turnDeg` אינו קיים בו.
+ */
+function squareCorners(run: PlanWall[]): boolean {
+  for (let i = 1; i < run.length; i++) {
+    const turn = Math.abs(((run[i].headingDeg - run[i - 1].headingDeg + 540) % 360) - 180);
+    if (Math.abs(turn - 90) > CORNER_TOLERANCE_DEG) return false;
+  }
+  return true;
 }
 
 /**
@@ -968,6 +997,13 @@ export function whyNothing(plan: PlanWall[]): string {
   if (!plan.length) return 'אין קירות בחדר';
   const longest = Math.max(...plan.map((p) => p.wall.lengthMm));
   if (longest < MIN_WALL) return `הקיר הארוך ביותר הוא ${longest} מ"מ, וצריך לפחות ${MIN_WALL}`;
+  /*
+   * זווית שאינה ישרה נאמרת בשמה. "אין קטע פנוי" היה תשובה שגויה
+   * לחדר שכולו פנוי ושהבעיה בו היא צורת הפינה.
+   */
+  if (plan.length > 1 && !squareCorners(plan)) {
+    return 'התכנון האוטומטי בונה פינות ישרות בלבד. בחדר הזה יש פינה בזווית אחרת — אפשר להניח ארגזים ביד';
+  }
   return 'הדלתות והעמודים לא משאירים קטע קיר פנוי';
 }
 
