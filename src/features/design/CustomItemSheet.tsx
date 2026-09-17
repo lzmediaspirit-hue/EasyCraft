@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { catalogRepo } from '../../catalog/catalogRepo';
+import { SaveError, useSaveGuard } from '../../ui/saveGuard';
 import { roomsRepo } from '../../catalog/roomsRepo';
 import { glyphDef } from '../../catalog/glyphList';
 import { autoShelves } from '../../catalog/CabinetGlyph';
@@ -113,7 +114,10 @@ export function CustomItemSheet({
   /* פריט שפנימו מתואר באזורים מורכבים אינו מקבל מספר מגירות יחיד */
   const composed = !!item && !drawersAreSimple(asUnit(item));
 
-  async function save() {
+  const guard = useSaveGuard();
+
+  function save() {
+    return guard.run(async () => {
     const caps = glyphDef(spec.glyph);
     /* שינוי המספר מגיע גם אל האזור עצמו, שאחרת גובר עליו */
     const zones =
@@ -151,6 +155,7 @@ export function CustomItemSheet({
       note: item?.note,
     });
     onClose();
+    });
   }
 
   /*
@@ -170,22 +175,25 @@ export function CustomItemSheet({
       onClose={onClose}
       tall
       footer={
-        <div className="flex items-center gap-2">
-          {item && (
-            <button
-              onClick={remove}
-              aria-label="מחיקה מהספרייה"
-              className="shrink-0 rounded-2xl border border-stone-200 p-4 text-stone-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-            >
-              <TrashIcon />
-            </button>
-          )}
-          <div className="flex-1">
-            <PrimaryButton disabled={!canSave} onClick={save}>
-              שמירה בספרייה
-            </PrimaryButton>
+        <>
+          <SaveError text={guard.error} />
+          <div className="flex items-center gap-2">
+            {item && (
+              <button
+                onClick={remove}
+                aria-label="מחיקה מהספרייה"
+                className="shrink-0 rounded-2xl border border-stone-200 p-4 text-stone-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+              >
+                <TrashIcon />
+              </button>
+            )}
+            <div className="flex-1">
+              <PrimaryButton disabled={!canSave || guard.busy} onClick={save}>
+                שמירה בספרייה
+              </PrimaryButton>
+            </div>
           </div>
-        </div>
+        </>
       }
     >
       <div className="space-y-5">

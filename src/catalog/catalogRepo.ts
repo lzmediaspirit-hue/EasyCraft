@@ -9,6 +9,7 @@ import { PRODUCTS_GENERATION, SHIPPED_PRODUCTS } from './products';
 import { allMine, eraseIds, mine, owned, patchRow } from '../db/rows';
 import { workshopId } from '../db/workshop';
 import { BuildError, checkItem } from './saveGate';
+import { cabinetNameKey, cleanCabinetName } from './names';
 
 /**
  * הספרייה נזרעת לתוך בסיס הנתונים בהפעלה הראשונה, כך שכל פריט —
@@ -134,10 +135,7 @@ export const catalogRepo = {
    * בארגז ישן שעדיין מוזכר בהזמנה או על מדבקה.
    */
   async nextCode(group: CatalogGroup): Promise<string> {
-    const prefix = CODE_PREFIX[group];
-    const rows = await allMine(db.catalog);
-    const top = rows.reduce((n, i) => Math.max(n, codeNumber(i.code, prefix)), 100);
-    return `${prefix}-${top + 1}`;
+    return nextCodeAmong(await allMine(db.catalog), group);
   },
 
   /** הארגז שנושא את המק״ט הזה, אם יש כזה. */
@@ -183,48 +181,81 @@ export const catalogRepo = {
     > & { id?: string },
   ): Promise<string> {
     /*
-     * הספרייה היא שער שמירה ככל שער אחר.
+     * הבדיקה והכתיבה בעסקה אחת.
      *
-     * פריט שאי אפשר לבנות ממנו ארגז אינו פריט — הוא ייצור חלקים
-     * בגובה אפס בכל פרויקט שיניח אותו, ורק שם זה יתגלה.
+     * "אין ארגז בשם הזה" שנבדק לפני הכתיבה ולא איתה הוא בדיקה
+     * שנכונה לרגע: שתי שמירות שרצות יחד עוברות שתיהן, ובספרייה
+     * יושבים שני ארגזים באותו שם.
      */
-    const why = checkItem(input);
-    if (why) throw new BuildError(why);
-    const now = Date.now();
-    const code = input.code?.trim().toUpperCase();
-    /*
-     * המק״ט הוא הזהות.
-     *
-     * שמירה תחת מק״ט שכבר קיים מעדכנת את הארגז ההוא ואינה יוצרת
-     * עותק שני שלו — אחרת אותו ארגז מופיע פעמיים ברשימה, ואי אפשר
-     * לדעת איזה מהם נכון. גם ייבוא של ספרייה שכבר יש ממנה חלק
-     * נשען על זה.
-     */
-    const twin = !input.id && code ? await catalogRepo.byCode(code) : undefined;
-    const id = input.id ?? twin?.id;
+    return db.transaction('rw', db.catalog, async () => {
+      const rows = await allMine(db.catalog);
+      const current = input.id ? rows.find((r) => r.id === input.id) : undefined;
+      if (input.id && !current) throw new BuildError('הארגז הזה כבר אינו בספרייה');
 
-    if (id) {
-      const { id: _drop, ...rest } = input;
-      // שדות שלא נשלחו נשארים כמו שהם, כדי שעריכה לא תמחק מאפיין קיים
-      const patch = defined({ ...rest, code });
-      await patchRow(db.catalog, id, patch);
-      return id;
-    }
+      /*
+       * השם הוא מה שרואים ברשימה, ולכן הוא מה שמזהה.
+       *
+       * שני ארגזים באותו שם הם ארגז אחד שאי אפשר לבחור בו: ההבדל
+       * — מידה, רגליים, מפלס — מתגלה רק אחרי ההנחה. רווח כפול
+       * ואות גדולה אינם הבדל, ולכן ההשוואה עוברת דרך מפתח מנוקה.
+       */
+      const name = cleanCabinetName(input.name ?? current?.name ?? '');
+      if (!name) throw new BuildError('לארגז צריך שם');
+      const key = cabinetNameKey(name);
+      if (rows.some((r) => r.id !== input.id && cabinetNameKey(r.name) === key)) {
+        throw new BuildError(`כבר יש בספרייה ארגז בשם "${name}"`);
+      }
 
-    const fresh = crypto.randomUUID();
-    await db.catalog.add({
-      ...input,
-      id: fresh,
-      code: code || (await catalogRepo.nextCode(input.group)),
-      // ארגז שהמשתמש בנה הוא ארגז שהוא מתכוון להשתמש בו — מקומו בספרייה הראשית
-      common: true,
-      isBuiltin: false,
-      sortOrder: 1000 + (now % 1000),
-      ...owned(),
-      createdAt: now,
-      updatedAt: now,
+      /*
+       * המק״ט שייך לארגז אחד.
+       *
+       * שמירה תחת מק״ט תפוס עדכנה בשקט את הארגז ההוא: מי ששמר
+       * ארגז חדש וכתב מק״ט קיים מחק בכך ארגז אחר, בלי שנאמר לו
+       * דבר. עכשיו זה נעצר ונאמר.
+       */
+      const code = input.code?.trim().toUpperCase();
+      if (code && rows.some((r) => r.id !== input.id && r.code?.toUpperCase() === code)) {
+        throw new BuildError(`המק״ט ${code} כבר שייך לארגז אחר`);
+      }
+
+      /*
+       * פריט שאי אפשר לבנות ממנו ארגז אינו פריט — הוא ייצור חלקים
+       * בגובה אפס בכל פרויקט שיניח אותו, ורק שם זה יתגלה. הבדיקה
+       * היא על הארגז כפי שייראה אחרי השמירה, ולא על מה שנשלח:
+       * עדכון חלקי שולח שדה אחד, ומהשדה הזה לבדו אין מה לבנות.
+       */
+      const after = { ...current, ...defined(input), name };
+      const { glyph, defaultWidthMm: w, defaultHeightMm: h, defaultDepthMm: d } = after;
+      if (glyph === undefined || w === undefined || h === undefined || d === undefined) {
+        throw new BuildError('חסרות מידות לארגז');
+      }
+      const why = checkItem({ ...after, glyph, defaultWidthMm: w, defaultHeightMm: h, defaultDepthMm: d });
+      if (why) throw new BuildError(why);
+
+      const now = Date.now();
+      if (current) {
+        const { id: _drop, ...rest } = input;
+        // שדות שלא נשלחו נשארים כמו שהם, כדי שעריכה לא תמחק מאפיין קיים
+        await patchRow(db.catalog, current.id, defined({ ...rest, name, code }));
+        return current.id;
+      }
+
+      const fresh = crypto.randomUUID();
+      await db.catalog.add({
+        ...input,
+        id: fresh,
+        name,
+        code: code || nextCodeAmong(rows, input.group),
+        // ארגז שהמשתמש בנה הוא ארגז שהוא מתכוון להשתמש בו — מקומו בספרייה הראשית
+        common: true,
+        isBuiltin: false,
+        sortOrder: 1000 + (now % 1000),
+        ...owned(),
+        createdAt: now,
+        updatedAt: now,
+      });
+      return fresh;
     });
-    return fresh;
   },
 
 
@@ -304,6 +335,13 @@ export const catalogRepo = {
   },
 
 };
+
+/** המק״ט הפנוי הבא בקטגוריה, מתוך שורות שכבר נקראו. */
+function nextCodeAmong(rows: CatalogItem[], group: CatalogGroup): string {
+  const prefix = CODE_PREFIX[group];
+  const top = rows.reduce((n, i) => Math.max(n, codeNumber(i.code, prefix)), 100);
+  return `${prefix}-${top + 1}`;
+}
 
 /** משמיט מפתחות ללא ערך, כדי ש-update לא ידרוס אותם ב-undefined. */
 function defined<T extends object>(obj: T): Partial<T> {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { catalogRepo } from '../../catalog/catalogRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
+import { SaveError, useSaveGuard } from '../../ui/saveGuard';
 import { cm } from '../../ui/units';
 import { alongWallMm } from '../../db/types';
 import type { CatalogGroupPart, PlacedUnit } from '../../db/types';
@@ -22,7 +23,7 @@ export function SaveGroupSheet({
   onClose: () => void;
 }) {
   const [name, setName] = useState(`${units[0]?.name ?? 'ארגז'} ועוד ${units.length - 1}`);
-  const [saving, setSaving] = useState(false);
+  const guard = useSaveGuard();
 
   /* פינת הקבוצה: הארגז שמתחיל הכי שמאלה והכי נמוך */
   const x0 = Math.min(...units.map((u) => u.xMm));
@@ -31,9 +32,9 @@ export function SaveGroupSheet({
   const heightMm = Math.max(...units.map((u) => u.yMm + u.heightMm)) - y0;
   const depthMm = Math.max(...units.map((u) => u.depthMm));
 
-  async function save() {
-    if (saving || !units.length) return;
-    setSaving(true);
+  function save() {
+    if (!units.length) return;
+    return guard.run(async () => {
     const parts: CatalogGroupPart[] = units.map((u) => {
       /* זהות, קיר ומיקום נקבעים בהנחה ולא נשמרים */
       const { id, projectId, wallId, xMm, yMm, createdAt, updatedAt, work, free, ...rest } = u;
@@ -60,6 +61,7 @@ export function SaveGroupSheet({
       parts,
     });
     onClose();
+    });
   }
 
   return (
@@ -67,9 +69,12 @@ export function SaveGroupSheet({
       title="שמירת הצירוף בספרייה"
       onClose={onClose}
       footer={
-        <PrimaryButton onClick={save} disabled={saving || !name.trim()}>
-          שמירה
-        </PrimaryButton>
+        <>
+          <SaveError text={guard.error} />
+          <PrimaryButton onClick={save} disabled={guard.busy || !name.trim()}>
+            שמירה
+          </PrimaryButton>
+        </>
       }
     >
       <div className="space-y-5">

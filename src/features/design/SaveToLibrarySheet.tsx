@@ -4,6 +4,7 @@ import { catalogRepo } from '../../catalog/catalogRepo';
 import { roomsRepo } from '../../catalog/roomsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
+import { SaveError, useSaveGuard } from '../../ui/saveGuard';
 import { Pill } from '../../ui/Pill';
 import { cm } from '../../ui/units';
 import { reusableSpec } from '../../db/types';
@@ -43,7 +44,7 @@ export function SaveToLibrarySheet({
   const canUpdate = source !== undefined && !source.isBuiltin;
   const [mode, setMode] = useState<'update' | 'new'>('new');
   const [name, setName] = useState(unit.name);
-  const [saving, setSaving] = useState(false);
+  const guard = useSaveGuard();
 
   /*
    * לאילו חדרים הארגז שייך — שאלה, ולא ניחוש.
@@ -58,10 +59,8 @@ export function SaveToLibrarySheet({
 
   const target = canUpdate && mode === 'update' ? source : undefined;
 
-  async function save() {
-    if (saving) return;
-    setSaving(true);
-
+  function save() {
+    return guard.run(async () => {
     await catalogRepo.saveCustom({
       /*
        * תיאור הבנייה נלקח מרשימה אחת משותפת. קודם הועתקו כאן שדות
@@ -99,6 +98,7 @@ export function SaveToLibrarySheet({
 
     });
     onClose();
+    });
   }
 
   return (
@@ -106,10 +106,13 @@ export function SaveToLibrarySheet({
       title="שמירה לספרייה"
       onClose={onClose}
       footer={
-        <PrimaryButton disabled={saving || !name.trim()} onClick={save}>
+        <>
+        <SaveError text={guard.error} />
+        <PrimaryButton disabled={guard.busy || !name.trim()} onClick={save}>
 
           {target ? 'עדכון הפריט' : 'שמירה כארגז חדש'}
         </PrimaryButton>
+        </>
       }
     >
       <div className="space-y-5">
