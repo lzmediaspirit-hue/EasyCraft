@@ -42,7 +42,12 @@ await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
 const m = await page.evaluate(async () => {
   const v = '?v=' + Date.now();
   const I = await import('/src/features/design/interior.ts' + v);
-  /* ארגז 800 רחב על 720 גבוה, בלי רגליים: נקי 764, גובה תא 702 */
+  /*
+   * ארגז 800 רחב על 720 גבוה, בלי רגליים, לוח 18.
+   * רוחב נקי 764, וחלל נקי 684 — הגוף פחות התחתית והתקרה.
+   * (עד ביקורת 18.9 נחסר כאן לוח אחד בלבד, והמספרים היו גדולים
+   * בלוח שלם. l164 נועלת את ההגדרה מול הלוחות שנבנים בפועל.)
+   */
   const u = (o = {}) => ({
     id: 'u', projectId: 'p', wallId: 'w', catalogItemId: 'c', name: 'ארגז',
     glyph: 'doors', level: 'floor', doors: 2, socleMm: 0,
@@ -78,25 +83,25 @@ const m = await page.evaluate(async () => {
   };
 });
 
-/* שלושה מדפים = ארבעה מרווחים. 702 פחות 3×18 = 648, לארבע */
+/* שלושה מדפים = ארבעה מרווחים. 684 פחות 3×18 = 630, לארבע */
 ok('שלושה מדפים נותנים ארבעה מרווחים', m.shelves3.length === 4, String(m.shelves3.length));
-ok('וכל מרווח הוא הגובה הנקי חלקי ארבע',
-  m.shelves3.every((c) => near(c.heightMm, 162)), m.shelves3.map((c) => c.heightMm).join());
+ok('וכל מרווח הוא החלל הנקי חלקי ארבע',
+  m.shelves3.every((c) => near(c.heightMm, 157.5)), m.shelves3.map((c) => c.heightMm).join());
 ok('המדף גוזל את עוביו מהמרווח שמעליו',
   near(m.shelves3[1].yMm - (m.shelves3[0].yMm + m.shelves3[0].heightMm), 18),
   `${m.shelves3[0].yMm}+${m.shelves3[0].heightMm} → ${m.shelves3[1].yMm}`);
 ok('והרוחב הוא הנקי בין הדפנות', m.shelves3.every((c) => near(c.widthMm, 764)));
 
-/* מרווחים ידניים 2:1:1 על 666 פנוי — 333, 166.5, 166.5 */
+/* מרווחים ידניים 2:1:1 על 648 פנוי — 324, 162, 162 */
 ok('מרווח שנקבע ביד נשמר ביחס שלו',
-  m.uneven.length === 3 && near(m.uneven[0].heightMm, 333) && near(m.uneven[1].heightMm, 166.5),
+  m.uneven.length === 3 && near(m.uneven[0].heightMm, 324) && near(m.uneven[1].heightMm, 162),
   m.uneven.map((c) => Math.round(c.heightMm)).join());
 ok('ולא בחלוקה שווה', !near(m.uneven[0].heightMm, m.uneven[1].heightMm));
 
 /* ארבע מגירות = ארבע שורות, בלי לוח ביניהן */
 ok('ארבע מגירות הן ארבע שורות', m.drawers4.length === 4, String(m.drawers4.length));
-ok('וכל שורה היא הגובה הנקי חלקי ארבע',
-  m.drawers4.every((c) => near(c.heightMm, 175.5)), m.drawers4.map((c) => c.heightMm).join());
+ok('וכל שורה היא החלל הנקי חלקי ארבע',
+  m.drawers4.every((c) => near(c.heightMm, 171)), m.drawers4.map((c) => c.heightMm).join());
 ok('שורות מגירה נוגעות זו בזו — אין לוח מפריד',
   near(m.drawers4[1].yMm, m.drawers4[0].yMm + m.drawers4[0].heightMm));
 
@@ -128,7 +133,9 @@ ok('אזורים נערמים לפי הסדר',
   m.stacked.filter((c) => c.kind === 'shelves').length === 3 &&
   m.stacked.filter((c) => c.kind === 'rod').length === 1,
   m.stacked.map((c) => c.kind).join());
-ok('והמגירות למטה', m.stacked[0].kind === 'drawers' && m.stacked[0].yMm === 0);
+/* התא התחתון יושב על תחתית הארגז, ולכן הוא מתחיל בעובי לוח */
+ok('והמגירות למטה, מעל התחתית',
+  m.stacked[0].kind === 'drawers' && near(m.stacked[0].yMm, 18), String(m.stacked[0].yMm));
 
 /* מה שאין לו פנים שנבנה כאן */
 ok('מכשיר שנקנה שלם אינו מקבל מידה פנימית', m.appliance.length === 0);
@@ -178,8 +185,8 @@ ok('הכפתור מצייר תא לכל חלוקה ולא לכל ארגז', rect
 
 const labels = await page.locator('svg text[fill="#0f766e"]').allTextContents();
 ok('לכל תא יש מידה קריאה', labels.length === 9, String(labels.length));
-ok('המרווח בין המדפים נכון', labels.filter((t) => t === '24.2').length === 5, labels.join());
-ok('וגובה שורת המגירה נכון', labels.filter((t) => t === '19.6').length === 4, labels.join());
+ok('המרווח בין המדפים נכון', labels.filter((t) => t === '23.8').length === 5, labels.join());
+ok('וגובה שורת המגירה נכון', labels.filter((t) => t === '19.1').length === 4, labels.join());
 /* הרוחב זהה בכל תא של אותו ארגז, ולכן הוא אינו נכתב */
 ok('ואין רוחב על התווית', labels.every((t) => !t.includes('×')), labels.join());
 
