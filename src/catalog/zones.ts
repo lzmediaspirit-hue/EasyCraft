@@ -355,6 +355,84 @@ export function zoneBands(
 }
 
 /**
+ * הרווח הנקי של אזור, בתוך גוף הארון.
+ *
+ * `zoneBands` מחלק את הגוף כולו, כולל המקום שבו יושבים הלוחות
+ * עצמם. מה שנשאר פנוי הוא פחות מזה: האזור התחתון יושב על תחתית
+ * הארון, העליון נעצר בתקרה, וכל אזור נעצר בחוצץ של האזור שמעליו.
+ *
+ * זה היה מקור לשקר: מידה פנימית הצהירה על 782 מ״מ בארון 800 עם
+ * לוח 18, בזמן שהחלל האמיתי בין התחתית לתקרה הוא 764. הפרש של
+ * לוח שלם הוא מדף שלא נכנס.
+ *
+ * המידות נמדדות מתחתית הגוף כלפי מעלה, ולא בקואורדינטות הציור.
+ */
+export function zoneClearBand(
+  band: { top: number; bottom: number },
+  index: number,
+  bodyMm: number,
+  t: number,
+): { fromMm: number; sizeMm: number } {
+  /* התחתון יושב על תחתית הארון; מי שמעליו יושב על החוצץ שלו */
+  const fromMm = index === 0 ? t : bodyMm - band.bottom;
+  /* העליון נעצר בתקרה; מי שמתחתיו נעצר בחוצץ של האזור שמעליו */
+  const toMm = bodyMm - band.top - t;
+  return { fromMm, sizeMm: Math.max(toMm - fromMm, 0) };
+}
+
+/** החלוקה היחסית של המרווחים בין המדפים; ריק = חלוקה שווה. */
+function gapShares(gaps: number[] | undefined, count: number): number[] {
+  if (gaps && gaps.length === count) {
+    const total = gaps.reduce((a, b) => a + b, 0);
+    if (total > 0) return gaps.map((g) => g / total);
+  }
+  return Array.from({ length: count }, () => 1 / count);
+}
+
+/**
+ * המרווחים הנקיים בתא עם מדפים, מלמטה למעלה.
+ *
+ * מדף גוזל את עוביו מהחלל, והשאר מתחלק בין המרווחים — שווה בשווה,
+ * או ביחס שנקבע ביד. זו ההגדרה שנגר מתכוון אליה כשהוא אומר "שלושה
+ * מדפים": ארבעה מרווחים שווים, ולא ארבעה מרווחים שהראשון שבהם
+ * גדול יותר כי הוא בלע את מקום התחתית.
+ */
+export function shelfClearGaps(
+  clearMm: number,
+  shelves: number,
+  gaps: number[] | undefined,
+  t: number,
+): number[] {
+  if (shelves < 1) return [clearMm];
+  const free = clearMm - shelves * t;
+  if (free <= 0) return [clearMm];
+  return gapShares(gaps, shelves + 1).map((share) => free * share);
+}
+
+/**
+ * הפאה התחתונה של כל מדף, מתחתית החלל הנקי כלפי מעלה.
+ * נגזר מאותם מרווחים, ולכן הציור והמידה אינם יכולים להיפרד.
+ */
+export function shelfFaceOffsets(
+  clearMm: number,
+  shelves: number,
+  gaps: number[] | undefined,
+  t: number,
+): number[] {
+  if (shelves < 1) return [];
+  const spans = shelfClearGaps(clearMm, shelves, gaps, t);
+  if (spans.length < shelves + 1) return [];
+  const out: number[] = [];
+  let y = 0;
+  for (let i = 0; i < shelves; i += 1) {
+    y += spans[i];
+    out.push(y);
+    y += t;
+  }
+  return out;
+}
+
+/**
  * שורות המגירות החיצוניות, כפי שהן בפועל.
  *
  * העריכה המהירה קראה עד כאן את `u.drawers` — השדה הישן — בזמן

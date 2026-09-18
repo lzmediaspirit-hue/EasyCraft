@@ -1,6 +1,5 @@
-import { blindSide, blindWidthMm, unitFronts, unitZones, zoneBands, zoneColumns } from '../../catalog/zones';
+import { blindSide, blindWidthMm, shelfFaceOffsets, unitFronts, unitZones, zoneBands, zoneClearBand, zoneColumns } from '../../catalog/zones';
 import { clamp } from '../../ui/units';
-import { shelfYs } from '../../catalog/CabinetGlyph';
 import { glyphDef } from '../../catalog/glyphList';
 import { shade } from '../../ui/color';
 import { MATERIAL } from '../../catalog/standards';
@@ -19,7 +18,7 @@ import {
   solidFaces,
 } from './isoMath';
 
-import { rad, unitBox, unitFrame } from './placement';
+import { COUNTER_OVERHANG_MM, rad, unitBox, unitFrame } from './placement';
 import { applianceOf } from '../../catalog/appliances';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
@@ -413,6 +412,14 @@ function unitSolids(
     const zBottom = y + (h - bottom);
     const zTop = y + (h - top);
     const zh = zTop - zBottom;
+    /*
+     * הרווח הנקי של האזור — אחרי התחתית, התקרה והחוצצים.
+     * המדפים נתלים בתוכו ולא ברצועה כולה, ולכן "שלושה מדפים"
+     * הם ארבעה מרווחים שווים באמת. זו אותה הגדרה שממנה נגזרת
+     * המידה הפנימית על הדו־ממד — ולכן הן אינן יכולות להיפרד.
+     */
+    const clear = zoneClearBand({ top, bottom }, bi, h, t);
+    const clearBottom = y + clear.fromMm;
     const cols = zoneColumns(zone);
     /* אזור רדוד — מדף מעל משטח עבודה — נכנס פחות לחדר מהארון עצמו */
     const zd = Math.min(zone.depthMm ?? d, d);
@@ -429,8 +436,8 @@ function unitSolids(
       const shelves = cell.content.kind === 'shelves' ? (cell.content.shelves ?? 0) : 0;
       const glassShelf = !!cell.content.glassShelves;
       if (shelves > 0) {
-        for (const sy of shelfYs({ shelves, gaps: cell.content.shelfGapsMm }, 0, zh)) {
-          const shelfY = zBottom + (zh - sy);
+        for (const sy of shelfFaceOffsets(clear.sizeMm, shelves, cell.content.shelfGapsMm, t)) {
+          const shelfY = clearBottom + sy;
           add(
             slab(frame, cx, shelfY, inZ, cw, t, zd - 20 - inZ, glassShelf ? GLASS_TONE : carcassTone, `${zk}-sh-${i}-${sy}`),
             glassShelf,
@@ -598,7 +605,7 @@ function unitSolids(
     /* המשטח רץ על כל רוחב הארגז, גם מעל דופן זרה */
     add(
       slab(
-        frame, 0, u.yMm + u.heightMm, 0, u.widthMm, u.counterMm, d + 20, '#78716c', `${u.id}-cnt`,
+        frame, 0, u.yMm + u.heightMm, 0, u.widthMm, u.counterMm, d + COUNTER_OVERHANG_MM, '#78716c', `${u.id}-cnt`,
       ),
     );
   }
@@ -837,9 +844,22 @@ function appliancePieces(
   const out: Solid[] = [];
   /* הגוף, ועליו חזית מתכת — המשותף לכולם */
   out.push(slab(frame, 0, y, 0, w, h, d, bodyTone, `${u.id}-appliance`));
+  /*
+   * פרט על החזית יושב *עליה*, ולא בתוכה.
+   *
+   * כל הפרטים התחילו באותו מישור קדמי, והזכוכית רק בלטה שני מ״מ
+   * יותר מהדלת. שני גופים שחולקים נפח משאירים את סדר הציור להכרעת
+   * המיון, והוא צבע את הדלת אחרונה — התנור והמיקרוגל יצאו מתכת
+   * חלקה, בלי החלון שכן נבנה. מה שנפתר כאן אינו הצבע אלא
+   * הגאומטריה: `zFrom` מתחיל את הפרט במקום שבו הדלת נגמרת, וכך
+   * אין נפח משותף ואין מה למיין.
+   */
   const face = (
-    key: string, fx: number, fy: number, fw: number, fh: number, tone: string, depth = front,
-  ) => out.push(slab(frame, fx, y + fy, d, Math.max(fw, 0), Math.max(fh, 0), depth, tone, `${u.id}-${key}`));
+    key: string, fx: number, fy: number, fw: number, fh: number, tone: string,
+    zFrom = 0, thick = front,
+  ) => out.push(
+    slab(frame, fx, y + fy, d + zFrom, Math.max(fw, 0), Math.max(fh, 0), thick, tone, `${u.id}-${key}`),
+  );
 
   const type = applianceOf(u)?.type;
   const pad = Math.min(w * 0.04, 24);
@@ -853,8 +873,8 @@ function appliancePieces(
     for (let i = 0; i < boxes; i++) {
       const base = i * each;
       face(`door${i}`, pad, base + 6, w - pad * 2, each - 12, APPLIANCE_TONES.steel);
-      face(`glass${i}`, pad * 2, base + each * 0.28, w - pad * 4, each * 0.46, APPLIANCE_TONES.dark, front + 2);
-      face(`grip${i}`, pad * 2, base + each * 0.82, w - pad * 4, 26, APPLIANCE_TONES.handle, front + 14);
+      face(`glass${i}`, pad * 2, base + each * 0.28, w - pad * 4, each * 0.46, APPLIANCE_TONES.dark, front, 2);
+      face(`grip${i}`, pad * 2, base + each * 0.82, w - pad * 4, 26, APPLIANCE_TONES.handle, front + 2, 12);
     }
     return out;
   }
@@ -865,8 +885,8 @@ function appliancePieces(
     face('fridgeDoor', pad, freezer + 6, w - pad * 2, h - freezer - pad, APPLIANCE_TONES.steel);
     face('freezerDoor', pad, pad, w - pad * 2, freezer - pad, APPLIANCE_TONES.steel);
     const grip = Math.max(w * 0.06, 30);
-    face('grip1', w - pad - grip, freezer + 40, grip, h - freezer - 100, APPLIANCE_TONES.handle, front + 12);
-    face('grip2', w - pad - grip, pad + 30, grip, Math.max(freezer - 90, 40), APPLIANCE_TONES.handle, front + 12);
+    face('grip1', w - pad - grip, freezer + 40, grip, h - freezer - 100, APPLIANCE_TONES.handle, front, 12);
+    face('grip2', w - pad - grip, pad + 30, grip, Math.max(freezer - 90, 40), APPLIANCE_TONES.handle, front, 12);
     return out;
   }
 
@@ -875,7 +895,7 @@ function appliancePieces(
     const panelH = Math.min(h * 0.12, 80);
     face('panel', pad, h - panelH, w - pad * 2, panelH - 6, APPLIANCE_TONES.panel);
     face('door', pad, pad, w - pad * 2, h - panelH - pad - 8, APPLIANCE_TONES.steel);
-    face('grip', pad * 2, h - panelH - 40, w - pad * 4, 26, APPLIANCE_TONES.handle, front + 14);
+    face('grip', pad * 2, h - panelH - 40, w - pad * 4, 26, APPLIANCE_TONES.handle, front, 14);
     return out;
   }
 
@@ -888,7 +908,7 @@ function appliancePieces(
       frame, (w - chimney) / 2, y + canopy, 0, chimney, Math.max(h - canopy, 0), d * 0.5,
       APPLIANCE_TONES.steel, `${u.id}-chimney`,
     ));
-    face('filter', pad, 6, w - pad * 2, Math.max(canopy - 24, 0), APPLIANCE_TONES.dark, 6);
+    face('filter', pad, 6, w - pad * 2, Math.max(canopy - 24, 0), APPLIANCE_TONES.dark, 0, 6);
     return out;
   }
 

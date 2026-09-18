@@ -1,5 +1,6 @@
 import { alongWallMm } from '../../db/types';
 import { cm } from '../../ui/units';
+import { physicalHeightMm } from './placement';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -93,22 +94,32 @@ export function rulerSpan(
       return { near: wall.heightMm, far: wall.heightMm, mid: wall.lengthMm / 2 };
     }
     if (f) return { near: f.yMm, far: f.yMm + f.heightMm, mid: f.xMm + f.widthMm / 2 };
-    return u ? { near: u.yMm, far: u.yMm + u.heightMm, mid: u.xMm + alongWallMm(u) / 2 } : null;
+    return u
+      ? { near: u.yMm, far: u.yMm + physicalHeightMm(u), mid: u.xMm + alongWallMm(u) / 2 }
+      : null;
   };
 
   const [a, b] = picked.map(at);
   if (!a || !b) return null;
-  const first = a.near <= b.near ? a : b;
-  const second = first === a ? b : a;
-  const from = first.far;
-  const to = second.near;
-  const delta = to - from;
+  /*
+   * חיתוך שני הקטעים, ולא "הקצה של הראשון עד ההתחלה של השני".
+   *
+   * הביטוי הישן הוא אורך החפיפה רק כששני הקטעים חותכים זה את זה
+   * מהצד. כשאחד מוכל בשני — ארון 100 ס״מ ומעליו ארונית 20 —
+   * הוא נתן 90 במקום 20, ובהתחלה משותפת התשובה השתנתה לפי סדר
+   * הבחירה. הנוסחה הזאת נכונה בכל המקרים ואינה תלויה בסדר.
+   */
+  const lo = Math.max(a.near, b.near);
+  const hi = Math.min(a.far, b.far);
+  const overlapMm = Math.max(hi - lo, 0);
+  const gap = Math.max(lo - hi, 0);
   return {
-    from: Math.min(from, to),
-    to: Math.max(from, to),
-    gap: Math.max(delta, 0),
-    overlapMm: Math.max(-delta, 0),
-    kind: delta > 0 ? 'gap' : delta < 0 ? 'overlap' : 'touch',
+    /* הקטע המצויר הוא בדיוק מה שנמדד: הרווח, או החפיפה */
+    from: Math.min(lo, hi),
+    to: Math.max(lo, hi),
+    gap,
+    overlapMm,
+    kind: overlapMm > 0 ? 'overlap' : gap > 0 ? 'gap' : 'touch',
     mid: Math.round((a.mid + b.mid) / 2),
   };
 }

@@ -1,6 +1,6 @@
 import { DRAWER, MATERIAL, drawerDepth } from '../../catalog/standards';
 import { glyphDef } from '../../catalog/glyphList';
-import { blindSide, blindWidthMm, unitFronts, unitZones, zoneBands, zoneCells, zoneColumns, ZONE_LABELS } from '../../catalog/zones';
+import { blindSide, blindWidthMm, shelfClearGaps, unitFronts, unitZones, zoneBands, zoneCells, zoneClearBand, zoneColumns, ZONE_LABELS } from '../../catalog/zones';
 import { carcassMm, frontThicknessMm, type BuildContext } from '../../catalog/saveGate';
 import { bodyHeightMm } from '../../db/types';
 import type { PlacedUnit, ZoneContent, ZoneKind } from '../../db/types';
@@ -36,11 +36,6 @@ export interface ClearSpan {
   mm: number;
   /** הסבר קצר, כשהמידה אינה מובנת מאליה */
   note?: string;
-}
-
-/** גובה התא הנקי: גובה האזור פחות הלוח שמפריד אותו מהבא. */
-function clearHeight(bandMm: number, t: number): number {
-  return Math.max(bandMm - t, 0);
 }
 
 /**
@@ -106,7 +101,8 @@ export function interiorDims(u: PlacedUnit, ctx: BuildContext = {}): ClearSpan[]
   const zones = unitZones(u);
   const bands = zoneBands(zones, body);
   bands.forEach(({ zone, top, bottom }, i) => {
-    const bandMm = bottom - top;
+    /* הרווח הנקי — אותה הגדרה שבה מצוירים הלוחות עצמם */
+    const clearH = zoneClearBand({ top, bottom }, i, body, t).sizeMm;
     const name = `תא ${i + 1} — ${ZONE_LABELS[zone.kind]}`;
     const cols = zoneColumns(zone);
     if (cols.length > 1) {
@@ -124,19 +120,15 @@ export function interiorDims(u: PlacedUnit, ctx: BuildContext = {}): ClearSpan[]
         note: `${cols.length} עמודות, ${cols.length - 1} מחיצות בעובי ${Math.round(t)} מ״מ`,
       });
     }
-    out.push({
-      label: `${name}: גובה נקי`,
-      axis: 'height',
-      mm: clearHeight(bandMm, t),
-    });
+    out.push({ label: `${name}: גובה נקי`, axis: 'height', mm: clearH });
     /* מדפים בתוך התא מחלקים אותו שוב */
     const shelves = zone.shelves ?? 0;
     if (zone.kind === 'shelves' && shelves > 0) {
-      const gap = (clearHeight(bandMm, t) - shelves * t) / (shelves + 1);
+      const spans = shelfClearGaps(clearH, shelves, zone.shelfGapsMm, t);
       out.push({
         label: `${name}: מרווח בין מדפים`,
         axis: 'height',
-        mm: Math.max(gap, 0),
+        mm: Math.max(spans[0] ?? 0, 0),
         note: `${shelves} מדפים בעובי ${Math.round(t)} מ״מ`,
       });
     }
@@ -195,21 +187,6 @@ export interface InteriorCell {
 }
 
 /**
- * החלוקה היחסית של המרווחים בין המדפים.
- *
- * `shelfGapsMm` נשמר כרשימה של מרווחים, והוא נקרא יחסית ולא
- * במילימטרים — בדיוק כפי שהציור קורא אותו. מי שלא קבע מרווחים
- * מקבל חלוקה שווה.
- */
-function gapShares(gaps: number[] | undefined, count: number): number[] {
-  if (gaps && gaps.length === count) {
-    const total = gaps.reduce((a, b) => a + b, 0);
-    if (total > 0) return gaps.map((g) => g / total);
-  }
-  return Array.from({ length: count }, () => 1 / count);
-}
-
-/**
  * תא אחד, מחולק למה שבאמת יושב בו.
  *
  * "מידה פנימית" של תא עם ארבעה מדפים אינה מספר אחד — היא חמישה
@@ -234,12 +211,11 @@ function splitCell(
   if (kind === 'shelves') {
     const shelves = content.shelves ?? 0;
     if (shelves < 1) return whole;
-    const free = clearH - shelves * t;
-    if (free <= 0) return whole;
+    const spans = shelfClearGaps(clearH, shelves, content.shelfGapsMm, t);
+    if (spans.length < 2) return whole;
     const out: InteriorCell[] = [];
     let y = yMm;
-    for (const share of gapShares(content.shelfGapsMm, shelves + 1)) {
-      const heightMm = free * share;
+    for (const heightMm of spans) {
       out.push({ xMm, yMm: y, widthMm, heightMm, kind });
       y += heightMm + t;
     }
@@ -282,11 +258,17 @@ export function interiorCells(u: PlacedUnit, ctx: BuildContext = {}): InteriorCe
   const socle = u.socleMm ?? 0;
 
   const out: InteriorCell[] = [];
-  for (const { zone, top, bottom } of zoneBands(unitZones(u), body)) {
-    const clearH = clearHeight(bottom - top, t);
-    if (clearH <= 0) continue;
-    /* הגבהים בציור נמדדים מלמעלה; התא נמדד מתחתית הגוף */
-    const yMm = socle + (body - bottom);
+  const bands = zoneBands(unitZones(u), body);
+  bands.forEach(({ zone, top, bottom }, i) => {
+    /*
+     * הרווח הנקי, ולא הרצועה: הלוחות עצמם תופסים מקום, והמידה
+     * היא מה שנשאר ביניהם. `zoneClearBand` היא אותה הגדרה שממנה
+     * התלת־ממד מניח את המדפים.
+     */
+    const clear = zoneClearBand({ top, bottom }, i, body, t);
+    const clearH = clear.sizeMm;
+    if (clearH <= 0) return;
+    const yMm = socle + clear.fromMm;
     /*
      * `zoneCells` מחזירה תא אחד לאזור בלי קושרת, ותא לכל עמודה
      * כשיש — ולכן אותו לולאה משרתת את שני המקרים. החלק היחסי הוא
@@ -294,13 +276,13 @@ export function interiorCells(u: PlacedUnit, ctx: BuildContext = {}): InteriorCe
      */
     const cells = zoneCells(zone);
     const usable = innerW - (cells.length - 1) * t;
-    if (usable <= 0) continue;
+    if (usable <= 0) return;
     let x = startMm;
     for (const { content, share } of cells) {
       const widthMm = usable * share;
       if (widthMm > 0) out.push(...splitCell(content, x, yMm, widthMm, clearH, t));
       x += widthMm + t;
     }
-  }
+  });
   return out;
 }

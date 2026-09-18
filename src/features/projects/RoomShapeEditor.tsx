@@ -500,3 +500,66 @@ export function shapeWalls(points: ShapePoint[]): { lengthMm: number; headingDeg
   }
   return out;
 }
+
+/* ------------------------------------------------------------------ */
+/* טופולוגיה: צורה שחוצה את עצמה אינה חדר                              */
+/* ------------------------------------------------------------------ */
+
+/** באיזה צד של הקו pq נמצאת r: שמאל, ימין, או עליו. */
+function orient(p: ShapePoint, q: ShapePoint, r: ShapePoint): number {
+  const v = (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  return Math.abs(v) < 1e-7 ? 0 : Math.sign(v);
+}
+
+/** q נמצאת על הקטע pr, בהינתן ששלושתן על קו אחד. */
+function onSeg(p: ShapePoint, q: ShapePoint, r: ShapePoint): boolean {
+  return (
+    q.x >= Math.min(p.x, r.x) - 1e-7 && q.x <= Math.max(p.x, r.x) + 1e-7 &&
+    q.y >= Math.min(p.y, r.y) - 1e-7 && q.y <= Math.max(p.y, r.y) + 1e-7
+  );
+}
+
+/** שני קטעים נפגשים — בחיתוך ממש, או בחפיפה על אותו קו. */
+function segmentsMeet(a1: ShapePoint, a2: ShapePoint, b1: ShapePoint, b2: ShapePoint): boolean {
+  const o1 = orient(a1, a2, b1);
+  const o2 = orient(a1, a2, b2);
+  const o3 = orient(b1, b2, a1);
+  const o4 = orient(b1, b2, a2);
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && onSeg(a1, b1, a2)) return true;
+  if (o2 === 0 && onSeg(a1, b2, a2)) return true;
+  if (o3 === 0 && onSeg(b1, a1, b2)) return true;
+  if (o4 === 0 && onSeg(b1, a2, b2)) return true;
+  return false;
+}
+
+/**
+ * הקירות שחוצים זה את זה, או `null` כשהצורה תקינה.
+ *
+ * צורת עניבה — (0,0)→(4,4)→(0,4)→(4,0) וסגירה — נקראה עד כאן כחדר
+ * בן ארבעה קירות ונשמרה. אין לה פנים אחד: הקו חוצה את עצמו
+ * באמצע, ומה שנבנה עליו אינו חדר אלא שני משולשים שנפגשים בנקודה.
+ *
+ * קירות שכנים חולקים נקודה ולכן אינם נספרים, וגם הראשון והאחרון
+ * בצורה סגורה — שם המפגש הוא הסגירה עצמה.
+ */
+export function shapeCrossing(points: ShapePoint[]): [number, number] | null {
+  const segs: [ShapePoint, ShapePoint][] = [];
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (Math.hypot(b.x - a.x, b.y - a.y) > 0) segs.push([a, b]);
+  }
+  const last = segs.length - 1;
+  const closed =
+    segs.length > 2 &&
+    segs[0][0].x === segs[last][1].x &&
+    segs[0][0].y === segs[last][1].y;
+  for (let i = 0; i < segs.length; i += 1) {
+    for (let j = i + 2; j < segs.length; j += 1) {
+      if (closed && i === 0 && j === last) continue;
+      if (segmentsMeet(segs[i][0], segs[i][1], segs[j][0], segs[j][1])) return [i, j];
+    }
+  }
+  return null;
+}

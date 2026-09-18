@@ -7,7 +7,7 @@ import { CUSTOM_ROOM_DEF } from '../../catalog/rooms';
 import { roomDef, roomsRepo } from '../../catalog/roomsRepo';
 import { ASK_COUNT, WALL_COUNTS, WALL_LAYOUTS, wallName } from './wallLayouts';
 import { WallFeaturesDesigner } from './WallFeaturesDesigner';
-import { RoomShapeEditor, shapeWalls, type ShapePoint } from './RoomShapeEditor';
+import { RoomShapeEditor, shapeCrossing, shapeWalls, type ShapePoint } from './RoomShapeEditor';
 import { projectsRepo, type NewWallInput } from './projectsRepo';
 import { settingsRepo } from '../../materials/materialsRepo';
 import { DEFAULT_WALL_HEIGHT, DEFAULT_WALL_LENGTH } from '../../catalog/standards';
@@ -93,6 +93,11 @@ export function NewProjectWizard({
 
   /* ---- הקירות שנגזרים מהשרטוט, לפי הסדר שנבחר ---- */
   const drawn = shapeWalls(shape);
+  /*
+   * צורה שחוצה את עצמה אינה חדר, ולכן היא נעצרת כאן ולא בשמירה:
+   * פרויקט חלקי שנוצר ואז נפסל גרוע מכפתור שאינו נלחץ.
+   */
+  const crossing = shapeCrossing(shape);
   const shapeClosed =
     shape.length > 3 &&
     shape[0].x === shape[shape.length - 1].x &&
@@ -229,6 +234,8 @@ export function NewProjectWizard({
 
   /** קובע את הקירות מהשרטוט וממשיך הלאה. */
   function acceptShape() {
+    /* שער שני: מה שלא נעצר בציור נעצר לפני שהוא הופך לקירות */
+    if (crossing) return setStep('shape');
     const n = ordered.length;
     setWallCount(n);
     setLengthsCm(ordered.map((w) => String(mmToCm(w.lengthMm))));
@@ -243,10 +250,12 @@ export function NewProjectWizard({
         המשך
       </PrimaryButton>
     ) : step === 'shape' ? (
-      <PrimaryButton disabled={drawn.length === 0} onClick={() => setStep('order')}>
-        {drawn.length === 0
-          ? 'שרטט את החדר'
-          : `המשך · ${drawn.length} ${drawn.length === 1 ? 'קיר' : 'קירות'}`}
+      <PrimaryButton disabled={drawn.length === 0 || !!crossing} onClick={() => setStep('order')}>
+        {crossing
+          ? `הקירות ${crossing[0] + 1} ו-${crossing[1] + 1} חוצים זה את זה`
+          : drawn.length === 0
+            ? 'שרטט את החדר'
+            : `המשך · ${drawn.length} ${drawn.length === 1 ? 'קיר' : 'קירות'}`}
       </PrimaryButton>
     ) : step === 'order' ? (
       <PrimaryButton onClick={acceptShape}>המשך</PrimaryButton>

@@ -94,6 +94,25 @@ export function frontOverhangMm(u: Pick<PlacedUnit, 'glyph' | 'doors' | 'drawers
 }
 
 /**
+ * כמה משטח העבודה בולט אל תוך החדר מעבר לגוף הארון.
+ * אותו מספר שממנו נבנה המשטח בתלת־ממד — אף לא אחד מהם מנחש.
+ */
+export const COUNTER_OVERHANG_MM = 20;
+
+/**
+ * הגובה שהארגז תופס בפועל: הגוף, ומשטח העבודה שעליו.
+ *
+ * `heightMm` הוא הארון, והמשטח יושב מעליו — כך מודד העורך, וכך
+ * הוא נבנה. אבל מי שבדק התנגשות בדק את הארון בלבד, ולכן ארון עליון
+ * שתחתיתו 10 מ״מ מעל ארון 800 עם משטח 40 עבר בשקט: המשטח תופס
+ * 800–840 והתחתית של העליון 810. עשרה מ״מ של "רווח" שהם שלושים
+ * של חדירה.
+ */
+export function physicalHeightMm(u: Pick<PlacedUnit, 'heightMm' | 'counterMm'>): number {
+  return u.heightMm + Math.max(u.counterMm ?? 0, 0);
+}
+
+/**
  * הגוף כפי שהוא תופס מקום בחדר — כולל מה שבולט ממנו פיזית.
  *
  * זו התיבה שבדיקת ההתנגשות שואלת עליה. `unitBox` נשאר הגוף עצמו,
@@ -102,11 +121,19 @@ export function frontOverhangMm(u: Pick<PlacedUnit, 'glyph' | 'doors' | 'drawers
 export function solidBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
   const b = unitBox(u, plan);
   if (!b) return null;
-  const front = frontOverhangMm(u);
-  if (front <= 0) return b;
+  const counter = Math.max(u.counterMm ?? 0, 0);
+  /*
+   * החזית בולטת לאורך הגוף, והמשטח בולט לאורך עוביו שלו. תיבה
+   * אחת אינה יכולה לתאר שני מדפים שונים, ולכן היא לוקחת את הגדול
+   * — עודף של שני מ״מ עדיף על חדירה שלא נתפסה.
+   */
+  const front = Math.max(frontOverhangMm(u), counter > 0 ? COUNTER_OVERHANG_MM : 0);
+  if (front <= 0 && counter <= 0) return b;
   const f = { x: Math.cos(b.facing), z: Math.sin(b.facing) };
   return {
     ...b,
+    /* המשטח יושב על הגוף, ולכן הוא מוסיף לגובה ולא מזיז את התחתית */
+    h: b.h + counter,
     d: b.d + front,
     cx: b.cx + f.x * (front / 2),
     cz: b.cz + f.z * (front / 2),

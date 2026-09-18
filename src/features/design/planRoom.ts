@@ -280,10 +280,26 @@ function buildRoomProposal(
    */
   const deepest = Math.max(...queue.map((c) => c.item.defaultDepthMm), 0);
   const cornerStartMm = deepest > 0 ? deepest + CORNER_FILLER : CORNER_START;
+  /*
+   * חדר סגור: גם הקיר הראשון נפגש בפינה.
+   *
+   * הפינה נשמרה עד כאן רק מהקיר השני והלאה, מתוך הנחה שתחילת
+   * הרצף היא קצה חופשי. בחדר מלבני סגור זה אינו נכון: הקיר
+   * האחרון נפגש בקיר הראשון, ושם אף אחד לא שמר מקום. התוצאה
+   * הייתה שני ארונות שחודרים זה לזה בפינת הסגירה, והפותר — בצדק
+   * — פסל את כל שלוש ההצעות. בחדר שינה, שירות, אמבטיה, ארונות
+   * ומשרד לא נשארה אף פריסה שאפשר להחיל.
+   */
+  const first = run[0];
+  const last = run[run.length - 1];
+  const closed =
+    run.length > 2 &&
+    Math.hypot(last.end.x - first.start.x, last.end.y - first.start.y) < 1;
+
   /* הקטעים הפנויים, פעם אחת — גם החלוקה וגם ההנחה נשענות עליהם */
   const areas = run.map((p, wi) => ({
     p,
-    spans: baseSpans(p, corner && wi > 0 ? cornerStartMm : 0, p.wall.lengthMm, topMm),
+    spans: baseSpans(p, corner && (wi > 0 || closed) ? cornerStartMm : 0, p.wall.lengthMm, topMm),
   }));
   const capacity = areas.reduce(
     (n, a) => n + a.spans.reduce((m, sp) => m + (sp.toMm - sp.fromMm), 0), 0,
@@ -382,7 +398,7 @@ function buildRoomProposal(
     layout,
     priority,
     title: PRIORITY_NAMES[priority],
-    layoutName: LAYOUT_NAMES[layout],
+    layoutName: layoutName(layout, run.length, closed),
     units,
     dropped: [...new Set(dropped)],
     notes: [...new Set(notes)],
@@ -474,6 +490,20 @@ const LAYOUT_NAMES: Record<LayoutKind, string> = {
   l: 'פינה',
   u: 'שלושה קירות',
 };
+
+/**
+ * שם הפריסה לפי מה שבאמת נבנה, ולא לפי סוג הפריסה בלבד.
+ *
+ * `u` נקרא "שלושה קירות", אבל הוא רץ על כל קיר שימושי שיש. בחדר
+ * מלבני סגור הוא רץ על ארבעה, והכותרת שיקרה למי שקרא אותה.
+ */
+const WALL_COUNT_NAMES = ['', 'קיר אחד', 'שני קירות', 'שלושה קירות', 'ארבעה קירות'];
+
+function layoutName(layout: LayoutKind, walls: number, closed: boolean): string {
+  if (layout !== 'u') return LAYOUT_NAMES[layout];
+  if (closed) return 'סביב החדר';
+  return WALL_COUNT_NAMES[walls] ?? `${walls} קירות`;
+}
 
 /**
  * הניקוד של חדר שאינו מטבח.

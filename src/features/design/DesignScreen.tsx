@@ -8,7 +8,7 @@ import { nudge } from './dragSolve';
 import { partsOf } from '../../costing/boards';
 import { axisLabel } from './axisLock';
 import type { Axis } from './axisLock';
-import { rad, unitBox } from './placement';
+import { rad, solidBox, unitBox } from './placement';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
@@ -71,6 +71,15 @@ import { useMaterialsAndFinishes } from '../../materials/useMaterials';
  * `?? []` בתוך ה-JSX יוצר מערך חדש בכל ציור, וכל מי שמקבל אותו
  * מחשב הכול מחדש גם כששום דבר לא השתנה. קבוע אחד פותר את זה.
  */
+/**
+ * השדות שמזיזים את הארגז בחדר או משנים את מה שהוא תופס בו.
+ * רק הם מצדיקים בדיקה מרחבית; גוון ושם אינם נוגעים באיש.
+ */
+const SPATIAL_FIELDS = [
+  'widthMm', 'heightMm', 'depthMm', 'xMm', 'yMm',
+  'rotationDeg', 'socleMm', 'counterMm', 'offWallMm', 'free', 'wallId',
+] as const satisfies readonly (keyof PlacedUnit)[];
+
 const NO_UNITS: PlacedUnit[] = [];
 const NO_HEX: Record<string, string> = {};
 
@@ -533,6 +542,32 @@ export function DesignScreen({
     })();
   }
 
+  /**
+   * מה שהעריכה המספרית עומדת לעשות לחדר.
+   *
+   * שער הבנייה שואל אם אפשר לחתוך את הארגז; הוא אינו שואל אם יש לו
+   * מקום. ארגז 600 שהורחב ל-1000 לצד שכן שעומד ב-700 נשמר בשקט
+   * וחפף אותו ב-300 — אותו מצב בדיוק שהגרירה מסרבת להניח. זו אותה
+   * בדיקה, מאותה פונקציה, לפני הכתיבה ולא אחריה.
+   *
+   * מה שאינו נוגע בגאומטריה — גוון, שם, מצב עבודה — עובר כאן בלי
+   * שאלה: אין לו מה להתנגש בו.
+   */
+  function roomRefusal(id: string, patch: Partial<PlacedUnit>): string | null {
+    const touchesRoom = SPATIAL_FIELDS.some((k) => k in patch);
+    if (!touchesRoom) return null;
+    const current = (allUnits ?? NO_UNITS).find((u) => u.id === id);
+    if (!current) return null;
+    const proposed = { ...current, ...patch };
+    const others = (allUnits ?? NO_UNITS).filter((u) => u.id !== id);
+    const next = buildPlan(walls ?? [], [...others, proposed]);
+    const box = solidBox(proposed, next);
+    if (!box) return null;
+    return blocked(proposed, box, others, next)
+      ? 'במידה הזאת הארגז נכנס לתוך מה שכבר עומד שם'
+      : null;
+  }
+
   async function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
     const workOnly = Object.keys(patch).every((k) => k === 'work');
     if (!editable && !workOnly) return;
@@ -794,7 +829,16 @@ export function DesignScreen({
           key={selected.id}
           unit={selected}
           inside={inside}
-          onChange={(patch) => patchUnit(selected.id, patch)}
+          onChange={(patch) => {
+            /*
+             * הגרירה כבר עוברת דרך `blocked` לפני שהיא מניחה;
+             * העריכה המספרית עוברת כאן, לפני שהיא כותבת.
+             */
+            const refused = roomRefusal(selected.id, patch);
+            if (refused) return refused;
+            void patchUnit(selected.id, patch);
+            return null;
+          }}
           project={project}
           parts={parts ?? undefined}
           canPrice={can.sell(me?.role)}

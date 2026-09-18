@@ -107,8 +107,13 @@ export function UnitEditor({
   fillHeight?: { startMm: number; sizeMm: number };
   /** גובה הרגליים שהעסק עובד בו — לארגז שחוזר לרצפה */
   defaultSocleMm?: number;
-  /** הופך את הארגז לאי בחדר, או מחזיר אותו אל הקיר */
-  onChange: (patch: Partial<PlacedUnit>) => void;
+  /**
+   * שינוי הארגז. מחזיר את הסיבה שבגללה סורב, או `null` כשנשמר.
+   *
+   * החדר עונה רק למי ששואל: מידה שמכניסה את הארגז לתוך שכנו
+   * נדחית שם, ומי שביקש אותה צריך לדעת למה היא לא קרתה.
+   */
+  onChange: (patch: Partial<PlacedUnit>) => string | null | void;
   /** החלת גוון וחומר על כל הפרויקט */
   onApplyChoiceAll: (role: PartRole, choice: PartChoice) => void;
   onEdit: () => void;
@@ -173,10 +178,11 @@ export function UnitEditor({
    * והמסך אומר מהו המינימום — לא "שגיאה".
    */
   function resize(patch: Partial<PlacedUnit>) {
+    /* אפשר לבנות אותו? */
     const why = unitProblem({ ...unit, ...patch }, carcassMm);
     if (why) return setBlocked(why);
-    setBlocked(null);
-    onChange(patch);
+    /* ויש לו מקום? התשובה מגיעה מהמסך, שמכיר את שאר החדר */
+    setBlocked(onChange(patch) || null);
   }
 
   /* מה אפשר לבנות בארגז — ולא מה שהאיור שנבחר לו מצייר */
@@ -187,6 +193,8 @@ export function UnitEditor({
   const exposed = unit.exposed ?? {};
   const glassSides = unit.glassSides ?? {};
   const bodyH = bodyHeightMm(unit);
+  /* מי שיכול לשאת משטח עבודה: גוף אמיתי, על הרצפה */
+  const canCarryCounter = !flat && !glyphDef(unit.glyph).standalone && unit.level !== 'wall';
   const led = unit.led ?? [];
   const rails = unit.rails ?? {};
   const backKind = unit.backKind ?? 'thin';
@@ -1019,6 +1027,32 @@ export function UnitEditor({
           )}
         </div>
       </div>
+
+      {/*
+        משטח עבודה: לוח שיושב על הארגז, לא בתוכו.
+        עד כאן הוא נקבע רק בבניית ארגז בספרייה, ומי שהניח ארון
+        תחתון בהדמיה לא יכול היה להוסיף לו משטח — או להוריד אותו —
+        בלי לחזור לספרייה ולשמור ארגז חדש. אפס הוא בחירה תקפה,
+        ולכן זו מידה ולא מתג.
+
+        הוא מוצע רק למי שיכול לשאת אותו: ארגז עם גוף שעומד על
+        הרצפה. לארון תלוי, ללוח בודד ולמכשיר שנקנה שלם אין על מה
+        להניח משטח, ושורה כזאת אצלם היא שאלה בלי משמעות.
+      */}
+      {canCarryCounter && (
+        <div className="mt-2">
+          <NumBox
+            label="משטח עבודה"
+            value={unit.counterMm ?? 0}
+            /*
+             * המשטח יושב מעל הגוף ואינו מרים אותו: `heightMm` הוא
+             * הארון, והמשטח נוסף לו בגובה הפיזי. כך הוא גם נחתך,
+             * וכך גם נבדקת ההתנגשות שמעליו.
+             */
+            onChange={(mm) => resize({ counterMm: mm })}
+          />
+        </div>
+      )}
     </div>
 
     {addingFinish && <FinishSheet finish={null} onClose={() => setAddingFinish(false)} />}
