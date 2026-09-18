@@ -57,6 +57,14 @@ export function fitCapability(u: CapSource, cap: Capability): Partial<CapSource>
 
   const std = APPLIANCES[cap as ApplianceType];
   if (!std) return null;
+  /*
+   * מכשיר עומד אינו נכנס לארון, ולכן אין בארגז מה להתאים לו.
+   *
+   * בלי זה נבנתה כאן "נישה" מרשימה ריקה: הארגז קיבל רצועת מגירה
+   * אחת ותו לא, והיכולת שביקשו להתאים אותו אליה נשארה כבויה —
+   * תיקון שמציע מבנה שאינו עונה על מה שנלחץ.
+   */
+  if (std.freestanding) return null;
 
   /* הנישות עצמן: גובה התא הוא הנישה ועוד הלוח שמפריד אותה מהבא */
   const niches: Zone[] = std.niches.map((n, i) => ({

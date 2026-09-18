@@ -9,6 +9,10 @@ import './_exit.mjs';
  *
  * מה שנבדק כאן: היכולת נקראת מהאזורים של הארגז ומהמידות שלו,
  * ומידות המכשירים הן תקן ולא "נתוני יצרן".
+ *
+ * מה שאינו נבדק כאן יותר הוא "נישת תנור": תנור ומדיח עומדים
+ * בשורה בגובה הארגזים, ואין ארון שמארח אותם. הנישה שנשארה היא
+ * של עמודת תנור ומיקרוגל, שהיא מכשירי בילד־אין באמת.
  */
 import { chromium } from 'playwright';
 
@@ -40,18 +44,31 @@ const r = await page.evaluate(async () => {
     socleMm: 0, counterMm: 0, backKind: 'thin', ...over,
   });
 
-  /* נישת תנור במידות תקן: 560×590×550 */
+  /* נישת מיקרוגל במידות תקן: 560×380×380 */
+  const microNiche = box({
+    glyph: 'open', applianceType: 'micro', widthMm: 600, heightMm: 800, depthMm: 580,
+    zones: [{ id: 'a', heightMm: 400, kind: 'empty' }, { id: 'b', heightMm: 400, kind: 'empty' }],
+  });
+  /* אותו ארגז, בלי חלוקה — חלל אחד בגובה 800 אינו נישה */
+  const microNoNiche = box({
+    glyph: 'open', applianceType: 'micro', widthMm: 600, heightMm: 800, depthMm: 580,
+    zones: [{ id: 'a', heightMm: 800, kind: 'empty' }],
+  });
+  /* ארגז מדפים ששמו "ארון מיקרוגל" */
+  const namedOnly = box({ glyph: 'doors', name: 'ארון מיקרוגל', doors: 2, shelves: 2 });
+
+  /*
+   * ארגז שנבנה כנישת תנור — ואין לו את מי לארח.
+   *
+   * זה בדיוק המבנה שעבר כאן קודם, ומה שהשתנה אינו הארגז אלא
+   * התנור: הוא עומד על הרצפה בגובה הארגזים שלצידו, והמשטח עובר
+   * מעליו. ארון שמפנה לו חלל אינו טעות — הוא פשוט אינו מה
+   * שמספק אותו.
+   */
   const ovenNiche = box({
     glyph: 'open', applianceType: 'oven', widthMm: 600, heightMm: 800, depthMm: 580,
     zones: [{ id: 'a', heightMm: 190, kind: 'empty' }, { id: 'b', heightMm: 610, kind: 'empty' }],
   });
-  /* אותו ארגז, בלי חלוקה — חלל אחד בגובה 800 אינו נישה */
-  const ovenNoNiche = box({
-    glyph: 'open', applianceType: 'oven', widthMm: 600, heightMm: 800, depthMm: 580,
-    zones: [{ id: 'a', heightMm: 800, kind: 'empty' }],
-  });
-  /* ארגז מדפים ששמו "ארון תנור" */
-  const namedOnly = box({ glyph: 'doors', name: 'ארון תנור', doors: 2, shelves: 2 });
 
   /* ארגז כיור: משטח, וחלל פנוי מתחתיו */
   const sinkBox = box({
@@ -81,28 +98,38 @@ const r = await page.evaluate(async () => {
     zones: [{ id: 'a', heightMm: 2100, kind: 'empty' }],
   });
 
+  /* הנישה שנותרה: זו של עמודת תנור ומיקרוגל */
+  const ovenStd = APPLIANCES.ovenMicro.niches[0];
+
   return {
-    oven: unitProvides(ovenNiche, 'oven'),
-    ovenNoNiche: unitProvides(ovenNoNiche, 'oven'),
-    namedOnly: unitProvides(namedOnly, 'oven'),
+    micro: unitProvides(microNiche, 'micro'),
+    microNoNiche: unitProvides(microNoNiche, 'micro'),
+    namedOnly: unitProvides(namedOnly, 'micro'),
+    ovenNiche: unitProvides(ovenNiche, 'oven'),
+    ovenFreestanding: APPLIANCES.oven.freestanding === true,
+    dwFreestanding: APPLIANCES.dishwasher.freestanding === true,
     sink: unitProvides(sinkBox, 'sink'),
     sinkDrawers: unitProvides(sinkDrawers, 'sink'),
     renamed: unitProvides(renamed, 'sink'),
     twoNiches: unitProvides(twoNiches, 'ovenMicro'),
     oneBigCavity: unitProvides(oneBigCavity, 'ovenMicro'),
     /* והתקן עצמו: מה שכתוב בו הוא מה שנבדק */
-    ovenStd: APPLIANCES.oven.niches[0],
+    ovenStd,
     sinkCut: CUTOUTS.sink,
-    slackOk: nicheFits({ fromMm: 0, widthMm: 564, heightMm: 592, depthMm: 576 }, APPLIANCES.oven.niches[0]),
-    slackTooTall: nicheFits({ fromMm: 0, widthMm: 564, heightMm: 900, depthMm: 576 }, APPLIANCES.oven.niches[0]),
+    slackOk: nicheFits({ fromMm: 0, widthMm: 564, heightMm: 592, depthMm: 576 }, ovenStd),
+    slackTooTall: nicheFits({ fromMm: 0, widthMm: 564, heightMm: 900, depthMm: 576 }, ovenStd),
     caps: unitCaps(sinkBox),
     capsProvideSink: capsProvide(unitCaps(sinkBox), 'sink'),
   };
 });
 
-ok('נישה במידות תקן ממלאת תפקיד תנור', r.oven === true, String(r.oven));
-ok('חלל לא מוגדר בגובה 800 אינו נישה', r.ovenNoNiche === false, String(r.ovenNoNiche));
+ok('נישה במידות תקן ממלאת תפקיד מיקרוגל', r.micro === true, String(r.micro));
+ok('חלל לא מוגדר בגובה 800 אינו נישה', r.microNoNiche === false, String(r.microNoNiche));
 ok('ושם בלבד אינו יוצר נישה', r.namedOnly === false, String(r.namedOnly));
+
+ok('תנור ומדיח הם מכשירים עומדים', r.ovenFreestanding && r.dwFreestanding,
+  `${r.ovenFreestanding}/${r.dwFreestanding}`);
+ok('ולכן גם ארגז שמפנה להם חלל אינו מספק אותם', r.ovenNiche === false, String(r.ovenNiche));
 
 ok('משטח וחלל מתחתיו הם ארגז כיור', r.sink === true, String(r.sink));
 ok('ארגז מגירות מלא אינו ארגז כיור', r.sinkDrawers === false, String(r.sinkDrawers));
@@ -111,7 +138,7 @@ ok('ושינוי שם אינו הופך ארגז דלתות לכיור', r.renam
 ok('תנור ומיקרוגל דורשים שתי נישות', r.twoNiches === true, String(r.twoNiches));
 ok('וחלל אחד גדול אינו מספק את שתיהן', r.oneBigCavity === false, String(r.oneBigCavity));
 
-ok('מידת נישת התנור היא תקן ולא נתון יצרן',
+ok('מידת הנישה בעמודה היא תקן ולא נתון יצרן',
   r.ovenStd.widthMm === 560 && r.ovenStd.heightMm === 590 && r.ovenStd.depthMm === 550,
   JSON.stringify(r.ovenStd));
 ok('וחיתוך הכיור הוא 490×430', r.sinkCut.widthMm === 490 && r.sinkCut.depthMm === 430,

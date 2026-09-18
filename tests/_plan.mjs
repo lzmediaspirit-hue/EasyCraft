@@ -12,6 +12,26 @@ const out = await page.evaluate(async () => {
   const P = await import('/src/features/design/plan.ts' + v);
   const R = await import('/src/catalog/kitchenRules.ts' + v);
   const B = await import('/src/catalog/builtins.ts' + v);
+  const PR = await import('/src/catalog/products.ts' + v);
+
+  /*
+   * אוצר המילים של המתכנן: מפתחות תפקיד מ-`SEED_CATALOG`, ולצידם
+   * מוצרי המערכת.
+   *
+   * קולט אדים ומיקרוגל אינם ארונות שנבנים סביבם אלא מכשירים
+   * שנקנים שלמים, ולכן המתכנן מציב את המוצר עצמו. הם נפתרים
+   * ב-`matchCatalog` לפי המזהה ולא דרך הדמיון ל-`SEED_CATALOG`,
+   * ולכן הם לא נמצאים שם — וזה לא מפתח מומצא.
+   */
+  const CATALOG = [
+    ...(B.SEED_CATALOG ?? []),
+    ...(PR.SHIPPED_PRODUCTS ?? []).map((i) => ({
+      key: i.id, name: i.name, glyph: i.glyph, level: i.level,
+      widths: i.widthOptionsMm, w: i.defaultWidthMm, h: i.defaultHeightMm,
+      d: i.defaultDepthMm, y: i.defaultYMm,
+      socle: i.socleMm, counter: i.counterMm,
+    })),
+  ];
 
   const wall = (id, len, features = [], turn) => ({
     id, name: id, lengthMm: len, heightMm: 2600, features, turnDeg: turn,
@@ -99,7 +119,7 @@ const out = await page.evaluate(async () => {
     const hob = p.units.find((u) => u.role === 'hob');
     if (!hob) continue;
     const above = p.units.filter((u) => u.level === 'wall' && u.xMm < hob.xMm + hob.widthMm && u.xMm + u.widthMm > hob.xMm);
-    ok(`מעל הכיריים · ${p.key}`, above.every((u) => u.catalogKey === 'k-up-hood'), above.map((u) => u.catalogKey).join());
+    ok(`מעל הכיריים · ${p.key}`, above.every((u) => u.catalogKey === 'appliance-hood'), above.map((u) => u.catalogKey).join());
   }
 
   /* --- 8. סדר התנועה: מקרר לפני כיור לפני כיריים --- */
@@ -130,7 +150,7 @@ const out = await page.evaluate(async () => {
     for (const p of A.planKitchen(input(walls))) {
       /* כל רוחב חייב להיות רוחב שהפריט בספרייה באמת נבנה בו */
       const bad = p.units.filter((u) => {
-        const it = (B.SEED_CATALOG ?? []).find((i) => i.key === u.catalogKey);
+        const it = CATALOG.find((i) => i.key === u.catalogKey);
         return !u.free && it && !it.widths.includes(u.widthMm);
       });
       ok(`רוחבי ספרייה ${name} · ${p.key}`, bad.length === 0,
@@ -157,7 +177,7 @@ const out = await page.evaluate(async () => {
   ok('מעבר צר פוסל מקבילי', !A.layoutsFor(tightGal).includes('galley'), A.layoutsFor(tightGal).join());
 
   /* --- 15. אין מפתח ספרייה מומצא --- */
-  const keys = new Set((B.SEED_CATALOG ?? []).map((i) => i.key));
+  const keys = new Set(CATALOG.map((i) => i.key));
   const seen = new Set();
   for (const [, walls] of Object.entries(rooms)) {
     for (const p of A.planKitchen(input(walls, { seating: true }))) for (const u of p.units) seen.add(u.catalogKey);
@@ -168,7 +188,7 @@ const out = await page.evaluate(async () => {
   /* --- 16. אורקל גאומטרי: אף שתי תיבות אינן חודרות זו לזו --- */
   const PL = await import('/src/features/design/placement.ts' + v);
   const C = await import('/src/features/design/collision.ts' + v);
-  const seed = new Map((B.SEED_CATALOG ?? []).map((i) => [i.key, i]));
+  const seed = new Map(CATALOG.map((i) => [i.key, i]));
   const asUnit = (pl, i) => {
     const it = seed.get(pl.catalogKey);
     return {

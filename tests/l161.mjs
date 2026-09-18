@@ -38,7 +38,7 @@ const r = await page.evaluate(async () => {
   });
 
   const built = {};
-  for (const cap of ['sink', 'hob', 'oven', 'micro', 'ovenMicro', 'fridge', 'dishwasher', 'hood']) {
+  for (const cap of ['sink', 'hob', 'micro', 'ovenMicro', 'fridge', 'hood']) {
     const u = blank(cap === 'sink' ? 'sink' : cap === 'hob' ? 'hob' : 'doors');
     const after = { ...u, ...fitCapability(u, cap) };
     built[cap] = {
@@ -47,10 +47,26 @@ const r = await page.evaluate(async () => {
     };
   }
 
+  /*
+   * תנור ומדיח אינם נבנים לתוך ארגז.
+   *
+   * הם מכשירים בגובה הארגזים שעומדים בשורה לצידם, והמשטח עובר
+   * מעליהם. `fitCapability` שניסה בכל זאת בנה להם "נישה" מרשימה
+   * ריקה — רצועת מגירה אחת בלי חלל — והיכולת נשארה כבויה.
+   */
+  const standing = {};
+  for (const cap of ['oven', 'dishwasher']) {
+    const u = blank();
+    standing[cap] = {
+      fit: fitCapability(u, cap),
+      provides: capsProvide(unitCaps({ ...u, applianceType: cap }), cap),
+    };
+  }
+
   /* הנישה שנבנתה היא מידת התקן, ולא משהו שסתם עובר */
-  const oven = { ...blank(), ...fitCapability(blank(), 'oven') };
-  const need = APPLIANCES.oven.niches[0];
-  const exact = unitCaps(oven).cavities.some(
+  const column = { ...blank(), ...fitCapability(blank(), 'ovenMicro') };
+  const need = APPLIANCES.ovenMicro.niches[0];
+  const exact = unitCaps(column).cavities.some(
     (c) => c.heightMm >= need.heightMm && c.heightMm <= need.heightMm + NICHE_SLACK_MM,
   );
 
@@ -62,7 +78,7 @@ const r = await page.evaluate(async () => {
   const standalone = fitCapability(blank('fridge'), 'fridge');
 
   return {
-    built, exact,
+    built, standing, exact,
     drawersKept: unitCaps(sunk).drawers,
     sinkOverDrawers: capsProvide(unitCaps(sunk), 'sink'),
     standaloneNull: standalone === null,
@@ -72,6 +88,10 @@ const r = await page.evaluate(async () => {
 for (const [cap, v] of Object.entries(r.built)) {
   ok(`${cap} — נבנה במידות התקן`, v.provides, '');
   ok(`${cap} — המידות גדלו ולא הצטמצמו`, v.grew, '');
+}
+for (const [cap, v] of Object.entries(r.standing)) {
+  ok(`${cap} — מכשיר עומד אינו מקבל נישה`, v.fit === null, JSON.stringify(v.fit));
+  ok(`${cap} — ואין ארגז שמספק אותו`, v.provides === false, String(v.provides));
 }
 ok('הנישה היא מידת התקן', r.exact);
 ok('חלל לקערה אינו מוחק את המגירות', r.drawersKept === 3, String(r.drawersKept));

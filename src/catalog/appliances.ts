@@ -105,6 +105,13 @@ export const APPLIANCES: Record<ApplianceType, ApplianceStd> = {
     niches: [MICRO_NICHE],
     openClearanceMm: 400,
   },
+  /*
+   * עמודת תנור ומיקרוגל — ושם התנור כן בנוי.
+   *
+   * זה אינו סותר את `oven` שמעליו: תנור *עומד* הוא מכשיר בפני
+   * עצמו בגובה הארגזים, ותנור בילד־אין הוא מה שנכנס לעמודה
+   * שנבנתה לו. מי שבוחר בעמודה בוחר בשני מכשירים מובנים.
+   */
   ovenMicro: {
     type: 'ovenMicro',
     label: 'תנור ומיקרוגל',

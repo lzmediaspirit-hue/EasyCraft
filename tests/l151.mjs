@@ -148,9 +148,9 @@ const plans = await page.evaluate(async () => {
   });
 
   return {
-    cheapHasMicro: !!cheap?.units.some((u) => u.catalogKey === 'k-up-micro'),
+    cheapHasMicro: !!cheap?.units.some((u) => u.catalogKey === 'appliance-micro'),
     cheapSaid: (cheap?.dropped ?? []).filter((d) => d.includes('מיקרוגל')).length,
-    richHasMicro: !!rich?.units.some((u) => u.catalogKey === 'k-up-micro'),
+    richHasMicro: !!rich?.units.some((u) => u.catalogKey === 'appliance-micro'),
     cramped: (cramped ?? []).map((p) => ({
       missing: p.score.missing,
       triangle: p.score.triangle,
