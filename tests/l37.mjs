@@ -70,7 +70,25 @@ const label = (await chip.innerText()).replace(/\s/g, '');
 await chip.click(); await page.waitForTimeout(800);
 u = await units();
 const top = u.find((z) => z.lvl === 'wall');
-ok(!!top && top.y === 2400 && top.h === 600, 'הארגז נכנס לרווח: 240 עד התקרה', JSON.stringify(top) + ' | ' + label);
+/*
+ * הרווח נמדד מראש הארגז שמתחת — הגובה הפיזי שלו, כולל משטח
+ * העבודה — ועד התקרה. הארגז שהספרייה נותנת נושא משטח, ולכן
+ * המספר אינו 240/60 עגול אלא מה שבאמת נשאר.
+ */
+const below = await page.evaluate(async () => {
+  const v = '?v=' + Date.now();
+  const { db } = await import('/src/db/db.ts' + v);
+  const { physicalHeightMm } = await import('/src/db/types.ts' + v);
+  const rows = await db.units.toArray();
+  const tallest = rows.filter((r) => r.level !== 'wall')
+    .reduce((a, r) => (a && a.heightMm >= r.heightMm ? a : r), null);
+  const wall = (await db.walls.toArray()).sort((a, b) => a.index - b.index)[0];
+  return { topMm: tallest.yMm + physicalHeightMm(tallest), ceilingMm: wall.heightMm };
+});
+const wantH = below.ceilingMm - below.topMm;
+ok(!!top && top.y === below.topMm && top.h === wantH,
+  'הארגז נכנס לרווח: מראש הארון ועד התקרה',
+  `${JSON.stringify(top)} | רצוי y=${below.topMm} h=${wantH} | ${label}`);
 await page.screenshot({ path: SP + '/L37-2-filled.png' });
 
 /* אין מה להשלים — השבב נעלם */

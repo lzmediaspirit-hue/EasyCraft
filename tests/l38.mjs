@@ -42,12 +42,18 @@ ok(hTxt.length === 1, 'מידת גובה מוצגת', hTxt.join(','));
 /*
  * המרווח הוא מה שנשאר בין ראש הארגז לתקרה, ולא מספר שנכתב כאן:
  * גובה הארגז מגיע מהספרייה של הנגרייה והוא משתנה איתה.
+ *
+ * ו"ראש הארגז" הוא הגובה הפיזי, כולל משטח העבודה — זה מה שנוגע
+ * בתקרה, וזה מה שהסרגל מודד. חישוב על הגוף בלבד נותן מספר גדול
+ * בעובי המשטח ממה שבאמת פנוי.
  */
 const gapCm = await page.evaluate(async (id) => {
-  const { db } = await import('/src/db/db.ts?v=' + Date.now());
+  const v = '?v=' + Date.now();
+  const { db } = await import('/src/db/db.ts' + v);
+  const { physicalHeightMm } = await import('/src/db/types.ts' + v);
   const u = (await db.units.toArray()).find((x) => x.id === id);
   const w = (await db.walls.toArray()).sort((a, b) => a.index - b.index)[0];
-  return (w.heightMm - ((u.yMm ?? 0) + u.heightMm)) / 10;
+  return (w.heightMm - ((u.yMm ?? 0) + physicalHeightMm(u))) / 10;
 }, ids[0]);
 ok(hTxt[0].includes(String(gapCm)), 'המידה היא המרווח עד התקרה', `${hTxt.join(',')} · ${gapCm}`);
 await page.screenshot({ path: SP + '/L38-2-height.png' });

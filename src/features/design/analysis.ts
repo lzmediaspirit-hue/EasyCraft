@@ -1,4 +1,4 @@
-import { alongWallMm } from '../../db/types';
+import { alongWallMm, physicalHeightMm } from '../../db/types';
 import type { PlacedUnit, Wall } from '../../db/types';
 import { glyphDef } from '../../catalog/glyphList';
 
@@ -67,9 +67,18 @@ export function fillSpan(
       (u) => u.xMm < unit.xMm + alongWallMm(unit) && u.xMm + alongWallMm(u) > unit.xMm,
     );
     const mid = unit.yMm + unit.heightMm / 2;
+    /*
+     * הגובה שחוסם מלמטה הוא הגובה הפיזי, כולל משטח העבודה.
+     *
+     * ההנחה על ארגז נוחתת על פני המשטח — כך `stackSnap` מחשבת —
+     * ואילו כאן נמדד הגוף בלבד. ההפרש הוא בדיוק עובי המשטח, ולכן
+     * "השלמה עד התקרה" הציעה מידה שגדולה ב-30 מ״מ ממה שנשאר:
+     * הארגז נחת ב-2,430 וההצעה חושבה מ-2,400. עד שנוסף שער הגבהים
+     * זה נשמר בשקט וחרג מהתקרה; עכשיו הוא פשוט נדחה.
+     */
     const start = same
-      .filter((u) => u.yMm + u.heightMm <= mid)
-      .reduce((n, u) => Math.max(n, u.yMm + u.heightMm), 0);
+      .filter((u) => u.yMm + physicalHeightMm(u) <= mid)
+      .reduce((n, u) => Math.max(n, u.yMm + physicalHeightMm(u)), 0);
     const end = same
       .filter((u) => u.yMm >= mid)
       .reduce((n, u) => Math.min(n, u.yMm), wall.heightMm);

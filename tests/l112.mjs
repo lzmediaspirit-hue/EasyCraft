@@ -123,7 +123,15 @@ await page.evaluate(async (id) => {
     const g = st.get(id);
     g.onsuccess = () => res(g.result);
   });
-  st.put({ ...row, xMm: 500, yMm: 0, widthMm: 800, heightMm: 880, level: 'floor', floorLocked: true });
+  /*
+   * `counterMm: 0` במפורש: הארגז שהספרייה נותנת נושא משטח, וההנחה
+   * על ארגז נוחתת על פני המשטח ולא על גוף הארון. כאן נבדקת ההצמדה
+   * עצמה, ולכן הגובה שנבדק הוא הגובה שנכתב.
+   */
+  st.put({
+    ...row, xMm: 500, yMm: 0, widthMm: 800, heightMm: 880,
+    level: 'floor', floorLocked: true, counterMm: 0,
+  });
   st.put({
     ...row,
     id: 'qa-upper',
