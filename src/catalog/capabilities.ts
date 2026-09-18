@@ -30,11 +30,20 @@ export interface Cavity extends Niche {
 export interface UnitCaps {
   /** החללים הפנויים, מהגדול לקטן */
   cavities: Cavity[];
-  /** אפשר לחתוך במשטח שמעליו, ויש חלל מתחת לחיתוך */
+  /** יש עליו משטח עבודה שאפשר לחתוך בו */
   worktop: boolean;
-  /** הפתח שאפשר לחתוך במשטח — רוחב ועומק החלל שמתחתיו */
+  /** הפתח שאפשר לחתוך במשטח — הנקי בין הדפנות */
   cutWidthMm: number;
   cutDepthMm: number;
+  /**
+   * יש חלל פנוי מתחת למשטח, שגוף נופל אליו.
+   *
+   * זה ההבדל בין כיור לכיריים: קערת הכיור תלויה בפתח ויורדת לתוך
+   * הארון, ולכן היא דורשת מקום. כיריים יושבות *על* המשטח בעובי
+   * של סנטימטרים, ומתחתיהן אפשר להמשיך במגירות — כך בנוי כל ארגז
+   * כיריים אמיתי, והמגירה העליונה בו רדודה.
+   */
+  bowlRoom: boolean;
   rods: number;
   shelves: number;
   drawers: number;
@@ -74,7 +83,8 @@ function cavityOf(u: CapSource, zone: Zone, fromMm: number, share: number): Cavi
 export function unitCaps(u: CapSource): UnitCaps {
   const def = glyphDef(u.glyph);
   const empty: UnitCaps = {
-    cavities: [], worktop: false, cutWidthMm: 0, cutDepthMm: 0, rods: 0, shelves: 0, drawers: 0,
+    cavities: [], worktop: false, cutWidthMm: 0, cutDepthMm: 0, bowlRoom: false,
+    rods: 0, shelves: 0, drawers: 0,
   };
   /* מכשיר שנקנה שלם ולוח בודד אינם גוף ארון, ואין בהם חלל לבנות בו */
   if (def.standalone || def.noCarcass) return empty;
@@ -116,15 +126,21 @@ export function unitCaps(u: CapSource): UnitCaps {
   out.cavities.sort((a, b) => b.heightMm * b.widthMm - a.heightMm * a.widthMm);
 
   /*
-   * חיתוך במשטח דורש שני דברים: משטח שיושב על הארגז, וחלל מתחתיו
-   * שהכיור או הכיריים נכנסים אליו. ארגז מגירות מלא אינו ארגז כיור
-   * גם כשקוראים לו כך — אין לאן להכניס את הקערה.
+   * חיתוך במשטח: מה שנחתך הוא המשטח, והפתח מוגבל בנקי שבין
+   * הדפנות. זו מידה של הגוף ולא של תא מסוים, ולכן היא נמדדת כאן
+   * ולא על חלל.
+   *
+   * מה שמתחת הוא שאלה נפרדת, ורק הכיור שואל אותה: הקערה תלויה
+   * בפתח ויורדת לתוך הארון. כיריים יושבות על המשטח, ומתחתיהן
+   * ממשיכות מגירות — ארגז כיריים אמיתי בנוי בדיוק כך. הדרישה
+   * לחלל פנוי מתחת לכיריים פסלה כל ארגז כיריים שיש בו מגירות.
    */
   const counter = (u.counterMm ?? 0) > 0;
   const topCavity = out.cavities.find((c) => c.fromMm + c.heightMm >= body - MATERIAL.carcassMm - 1);
-  out.worktop = counter && !!topCavity;
-  out.cutWidthMm = topCavity ? topCavity.widthMm : 0;
-  out.cutDepthMm = topCavity ? topCavity.depthMm : 0;
+  out.worktop = counter;
+  out.cutWidthMm = counter ? Math.max(u.widthMm - MATERIAL.carcassMm * 2, 0) : 0;
+  out.cutDepthMm = counter ? Math.max(u.depthMm - MATERIAL.carcassMm, 0) : 0;
+  out.bowlRoom = !!topCavity;
   return out;
 }
 
@@ -162,15 +178,24 @@ export function capsProvide(caps: UnitCaps, role: Capability): boolean {
   if (role === 'drawer') return caps.drawers > 0;
   if (role === 'sink' || role === 'hob') {
     /*
-     * הקערה נופלת דרך הפתח אל תוך הארון, ולכן החלל שמתחת למשטח
-     * הוא מה שקובע. השוליים נמדדים על המשטח עצמו, והוא רחב
-     * מהארון ובולט מעליו — ולכן הם אינם תנאי על הגוף.
+     * שניהם נחתכים במשטח, ורק הכיור דורש גם מקום מתחתיו: הקערה
+     * נופלת דרך הפתח אל תוך הארון. השוליים נמדדים על המשטח עצמו,
+     * והוא רחב מהארון ובולט מעליו — ולכן הם אינם תנאי על הגוף.
      */
     const cut = CUTOUTS[role];
-    return caps.worktop && caps.cutWidthMm >= cut.widthMm && caps.cutDepthMm >= cut.depthMm;
+    if (!caps.worktop || caps.cutWidthMm < cut.widthMm || caps.cutDepthMm < cut.depthMm) {
+      return false;
+    }
+    return role === 'hob' || caps.bowlRoom;
   }
   const std = APPLIANCES[role];
   if (!std) return false;
+  /*
+   * מכשיר עומד אינו נכנס לארון, ולכן שום ארון אינו מספק אותו.
+   * בלי השורה הזאת רשימת נישות ריקה הייתה נקראת "אין דרישות",
+   * וכל ארגז בספרייה היה עונה על תנור.
+   */
+  if (std.freestanding) return false;
   /* כל נישה נתפסת פעם אחת: שתי דרישות אינן מתמלאות באותו חלל */
   const left = [...caps.cavities];
   for (const need of std.niches) {

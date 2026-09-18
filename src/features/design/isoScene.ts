@@ -19,7 +19,7 @@ import {
 } from './isoMath';
 
 import { COUNTER_OVERHANG_MM, unitBox, unitFrame, wallAxes } from './placement';
-import { applianceOf } from '../../catalog/appliances';
+import { APPLIANCES, applianceOf } from '../../catalog/appliances';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import type { Face, Frame, IsoView, Solid, Tf } from './isoMath';
@@ -37,6 +37,14 @@ const LED_TONE = '#f59e0b';
 const LED_MM = 16;
 /** ידית: מוט דק על החזית, בעובי שנראה בלי לגנוב את התמונה. */
 const HANDLE_MM = 30;
+
+/**
+ * עובי לוח הכיריים שמצויר על המשטח.
+ *
+ * כיריים אמיתיות בולטות מעל המשטח בכמה מ״מ, וזה כל מה שזה: ציור
+ * ולא נפח שנבדק. שער ההתנגשות ומידת הגובה אינם רואים אותו.
+ */
+const HOB_PLATE_MM = 6;
 
 /** רקע של קיר אחד: המישור, העובי, והסימונים שעליו. */
 export interface Backdrop {
@@ -608,6 +616,35 @@ function unitSolids(
         frame, 0, u.yMm + u.heightMm, 0, u.widthMm, u.counterMm, d + COUNTER_OVERHANG_MM, '#78716c', `${u.id}-cnt`,
       ),
     );
+    /*
+     * הכיריים, על המשטח.
+     *
+     * ארגז כיריים נראה כמו כל ארגז מגירות אחר, ולכן אי אפשר היה
+     * לדעת מהתמונה איפה הן. הן מצוירות כאן ולא נבנות: הן יושבות
+     * *על* המשטח בעובי של כמה מ״מ, ואינן מוסיפות לגובה שהארגז
+     * תופס — `physicalHeightMm` נשאר הארון ועוד המשטח.
+     *
+     * מי שמצייר אותן הוא הארגז שמצהיר שהוא ארגז כיריים, בדיוק כפי
+     * שארון תנור מצהיר על נישת תנור. שם לבדו אינו מצייר דבר.
+     */
+    if (u.applianceType === 'hob') {
+      const std = APPLIANCES.hob;
+      const hw = Math.min(std.widthMm, Math.max(u.widthMm - MATERIAL.carcassMm * 2, 0));
+      const hd = Math.min(std.depthMm, Math.max(d - MATERIAL.carcassMm, 0));
+      add(
+        slab(
+          frame,
+          (u.widthMm - hw) / 2,
+          u.yMm + u.heightMm + u.counterMm,
+          (d - hd) / 2,
+          hw,
+          HOB_PLATE_MM,
+          hd,
+          '#1c1917',
+          `${u.id}-hob`,
+        ),
+      );
+    }
   }
 
   /* דפנות זרות — בתוך המעטפת, לא מעליה */

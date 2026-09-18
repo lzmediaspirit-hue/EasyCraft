@@ -31,11 +31,29 @@ export interface Niche {
   widthMm: number;
   heightMm: number;
   depthMm: number;
+  /**
+   * מינימום בלבד — בלי תקרה.
+   *
+   * נישה רגילה היא מידה: מכשיר בילד־אין מיוצר לפי תקן, וחלל שגבוה
+   * ממנו בהרבה אינו נישה אלא עמודה ריקה. מקרר אינו כזה — הוא עומד
+   * *בתוך* ארגז מקרר, והוא זה שנבחר לפי הארגז ולא להפך. לכן שם
+   * נדרש רק שיהיה מספיק גדול.
+   */
+  atLeast?: true;
 }
 
 export interface ApplianceStd {
   type: ApplianceType;
   label: string;
+  /**
+   * המכשיר עומד בעצמו על הרצפה, בגובה הארגזים שלצידו.
+   *
+   * תנור ומדיח אינם נכנסים לארון: הם ניצבים בשורה בין הארגזים,
+   * והמשטח עובר מעליהם. עד כאן הם נדרשו נישה, ולכן כל מטבח נזקק
+   * ל"עמודת תנור" שאיש לא בנה — ובספרייה שאין בה אחת, התכנון
+   * האוטומטי לא הצליח למלא את התחנה.
+   */
+  freestanding?: true;
   /** המכשיר עצמו — מה שנראה בחזית */
   widthMm: number;
   heightMm: number;
@@ -66,12 +84,14 @@ const MICRO_NICHE: Niche = { widthMm: 560, heightMm: 380, depthMm: 380 };
 export const APPLIANCES: Record<ApplianceType, ApplianceStd> = {
   oven: {
     type: 'oven',
-    label: 'תנור בנוי',
+    label: 'תנור',
+    freestanding: true,
     widthMm: 595,
-    heightMm: 595,
-    depthMm: 550,
+    heightMm: 720,
+    depthMm: 580,
     widthOptionsMm: [600],
-    niches: [OVEN_NICHE],
+    /* עומד בשורה בין הארגזים, ולכן אין ארון שמארח אותו */
+    niches: [],
     /* דלת תנור נופלת קדימה לאורך גובהה */
     openClearanceMm: 600,
   },
@@ -103,18 +123,28 @@ export const APPLIANCES: Record<ApplianceType, ApplianceStd> = {
     heightMm: 1772,
     depthMm: 550,
     widthOptionsMm: [600, 700, 800, 900],
-    niches: [{ widthMm: 560, heightMm: 1772, depthMm: 550 }],
+    /*
+     * המקרר עומד בתוך ארגז מקרר, ומידתו נגזרת ממנו.
+     *
+     * לכן זה מינימום ולא מידה: ארגז מקרר הוא תיבה גבוהה ופנויה,
+     * והמקרר שנכנס אליה קטן ממנה בכדי `FRIDGE_CLEAR_MM`. דרישה
+     * למידת תקן קבועה פסלה ארגז מקרר של 170 ס״מ — שהוא ארגז מקרר
+     * לכל דבר, רק לדגם אחר.
+     */
+    niches: [{ widthMm: 500, heightMm: 1200, depthMm: 500, atLeast: true }],
     /* דלת מקרר מסתובבת כרוחבה */
     openClearanceMm: 600,
   },
   dishwasher: {
     type: 'dishwasher',
     label: 'מדיח כלים',
+    freestanding: true,
     widthMm: 598,
     heightMm: 818,
     depthMm: 570,
     widthOptionsMm: [450, 600],
-    niches: [{ widthMm: 600, heightMm: 820, depthMm: 570 }],
+    /* גם הוא עומד בשורה, בגובה הארגזים, ומתחת למשטח */
+    niches: [],
     /* דלת מדיח נופלת קדימה, והסל נשלף מעליה */
     openClearanceMm: 550,
   },
@@ -191,10 +221,27 @@ export function applianceOf(
 
 /** האם הנישה שהארון מפנה מכילה את מה שהמכשיר דורש. */
 export function nicheFits(have: Niche, need: Niche): boolean {
-  return (
-    have.widthMm >= need.widthMm &&
-    have.depthMm >= need.depthMm &&
-    have.heightMm >= need.heightMm &&
-    have.heightMm <= need.heightMm + NICHE_SLACK_MM
-  );
+  if (have.widthMm < need.widthMm) return false;
+  if (have.depthMm < need.depthMm) return false;
+  if (have.heightMm < need.heightMm) return false;
+  /* מינימום בלבד: החלל מחזיק את המכשיר, ואינו נמדד לפיו */
+  return need.atLeast === true || have.heightMm <= need.heightMm + NICHE_SLACK_MM;
+}
+
+/**
+ * המרווח שהמכשיר קטן בו מהחלל שהוא עומד בו.
+ *
+ * מקרר שנכנס לארגז מקרר אינו ממלא אותו עד הדופן: צריך אוויר
+ * מאחוריו ואצבע מכל צד. המספר הזה הוא מה שמפריד בין "נכנס"
+ * לבין "נדחק".
+ */
+export const FRIDGE_CLEAR_MM = 20;
+
+/** מידות המכשיר שעומד בתוך החלל הזה — החלל, פחות המרווח. */
+export function applianceInCavity(cavity: Niche): Niche {
+  return {
+    widthMm: Math.max(cavity.widthMm - FRIDGE_CLEAR_MM * 2, 0),
+    heightMm: Math.max(cavity.heightMm - FRIDGE_CLEAR_MM, 0),
+    depthMm: Math.max(cavity.depthMm - FRIDGE_CLEAR_MM, 0),
+  };
 }

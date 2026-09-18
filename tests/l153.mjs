@@ -30,6 +30,7 @@ const r = await page.evaluate(async () => {
   const { SHIPPED_LIBRARY } = await import('/src/catalog/shipped.ts' + v);
   const { itemSpec } = await import('/src/catalog/roles.ts' + v);
   const { unitCaps, capsProvide } = await import('/src/catalog/capabilities.ts' + v);
+  const { APPLIANCES, applianceInCavity } = await import('/src/catalog/appliances.ts' + v);
   const at = (code) => SHIPPED_LIBRARY.find((i) => i.code === code);
   const provides = (u, cap) => capsProvide(unitCaps(u), cap);
 
@@ -55,15 +56,35 @@ const r = await page.evaluate(async () => {
     /* ומה שכן בנוי — כן מספק */
     realSink: provides(itemSpec(at('EC-002')), 'sink'),
     /*
-     * ואותו כלל, מהצד השני: "ארון תנור עם מגירה" מצהיר בשמו על
-     * תנור, ואזור המכשיר שלו 600 מ״מ — אבל אחרי לוח התקרה נשאר
-     * חלל נקי של 582, ונישת התקן דורשת 590. השם אינו סוגר את
-     * הפער, וזה בדיוק העניין: מה שנמדד הוא מה שנבנה.
+     * כיריים אינן נישה אלא חיתוך במשטח, ולכן מגירות מתחתיהן אינן
+     * פוסלות: כך בנוי כל ארגז כיריים אמיתי, והמגירה העליונה בו
+     * רדודה. הדרישה לחלל פנוי מתחת פסלה את "ארגז כיריים" עצמו.
      */
-    namedOven: at('EC-057')?.name,
-    namedOvenClear: unitCaps(itemSpec(at('EC-057'))).cavities.map((c) => c.heightMm),
-    namedOvenProvides: provides(itemSpec(at('EC-057')), 'oven'),
-    /* ומכשיר שכן נכנס — מיקרוגל, שנישתו נמוכה יותר */
+    hobBox: at('B-137')?.name,
+    hobFromDrawers: provides(itemSpec(at('B-137')), 'hob'),
+    hobCaps: unitCaps(itemSpec(at('B-137'))),
+    /* הכיור כן דורש מקום מתחת — הקערה יורדת לתוך הארון */
+    sinkFromDrawers: provides(itemSpec(at('EC-056')), 'sink'),
+    /*
+     * תנור ומדיח עומדים על הרצפה בגובה הארגזים, ואינם נכנסים
+     * לארון. לכן שום ארגז אינו "מארח" אותם — הם מוצבים בעצמם.
+     */
+    cabinetHostsOven: provides(itemSpec(at('EC-053')), 'oven'),
+    cabinetHostsDw: provides(itemSpec(at('EC-053')), 'dishwasher'),
+    ovenIsFreestanding: APPLIANCES.oven.freestanding === true,
+    dwIsFreestanding: APPLIANCES.dishwasher.freestanding === true,
+    /*
+     * המקרר עומד בתוך ארגז מקרר, ומידתו נגזרת ממנו: הדרישה היא
+     * מינימום ולא מידת תקן, ולכן ארגז מקרר של 170 ס״מ הוא ארגז
+     * מקרר לכל דבר.
+     */
+    fridgeBox: at('B-138')?.name,
+    fridgeFromBox: provides(itemSpec(at('B-138')), 'fridge'),
+    fridgeInside: applianceInCavity(unitCaps(itemSpec(at('B-138'))).cavities[0] ?? {
+      widthMm: 0, heightMm: 0, depthMm: 0,
+    }),
+    fridgeCavity: unitCaps(itemSpec(at('B-138'))).cavities[0],
+    /* ומכשיר שכן נכנס לנישה — מיקרוגל */
     realMicro: provides(itemSpec(at('EC-048')), 'micro'),
     /* ארון תלוי שנוחת על הרצפה הוא באג שנראה מיד */
     onFloor: SHIPPED_LIBRARY.filter((i) => i.level === 'wall' && !i.defaultYMm)
@@ -76,9 +97,20 @@ ok('הצהרה על תנור בלי נישה אינה מספקת תנור', r.fa
 ok('ושינוי השם בחזרה אינו משנה דבר — המבנה הוא שקובע',
   r.renamedAwayIsOven === r.fakeIsOven);
 ok('ארון כיור שבנוי כמו שצריך מספק כיור', r.realSink === true);
-ok('וארגז שנישתו נמוכה מהתקן אינו מספק תנור — גם כששמו אומר שכן',
-  r.namedOvenProvides === false,
-  `${r.namedOven}: חלל ${r.namedOvenClear.join()} מול 590 שהתקן דורש`);
+ok('ארגז כיריים עם מגירות מספק כיריים — החיתוך במשטח, לא מתחתיו',
+  r.hobFromDrawers === true,
+  `${r.hobBox}: חיתוך ${r.hobCaps.cutWidthMm}×${r.hobCaps.cutDepthMm}, חלל מתחת ${r.hobCaps.bowlRoom}`);
+ok('ואותן מגירות בלי חלל אינן מספקות כיור', r.sinkFromDrawers === false);
+ok('תנור ומדיח מוגדרים כמכשיר עומד',
+  r.ovenIsFreestanding && r.dwIsFreestanding);
+ok('ולכן שום ארגז אינו מארח אותם',
+  r.cabinetHostsOven === false && r.cabinetHostsDw === false,
+  `${r.cabinetHostsOven} / ${r.cabinetHostsDw}`);
+ok('ארגז מקרר מספק מקרר, גם כשאינו במידת התקן', r.fridgeFromBox === true, r.fridgeBox);
+ok('והמקרר שבתוכו קטן ממנו', !!r.fridgeCavity &&
+  r.fridgeInside.heightMm < r.fridgeCavity.heightMm &&
+  r.fridgeInside.widthMm < r.fridgeCavity.widthMm,
+  `חלל ${r.fridgeCavity?.widthMm}×${r.fridgeCavity?.heightMm} → מקרר ${r.fridgeInside.widthMm}×${r.fridgeInside.heightMm}`);
 ok('ומכשיר שכן נכנס לנישה שלו מסופק', r.realMicro === true);
 /*
  * גובה ההתקנה נבדק ככלל ולא בשלושה מספרים כתובים. קודם היו כאן

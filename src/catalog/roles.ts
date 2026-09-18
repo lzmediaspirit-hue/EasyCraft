@@ -53,12 +53,12 @@ export const ROLE_NEEDS: Record<string, RoleNeed> = {
 export const ROLE_OF_KEY: Record<string, RoleNeed> = {
   'k-base-sink': ROLE_NEEDS.sink,
   'k-base-hob': ROLE_NEEDS.hob,
+  /* מכשירים שעומדים בעצמם — המפתח הוא המוצר, ולא ארון שמארח אותו */
   'k-base-dw': ROLE_NEEDS.dishwasher,
-  'k-tall-oven': ROLE_NEEDS.oven,
-  'k-tall-ovenmicro': ROLE_NEEDS.ovenMicro,
+  'k-base-oven': ROLE_NEEDS.oven,
   'k-tall-fridge': ROLE_NEEDS.fridge,
-  'k-up-hood': ROLE_NEEDS.hood,
-  'k-up-micro': ROLE_NEEDS.micro,
+  'appliance-hood': ROLE_NEEDS.hood,
+  'appliance-micro': ROLE_NEEDS.micro,
 };
 
 /** המפרט של פריט ספרייה, במידות ברירת המחדל שלו. */

@@ -368,13 +368,15 @@ function sequence(input: AutoInput, priority: Priority): Slot[] {
   });
   if (a.hob) out.push({ role: 'hob', zone: 'hot', key: 'k-base-hob', wantMm: 600, minMm: 600 });
   if (a.oven) {
-    out.push({
-      role: 'oven',
-      zone: 'hot',
-      key: a.microwave ? 'k-tall-ovenmicro' : 'k-tall-oven',
-      wantMm: 600,
-      minMm: 600,
-    });
+    /*
+     * התנור עומד על הרצפה בגובה הארגזים, ואינו נכנס לעמודה.
+     *
+     * עד כאן התכנון ביקש "עמודת תנור" — ארון שמארח תנור בנישה —
+     * ובספרייה שאין בה כזה, התחנה לא התמלאה וההצעה כולה נחסמה.
+     * מה שמוצב עכשיו הוא המכשיר עצמו, שקיים תמיד: הוא מוצר של
+     * המערכת ולא ארגז שנבנה.
+     */
+    out.push({ role: 'oven', zone: 'hot', key: 'k-base-oven', wantMm: 600, minMm: 600 });
   }
   return out;
 }
@@ -416,9 +418,11 @@ function spread(slots: Slot[], caps: number[]): Slot[][] {
 }
 
 const NAME: Record<string, string> = {
-  'k-tall-fridge': 'עמודת מקרר',
-  'k-tall-oven': 'עמודת תנור',
-  'k-tall-ovenmicro': 'עמודת תנור ומיקרוגל',
+  'k-tall-fridge': 'מקרר',
+  /* תנור, מדיח, מיקרוגל וקולט אדים הם המכשיר עצמו, ולא ארון סביבו */
+  'k-base-oven': 'תנור',
+  'appliance-micro': 'מיקרוגל',
+  'appliance-hood': 'קולט אדים',
   'k-tall-pantry': 'עמודת מזווה',
   'k-base-sink': 'ארגז כיור',
   'k-base-dw': 'ארגז מדיח',
@@ -430,8 +434,6 @@ const NAME: Record<string, string> = {
   'k-tall-door': 'עמודת דלתות',
   'k-up-door1': 'עליון דלת',
   'k-up-door2': 'עליון דלתות',
-  'k-up-micro': 'ארון מיקרוגל',
-  'k-up-hood': 'ארון קולט אדים',
 };
 
 /** ארגז עמודה מגיע עד התקרה ואינו נושא ארון עליון. */
@@ -761,7 +763,8 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
       if (upperBlocked(wall, u.xMm, u.widthMm)) continue;
       /* מעל כיריים תלוי קולט אדים ולא ארון; ובלי קולט — כלום */
       if (u.role === 'hob') {
-        if (hood) units.push({ ...u, catalogKey: 'k-up-hood', role: 'hood', level: 'wall' });
+        /* קולט האדים הוא מוצר של המערכת, ולא ארון שנבנה סביבו */
+        if (hood) units.push({ ...u, catalogKey: 'appliance-hood', role: 'hood', level: 'wall' });
         continue;
       }
       units.push({
@@ -777,7 +780,7 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
     if (input.appliances.microwave && !input.appliances.oven) {
       const spot = units.find((u) => u.role === 'upper' && u.widthMm >= 600);
       if (spot) {
-        spot.catalogKey = 'k-up-micro';
+        spot.catalogKey = 'appliance-micro';
         spot.role = 'oven';
         spot.widthMm = 600;
       } else {
