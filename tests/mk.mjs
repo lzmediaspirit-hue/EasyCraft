@@ -79,10 +79,10 @@ export const BOX = {
   doors2: /^ארון תחתון שתי דלתות/,
   drawers: /^ארון תחתון מגירות/,
   sink: /^ארון כיור/,
-  hob: /^ארון כיריים עם מגירות/,
-  oven: /^ארון תנור תחתון/,
+  hob: /^ארגז כיריים/,
+  /* ארון תנור: מה שיש בספרייה הוא זה שעם המגירה */
+  oven: /^ארון תנור עם מגירה/,
   ovenDrawer: /^ארון תנור עם מגירה/,
-  cornerL: /^ארון פינה L/,
   blindEnd: /^פינה מתה ימין/,
   blindStart: /^פינה מתה שמאל/,
   /* מוצר של המערכת, ולא ארגז שנחתך */
@@ -90,7 +90,7 @@ export const BOX = {
   /* עליונים */
   upper: /^ארון עליון דלתות/,
   upperOpen: /^ארון עליון פתוח/,
-  upperLift: /^ארון עליון קלפה/,
+  upperLift: /^עליון קלאפה/,
   /* עמודות */
   tall: /^עמודת מזווה מדפים/,
   fridge: /^מקרר/,
@@ -128,7 +128,15 @@ export const OTHER_ROOM = {
 export async function addBox(page, box, { tab, room, edit = false } = {}) {
   const dlg = () => page.getByRole('dialog').last();
   while (await page.getByRole('dialog').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(250); }
-  await page.getByRole('button', { name: /הוספת ארגז/ }).first().click();
+  /*
+   * השם המדויק, ולא ביטוי מכיל.
+   *
+   * בספרייה יש ארגזים ששמם מתחיל ב"ארגז" — "ארגז כיריים", "ארגז
+   * מקרר" — וכרטיס בספריית המחשב נושא `aria-label` "הוספת {שם}".
+   * לכן "הוספת ארגז" כביטוי מכיל תפס את הכרטיסים לפני הכפתור,
+   * ו-`first()` הוסיף ארגז אקראי במקום לפתוח את הספרייה.
+   */
+  await page.getByRole('button', { name: 'הוספת ארגז', exact: true }).first().click();
   await page.waitForTimeout(700);
   if (room) {
     const back = dlg().getByRole('button', { name: 'לשלב הקודם' });
