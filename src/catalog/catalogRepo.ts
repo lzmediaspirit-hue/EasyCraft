@@ -4,10 +4,10 @@ import { CUSTOM_ROOM, type CatalogGroup, type CatalogItem, type RoomKind } from 
 
 import { CODE_PREFIX, codeNumber, fillCodes } from './codes';
 import { SEED_CATALOG, type SeedItem } from './builtins';
-import { LIBRARY_RELEASE, SHIPPED_LIBRARY, type ShippedItem } from './shipped';
+import { LIBRARY_GENERATION, LIBRARY_RELEASE, SHIPPED_LIBRARY, type ShippedItem } from './shipped';
 import { diffLibrary, fingerprintOf, mergedRow, type LibraryUpdate } from './libraryRelease';
 import { PRODUCTS_GENERATION, SHIPPED_PRODUCTS } from './products';
-import { allMine, eraseIds, mine, owned, patchRow } from '../db/rows';
+import { allMine, eraseIds, mine, owned, patchRow, revive } from '../db/rows';
 import { workshopId } from '../db/workshop';
 import { BuildError, checkItem } from './saveGate';
 import { cabinetNameKey, cleanCabinetName } from './names';
@@ -231,6 +231,64 @@ export async function removeSuperseded(): Promise<number> {
   const rows = await supersededBuiltins();
   if (rows.length) await eraseIds(db.catalog, rows.map((i) => i.id));
   return rows.length;
+}
+
+/**
+ * הספרייה שמגיעה עם האפליקציה הוחלפה — והתקנה קיימת מקבלת את החדשה
+ * במקום הישנה, ולא לצידה.
+ *
+ * `addShippedCabinets` ו-`applyLibraryUpdate` הם מנגנון ההצעה, והם
+ * נכונים לשינוי נקודתי: תבנית שהשתנתה מוצגת, והנגרייה בוחרת. הם
+ * אינם נכונים כאן. כשספרייה שלמה מוחלפת באחרת אין "גרסה חדשה של
+ * אותו ארגז" למזג — מה שהיה כאן הוא פשוט ספרייה אחרת, והשארתה לצד
+ * החדשה נותנת שתי רשימות באותם חדרים. בדיוק זה קרה כשנכנסה ספריית
+ * הנגרייה הראשונה, ו-`removeSuperseded` נכתב כדי לנקות אחריה — ביד.
+ *
+ * הדור הוא מה שהופך את זה לאוטומטי, ורק פעם אחת לכל החלפה. שלושה
+ * דברים קורים, לפי הסדר:
+ *
+ *   1. כל תבנית מובנית שאינה בספרייה החדשה יורדת. פרויקטים אינם
+ *      נפגעים — ארגז שהונח על קיר נושא את המפרט שלו בעצמו, ולכן
+ *      מחיקת התבנית שממנה נולד אינה נוגעת בו.
+ *   2. סימוני המחיקה של מה שכן בספרייה החדשה מנוקים. בלעדיהם ארגז
+ *      שהנגרייה מחקה פעם היה חוזר ונעלם — הסימון הוא תשובה לשאלה
+ *      הישנה, ולא לזו.
+ *   3. הספרייה החדשה נכתבת. תבנית שנערכה כאן נדרסת, וזו הכוונה:
+ *      ההחלפה היא החלטה מפורשת.
+ *
+ * מה שהנגרייה בנתה בעצמה — `isBuiltin: false` — אינו נוגע בזה
+ * בכלל. הוא לא הגיע עם האפליקציה, ולכן אין לו "גרסה חדשה".
+ */
+export async function replaceLibrary(): Promise<{ removed: number; added: number }> {
+  const settings = await settingsRepo.get();
+  /* התקנה חדשה נזרעת מהספרייה הזאת ממילא, ואין לה מה להחליף */
+  if (!settings.catalogSeededAt) {
+    await settingsRepo.save({ libraryGeneration: LIBRARY_GENERATION });
+    return { removed: 0, added: 0 };
+  }
+  if ((settings.libraryGeneration ?? 0) >= LIBRARY_GENERATION) return { removed: 0, added: 0 };
+
+  const shipped = shippedLibrary();
+  const gone = await supersededBuiltins();
+  if (gone.length) await eraseIds(db.catalog, gone.map((i) => i.id));
+  await revive('catalog', shipped.map((s) => s.id));
+
+  const now = Date.now();
+  await db.catalog.bulkPut(
+    shipped.map((r) => ({
+      ...r,
+      ...owned(),
+      createdAt: now,
+      updatedAt: now,
+      releaseMark: fingerprintOf(r),
+    })) as CatalogItem[],
+  );
+  await settingsRepo.save({
+    libraryGeneration: LIBRARY_GENERATION,
+    /* אין מה להציע אחרי החלפה: מה שבקוד הוא בדיוק מה שכאן */
+    libraryRelease: LIBRARY_RELEASE,
+  });
+  return { removed: gone.length, added: shipped.length };
 }
 
 export async function addSystemProducts(): Promise<number> {

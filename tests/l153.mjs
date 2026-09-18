@@ -54,8 +54,20 @@ const r = await page.evaluate(async () => {
     renamedAwayIsOven: provides(renamedAway, 'oven'),
     /* ומה שכן בנוי — כן מספק */
     realSink: provides(itemSpec(at('EC-002')), 'sink'),
-    realOven: provides(itemSpec(at('EC-057')), 'oven'),
-    offsets: ['EC-047', 'EC-075', 'EC-080'].map((c) => [c, at(c)?.defaultYMm]),
+    /*
+     * ואותו כלל, מהצד השני: "ארון תנור עם מגירה" מצהיר בשמו על
+     * תנור, ואזור המכשיר שלו 600 מ״מ — אבל אחרי לוח התקרה נשאר
+     * חלל נקי של 582, ונישת התקן דורשת 590. השם אינו סוגר את
+     * הפער, וזה בדיוק העניין: מה שנמדד הוא מה שנבנה.
+     */
+    namedOven: at('EC-057')?.name,
+    namedOvenClear: unitCaps(itemSpec(at('EC-057'))).cavities.map((c) => c.heightMm),
+    namedOvenProvides: provides(itemSpec(at('EC-057')), 'oven'),
+    /* ומכשיר שכן נכנס — מיקרוגל, שנישתו נמוכה יותר */
+    realMicro: provides(itemSpec(at('EC-048')), 'micro'),
+    /* ארון תלוי שנוחת על הרצפה הוא באג שנראה מיד */
+    onFloor: SHIPPED_LIBRARY.filter((i) => i.level === 'wall' && !i.defaultYMm)
+      .map((i) => i.code),
   };
 });
 
@@ -64,10 +76,17 @@ ok('הצהרה על תנור בלי נישה אינה מספקת תנור', r.fa
 ok('ושינוי השם בחזרה אינו משנה דבר — המבנה הוא שקובע',
   r.renamedAwayIsOven === r.fakeIsOven);
 ok('ארון כיור שבנוי כמו שצריך מספק כיור', r.realSink === true);
-ok('וארון תנור עם נישה מספק תנור', r.realOven === true);
-ok('גבהי ההתקנה שאושרו נשמרו',
-  JSON.stringify(r.offsets) === JSON.stringify([['EC-047', 1500], ['EC-075', 1500], ['EC-080', 600]]),
-  JSON.stringify(r.offsets));
+ok('וארגז שנישתו נמוכה מהתקן אינו מספק תנור — גם כששמו אומר שכן',
+  r.namedOvenProvides === false,
+  `${r.namedOven}: חלל ${r.namedOvenClear.join()} מול 590 שהתקן דורש`);
+ok('ומכשיר שכן נכנס לנישה שלו מסופק', r.realMicro === true);
+/*
+ * גובה ההתקנה נבדק ככלל ולא בשלושה מספרים כתובים. קודם היו כאן
+ * EC-047, EC-075 ו-EC-080 — שלושה שתוקנו ביד אחרי שהגיליון לא
+ * נשא עמודת גובה כלל, ואפס בו נקרא "על הרצפה". הספרייה כבר אינה
+ * מגיעה מגיליון, והכלל הוא מה שנשאר נכון: ארון תלוי נתלה.
+ */
+ok('אף ארון תלוי אינו נוחת על הרצפה', r.onFloor.length === 0, r.onFloor.join(','));
 
 /* ------------------------------------------------------------------ */
 /* ועל המסך: אין אזהרות בנייה, בשום מקום                              */

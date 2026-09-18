@@ -192,6 +192,14 @@ await addUnit(page, 0);
 await page.waitForTimeout(700);
 
 /* משטח עבודה נערך על ארגז מונח */
+/*
+ * הגובה נקרא לפני העריכה ולא נכתב כמספר: הוא בא מהספרייה, והיא
+ * מוחלפת. מה שנבדק הוא שהמשטח אינו נוגע בו, ולא כמה הוא.
+ */
+const bodyBefore = await page.evaluate(async () => {
+  const { db } = await import('/src/db/db.ts');
+  return (await db.units.toArray())[0]?.heightMm;
+});
 const counter = page.getByLabel('משטח עבודה');
 ok('משטח עבודה נערך בעורך הארגז', (await counter.count()) === 1);
 await counter.fill('4');
@@ -202,7 +210,8 @@ const withCounter = await page.evaluate(async () => {
   return { counterMm: u.counterMm, heightMm: u.heightMm };
 });
 ok('והמשטח נשמר', withCounter.counterMm === 40, JSON.stringify(withCounter));
-ok('בלי להרים את גוף הארון', withCounter.heightMm === 900, String(withCounter.heightMm));
+ok('בלי להרים את גוף הארון', withCounter.heightMm === bodyBefore,
+  `${bodyBefore} → ${withCounter.heightMm}`);
 await counter.fill('0');
 await page.waitForTimeout(700);
 

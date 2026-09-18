@@ -51,10 +51,15 @@ const lib = await page.evaluate(async () => {
     /*
      * הכמות הנכונה אינה מספר כתוב אלא מה שיש בקוד: הספרייה
      * מוחלפת, ומספר שנכתב ביד מתיישן בדיוק ברגע שהיא מוחלפת.
+     *
+     * והאיחוד הוא לפי מזהה, כמו ב-`shippedLibrary`. מאז שהנגרייה
+     * מייצאת את הספרייה שלה מהאפליקציה היא נושאת גם את מוצרי
+     * המערכת שכבר יש בה, וחיבור פשוט של שתי הרשימות ספר תשעה
+     * מהם פעמיים.
      */
-    shipped: SHIPPED_LIBRARY.length + SHIPPED_PRODUCTS.length,
+    shipped: new Set([...SHIPPED_LIBRARY, ...SHIPPED_PRODUCTS].map((i) => i.id)).size,
     /* ארגז שנבנה בנגרייה — לא תבנית שנכתבה בקוד */
-    sample: all.find((i) => i.name === 'ארון כיריים עם מגירות'),
+    sample: all.find((i) => i.name === 'ארון תנור עם מגירה'),
   };
 });
 ok('נזרעה הספרייה של הנגרייה ולצדה מוצרי המערכת', lib.n === lib.shipped, `${lib.n}/${lib.shipped}`);
@@ -73,13 +78,14 @@ ok('שלוש הקטגוריות שכל חדר בנוי מהן קיימות',
  * המבנית סימנה אותו כמי שהשם שלו מבטיח מה שהמבנה אינו נותן.
  * עכשיו יש בו שני אזורים: מגירות, ומעליהן חלל לחיתוך.
  */
-ok('ארגז הכיריים שמר את האזורים שלו',
+ok('ארגז התנור שמר את האזורים שלו',
   lib.sample?.zones?.length === 2 &&
     lib.sample.zones[0].kind === 'drawers' &&
     lib.sample.zones[1].kind === 'empty',
   JSON.stringify(lib.sample?.zones));
-ok('ואת המסילות החסרות', lib.sample?.rails?.back === false && lib.sample?.rails?.top === false,
-  JSON.stringify(lib.sample?.rails));
+/* גובה נעול הוא מה שמפריד נישת מכשיר מחלל שנמתח עם הארגז */
+ok('ואזור המכשיר נעול בגובהו', lib.sample?.zones?.[1]?.fixedHeight === true,
+  JSON.stringify(lib.sample?.zones?.[1]));
 
 /*
  * קטגוריה שיש בה ארגזים חייבת להיות בסדר הכרטיסיות של החדר.

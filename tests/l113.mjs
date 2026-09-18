@@ -112,14 +112,24 @@ const lib = await page.evaluate(async () => {
   const bust = '?v=' + Date.now();
   const { SHIPPED_LIBRARY } = await import('/src/catalog/shipped.ts' + bust);
   const { SHIPPED_PRODUCTS } = await import('/src/catalog/products.ts' + bust);
-  const names = [...SHIPPED_LIBRARY, ...SHIPPED_PRODUCTS].map((i) => i.name);
+  /*
+   * האיחוד לפי מזהה, ולא חיבור של שתי רשימות.
+   *
+   * מאז שהנגרייה מייצאת את הספרייה שלה מתוך האפליקציה, מוצרי
+   * המערכת שכבר יש בה נוסעים בה — ולכן חיבור פשוט ספר תשעה מהם
+   * פעמיים וקרא לזה כפילות שם. זו בדיוק הרשימה ש-`shippedLibrary`
+   * בונה, ולכן זו גם הרשימה שנבדקת.
+   */
+  const libIds = new Set(SHIPPED_LIBRARY.map((i) => i.id));
+  const all = [...SHIPPED_LIBRARY, ...SHIPPED_PRODUCTS.filter((p) => !libIds.has(p.id))];
+  const names = all.map((i) => i.name);
   const dup = names.filter((n, i) => names.indexOf(n) !== i);
   return { names, products: SHIPPED_PRODUCTS.map((i) => i.name), dup: [...new Set(dup)] };
 });
 for (const n of ['תנור', 'מקרר', 'מדיח']) {
   ok(`"${n}" הוא מוצר של המערכת`, lib.products.includes(n), lib.products.join(' · '));
 }
-for (const n of ['ארון תנור עם מגירה', 'ארון תנור תחתון']) {
+for (const n of ['ארון תנור עם מגירה', 'ארגז כיריים']) {
   ok(`"${n}" קיים בספרייה`, lib.names.includes(n));
 }
 /*

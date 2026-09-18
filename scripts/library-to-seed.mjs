@@ -13,15 +13,24 @@
  * הכלי אינו נוגע בבסיס הנתונים של אף אחד: הוא כותב קוד. מכשיר
  * שכבר יש בו ספרייה שומר על שלו, כי זריעה מוסיפה רק מה שחסר.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src/catalog/shipped.ts');
 
-/** שדות שאינם שייכים לקוד: הם נקבעים מחדש בכל מכשיר. */
-const PER_DEVICE = ['createdAt', 'updatedAt', 'hiddenAt', 'workshopId', 'rev', 'sourceId'];
+/**
+ * שדות שאינם שייכים לקוד: הם נקבעים מחדש בכל מכשיר.
+ *
+ * `releaseMark` הוא ביניהם, וזו לא קוסמטיקה: הוא אומר "מה המכשיר
+ * הזה קיבל בשחרור הקודם", והזריעה מחשבת אותו מחדש מהשורה עצמה.
+ * סימון שנוסע בקוד היה טוען על התקנה חדשה שהיא כבר קיבלה שחרור
+ * שלא היה, ומנגנון העדכון היה קורא לזה "נערך כאן".
+ */
+const PER_DEVICE = [
+  'createdAt', 'updatedAt', 'hiddenAt', 'workshopId', 'rev', 'sourceId', 'releaseMark',
+];
 
 const HEAD = `import type { CatalogItem, Finish, Material } from '../db/types';
 
@@ -66,6 +75,53 @@ const DEPS_DOC = `
  */
 `;
 
+/**
+ * שני המספרים ששומרים על התקנות קיימות, ומה ההבדל ביניהם.
+ *
+ * `LIBRARY_RELEASE` הוא מנגנון ההצעה: תבנית שהשתנתה מוצגת, והנגרייה
+ * בוחרת אם לקבל אותה. הוא נכון לשינוי נקודתי.
+ *
+ * `LIBRARY_GENERATION` הוא החלפה. כשספרייה שלמה מוחלפת באחרת אין מה
+ * להציע ואין מה למזג: מה שהיה יורד, ומה שבא נכנס. הוא עולה בכל פעם
+ * שהכלי הזה כותב ספרייה חדשה, וזה מה שאומר להתקנה קיימת שהיא צריכה
+ * להחליף ולא להוסיף.
+ *
+ * שניהם נכתבים כאן ולא ביד. `LIBRARY_RELEASE` נוסף פעם אחת ביד אחרי
+ * שהכלי נכתב, והריצה הבאה הייתה מוחקת אותו בשקט — הקובץ נכתב מאפס
+ * בכל פעם. מי שממשיך להיכתב ביד ייעלם בהרצה הבאה.
+ */
+function carriedOver() {
+  const prev = existsSync(OUT) ? readFileSync(OUT, 'utf8') : '';
+  const read = (name, fallback) => {
+    const m = prev.match(new RegExp(`export const ${name} = (\\d+)`));
+    return m ? Number(m[1]) : fallback;
+  };
+  return { release: read('LIBRARY_RELEASE', 1), generation: read('LIBRARY_GENERATION', 0) };
+}
+
+/** הקבועים, בתחתית הקובץ — כדי שהספרייה עצמה תישאר למעלה */
+function versions({ release, generation }) {
+  return `
+/**
+ * גרסת הספרייה — מנגנון ההצעה.
+ *
+ * מספר שעולה כשתבנית כאן משתנה. התקנה קיימת אינה נזרעת שוב, ולכן
+ * המספר הזה הוא מה שמאפשר לה לדעת שיש שינוי, להציג אותו, ולבחור מה
+ * לקבל. ראה \`libraryRelease.ts\`.
+ */
+export const LIBRARY_RELEASE = ${release};
+
+/**
+ * דור הספרייה — מנגנון ההחלפה.
+ *
+ * עולה בכל פעם שהכלי כותב כאן ספרייה אחרת. התקנה שהדור שלה נמוך
+ * יותר אינה מקבלת הצעות למיזוג: היא מקבלת את הספרייה הזאת במקום מה
+ * שהיה לה. ראה \`replaceLibrary\` ב-\`catalogRepo.ts\`.
+ */
+export const LIBRARY_GENERATION = ${generation};
+`;
+}
+
 const args = process.argv.slice(2);
 if (!args.length || args.includes('--help')) {
   console.log('שימוש: node scripts/library-to-seed.mjs <library.json> | --reset');
@@ -73,15 +129,16 @@ if (!args.length || args.includes('--help')) {
 }
 
 if (args[0] === '--reset') {
-  writeFileSync(OUT, empty());
+  const was = carriedOver();
+  writeFileSync(OUT, empty(was));
   console.log('חזרנו לארגזי התקן שב-builtins.ts');
   process.exit(0);
 }
 
 const backup = JSON.parse(readFileSync(args[0], 'utf8'));
 if (backup.app !== 'easycraft') die('זה לא קובץ גיבוי של EasyCraft');
-const rows = backup.tables?.catalog;
-if (!Array.isArray(rows) || !rows.length) die('אין ארגזים בקובץ');
+const catalogRows = backup.tables?.catalog;
+if (!Array.isArray(catalogRows) || !catalogRows.length) die('אין ארגזים בקובץ');
 const materialRows = backup.tables?.materials ?? [];
 const finishRows = backup.tables?.finishes ?? [];
 
@@ -89,7 +146,7 @@ const finishRows = backup.tables?.finishes ?? [];
  * מה שהוסר מהספרייה אינו נכנס. הוא הוסר בכוונה, ולהחזיר אותו
  * דרך הקוד היה מבטל בדיוק את ההחלטה הזו.
  */
-const items = rows
+const items = catalogRows
   .filter((i) => !i.hiddenAt)
   .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
   .map((i, order) => {
@@ -123,17 +180,20 @@ const materials = materialRows.filter((m) => needMaterials.has(m.id)).map(strip)
 const missing = [...needFinishes].filter((id) => !finishes.some((f) => f.id === id)).length
   + [...needMaterials].filter((id) => !materials.some((m) => m.id === id)).length;
 
+const was = carriedOver();
 writeFileSync(
   OUT,
   HEAD +
     `export const SHIPPED_LIBRARY: ShippedItem[] = ${rows(items)};\n` +
     DEPS_DOC +
     `export const SHIPPED_MATERIALS: ShippedMaterial[] = ${rows(materials)};\n` +
-    `export const SHIPPED_FINISHES: ShippedFinish[] = ${rows(finishes)};\n`,
+    `export const SHIPPED_FINISHES: ShippedFinish[] = ${rows(finishes)};\n` +
+    versions({ release: was.release, generation: was.generation + 1 }),
 );
 console.log(`${items.length} ארגזים נכנסו ל-src/catalog/shipped.ts`);
+console.log(`דור הספרייה: ${was.generation} ← ${was.generation + 1}`);
 console.log(`${materials.length} לוחות ו-${finishes.length} גוונים נכנסו איתם`);
-const dropped = rows.length - items.length;
+const dropped = catalogRows.length - items.length;
 if (dropped) console.log(`${dropped} שהוסרו מהספרייה לא נכנסו`);
 if (missing) {
   console.log(
@@ -162,13 +222,14 @@ function strip(row) {
 }
 
 /** הקובץ הריק — כשחוזרים לארגזי התקן */
-function empty() {
+function empty(was) {
   return (
     HEAD +
     'export const SHIPPED_LIBRARY: ShippedItem[] = [];\n' +
     DEPS_DOC +
     'export const SHIPPED_MATERIALS: ShippedMaterial[] = [];\n' +
-    'export const SHIPPED_FINISHES: ShippedFinish[] = [];\n'
+    'export const SHIPPED_FINISHES: ShippedFinish[] = [];\n' +
+    versions({ release: was.release, generation: was.generation + 1 })
   );
 }
 

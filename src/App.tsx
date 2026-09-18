@@ -9,7 +9,12 @@ import { CalendarScreen } from './features/workflow/CalendarScreen';
 import { TasksScreen } from './features/workflow/TasksScreen';
 import { TeamScreen } from './features/team/TeamScreen';
 import { StockScreen } from './features/stock/StockScreen';
-import { addShippedCabinets, addSystemProducts, seedCatalog } from './catalog/catalogRepo';
+import {
+  addShippedCabinets,
+  addSystemProducts,
+  replaceLibrary,
+  seedCatalog,
+} from './catalog/catalogRepo';
 import { addBuiltinRooms, seedRooms } from './catalog/roomsRepo';
 import { seedMaterials } from './materials/materialsRepo';
 import { seedAdmin } from './workflow/auth';
@@ -34,6 +39,15 @@ export default function App() {
   useEffect(() => {
     ensureWorkshop()
       .then(() => Promise.all([seedCatalog(), seedRooms(), seedMaterials(), seedAdmin()]))
+      /*
+       * החלפת ספרייה קודמת ל"מה שחסר", ולא במקרה.
+       *
+       * `addShippedCabinets` מוסיף מה שאין ומעדכן מה שלא נערך —
+       * חשבון שנכון לשינוי נקודתי. כשהספרייה כולה הוחלפה הוא היה
+       * מוסיף את החדשה *מעל* הישנה, ושתיהן היו יושבות באותם חדרים.
+       * ההחלפה רצה קודם, ואחריה אין לו מה להוסיף.
+       */
+      .then(() => replaceLibrary())
       /*
        * מה שנוסף אחרי ההתקנה — אחרי הזריעה, ורק מה שחסר.
        * מוצרי מערכת וחדרים מובנים כאחד: שניהם נחסמו על ידי סימון
