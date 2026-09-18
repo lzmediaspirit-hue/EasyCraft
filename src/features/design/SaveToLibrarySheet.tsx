@@ -5,7 +5,7 @@ import { roomsRepo } from '../../catalog/roomsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { SaveError, useSaveGuard } from '../../ui/saveGuard';
-import { freeCabinetName } from '../../catalog/names';
+import { cabinetNameKey, freeCabinetName } from '../../catalog/names';
 import { Pill } from '../../ui/Pill';
 import { cm } from '../../ui/units';
 import { reusableSpec } from '../../db/types';
@@ -70,6 +70,28 @@ export function SaveToLibrarySheet({
   /* עדכון שומר את השם שיש; ארגז חדש מקבל שם פנוי */
   const name = typed ?? (target ? unit.name : freeCabinetName(unit.name, inLibrary.map((i) => i.name)));
 
+  /*
+   * ארגז אחר בספרייה שכבר נושא את השם הזה.
+   *
+   * עד כאן זו הייתה מבוי סתום: השמירה נדחתה ב"כבר יש בספרייה ארגז
+   * בשם הזה", ולמי שרצה דווקא להחליף אותו לא הייתה דרך — הוא נאלץ
+   * למחוק אותו קודם, או להמציא שם שני. שם זהה הוא בדיוק הכוונה
+   * "זה אותו ארגז, בגרסה מעודכנת", ולכן היא נענית.
+   *
+   * ההשוואה עוברת דרך אותו מפתח מנוקה שבו משתמש שער השמירה, ולכן
+   * מה שנראה כאן כהתנגשות הוא מה שייחסם שם — ולהפך.
+   *
+   * מוחרג רק מי שכבר נבחר לעדכון: הוא אינו "ארגז אחר באותו שם"
+   * אלא אותו ארגז. המקור עצמו כן נספר — ארגז שהגיע עם האפליקציה
+   * הוא בדיוק המקרה שבו אין מצב "עדכון", ובכל זאת מבקשים להחליף
+   * דווקא אותו.
+   */
+  const twin = inLibrary.find(
+    (i) => i.id !== target?.id && cabinetNameKey(i.name) === cabinetNameKey(name),
+  );
+  /* מי שבאמת ייכתב: המקור בעדכון, התאום בהחלפה, ואחרת שורה חדשה */
+  const into = target ?? twin;
+
   function save() {
     return guard.run(async () => {
     await catalogRepo.saveCustom({
@@ -79,14 +101,14 @@ export function SaveToLibrarySheet({
        * חזר מהספרייה עם תקרה.
        */
       ...reusableSpec(unit),
-      id: target?.id,
+      id: into?.id,
       /*
        * כשפריט המקור נמחק מהספרייה, הארגז שעל הקיר עדיין מחזיק את
        * כל המפרט שלו — ולכן אפשר לשמור אותו כארגז חדש. רק המידע
        * הקטלוגי חסר, ורק הוא נגזר: קבוצה מהמפלס, וכל החדרים.
        */
       rooms: chosen.length ? chosen : [GROUP_FALLBACK_ROOM],
-      group: source?.group ?? GROUP_BY_LEVEL[unit.level],
+      group: into?.group ?? source?.group ?? GROUP_BY_LEVEL[unit.level],
       name: name.trim() || unit.name,
       glyph: unit.glyph,
 
@@ -96,7 +118,7 @@ export function SaveToLibrarySheet({
 
       defaultWidthMm: unit.widthMm,
       // הרוחב הנוכחי נכנס לרשימת מידות התקן, כדי שיהיה זמין בבחירה מהירה
-      widthOptionsMm: [...new Set([...(source?.widthOptionsMm ?? []), unit.widthMm])].sort(
+      widthOptionsMm: [...new Set([...(into?.widthOptionsMm ?? source?.widthOptionsMm ?? []), unit.widthMm])].sort(
         (a, b) => a - b,
       ),
 
@@ -105,7 +127,7 @@ export function SaveToLibrarySheet({
       defaultYMm: unit.yMm,
       socleMm: unit.socleMm,
       counterMm: unit.counterMm,
-      note: source?.note,
+      note: into?.note ?? source?.note,
 
     });
     onClose();
@@ -121,7 +143,7 @@ export function SaveToLibrarySheet({
         <SaveError text={guard.error} />
         <PrimaryButton disabled={guard.busy || !name.trim()} onClick={save}>
 
-          {target ? 'עדכון הפריט' : 'שמירה כארגז חדש'}
+          {target ? 'עדכון הפריט' : twin ? `החלפת "${twin.name}"` : 'שמירה כארגז חדש'}
         </PrimaryButton>
         </>
       }
@@ -179,7 +201,18 @@ export function SaveToLibrarySheet({
           </Field>
         )}
 
-        {source?.isBuiltin && (
+        {/*
+          שם שכבר תפוס. במקום שהשמירה תיפול על שער השם, נאמר כאן מה
+          תעשה הלחיצה — ומה יקרה לארגז שכבר יושב שם.
+        */}
+        {twin && !target && (
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900">
+            בספרייה כבר יש "{twin.name}"{twin.isBuiltin && ' — ארגז שהגיע עם האפליקציה'}.
+            שמירה תחליף אותו במה שכיווננת כאן. לשמור לצד הקיים — תנו שם אחר.
+          </p>
+        )}
+
+        {source?.isBuiltin && !twin && (
           <p className="text-xs leading-snug text-stone-400">
             {source.name} הגיע עם האפליקציה ונשאר כפי שהוא — מה שנשמר כאן
             נוסף לספרייה כארגז נוסף.
