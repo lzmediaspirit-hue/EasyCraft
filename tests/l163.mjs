@@ -12,7 +12,7 @@ import './_exit.mjs';
  *   • מרווחים שנקבעו ביד נשמרים ביחס שלהם, ולא בחלוקה שווה.
  *   • שורת מגירה אחת היא תא, וגם עמודה של מגירות זו לצד זו.
  *   • קושרת מחלקת את הרוחב לפי החלק שנשמר בה, ולכל עמודה התוכן שלה.
- *   • ועל המסך: הכפתור מצייר תא לכל חלוקה, לא לכל ארגז.
+ *   • ועל המסך: תא לכל חלוקה ולא לכל ארגז, והתווית היא הגובה.
  */
 import { chromium } from 'playwright';
 import { setup, addUnit } from './mk.mjs';
@@ -178,8 +178,10 @@ ok('הכפתור מצייר תא לכל חלוקה ולא לכל ארגז', rect
 
 const labels = await page.locator('svg text[fill="#0f766e"]').allTextContents();
 ok('לכל תא יש מידה קריאה', labels.length === 9, String(labels.length));
-ok('המרווח בין המדפים נכון', labels.filter((t) => t === '86.4×24.2').length === 5, labels.join());
-ok('וגובה שורת המגירה נכון', labels.filter((t) => t === '76.4×19.6').length === 4, labels.join());
+ok('המרווח בין המדפים נכון', labels.filter((t) => t === '24.2').length === 5, labels.join());
+ok('וגובה שורת המגירה נכון', labels.filter((t) => t === '19.6').length === 4, labels.join());
+/* הרוחב זהה בכל תא של אותו ארגז, ולכן הוא אינו נכתב */
+ok('ואין רוחב על התווית', labels.every((t) => !t.includes('×')), labels.join());
 
 ok('בלי שגיאות בדפדפן', errs.length === 0, errs.slice(0, 2).join(' | '));
 

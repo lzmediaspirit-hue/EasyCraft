@@ -868,10 +868,11 @@ export function WallElevation({
                     strokeDasharray={`${stroke * 6} ${stroke * 4}`}
                   />
                   {/*
-                    המידה נכתבת רק כשיש לה מקום להיקרא בו — ובשורה
-                    נמוכה, שבה "רוחב×גובה" לא נכנס, נכתב הגובה
-                    לבדו. הוא המספר שבגללו פותחים את הכפתור הזה:
-                    כמה נשאר בין מדף למדף, ומה גובה כל מגירה.
+                    הגובה בלבד, ולא "רוחב×גובה".
+                    הרוחב זהה בכל התאים של אותו ארגז — הוא הנקי בין
+                    הדפנות — ולכן חזרתו בכל שורה היא רעש שמסתיר את
+                    המספר שבגללו פותחים את הכפתור: כמה נשאר בין מדף
+                    למדף, ומה גובה כל מגירה. הוא נכתב כשיש לו מקום.
                   */}
                   {c.heightMm > fontSize * 1.15 && c.widthMm > fontSize * 2 ? (
                     <text
@@ -883,9 +884,7 @@ export function WallElevation({
                       fontWeight="600"
                       direction="ltr"
                     >
-                      {c.widthMm > fontSize * 4 && c.heightMm > fontSize * 1.6
-                        ? `${cm(c.widthMm)}×${cm(c.heightMm)}`
-                        : cm(c.heightMm)}
+                      {cm(c.heightMm)}
                     </text>
                   ) : null}
                 </g>
