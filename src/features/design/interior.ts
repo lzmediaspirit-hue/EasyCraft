@@ -1,9 +1,9 @@
 import { DRAWER, MATERIAL, drawerDepth } from '../../catalog/standards';
 import { glyphDef } from '../../catalog/glyphList';
-import { blindSide, blindWidthMm, unitFronts, unitZones, zoneBands, zoneColumns, ZONE_LABELS } from '../../catalog/zones';
+import { blindSide, blindWidthMm, unitFronts, unitZones, zoneBands, zoneCells, zoneColumns, ZONE_LABELS } from '../../catalog/zones';
 import { carcassMm, frontThicknessMm, type BuildContext } from '../../catalog/saveGate';
 import { bodyHeightMm } from '../../db/types';
-import type { PlacedUnit } from '../../db/types';
+import type { PlacedUnit, ZoneContent, ZoneKind } from '../../db/types';
 
 /**
  * המידות הפנימיות הנקיות של ארגז.
@@ -186,10 +186,86 @@ export function interiorDims(u: PlacedUnit, ctx: BuildContext = {}): ClearSpan[]
 export interface InteriorCell {
   xMm: number;
   yMm: number;
-  /** הרוחב הנקי בין הדפנות, או בין המחיצות בתא מחולק */
+  /** הרוחב הנקי בין הדפנות, בין קושרות, או בין מגירות שזו לצד זו */
   widthMm: number;
-  /** הגובה הנקי: גובה האזור פחות הלוח שמפריד אותו מהבא */
+  /** הגובה הנקי של התא הזה — בין מדף למדף, או של שורת מגירה אחת */
   heightMm: number;
+  /** מה יושב בו, כדי שהתווית תדע על מה היא מדברת */
+  kind: ZoneKind;
+}
+
+/**
+ * החלוקה היחסית של המרווחים בין המדפים.
+ *
+ * `shelfGapsMm` נשמר כרשימה של מרווחים, והוא נקרא יחסית ולא
+ * במילימטרים — בדיוק כפי שהציור קורא אותו. מי שלא קבע מרווחים
+ * מקבל חלוקה שווה.
+ */
+function gapShares(gaps: number[] | undefined, count: number): number[] {
+  if (gaps && gaps.length === count) {
+    const total = gaps.reduce((a, b) => a + b, 0);
+    if (total > 0) return gaps.map((g) => g / total);
+  }
+  return Array.from({ length: count }, () => 1 / count);
+}
+
+/**
+ * תא אחד, מחולק למה שבאמת יושב בו.
+ *
+ * "מידה פנימית" של תא עם ארבעה מדפים אינה מספר אחד — היא חמישה
+ * מרווחים, וזה מה שנגר מודד כשהוא שואל מה נכנס לכאן. הגובה הנקי
+ * של התא כולו הוא מה שהוצג עד כאן, והוא לא ענה על השאלה.
+ *
+ * המדפים גוזלים את עוביים מהגובה הפנוי, המגירות מחלקות אותו
+ * לשורות שוות, והקושרת שבתוך תא מגירות מחלקת את הרוחב — הכול
+ * כמו בציור עצמו, ולא בקירוב שלו.
+ */
+function splitCell(
+  content: ZoneContent,
+  xMm: number,
+  yMm: number,
+  widthMm: number,
+  clearH: number,
+  t: number,
+): InteriorCell[] {
+  const kind = content.kind;
+  const whole = [{ xMm, yMm, widthMm, heightMm: clearH, kind }];
+
+  if (kind === 'shelves') {
+    const shelves = content.shelves ?? 0;
+    if (shelves < 1) return whole;
+    const free = clearH - shelves * t;
+    if (free <= 0) return whole;
+    const out: InteriorCell[] = [];
+    let y = yMm;
+    for (const share of gapShares(content.shelfGapsMm, shelves + 1)) {
+      const heightMm = free * share;
+      out.push({ xMm, yMm: y, widthMm, heightMm, kind });
+      y += heightMm + t;
+    }
+    return out;
+  }
+
+  if (kind === 'drawers') {
+    const rows = content.drawers ?? 0;
+    if (rows < 1) return whole;
+    /*
+     * מגירות זו לצד זו אינן מופרדות בלוח — כל אחת על המסילות שלה,
+     * וכך הן גם נחתכות. לכן הרוחב מתחלק בלי לחסר עובי.
+     */
+    const cols = Math.max(content.drawerCols ?? 1, 1);
+    const rowH = clearH / rows;
+    const colW = widthMm / cols;
+    const out: InteriorCell[] = [];
+    for (let r = 0; r < rows; r += 1) {
+      for (let c = 0; c < cols; c += 1) {
+        out.push({ xMm: xMm + c * colW, yMm: yMm + r * rowH, widthMm: colW, heightMm: rowH, kind });
+      }
+    }
+    return out;
+  }
+
+  return whole;
 }
 
 /**
@@ -211,15 +287,19 @@ export function interiorCells(u: PlacedUnit, ctx: BuildContext = {}): InteriorCe
     if (clearH <= 0) continue;
     /* הגבהים בציור נמדדים מלמעלה; התא נמדד מתחתית הגוף */
     const yMm = socle + (body - bottom);
-    const cols = zoneColumns(zone);
-    if (cols.length > 1) {
-      const share = (innerW - (cols.length - 1) * t) / cols.length;
-      if (share <= 0) continue;
-      for (let i = 0; i < cols.length; i += 1) {
-        out.push({ xMm: startMm + i * (share + t), yMm, widthMm: share, heightMm: clearH });
-      }
-    } else {
-      out.push({ xMm: startMm, yMm, widthMm: innerW, heightMm: clearH });
+    /*
+     * `zoneCells` מחזירה תא אחד לאזור בלי קושרת, ותא לכל עמודה
+     * כשיש — ולכן אותו לולאה משרתת את שני המקרים. החלק היחסי הוא
+     * זה שנשמר בעמודה, ולא חלוקה שווה: קושרת שהוזזה הוזזה גם כאן.
+     */
+    const cells = zoneCells(zone);
+    const usable = innerW - (cells.length - 1) * t;
+    if (usable <= 0) continue;
+    let x = startMm;
+    for (const { content, share } of cells) {
+      const widthMm = usable * share;
+      if (widthMm > 0) out.push(...splitCell(content, x, yMm, widthMm, clearH, t));
+      x += widthMm + t;
     }
   }
   return out;

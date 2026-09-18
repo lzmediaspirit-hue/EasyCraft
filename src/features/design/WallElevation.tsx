@@ -867,8 +867,13 @@ export function WallElevation({
                     strokeWidth={stroke}
                     strokeDasharray={`${stroke * 6} ${stroke * 4}`}
                   />
-                  {/* המידה נכתבת רק כשיש לה מקום להיקרא בו */}
-                  {c.widthMm > fontSize * 4 && c.heightMm > fontSize * 1.6 ? (
+                  {/*
+                    המידה נכתבת רק כשיש לה מקום להיקרא בו — ובשורה
+                    נמוכה, שבה "רוחב×גובה" לא נכנס, נכתב הגובה
+                    לבדו. הוא המספר שבגללו פותחים את הכפתור הזה:
+                    כמה נשאר בין מדף למדף, ומה גובה כל מגירה.
+                  */}
+                  {c.heightMm > fontSize * 1.15 && c.widthMm > fontSize * 2 ? (
                     <text
                       x={u.xMm + c.xMm + c.widthMm / 2}
                       y={flip(u.yMm + c.yMm + c.heightMm / 2) + fontSize * 0.35}
@@ -878,7 +883,9 @@ export function WallElevation({
                       fontWeight="600"
                       direction="ltr"
                     >
-                      {`${cm(c.widthMm)}×${cm(c.heightMm)}`}
+                      {c.widthMm > fontSize * 4 && c.heightMm > fontSize * 1.6
+                        ? `${cm(c.widthMm)}×${cm(c.heightMm)}`
+                        : cm(c.heightMm)}
                     </text>
                   ) : null}
                 </g>
