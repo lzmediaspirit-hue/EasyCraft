@@ -125,7 +125,7 @@ const plans = await page.evaluate(async () => {
     id: 'w1', projectId: 'p', index: 0, lengthMm: 5200, heightMm: 2600,
     features: [], createdAt: 0, updatedAt: 0, workshopId: '', rev: 1,
   };
-  const plan = [{ wall, start: { x: 0, y: 0 }, end: { x: 5200, y: 0 }, headingDeg: 0, depthMm: 600 }];
+  const plan = [{ wall, start: { x: 0, y: 0 }, end: { x: 5200, y: 0 }, headingDeg: 0, depthMm: 600, inward: 1 }];
   const at = (appliances) =>
     planKitchen({
       walls: [wall], plan, appliances, seating: false, finish: 'standard',
@@ -140,7 +140,7 @@ const plans = await page.evaluate(async () => {
 
   /* וקיר קצר מדי לכל התחנות — הציון אינו מתעלם ממה שחסר */
   const tiny = { ...wall, lengthMm: 1600 };
-  const tinyPlan = [{ wall: tiny, start: { x: 0, y: 0 }, end: { x: 1600, y: 0 }, headingDeg: 0, depthMm: 600 }];
+  const tinyPlan = [{ wall: tiny, start: { x: 0, y: 0 }, end: { x: 1600, y: 0 }, headingDeg: 0, depthMm: 600, inward: 1 }];
   const cramped = planKitchen({
     walls: [tiny], plan: tinyPlan,
     appliances: { fridge: true, oven: true, hob: true, microwave: false, dishwasher: true, hood: true },

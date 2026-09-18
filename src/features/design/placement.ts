@@ -33,14 +33,35 @@ export interface UnitBox {
 }
 
 /**
+ * שני הכיוונים של קיר: לאורכו, ואל תוך החדר.
+ *
+ * הנורמל הפנימי היה כתוב ביד בתשעה מקומות — `{-sin, cos}` — וכל
+ * אחד מהם הניח שהחדר נמצא תשעים מעלות שמאלה מהקיר. בחדר ששורטט
+ * בכיוון ההפוך ההנחה הזאת שקרית, ואז הרהיטים יושבים מחוץ לחדר.
+ * `p.inward` הוא התשובה, והיא נקראת כאן — פעם אחת, בשם.
+ */
+export function wallAxes(p: PlanWall): {
+  dir: { x: number; z: number };
+  normal: { x: number; z: number };
+} {
+  const a = rad(p.headingDeg);
+  const s = p.inward;
+  return {
+    dir: { x: Math.cos(a), z: Math.sin(a) },
+    normal: { x: -Math.sin(a) * s, z: Math.cos(a) * s },
+  };
+}
+
+/**
  * לאן פונה החזית של ארגז שעומד על קיר.
  *
  * קיר שכיוונו `heading` מפנה את הארגזים שעליו אל תוך החדר, כלומר
- * תשעים מעלות ממנו. הסיבוב של הארגז מתווסף לזה, ולכן ארבעת המצבים
- * הם חשבון אחד ולא ארבעה מקרים.
+ * תשעים מעלות ממנו — ובחדר ששורטט הפוך, תשעים לצד השני. הסיבוב של
+ * הארגז מתווסף לזה, ולכן ארבעת המצבים הם חשבון אחד ולא ארבעה
+ * מקרים.
  */
-function wallFacingDeg(headingDeg: number, rotationDeg = 0): number {
-  return headingDeg + 90 + rotationDeg;
+export function wallFacingDeg(p: PlanWall, rotationDeg = 0): number {
+  return p.headingDeg + 90 * p.inward + rotationDeg;
 }
 
 /** התיבה של ארגז אחד. `plan` דרוש רק לארגז שעומד על קיר. */
@@ -54,9 +75,7 @@ export function unitBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
 
   const p = plan.find((q) => q.wall.id === u.wallId);
   if (!p) return null;
-  const a = rad(p.headingDeg);
-  const dir = { x: Math.cos(a), z: Math.sin(a) };
-  const normal = { x: -Math.sin(a), z: Math.cos(a) };
+  const { dir, normal } = wallAxes(p);
   /* מה שהארגז תופס על הקיר, ומה שהוא נכנס לחדר — תלוי בסיבוב */
   const along = alongWallMm(u);
   const into = intoRoomMm(u);
@@ -70,7 +89,7 @@ export function unitBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
     ...common,
     cx: p.start.x + dir.x * (u.xMm + along / 2) + normal.x * (into / 2 + off),
     cz: p.start.y + dir.z * (u.xMm + along / 2) + normal.z * (into / 2 + off),
-    facing: rad(wallFacingDeg(p.headingDeg, u.rotationDeg)),
+    facing: rad(wallFacingDeg(p, u.rotationDeg)),
   };
 }
 
@@ -100,27 +119,18 @@ export function frontOverhangMm(u: Pick<PlacedUnit, 'glyph' | 'doors' | 'drawers
 export const COUNTER_OVERHANG_MM = 20;
 
 /**
- * הגובה שהארגז תופס בפועל: הגוף, ומשטח העבודה שעליו.
+ * מתיבת הגוף אל התיבה הפיזית: מה שבולט מהארון מתווסף כאן.
  *
- * `heightMm` הוא הארון, והמשטח יושב מעליו — כך מודד העורך, וכך
- * הוא נבנה. אבל מי שבדק התנגשות בדק את הארון בלבד, ולכן ארון עליון
- * שתחתיתו 10 מ״מ מעל ארון 800 עם משטח 40 עבר בשקט: המשטח תופס
- * 800–840 והתחתית של העליון 810. עשרה מ״מ של "רווח" שהם שלושים
- * של חדירה.
+ * זו הפונקציה היחידה שיודעת את זה, וזו הנקודה. קודם היו שתיים:
+ * `solidBox` הרחיבה שכן עומד בחזית ובמשטח, ובדיקת ההתנגשות
+ * הרחיבה את הארגז הנע בחזית בלבד. לכן התשובה הייתה תלויה בכיוון
+ * השאלה — א' מול ב' "פנוי", ב' מול א' "תפוס" — ומשטח עבודה בגובה
+ * 40 נכנס לתוך ארון עליון בלי שאיש עצר אותו.
  */
-export function physicalHeightMm(u: Pick<PlacedUnit, 'heightMm' | 'counterMm'>): number {
-  return u.heightMm + Math.max(u.counterMm ?? 0, 0);
-}
-
-/**
- * הגוף כפי שהוא תופס מקום בחדר — כולל מה שבולט ממנו פיזית.
- *
- * זו התיבה שבדיקת ההתנגשות שואלת עליה. `unitBox` נשאר הגוף עצמו,
- * כי זה מה שנמדד בסרגל ובחזית.
- */
-export function solidBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
-  const b = unitBox(u, plan);
-  if (!b) return null;
+export function physicalOf(
+  u: Pick<PlacedUnit, 'glyph' | 'doors' | 'drawers' | 'zones' | 'opening' | 'counterMm'>,
+  b: UnitBox,
+): UnitBox {
   const counter = Math.max(u.counterMm ?? 0, 0);
   /*
    * החזית בולטת לאורך הגוף, והמשטח בולט לאורך עוביו שלו. תיבה
@@ -141,6 +151,17 @@ export function solidBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
 }
 
 /**
+ * הגוף כפי שהוא תופס מקום בחדר — כולל מה שבולט ממנו פיזית.
+ *
+ * זו התיבה שבדיקת ההתנגשות שואלת עליה. `unitBox` נשאר הגוף עצמו,
+ * כי זה מה שנמדד בסרגל ובחזית.
+ */
+export function solidBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
+  const b = unitBox(u, plan);
+  return b && physicalOf(u, b);
+}
+
+/**
  * המקום שסימון על הקיר תופס בחדר.
  *
  * עמוד ומדרגה אינם ציור על הקיר אלא גוף שעומד בחלל, ולכן הם נמדדים
@@ -148,9 +169,7 @@ export function solidBox(u: PlacedUnit, plan: PlanWall[]): UnitBox | null {
  * סימון שטוח, כמו חלון או שקע, אינו תופס עומק ולכן אינו כאן.
  */
 export function featureBox(f: WallFeature, p: PlanWall, biteMm: number): UnitBox {
-  const a = rad(p.headingDeg);
-  const dir = { x: Math.cos(a), z: Math.sin(a) };
-  const normal = { x: -Math.sin(a), z: Math.cos(a) };
+  const { dir, normal } = wallAxes(p);
   return {
     w: f.widthMm,
     d: biteMm,
@@ -158,7 +177,7 @@ export function featureBox(f: WallFeature, p: PlanWall, biteMm: number): UnitBox
     h: f.heightMm,
     cx: p.start.x + dir.x * (f.xMm + f.widthMm / 2) + normal.x * (biteMm / 2),
     cz: p.start.y + dir.z * (f.xMm + f.widthMm / 2) + normal.z * (biteMm / 2),
-    facing: rad(wallFacingDeg(p.headingDeg)),
+    facing: rad(wallFacingDeg(p)),
   };
 }
 
@@ -200,9 +219,7 @@ export function boxCorners(b: UnitBox): { x: number; y: number }[] {
  * לצייר אותו, והמרחק הוא מה שאומר שהוא לא באמת שם.
  */
 export function wallShadow(b: UnitBox, p: PlanWall): { xMm: number; widthMm: number; awayMm: number } {
-  const a = rad(p.headingDeg);
-  const dir = { x: Math.cos(a), z: Math.sin(a) };
-  const normal = { x: -Math.sin(a), z: Math.cos(a) };
+  const { dir, normal } = wallAxes(p);
   let lo = Infinity;
   let hi = -Infinity;
   let near = Infinity;
@@ -215,6 +232,48 @@ export function wallShadow(b: UnitBox, p: PlanWall): { xMm: number; widthMm: num
     near = Math.min(near, rx * normal.x + rz * normal.z);
   }
   return { xMm: lo, widthMm: hi - lo, awayMm: near };
+}
+
+/**
+ * איפה הארגז נופל על קיר מסוים, והאם מה שרואים ממנו שם הוא חזיתו.
+ *
+ * זו התשובה היחידה לשאלה "איפה הוא על הקיר הזה", וזה מה שהיה חסר.
+ * הציור ידע לחשב אותה — ארגז מסובב מצויר ברוחב עומקו, ואי מצויר
+ * בצל שלו — אבל המידות שמעליו נשארו על `xMm` ועל הרוחב השמור.
+ * לכן ארגז 1200 מסובב ב-90° צויר ברוחב 300 ומעליו מלבנים פנימיים
+ * ברוחב 1164, ואי שנפל על 1,450 קיבל קו מידה ב-0 וסרגל שאמר
+ * "צמוד" לפינה שהוא מטר וחצי ממנה.
+ *
+ * `frontOn` הוא מה שמפריד בין מידה למידה שקרית: פנים של ארון נראה
+ * רק מלפניו. ארגז שמסובב לצד או לאחור, ואי שפונה לכיוון אחר,
+ * מצוירים — אבל החלוקה הפנימית שלהם אינה מה שרואים בחזית הזאת.
+ */
+export function unitOnWall(
+  u: PlacedUnit,
+  plan: PlanWall[],
+  p: PlanWall,
+): { xMm: number; widthMm: number; awayMm: number; frontOn: boolean } | null {
+  const b = unitBox(u, plan);
+  if (!b) return null;
+  const shadow = wallShadow(b, p);
+  const off = b.facing - rad(wallFacingDeg(p));
+  /* הפרש זוויות אמיתי, ולא הפרש מספרים: 359° ו-1° הם שתי מעלות */
+  const apart = Math.abs(Math.atan2(Math.sin(off), Math.cos(off)));
+  /*
+   * הרעש של הסינוס והקוסינוס נחתך כאן, ברמת המיקרון.
+   *
+   * ההיטל של ארגז שעומד ב-0 מחזיר 9e-15, ושל שכנו שמתחיל בדיוק
+   * בקצהו 600.0000000000001. פיזית זה אותו מספר, אבל הסרגל שואל
+   * "מרווח או מגע" בהשוואה מדויקת — ושני ארגזים צמודים היו מקבלים
+   * "מרווח 0" במקום "צמוד".
+   */
+  const tidy = (v: number) => Math.round(v * 1e3) / 1e3;
+  return {
+    xMm: tidy(shadow.xMm),
+    widthMm: tidy(shadow.widthMm),
+    awayMm: tidy(shadow.awayMm),
+    frontOn: apart < rad(1),
+  };
 }
 
 /**

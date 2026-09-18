@@ -38,7 +38,7 @@ const env = await page.evaluate(async () => {
     id: 'w1', projectId: 'p', index: 0, lengthMm: 4000, heightMm: 2600,
     features: [pillar], createdAt: 0, updatedAt: 0, workshopId: '', rev: 1,
   };
-  const plan = [{ wall, start: { x: 0, y: 0 }, end: { x: 4000, y: 0 }, headingDeg: 0, depthMm: 600 }];
+  const plan = [{ wall, start: { x: 0, y: 0 }, end: { x: 4000, y: 0 }, headingDeg: 0, depthMm: 600, inward: 1 }];
 
   /* ארגז מגירות חופשי, פונה אל העמוד */
   const unit = {

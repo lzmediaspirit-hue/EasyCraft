@@ -119,7 +119,7 @@ const off = await page.evaluate(async () => {
     features: [], createdAt: 0, updatedAt: 0,
   };
   const plan = [
-    { wall, start: { x: 0, y: 0 }, end: { x: 4000, y: 0 }, headingDeg: 0, depthMm: 600 },
+    { wall, start: { x: 0, y: 0 }, end: { x: 4000, y: 0 }, headingDeg: 0, depthMm: 600, inward: 1 },
   ];
   const unit = (over = {}) => ({
     id: 'u', projectId: 'p', wallId: 'w', catalogItemId: 'c',

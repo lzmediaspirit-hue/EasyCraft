@@ -3,7 +3,7 @@ import type { PlacedUnit, WallFeature } from '../../db/types';
 import { glyphDef } from '../../catalog/glyphList';
 import { applianceOf } from '../../catalog/appliances';
 import { unitFronts, unitZones, zoneBands, zoneCells } from '../../catalog/zones';
-import { featureBox, rad, unitBox, unitFrame } from './placement';
+import { featureBox, rad, unitBox, unitFrame, wallAxes, wallFacingDeg } from './placement';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
 import { boxesMeet } from './collision';
@@ -238,9 +238,7 @@ export function featureEnvelope(f: WallFeature, p: PlanWall): Envelope | null {
    * את כל הקשת. בלי צד הצירים אין דרך לדעת לאיזה צד — והמעטפת
    * נמתחת על כל הפתח, שזו ההערכה הבטוחה.
    */
-  const a = rad(p.headingDeg);
-  const dir = { x: Math.cos(a), z: Math.sin(a) };
-  const normal = { x: -Math.sin(a), z: Math.cos(a) };
+  const { dir, normal } = wallAxes(p);
   const reach = f.widthMm;
   const cxAlong = f.xMm + f.widthMm / 2;
   return {
@@ -253,7 +251,7 @@ export function featureEnvelope(f: WallFeature, p: PlanWall): Envelope | null {
       h: f.heightMm,
       cx: p.start.x + dir.x * cxAlong + normal.x * (reach / 2),
       cz: p.start.y + dir.z * cxAlong + normal.z * (reach / 2),
-      facing: a + Math.PI / 2,
+      facing: rad(wallFacingDeg(p)),
     },
     missing: f.hingeSide ? undefined : `צד הצירים של ${label}`,
   };

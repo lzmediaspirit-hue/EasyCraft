@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { clamp } from '../../ui/units';
+import { clamp, unitLabel } from '../../ui/units';
 import { cm } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { EqualizeIcon, LockIcon, UnlockIcon } from '../../ui/icons';
@@ -107,13 +107,13 @@ export function ShelfGaps({
               ariaLabel={`מרווח ${i + 1}`}
               className="num w-14 bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
             />
-            <span className="shrink-0 text-[10px] text-stone-400">ס״מ</span>
+            <span className="shrink-0 text-[10px] text-stone-400">{unitLabel()}</span>
           </li>
         ))}
       </ul>
 
       <p className="mt-1 text-[10px] text-stone-400">
-        סך המרווחים: <span className="num">{cm(heightMm)}</span> ס״מ
+        סך המרווחים: <span className="num">{cm(heightMm)}</span> {unitLabel()}
       </p>
     </div>
   );

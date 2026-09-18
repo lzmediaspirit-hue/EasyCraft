@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { clamp } from '../../ui/units';
+import { clamp, unitLabel } from '../../ui/units';
 import {
   FEATURE_DEFS,
   HEIGHT_REF_LABEL,
@@ -322,7 +322,7 @@ function FeatureSettings({
               ariaLabel={`${def.label} — ${field.label}`}
               className="num w-12 shrink-0 bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
             />
-            <span className="shrink-0 text-[10px] text-stone-400">ס״מ</span>
+            <span className="shrink-0 text-[10px] text-stone-400">{unitLabel()}</span>
           </label>
         ))}
       </div>

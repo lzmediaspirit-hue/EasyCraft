@@ -1,4 +1,4 @@
-import { alongWallMm } from '../../db/types';
+import { alongWallMm, physicalHeightMm } from '../../db/types';
 import type {
   HeightRef,
   PlacedUnit,
@@ -244,14 +244,16 @@ export function growToCeiling(
  * שונות לאותה שאלה הן באג שממתין לקרות.
  */
 export function featureOverlaps(
-  u: Pick<PlacedUnit, 'xMm' | 'yMm' | 'heightMm' | 'widthMm' | 'depthMm' | 'rotationDeg'>,
+  u: Pick<PlacedUnit, 'xMm' | 'yMm' | 'heightMm' | 'counterMm' | 'widthMm' | 'depthMm' | 'rotationDeg'>,
   f: WallFeature,
 ): boolean {
   return (
     u.xMm < f.xMm + f.widthMm &&
     u.xMm + alongWallMm(u) > f.xMm &&
     u.yMm < f.yMm + f.heightMm &&
-    u.yMm + u.heightMm > f.yMm
+    /* הגובה הוא מה שתופס מקום: הארון, ומשטח העבודה שעליו. ארון
+       800 עם משטח 40 מגיע לחלון שתחתיתו 810, וזה מה שנבדק כאן. */
+    u.yMm + physicalHeightMm(u) > f.yMm
   );
 }
 

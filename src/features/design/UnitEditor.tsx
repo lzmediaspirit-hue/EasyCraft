@@ -351,8 +351,8 @@ export function UnitEditor({
 
       {bodyH > MAX_BODY_MM && (
         <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
-          גוף הארון <span className="num">{cm(bodyH)}</span> ס״מ, מעל{' '}
-          <span className="num">{cm(MAX_BODY_MM)}</span> ס״מ — קשה להוביל ולהתקין,
+          גוף הארון <span className="num">{cm(bodyH)}</span> {unitLabel()}, מעל{' '}
+          <span className="num">{cm(MAX_BODY_MM)}</span> {unitLabel()} — קשה להוביל ולהתקין,
           ולרוב עדיף לפצל לשניים.
         </p>
       )}
@@ -719,7 +719,7 @@ export function UnitEditor({
                   ariaLabel="עומק הדופן הזרה"
                   className="num w-full bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
                 />
-                <span className="shrink-0 text-[10px] text-stone-400">ס״מ</span>
+                <span className="shrink-0 text-[10px] text-stone-400">{unitLabel()}</span>
               </label>
             </div>
           )}

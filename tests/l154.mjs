@@ -38,7 +38,7 @@ const engine = await page.evaluate(async () => {
       id: 'w1', projectId: 'p', index: 0, lengthMm: len, heightMm: 2600,
       features, createdAt: 0, updatedAt: 0, workshopId: 'w', rev: 1,
     };
-    return { walls: [w], plan: [{ wall: w, start: { x: 0, y: 0 }, end: { x: len, y: 0 }, headingDeg: 0, depthMm: 600 }] };
+    return { walls: [w], plan: [{ wall: w, start: { x: 0, y: 0 }, end: { x: len, y: 0 }, headingDeg: 0, depthMm: 600, inward: 1 }] };
   };
   const at = (prof, len = 4000, features = []) => {
     const { walls, plan } = room(len, features);

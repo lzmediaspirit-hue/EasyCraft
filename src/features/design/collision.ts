@@ -1,7 +1,8 @@
 import { glyphDef } from '../../catalog/glyphList';
 import { featureBiteMm, featureDef, featureOverlaps } from '../projects/wallFeatures';
-import { boxCorners, featureBox, frontOverhangMm, solidBox } from './placement';
+import { boxCorners, featureBox, physicalOf, solidBox } from './placement';
 import { unitCaps } from '../../catalog/capabilities';
+import { boxOutside } from './roomBounds';
 import type { UnitBox } from './placement';
 import type { PlacedUnit } from '../../db/types';
 import type { PlanWall } from './plan';
@@ -41,10 +42,16 @@ interface Span {
 }
 
 /**
- * האם הנחת הארגז כאן פוגעת בארגז אחר.
+ * האם הנחת הארגז כאן פוגעת בארגז אחר, בסימון, או בגבול החדר.
  *
  * `at` הוא המיקום הנבדק, שאינו בהכרח המיקום השמור — כך אפשר לשאול
  * "אם אניח אותו כאן" בלי לכתוב אותו קודם.
+ *
+ * **חוזה הקלט:** `at` היא תיבת ה*גוף*, כפי ש-`unitBox` מחזירה
+ * אותה. מה שבולט ממנה — חזית ומשטח עבודה — מתווסף כאן, פעם אחת.
+ * מי שהזין תיבה פיזית קיבל חזית כפולה: העריכה המספרית שלחה
+ * `solidBox`, הבדיקה הרחיבה אותה שוב, והמועמד יצא 18 מ״מ ארוך
+ * ממה שמצויר — ולכן שינוי רוחב עם 10 מ״מ מרווח אמיתי נדחה.
  */
 export function blocked(
   unit: PlacedUnit,
@@ -53,23 +60,17 @@ export function blocked(
   plan: PlanWall[],
 ): boolean {
   if (glyphDef(unit.glyph).cladding) return false;
-  if (hitsFeature(unit, at, plan)) return true;
-  /* הגוף כולל את החזית הסגורה שבולטת ממנו */
-  const mine = grow(unit, at);
+  /* הגוף כולל את החזית והמשטח שבולטים ממנו — אותו חשבון כמו לשכן */
+  const mine = physicalOf(unit, at);
+  if (hitsFeature(unit, mine, plan)) return true;
+  /* גבול החדר: בחדר סגור, ארגז שחורג ממנו אינו ניתן להנחה */
+  if (boxOutside(mine, plan)) return true;
   for (const o of others) {
     if (o.id === unit.id || glyphDef(o.glyph).cladding) continue;
     const ob = solidBox(o, plan);
     if (ob && unitsClash({ unit, box: mine }, { unit: o, box: ob })) return true;
   }
   return false;
-}
-
-/** הוספת עובי החזית לתיבה שכבר חושבה — לגרירה, שמחשבת מיקום נבדק. */
-function grow(u: PlacedUnit, b: UnitBox): UnitBox {
-  const front = frontOverhangMm(u);
-  if (front <= 0) return b;
-  const f = { x: Math.cos(b.facing), z: Math.sin(b.facing) };
-  return { ...b, d: b.d + front, cx: b.cx + f.x * (front / 2), cz: b.cz + f.z * (front / 2) };
 }
 
 /** ארגז עם התיבה הפיזית שלו, כדי לשאול על השניים יחד. */

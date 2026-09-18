@@ -6,7 +6,7 @@ import { isDark, shade } from '../../ui/color';
 import { unitZones } from '../../catalog/zones';
 import { featureBiteMm, featureDef } from '../projects/wallFeatures';
 import { MATERIAL } from '../../catalog/standards';
-import { cm } from '../../ui/units';
+import { cm, cmWith } from '../../ui/units';
 import { WORK_TONES, isInstalled, tracksWork, workTone } from '../../workflow/unitWork';
 import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
 import { stackSnap } from './stacking';
@@ -17,7 +17,7 @@ import type { GesturePhase } from './gesture';
 import type { Axis } from './axisLock';
 import { blocked } from './collision';
 import { interiorCells } from './interior';
-import { rad, unitBox, wallShadow } from './placement';
+import { rad, unitBox, unitOnWall } from './placement';
 import type { CornerZones, PlanWall } from './plan';
 import { outOfSight } from './designView';
 import { RulerMeasure, RulerTargets, rulerSpan } from './wallRuler';
@@ -154,12 +154,14 @@ export function WallElevation({
    */
   const shown = units.filter((u) => !outOfSight(u));
   const here = plan.find((p) => p.wall.id === wall.id);
+  /**
+   * ההיטל של הארגז על הקיר שרואים: איפה הוא נופל עליו, וכמה הוא
+   * רחוק ממנו. זו התשובה גם לאי וגם לארגז מסובב, ולכן הציור
+   * והמידות שמעליו אינם יכולים לסתור זה את זה.
+   */
+  const onWall = (u: PlacedUnit) => (here ? unitOnWall(u, plan, here) : null);
   /** אי: הצל שלו על הקיר הזה. ארגז רגיל מחזיר ריק ומצויר כרגיל. */
-  const free = (u: PlacedUnit) => {
-    if (!u.free || !here) return null;
-    const b = unitBox(u, plan);
-    return b ? wallShadow(b, here) : null;
-  };
+  const free = (u: PlacedUnit) => (u.free ? onWall(u) : null);
 
   const svgRef = useRef<SVGSVGElement>(null);
   /*
@@ -219,7 +221,7 @@ export function WallElevation({
   const vbH = wall.heightMm + padTop + padBottom;
   const stroke = Math.max(wall.lengthMm / 420, 4);
   /* המרווח שנמדד בין שני הקצוות שנבחרו, כשהסרגל פתוח */
-  const span = rulerSpan(wall, units, rulerPair, rulerAxis);
+  const span = rulerSpan(wall, units, rulerPair, rulerAxis, onWall);
   const fontSize = Math.max(wall.lengthMm / 40, 70);
   /** גובה המסך של נקודה שנמדדת מהרצפה. */
   const flip = (yFromFloor: number) => wall.heightMm - yFromFloor;
@@ -787,7 +789,7 @@ export function WallElevation({
                   fill="#0f766e"
                   direction="ltr"
                 >
-                  {`אי · ${cm(awayMm)} ס״מ מהקיר`}
+                  {`אי · ${cmWith(awayMm)} מהקיר`}
                 </text>
               </g>
             )}
@@ -827,7 +829,7 @@ export function WallElevation({
           >
             {/* עומק הוא מידה שמשנה תכנון, ולכן הוא נכתב ליד השם */}
             {featureBiteMm(f)
-              ? `${def.label} ${cm(Math.abs(featureBiteMm(f)))} ס״מ`
+              ? `${def.label} ${cmWith(Math.abs(featureBiteMm(f)))}`
               : def.label}
           </text>
         );
@@ -840,7 +842,7 @@ export function WallElevation({
       {measure
         ? shown.map((u) => (
             <g key={`measure-${u.id}`}>
-              {measureOverlay(u, measure, flip, stroke, fontSize)}
+              {measureOverlay(u, onWall(u), measure, flip, stroke, fontSize)}
             </g>
           ))
         : null}
@@ -853,12 +855,24 @@ export function WallElevation({
         הנקי: אחרי הדפנות, אחרי המדף שמפריד, ואחרי הפינה המתה.
       */}
       {interior
-        ? shown.map((u) => (
+        ? shown.map((u) => {
+            /*
+             * המלבנים יושבים על ההיטל, ולא על `xMm` השמור — אחרת
+             * אי מצויר במקום אחד ונמדד במקום אחר.
+             *
+             * וכשלא רואים את החזית אין מה לצייר: ארגז מסובב לצד
+             * מראה את עומקו, מסובב לאחור את גבו, ואי שפונה לכיוון
+             * אחר אינו פונה לכאן כלל. חלוקה פנימית שמצוירת על אחד
+             * מהם אינה מידה חלקית אלא מידה שקרית.
+             */
+            const proj = onWall(u);
+            if (!proj?.frontOn) return null;
+            return (
             <g key={`interior-${u.id}`} pointerEvents="none">
               {interiorCells(u, { parts }).map((c, i) => (
                 <g key={i}>
                   <rect
-                    x={u.xMm + c.xMm}
+                    x={proj.xMm + c.xMm}
                     y={flip(u.yMm + c.yMm + c.heightMm)}
                     width={c.widthMm}
                     height={c.heightMm}
@@ -876,7 +890,7 @@ export function WallElevation({
                   */}
                   {c.heightMm > fontSize * 1.15 && c.widthMm > fontSize * 2 ? (
                     <text
-                      x={u.xMm + c.xMm + c.widthMm / 2}
+                      x={proj.xMm + c.xMm + c.widthMm / 2}
                       y={flip(u.yMm + c.yMm + c.heightMm / 2) + fontSize * 0.35}
                       textAnchor="middle"
                       fontSize={fontSize * 0.9}
@@ -890,7 +904,8 @@ export function WallElevation({
                 </g>
               ))}
             </g>
-          ))
+            );
+          })
         : null}
 
       {/* קו מידה של הקיר */}
@@ -1092,12 +1107,16 @@ function sideMarks(u: PlacedUnit, stroke: number, bodyH: number, t: number) {
 /** קו מידה על הארגז שנבחר, בציר שנבחר במצב מדידה. */
 function measureOverlay(
   u: PlacedUnit | undefined,
+  /** ההיטל על הקיר שרואים — מה שמצויר, ולכן גם מה שנמדד */
+  on: { xMm: number; widthMm: number } | null,
   axis: MeasureAxis,
   flip: (y: number) => number,
   stroke: number,
   fontSize: number,
 ) {
   if (!u) return null;
+  const ux = on ? on.xMm : u.xMm;
+  const uw = on ? on.widthMm : alongWallMm(u);
   const tick = stroke * 12;
   const color = '#0f766e';
   const label = (
@@ -1124,23 +1143,18 @@ function measureOverlay(
     return (
       <g pointerEvents="none">
         <g stroke={color} strokeWidth={stroke * 1.2}>
-          <line x1={u.xMm} y1={y} x2={u.xMm + alongWallMm(u)} y2={y} />
-          <line x1={u.xMm} y1={y - tick / 2} x2={u.xMm} y2={y + tick / 2} />
-          <line
-            x1={u.xMm + alongWallMm(u)}
-            y1={y - tick / 2}
-            x2={u.xMm + alongWallMm(u)}
-            y2={y + tick / 2}
-          />
+          <line x1={ux} y1={y} x2={ux + uw} y2={y} />
+          <line x1={ux} y1={y - tick / 2} x2={ux} y2={y + tick / 2} />
+          <line x1={ux + uw} y1={y - tick / 2} x2={ux + uw} y2={y + tick / 2} />
         </g>
         {/* מה שנמדד על הקיר הוא מה שתופס אותו — בארגז מסובב זה עומקו */}
-        {label(u.xMm + alongWallMm(u) / 2, y + tick * 1.6, cm(alongWallMm(u)))}
+        {label(ux + uw / 2, y + tick * 1.6, cm(uw))}
       </g>
     );
   }
 
   if (axis === 'h') {
-    const x = u.xMm + alongWallMm(u) + tick * 1.2;
+    const x = ux + uw + tick * 1.2;
     const top = flip(u.yMm + u.heightMm);
     const bottom = flip(u.yMm);
     return (
@@ -1156,7 +1170,7 @@ function measureOverlay(
   }
 
   // העומק אינו נראה בחזית, ולכן מוצג כתווית על הארגז
-  const cx = u.xMm + alongWallMm(u) / 2;
+  const cx = ux + uw / 2;
   const cy = flip(u.yMm + u.heightMm / 2);
   const boxW = fontSize * 4;
   const boxH = fontSize * 1.7;

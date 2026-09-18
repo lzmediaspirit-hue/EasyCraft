@@ -18,7 +18,7 @@ import {
   solidFaces,
 } from './isoMath';
 
-import { COUNTER_OVERHANG_MM, rad, unitBox, unitFrame } from './placement';
+import { COUNTER_OVERHANG_MM, unitBox, unitFrame, wallAxes } from './placement';
 import { applianceOf } from '../../catalog/appliances';
 import type { UnitBox } from './placement';
 import type { PlanWall } from './plan';
@@ -670,10 +670,12 @@ function wallScenery(
   const out: Solid[] = [];
   const bounds: [number, number][] = [];
   let mark: WallMark | null = null;
-  const a = rad(p.headingDeg);
-  const cos = Math.cos(a);
-  const sin = Math.sin(a);
-  const tf: Tf = (x, z) => [p.start.x + x * cos - z * sin, p.start.y + x * sin + z * cos];
+  const { dir, normal } = wallAxes(p);
+  /* z חיובי נכנס אל תוך החדר — ולכן הוא נמדד על הנורמל הפנימי */
+  const tf: Tf = (x, z) => [
+    p.start.x + x * dir.x + z * normal.x,
+    p.start.y + x * dir.z + z * normal.z,
+  ];
   const w0 = p.wall;
   const at = (x: number, y: number, z: number): [number, number] => {
     const [wx, wz] = tf(x, z);
@@ -688,7 +690,7 @@ function wallScenery(
    * וחדר סגור היה נראה קופסה אטומה במקום חדר.
    */
   // המכפלה הפנימית של הנורמל הפנימי של הקיר עם הכיוון אל הצופה
-  const toward = v.toward(-sin, cos);
+  const toward = v.toward(normal.x, normal.z);
   const facing = toward > 0.01;
   const len = w0.lengthMm;
   const hgt = w0.heightMm;

@@ -1,6 +1,6 @@
-import { alongWallMm } from '../../db/types';
+import { alongWallMm, physicalHeightMm } from '../../db/types';
 import { cm } from '../../ui/units';
-import { physicalHeightMm } from './placement';
+
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -70,8 +70,23 @@ export function rulerSpan(
   units: PlacedUnit[],
   picked: string[] | null | undefined,
   axis: RulerAxis,
+  /**
+   * ההיטל של ארגז על הקיר שנמדד.
+   *
+   * `xMm` ו-`alongWallMm` מתארים ארגז שעומד על הקיר הזה, ורק
+   * אותו. אי שנפל על 1,450 מ״מ ממנו מחזיק `xMm = 0`, ולכן הסרגל
+   * מדד ממנו לפינת הקיר ואמר "צמוד" — למרחק של מטר וחצי. מי
+   * שמעביר את ההיטל מקבל מדידה על מה שרואים; בלעדיו ההתנהגות היא
+   * הישנה, ולארגז שעומד על הקיר אלה אותם מספרים בדיוק.
+   */
+  onWall?: (u: PlacedUnit) => { xMm: number; widthMm: number } | null,
 ): RulerSpan | null {
   if (!picked || picked.length < 2) return null;
+  /** איפה הארגז נמצא לרוחב הקיר: ההיטל כשיש, והשמור כשאין */
+  const across = (u: PlacedUnit) => {
+    const p = onWall?.(u);
+    return p ? { from: p.xMm, size: p.widthMm } : { from: u.xMm, size: alongWallMm(u) };
+  };
   /*
    * קצה הסרגל הוא ארגז, סימון על הקיר, או קצה של הקיר. קצה הוא
    * נקודה ולא מלבן, ולכן שתי הפאות שלו זהות — וכל השאר מתנהג
@@ -87,16 +102,18 @@ export function rulerSpan(
         return { near: wall.lengthMm, far: wall.lengthMm, mid: wall.heightMm / 2 };
       }
       if (f) return { near: f.xMm, far: f.xMm + f.widthMm, mid: f.yMm + f.heightMm / 2 };
-      return u ? { near: u.xMm, far: u.xMm + alongWallMm(u), mid: u.yMm + u.heightMm / 2 } : null;
+      if (!u) return null;
+      const a = across(u);
+      return { near: a.from, far: a.from + a.size, mid: u.yMm + u.heightMm / 2 };
     }
     if (id === EDGE_FLOOR) return { near: 0, far: 0, mid: wall.lengthMm / 2 };
     if (id === EDGE_CEILING) {
       return { near: wall.heightMm, far: wall.heightMm, mid: wall.lengthMm / 2 };
     }
     if (f) return { near: f.yMm, far: f.yMm + f.heightMm, mid: f.xMm + f.widthMm / 2 };
-    return u
-      ? { near: u.yMm, far: u.yMm + physicalHeightMm(u), mid: u.xMm + alongWallMm(u) / 2 }
-      : null;
+    if (!u) return null;
+    const a = across(u);
+    return { near: u.yMm, far: u.yMm + physicalHeightMm(u), mid: a.from + a.size / 2 };
   };
 
   const [a, b] = picked.map(at);

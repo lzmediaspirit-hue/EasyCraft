@@ -2,6 +2,7 @@ import { alongWallMm, intoRoomMm } from '../../db/types';
 import { boxCorners, rad, solidBox, unitBox } from './placement';
 import type { UnitBox } from './placement';
 import { unitsClash } from './collision';
+import { planCloses } from './roomBounds';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -25,6 +26,16 @@ export interface PlanWall {
   headingDeg: number;
   /** העומק התפוס על הקיר הזה */
   depthMm: number;
+  /**
+   * לאיזה צד של הקיר נמצא החדר: `1` = תשעים מעלות שמאלה מכיוונו,
+   * `-1` = הצד ההפוך.
+   *
+   * עד כאן זה היה קבוע `1`, ולכן כיוון השרטוט קבע איפה הרהיטים.
+   * מי ששרטט את אותו חדר בדיוק בכיוון ההפוך — או רק סימן "היפוך
+   * סדר הקירות", שאמור לשנות מספור בלבד — קיבל חדר שתופס Z שלילי
+   * וארגזים שיושבים מחוצה לו, בלי התנגשות ובלי אזהרה.
+   */
+  inward: 1 | -1;
 }
 
 export const DEFAULT_TURN_DEG = 90;
@@ -60,10 +71,33 @@ export function buildPlan(walls: Wall[], units: PlacedUnit[]): PlanWall[] {
       end,
       headingDeg: heading,
       depthMm: wallDepth(wall, units),
+      inward: 1,
     });
     cursor = end;
   }
-  return out;
+  /* הצד הפנימי נקבע לשרשרת כולה, ולא לקיר אחד — זה חדר אחד */
+  const sign = inwardSign(out);
+  return sign === 1 ? out : out.map((p) => ({ ...p, inward: sign }));
+}
+
+/**
+ * לאיזה צד של הקירות נמצא החדר.
+ *
+ * שרשרת פתוחה אינה מגדירה פנים, ולכן היא מקבלת את מה שתמיד היה:
+ * תשעים מעלות מכיוון הקיר. שרשרת סגורה כן מגדירה — סימן השטח שלה
+ * אומר לאיזה צד סובבו — וזו התשובה שהפכה את כיוון השרטוט לשאלה
+ * גאומטרית במקום לשאלת מספור.
+ */
+function inwardSign(plan: PlanWall[]): 1 | -1 {
+  if (!planCloses(plan)) return 1;
+  const pts = plan.map((p) => p.start);
+  let twice = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    twice += a.x * b.y - b.x * a.y;
+  }
+  return twice >= 0 ? 1 : -1;
 }
 
 /** העומק הגדול ביותר של ארון שעומד על הרצפה בקיר נתון. */

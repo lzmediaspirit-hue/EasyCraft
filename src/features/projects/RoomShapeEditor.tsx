@@ -540,10 +540,18 @@ function segmentsMeet(a1: ShapePoint, a2: ShapePoint, b1: ShapePoint, b2: ShapeP
  * בן ארבעה קירות ונשמרה. אין לה פנים אחד: הקו חוצה את עצמו
  * באמצע, ומה שנבנה עליו אינו חדר אלא שני משולשים שנפגשים בנקודה.
  *
- * קירות שכנים חולקים נקודה ולכן אינם נספרים, וגם הראשון והאחרון
- * בצורה סגורה — שם המפגש הוא הסגירה עצמה.
+ * קירות שכנים חולקים נקודה, ולכן חיתוך רגיל אינו נשאל עליהם — אבל
+ * *חפיפה* כן. שני קירות שכנים שרצים על אותו קו ומכסים זה את זה הם
+ * קיר אחד שנמדד פעמיים: השרטוט (500,500)→(4500,500)→(2500,500)
+ * התקבל ונשמר כשני קירות, 4,000 קדימה ו-2,000 בחזרה על עצמם. אין
+ * לזה פנים, ומה שייבנה עליו נשען על שרשרת שאינה קיימת.
+ *
+ * הראשון והאחרון בצורה סגורה פטורים מהחיתוך — שם המפגש הוא הסגירה
+ * עצמה — אבל לא מהחפיפה.
  */
-export function shapeCrossing(points: ShapePoint[]): [number, number] | null {
+export type ShapeFault = 'cross' | 'retrace';
+
+export function shapeCrossing(points: ShapePoint[]): [number, number, ShapeFault] | null {
   const segs: [ShapePoint, ShapePoint][] = [];
   for (let i = 1; i < points.length; i += 1) {
     const a = points[i - 1];
@@ -556,10 +564,33 @@ export function shapeCrossing(points: ShapePoint[]): [number, number] | null {
     segs[0][0].x === segs[last][1].x &&
     segs[0][0].y === segs[last][1].y;
   for (let i = 0; i < segs.length; i += 1) {
-    for (let j = i + 2; j < segs.length; j += 1) {
-      if (closed && i === 0 && j === last) continue;
-      if (segmentsMeet(segs[i][0], segs[i][1], segs[j][0], segs[j][1])) return [i, j];
+    for (let j = i + 1; j < segs.length; j += 1) {
+      const neighbours = j === i + 1 || (closed && i === 0 && j === last);
+      /* שכנים: רק חפיפה על אותו קו נספרת, ולא הנקודה המשותפת */
+      if (neighbours) {
+        if (segmentsOverlap(segs[i], segs[j])) return [i, j, 'retrace'];
+        continue;
+      }
+      if (segmentsMeet(segs[i][0], segs[i][1], segs[j][0], segs[j][1])) return [i, j, 'cross'];
     }
   }
   return null;
+}
+
+/**
+ * שני קטעים רצים על אותו קו וחולקים אורך, ולא רק נקודה.
+ *
+ * זו השאלה שנשאלת על קירות שכנים: קיר שחוזר על קודמו מכסה אותו
+ * לאורך, וזה מה שנמדד כאן — הקרנה על הכיוון המשותף, והחפיפה
+ * שביניהן חייבת להיות אורך של ממש.
+ */
+function segmentsOverlap(a: [ShapePoint, ShapePoint], b: [ShapePoint, ShapePoint]): boolean {
+  if (orient(a[0], a[1], b[0]) !== 0 || orient(a[0], a[1], b[1]) !== 0) return false;
+  const len = Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y);
+  if (len < 1e-7) return false;
+  const dir = { x: (a[1].x - a[0].x) / len, y: (a[1].y - a[0].y) / len };
+  const on = (p: ShapePoint) => (p.x - a[0].x) * dir.x + (p.y - a[0].y) * dir.y;
+  const lo = Math.max(0, Math.min(on(b[0]), on(b[1])));
+  const hi = Math.min(len, Math.max(on(b[0]), on(b[1])));
+  return hi - lo > 1e-6;
 }

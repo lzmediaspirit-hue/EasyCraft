@@ -61,6 +61,17 @@ export function cm(mm: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
+/**
+ * מידה עם היחידה שלה, בביטוי אחד.
+ *
+ * המספר עקב אחרי היחידה שנבחרה והסיומת נכתבה ביד, ולכן במצב מ״מ
+ * נכתב "עמוד / פינוי 250 ס״מ" — פי עשרה ממה שהוא. שני החלקים
+ * נגזרים כאן יחד, וזה מה שמונע מהם להיפרד שוב.
+ */
+export function cmWith(mm: number): string {
+  return `${cm(mm)} ${unitLabel()}`;
+}
+
 /** המרות ישירות, לשימושים שאינם תלויים בתצוגה. */
 export const cmToMm = (value: number): number => Math.round(value * 10);
 export const mmToCm = (mm: number): number => mm / 10;

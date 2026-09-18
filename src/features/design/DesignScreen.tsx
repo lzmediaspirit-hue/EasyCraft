@@ -8,7 +8,8 @@ import { nudge } from './dragSolve';
 import { partsOf } from '../../costing/boards';
 import { axisLabel } from './axisLock';
 import type { Axis } from './axisLock';
-import { rad, solidBox, unitBox } from './placement';
+import { unitBox, wallAxes, wallFacingDeg } from './placement';
+import { outOfWall } from './roomBounds';
 import { WallIso } from './WallIso';
 import { LibrarySheet } from './LibrarySheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
@@ -38,7 +39,7 @@ import { DesktopLibrary } from './DesktopLibrary';
 import { useMedia } from '../../ui/useMedia';
 import type { SheetName } from './sheets';
 import { readPref, writePref } from '../../ui/prefs';
-import { clamp, cm } from '../../ui/units';
+import { clamp, cmWith } from '../../ui/units';
 import { ConfirmSheet } from '../../ui/ConfirmSheet';
 import { history, useHistory } from './history';
 import { preview, usePreview, withPreview } from './preview';
@@ -405,15 +406,14 @@ export function DesignScreen({
     if (!item.island || !wall) return undefined;
     const p = plan.find((q) => q.wall.id === wall.id);
     if (!p) return undefined;
-    const a = rad(p.headingDeg);
-    const dir = { x: Math.cos(a), z: Math.sin(a) };
-    const normal = { x: -Math.sin(a), z: Math.cos(a) };
+    const { dir, normal } = wallAxes(p);
     const along = wall.lengthMm / 2;
     const into = AISLE.workMm + item.defaultDepthMm / 2;
     return {
       xMm: Math.round(p.start.x + dir.x * along + normal.x * into),
       zMm: Math.round(p.start.y + dir.z * along + normal.z * into),
-      headingDeg: Math.round(p.headingDeg + 90),
+      /* האי פונה לאותו צד שאליו פונים הארגזים על הקיר הזה */
+      headingDeg: Math.round(wallFacingDeg(p)),
     };
   }
 
@@ -561,7 +561,15 @@ export function DesignScreen({
     const proposed = { ...current, ...patch };
     const others = (allUnits ?? NO_UNITS).filter((u) => u.id !== id);
     const next = buildPlan(walls ?? [], [...others, proposed]);
-    const box = solidBox(proposed, next);
+    /* קודם הקיר עצמו: חריגה ממנו אינה התנגשות, ולכן היא נאמרת בשמה */
+    const off = outOfWall(proposed, walls ?? []);
+    if (off) return off;
+    /*
+     * תיבת הגוף, ולא הפיזית. `blocked` מוסיפה את החזית והמשטח
+     * בעצמה; מי ששלח לה `solidBox` קיבל חזית כפולה, ושינוי רוחב
+     * עם מרווח אמיתי של 10 מ״מ נדחה על 18 מ״מ שאינם קיימים.
+     */
+    const box = unitBox(proposed, next);
     if (!box) return null;
     return blocked(proposed, box, others, next)
       ? 'במידה הזאת הארגז נכנס לתוך מה שכבר עומד שם'
@@ -1191,7 +1199,7 @@ export function DesignScreen({
           what={
             deleting.length > 1
               ? `${deleting.length} ארגזים`
-              : `${deleting[0].name} · ${cm(deleting[0].widthMm)} ס״מ`
+              : `${deleting[0].name} · ${cmWith(deleting[0].widthMm)}`
           }
           impact={'הארגזים יורדים מהקיר, ואיתם מהחומרים, מהניסור ומהמחיר. אפשר להחזיר ב"בטל" מיד אחרי המחיקה.'}
           onConfirm={() => void removeUnits(deleting.map((u) => u.id))}

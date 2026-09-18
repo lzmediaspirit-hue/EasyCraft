@@ -117,6 +117,15 @@ export function LibrarySheet({
     return order.filter((g) => present.has(g));
   }, [pool, view]);
 
+  /*
+   * החדרים שאפשר לעבור אליהם מתוך פרויקט — החדר שלו ראשון.
+   * חדר בלי ארגזים אינו מוצג: מגירה ריקה אינה יעד.
+   */
+  const roomTabs = useMemo(() => {
+    const has = savedRooms.filter((r) => inRoom(r.id) > 0 || r.id === roomKind);
+    return [...has.filter((r) => r.id === roomKind), ...has.filter((r) => r.id !== roomKind)];
+  }, [savedRooms, items, roomKind]);
+
   const activeGroup = group && groups.includes(group) ? group : groups[0];
   /*
    * בחיפוש אין לשוניות קטגוריה: התוצאה היא כל מה שנקרא כך, ולחתוך
@@ -180,6 +189,37 @@ export function LibrarySheet({
               ? 'אין ארגז בשם הזה'
               : `${visible.length === 1 ? 'ארגז אחד' : `${visible.length} ארגזים`} בכל הספרייה`}
           </p>
+        )}
+
+        {/*
+          שאר החדרים, כשהספרייה נפתחה מתוך פרויקט.
+
+          שם היא קופצת ישר לחדר של הפרויקט — זה מה שמחפשים — אבל
+          מטבח אמיתי לוקח גם ארון מהסלון וגם ארגז מחדר השירות, ועד
+          כאן הדרך לשם הייתה חזרה לתפריט ובחירה מחדש בכל ארגז.
+          השורה הזאת היא אותה דרך, בלחיצה אחת, והחדר של הפרויקט
+          נשאר ראשון בה כדי שהחזרה אליו קצרה כמו היציאה ממנו.
+        */}
+        {!needle && !manage && roomTabs.length > 1 && view.kind !== 'menu' && (
+          <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="ספריות לפי חדר">
+            {roomTabs.map((room) => {
+              const Icon = roomIcon(room.icon);
+              const on = view.kind === 'room' && view.id === room.id;
+              return (
+                <button
+                  key={room.id}
+                  onClick={() => goTo({ kind: 'room', id: room.id })}
+                  aria-pressed={on}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium transition-colors ${
+                    on ? 'bg-oak-100 text-oak-800' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  <Icon className="size-4" />
+                  {room.label}
+                </button>
+              );
+            })}
+          </div>
         )}
 
         {/*

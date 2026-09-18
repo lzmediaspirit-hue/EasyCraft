@@ -3,7 +3,7 @@ import { catalogRepo } from '../../catalog/catalogRepo';
 import { Sheet } from '../../ui/Sheet';
 import { Field, PrimaryButton, inputClass, selectOnFocus } from '../../ui/Field';
 import { SaveError, useSaveGuard } from '../../ui/saveGuard';
-import { cm } from '../../ui/units';
+import { cm, unitLabel } from '../../ui/units';
 import { alongWallMm } from '../../db/types';
 import type { CatalogGroupPart, PlacedUnit } from '../../db/types';
 
@@ -118,7 +118,7 @@ function Spec({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-stone-50 px-3 py-2">
       <dt className="text-[11px] text-stone-400">{label}</dt>
-      <dd className="num text-sm font-semibold text-stone-800">{value} ס״מ</dd>
+      <dd className="num text-sm font-semibold text-stone-800">{value} {unitLabel()}</dd>
     </div>
   );
 }

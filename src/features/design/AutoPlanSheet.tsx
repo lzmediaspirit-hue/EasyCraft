@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Sheet } from '../../ui/Sheet';
+import { cmWith } from '../../ui/units';
 import { CheckIcon, WandIcon } from '../../ui/icons';
 import { unitsRepo } from '../projects/projectsRepo';
 import { history } from './history';
@@ -468,7 +469,7 @@ function ProposalCard({
           label="משולש עבודה"
           value={score.missing ? '—' : `${Math.round(score.triangle * 100)}%`}
         />
-        <Metric label="משטח הכנה" value={`${Math.round(score.prepMm / 10)} ס״מ`} />
+        <Metric label="משטח הכנה" value={cmWith(score.prepMm)} />
         <Metric label="מטר רץ" value={`${(score.runMm / 1000).toFixed(2)} מ׳`} />
         <Metric label="ארגזים" value={String(score.boxes)} />
       </dl>

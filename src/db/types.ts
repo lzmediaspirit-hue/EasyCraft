@@ -1090,6 +1090,23 @@ export function intoRoomMm(u: Pick<PlacedUnit, 'widthMm' | 'depthMm' | 'rotation
   return turned(u) ? u.widthMm : u.depthMm;
 }
 
+/**
+ * הגובה שהארגז תופס בפועל: הגוף, ומשטח העבודה שעליו.
+ *
+ * `heightMm` הוא הארון, והמשטח יושב מעליו — כך מודד העורך, וכך
+ * הוא נבנה. אבל מי שבדק התנגשות בדק את הארון בלבד, ולכן ארון עליון
+ * שתחתיתו 10 מ״מ מעל ארון 800 עם משטח 40 עבר בשקט: המשטח תופס
+ * 800–840 והתחתית של העליון 810. עשרה מ״מ של "רווח" שהם שלושים
+ * של חדירה.
+ *
+ * הוא יושב כאן, לצד `alongWallMm` ו-`intoRoomMm`, כי זו תכונה של
+ * הארגז השמור ולא של המסך שמצייר אותו — וגם מי שמודד סימון על
+ * הקיר שואל אותה.
+ */
+export function physicalHeightMm(u: Pick<PlacedUnit, 'heightMm' | 'counterMm'>): number {
+  return u.heightMm + Math.max(u.counterMm ?? 0, 0);
+}
+
 /** האם הארגז עומד בצד — 90° או 270°. */
 export function turned(u: Pick<PlacedUnit, 'rotationDeg'>): boolean {
   const r = ((u.rotationDeg ?? 0) % 360 + 360) % 360;

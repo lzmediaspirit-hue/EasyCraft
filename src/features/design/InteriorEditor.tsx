@@ -18,7 +18,7 @@ import {
 } from '../../catalog/zones';
 import { ShelfGaps } from './ShelfGaps';
 import { ZoneIcon } from './ZoneIcon';
-import { cm } from '../../ui/units';
+import { cm, cmWith, unitLabel } from '../../ui/units';
 import { MeasureInput } from '../../ui/MeasureInput';
 import { BackIcon, LockIcon, PlusIcon, TrashIcon, UnlockIcon } from '../../ui/icons';
 import { bodyHeightMm } from '../../db/types';
@@ -132,7 +132,7 @@ export function InteriorEditor({
     return (
       <Panel
         title={`תא ${index + 1}`}
-        subtitle={`${cm(zone.heightMm)} ס״מ · ${
+        subtitle={`${cmWith(zone.heightMm)} · ${
           columns.length ? `${columns.length} תאים לרוחב` : contentSummary(zone)
         }`}
         onBack={() => setFocus(null)}
@@ -157,7 +157,7 @@ export function InteriorEditor({
               ariaLabel="גובה התא"
               className="num w-14 bg-transparent text-end text-sm font-medium text-stone-900 focus:outline-none"
             />
-            <span className="text-[10px] text-stone-400">ס״מ</span>
+            <span className="text-[10px] text-stone-400">{unitLabel()}</span>
           </label>
           <button
             onClick={() => patchZone(zone.id, { fixedHeight: !zone.fixedHeight })}
@@ -284,7 +284,7 @@ export function InteriorEditor({
             <li key={z.id}>
               <CellRow
                 title={`תא ${index + 1}`}
-                summary={`${cm(z.heightMm)} ס״מ · ${
+                summary={`${cmWith(z.heightMm)} · ${
                   columns.length ? `${columns.length} תאים לרוחב` : contentSummary(z)
                 }`}
                 locked={z.fixedHeight}
@@ -343,7 +343,7 @@ export function InteriorEditor({
 
       {bodyH > MAX_BODY_MM && (
         <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
-          גוף הארון <span className="num">{cm(bodyH)}</span> ס״מ — מעל{' '}
+          גוף הארון <span className="num">{cm(bodyH)}</span> {unitLabel()} — מעל{' '}
           <span className="num">{cm(MAX_BODY_MM)}</span> קשה להוביל ולהתקין.
         </p>
       )}

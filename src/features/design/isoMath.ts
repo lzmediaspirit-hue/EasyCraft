@@ -1,7 +1,7 @@
 import { shade } from '../../ui/color';
 import { clamp } from '../../ui/units';
 import type { PlanWall } from './plan';
-import { rad } from './placement';
+import { rad, wallAxes } from './placement';
 
 /**
  * הגיאומטריה של המבט התלת־ממדי.
@@ -565,8 +565,8 @@ export function roomFloor(plan: PlanWall[]): { x: number; y: number }[] {
   if (!plan.length) return [];
   const pts = [plan[0].start, ...plan.map((p) => p.end)];
   if (plan.length === 1) {
-    const a = rad(plan[0].headingDeg);
-    const n = { x: -Math.sin(a) * LONE_ROOM_MM, y: Math.cos(a) * LONE_ROOM_MM };
+    const { normal } = wallAxes(plan[0]);
+    const n = { x: normal.x * LONE_ROOM_MM, y: normal.z * LONE_ROOM_MM };
     return [pts[0], pts[1], { x: pts[1].x + n.x, y: pts[1].y + n.y }, { x: pts[0].x + n.x, y: pts[0].y + n.y }];
   }
   if (plan.length === 2) {
