@@ -97,27 +97,6 @@ export function AutoPlanSheet({
   const [frozen, setFrozen] = useState<PlanWall[] | null>(null);
   const plan = frozen ?? buildPlan(walls, units);
   const items = useLiveQuery(() => catalogRepo.all(), [], []);
-  /* רק הספרייה של החדר: ארון בגדים אינו ממלא תפקיד במטבח */
-  const roomItems = useMemo(
-    () => items.filter((i) => i.rooms.includes(roomKind)),
-    [items, roomKind],
-  );
-  const proposals = useMemo(() => {
-    if (!frozen) return [];
-    if (!profile) return planKitchen({ walls, plan: frozen, appliances, seating, finish });
-    return planRoom({
-      room: roomKind,
-      walls,
-      plan: frozen,
-      items: roomItems,
-      options: roomOptions,
-    });
-  }, [frozen, walls, appliances, seating, finish, profile, roomKind, roomItems, roomOptions]);
-  const show = () => {
-    setFrozen(buildPlan(walls, units));
-    setStep('pick');
-  };
-
   /*
    * הספרייה האמיתית, ההגדרות והחדר — מה שההצעה נפתרת מולו.
    *
@@ -127,6 +106,38 @@ export function AutoPlanSheet({
    */
   const settings = useLiveQuery(() => settingsRepo.get(), []);
   const project = useLiveQuery(() => projectsRepo.get(projectId), [projectId]);
+  /* רק הספרייה של החדר: ארון בגדים אינו ממלא תפקיד במטבח */
+  const roomItems = useMemo(
+    () => items.filter((i) => i.rooms.includes(roomKind)),
+    [items, roomKind],
+  );
+  const proposals = useMemo(() => {
+    if (!frozen) return [];
+    if (!profile) {
+      return planKitchen({
+        walls, plan: frozen, appliances, seating, finish,
+        /*
+         * גובה המשטח של הנגרייה, ולא של התקן: אותו מספר שממנו
+         * נגזר הארגז שיישמר. בלעדיו התכנון מדד מול 90 ס"מ בעוד
+         * הארגז מגיע ל-92, וחלון שסִפּוֹ בגובה המשטח פסל את כל
+         * ההצעות אחרי שהוצעו.
+         */
+        counterTopMm: settings?.defaults.counterTopMm,
+      });
+    }
+    return planRoom({
+      room: roomKind,
+      walls,
+      plan: frozen,
+      items: roomItems,
+      options: roomOptions,
+    });
+  }, [frozen, walls, appliances, seating, finish, profile, roomKind, roomItems, roomOptions, settings]);
+  const show = () => {
+    setFrozen(buildPlan(walls, units));
+    setStep('pick');
+  };
+
   const resolved = useMemo(() => {
     const map = new Map<string, ResolvedPlan>();
     if (!settings || !items.length) return map;

@@ -257,6 +257,35 @@ export function featureOverlaps(
   );
 }
 
+/**
+ * האם סימון חוסם עומד במלבן הזה של חזית הקיר.
+ *
+ * אותה חפיפה כמו ב-`featureOverlaps`, על מלבן במקום על ארגז: כך
+ * אפשר לשאול "האם מותר להעמיד כאן גוף בגובה הזה" עוד לפני שיש
+ * ארגז. התכנון האוטומטי שואל את זה על כל יחידה שהוא שוקל, והוא
+ * חייב לקבל בדיוק את התשובה שיקבל אחר כך שער ההנחה — אחרת הוא
+ * מציע מטבח ואז פוסל אותו בעצמו.
+ *
+ * `topMm` הוא הגובה שהגוף מגיע אליו *כולל* משטח העבודה, כי זה מה
+ * שתופס מקום מול החלון.
+ */
+export function wallBlocks(
+  features: WallFeature[],
+  fromMm: number,
+  widthMm: number,
+  bottomMm: number,
+  topMm: number,
+): boolean {
+  return features.some(
+    (f) =>
+      featureDef(f.kind).blocks &&
+      f.xMm < fromMm + widthMm &&
+      f.xMm + f.widthMm > fromMm &&
+      f.yMm < topMm &&
+      f.yMm + f.heightMm > bottomMm,
+  );
+}
+
 /*
  * הגיאומטריה נשמרת תמיד באותה צורה — xMm מתחילת הקיר לקצה השמאלי,
  * yMm מהרצפה לתחתית. מה שמשתנה הוא רק איך המספר מוצג ונקלט, לפי

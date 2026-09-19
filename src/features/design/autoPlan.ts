@@ -1,8 +1,9 @@
 import { AISLE, BLIND_CORNER, ISLAND, KITCHEN, LANDING, PREP, SAFETY, TRIANGLE } from '../../catalog/kitchenRules';
-import type { FreePlacement, UnitLevel, Wall, WallFeature } from '../../db/types';
+import type { FreePlacement, UnitLevel, Wall } from '../../db/types';
 import { SEED_CATALOG } from '../../catalog/builtins';
 import type { PlanWall } from './plan';
 import { rad } from './placement';
+import { featureDef, wallBlocks } from '../projects/wallFeatures';
 
 /**
  * תכנון מטבח אוטומטי.
@@ -44,6 +45,16 @@ export interface AutoInput {
    * `plain` בוחר ארונות רחבים ודלתות; `rich` בוחר מגירות.
    */
   finish: 'plain' | 'standard' | 'rich';
+  /**
+   * הגובה שהשורה התחתונה מגיעה אליו בפועל — הגוף ועוד המשטח.
+   *
+   * זה מספר של הנגרייה ולא של התקן: מי שעבר למשטח 92 ס"מ מתכנן
+   * מול חלונות אחרים ממי שנשאר על 90. בלעדיו התכנון מדד לפי
+   * `KITCHEN.counterTopMm` ושער ההנחה לפי מה שבאמת נשמר, וחלון
+   * שסִפּוֹ בדיוק בגובה המשטח פסל את שלוש ההצעות — כולן הוצעו
+   * וכולן נחסמו.
+   */
+  counterTopMm?: number;
 }
 
 export type LayoutKind = 'single' | 'galley' | 'l' | 'u';
@@ -278,6 +289,21 @@ function closedRing(run: PlanWall[]): boolean {
   return Math.hypot(a.x - b.x, a.y - b.y) < KITCHEN.baseDepthMm;
 }
 
+/**
+ * האם הפינה שבסוף הקיר הזה תפוסה בידי הקיר הבא.
+ *
+ * הרזרבה בתחילת הקיר הבא נועדה לשורה של הקיר הזה, ולכן היא שלה.
+ * סימון חוסם שיושב בתוכה מבטל את המתנה: ארון שירוץ עד הפינה יעמוד
+ * בפתח או בעמוד של השכן, גם כשעל הקיר שלו עצמו אין דבר.
+ */
+function nextCornerBusy(run: PlanWall[], wi: number, ring: boolean): boolean {
+  const next = wi + 1 < run.length ? run[wi + 1] : ring ? run[0] : null;
+  if (!next) return false;
+  return next.wall.features.some(
+    (f) => featureDef(f.kind).blocks && f.xMm < CORNER_START,
+  );
+}
+
 /** המרווח בין שתי שורות ארונות מקבילות. */
 function aisleOf(run: PlanWall[]): number {
   if (run.length < 2) return Infinity;
@@ -440,6 +466,19 @@ const NAME: Record<string, string> = {
 const isColumn = (key: string): boolean => key.startsWith('k-tall');
 
 /**
+ * הגובה שעמודה מגיעה אליו, מהספרייה ולא ממספר שנכתב כאן.
+ *
+ * מי שאין לו מידה בספרייה מקבל את גובה העמודה המקובל, כדי
+ * שהבדיקה מול החלון לא תיפול בשקט לגובה אפס.
+ */
+const COLUMN_TOP_MM = 2000;
+function columnTopMm(key: string): number {
+  const seed = seedOf(key);
+  if (!seed) return COLUMN_TOP_MM;
+  return (seed.y ?? 0) + seed.h + (seed.counter ?? 0);
+}
+
+/**
  * זוגות פריטים שהם אותו תפקיד בשני רוחבים.
  *
  * ארגז דלתות ברוחב 400 הוא ארגז דלת אחת, ועמודת מזווה אינה נבנית
@@ -505,10 +544,13 @@ export function baseSpans(
   const blocks = p.wall.features
     .filter(
       (f) =>
-        f.kind === 'door' ||
-        f.kind === 'pillar' ||
-        f.kind === 'step' ||
-        (f.kind === 'window' && f.yMm < topMm),
+        /*
+         * מה שאי אפשר לבנות לתוכו — אותו דגל שחוסם גם הנחה ביד —
+         * ועוד מדרגה, שאינה חוסמת אלא גונבת עומק: ארון בעומק מלא
+         * אינו נכנס לפניה, ולכן התכנון אינו מציע אותו שם.
+         */
+        (featureDef(f.kind).blocks && f.yMm < topMm && f.yMm + f.heightMm > 0) ||
+        f.kind === 'step',
     )
     .map((f) => ({ from: f.xMm, to: f.xMm + f.widthMm }))
     .sort((x, y) => x.from - y.from);
@@ -524,12 +566,14 @@ export function baseSpans(
 }
 
 /** האם ארון עליון ברוחב הזה יתנגש בחלון או בדלת. */
-export function upperBlocked(wall: Wall, fromMm: number, widthMm: number): boolean {
-  return wall.features.some((f: WallFeature) => {
-    if (f.kind !== 'window' && f.kind !== 'door') return false;
-    if (f.yMm + f.heightMm <= KITCHEN.upperBottomMm) return false;
-    return f.xMm < fromMm + widthMm && f.xMm + f.widthMm > fromMm;
-  });
+export function upperBlocked(
+  wall: Wall,
+  fromMm: number,
+  widthMm: number,
+  bottomMm: number = KITCHEN.upperBottomMm,
+  topMm: number = Infinity,
+): boolean {
+  return wallBlocks(wall.features, fromMm, widthMm, bottomMm, topMm);
 }
 
 /**
@@ -625,6 +669,8 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
   const dropped: string[] = [];
   const notes: string[] = [];
   const wide = priority === 'economical';
+  /* הגובה שהשורה התחתונה באמת מגיעה אליו, ולא גובה התקן */
+  const baseTopMm = input.counterTopMm ?? KITCHEN.counterTopMm;
   let queue = sequence(input, priority);
 
   const put = (
@@ -655,13 +701,30 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
     let endMm = p.wall.lengthMm;
 
     /*
+     * הפינה שהקיר הבא שומר לנו אינה תמיד פנויה.
+     *
+     * הקיר הבא מתחיל ב-`CORNER_START` כדי לפנות מקום לשורה הזאת,
+     * ולכן השורה הזאת רצה עד סוף הקיר. אבל כשבתוך הרזרבה הזאת
+     * יושבת דלת או עמוד, המקום שנשמר אינו פנוי כלל: הארון
+     * האחרון עמד 45 מ"מ מהפינה ובלע את פתח הדלת של הקיר הבא,
+     * ושלוש ההצעות נפסלו בחדר סגור עם דלת ליד הפינה.
+     */
+    if (corner && nextCornerBusy(run, wi, ring)) endMm -= CORNER_START;
+
+    /*
      * הפינה עצמה: ארון פינה מתה בקצה הקיר היוצא. בלעדיו העומק
      * שמאחורי הקיר הבא פשוט אובד. בגרסה החסכונית מוותרים עליו —
      * ארון פינה יקר, והשטח שהוא מציל קטן.
      */
     if (corner && (wi < run.length - 1 || ring)) {
       const w = CORNER_WIDTH;
-      if (priority !== 'economical' && endMm - startMm >= w + MIN_BOX) {
+      /*
+       * וגם ארון הפינה נבדק מול הקיר. הוא הונח כאן בלי לשאול,
+       * לפני חישוב הקטעים הפנויים, ולכן בחדר קטן עם דלת ליד
+       * הפינה הוא נחת בדיוק על הפתח — ופסל את ההצעה כולה.
+       */
+      const free = !wallBlocks(p.wall.features, endMm - w, w, 0, baseTopMm);
+      if (priority !== 'economical' && free && endMm - startMm >= w + MIN_BOX) {
         put(p, 'k-base-blind-end', endMm - w, w, 'corner', CORNER_BLIND);
         endMm -= w;
       } else {
@@ -669,7 +732,7 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
         if (priority === 'economical') notes.push('הפינה נשארת ריקה — בלי ארון פינה');
       }
     }
-    areas.push({ p, spans: baseSpans(p, startMm, endMm) });
+    areas.push({ p, spans: baseSpans(p, startMm, endMm, baseTopMm) });
   }
 
   /*
@@ -707,7 +770,27 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
           minMm: MIN_BOX,
         };
         const w = fitWidth(span.toMm - at, slot, wide && slot.role === 'store');
-        if (w === null) break;
+        if (w === null) {
+          /*
+           * הקטע קטן מכל מה שנשאר בתור — אבל הוא עדיין קיר.
+           *
+           * עד כאן הוא ננטש בשלמותו: קיר שדלת, חלון ועמוד חתכו
+           * אותו לשלושה פתחים של חצי מטר לא קיבל שום ארגז, כי
+           * ארגז הכיור לא נכנס באף אחד מהם. מה שאינו יכול לשרת
+           * את התור — מקבל אחסון, ולא נשאר ריק.
+           */
+          const spare = q.some((x) => fitWidth(span.toMm - at, x, false) !== null);
+          if (spare) break;
+          const filler = fitWidth(
+            span.toMm - at,
+            { ...slot, key: 'k-base-door2', minMm: MIN_BOX },
+            wide,
+          );
+          if (filler === null) break;
+          put(p, 'k-base-door2', at, filler, 'store');
+          at += filler;
+          continue;
+        }
 
         /*
          * כיריים לא נצמדות לקיר ניצב: ידית סיר בולטת אל המעבר,
@@ -717,7 +800,18 @@ function buildProposal(input: AutoInput, layout: LayoutKind, priority: Priority)
         const tooClose =
           slot.role === 'hob' &&
           (at - span.fromMm < SAFETY.hobFromWallMm || span.toMm - (at + w) < SAFETY.hobFromWallMm);
-        if (tooClose) {
+        /*
+         * עמודה אינה ארגז תחתון, והקטעים הפנויים נמדדו בגובה
+         * המשטח.
+         *
+         * לכן עמודת מקרר בגובה שני מטר נדחפה היישר אל מתחת
+         * לחלון שמתחיל ב-90 ס"מ: לפי מידת השורה התחתונה המקום
+         * היה פנוי. גובה הגוף עצמו הוא מה שנבדק כאן, וכשהוא
+         * נתקל — ממלאים תחתון וממשיכים, והעמודה מחכה לקטע הבא.
+         */
+        const tall =
+          isColumn(slot.key) && upperBlocked(p.wall, at, w, baseTopMm, columnTopMm(slot.key));
+        if (tooClose || tall) {
           const filler = fitWidth(span.toMm - at, { ...slot, minMm: MIN_BOX }, false);
           if (filler === null) break;
           put(p, 'k-base-door2', at, filler, 'store');

@@ -4,7 +4,6 @@ import {
   baseSpans,
   layoutFor,
   runOf,
-  upperBlocked,
   type LayoutKind,
   type Placement,
   type Priority,
@@ -14,6 +13,7 @@ import {
 import { roomProfile, type Pick, type RoomProfile, type RoomWant } from './roomProfiles';
 import type { PlanWall } from './plan';
 import { promisedRole } from '../../catalog/roles';
+import { featureDef, wallBlocks } from '../projects/wallFeatures';
 import { ISLAND } from '../../catalog/kitchenRules';
 import type { CatalogItem, RoomKind, Wall } from '../../db/types';
 
@@ -296,10 +296,28 @@ function buildRoomProposal(
     run.length > 2 &&
     Math.hypot(last.end.x - first.start.x, last.end.y - first.start.y) < 1;
 
-  /* הקטעים הפנויים, פעם אחת — גם החלוקה וגם ההנחה נשענות עליהם */
+  /*
+   * הקטעים הפנויים, פעם אחת — גם החלוקה וגם ההנחה נשענות עליהם.
+   *
+   * הקיר הבא שומר לנו את הפינה, אבל רק כשהיא באמת פנויה: סימון
+   * חוסם בתוך הרזרבה שלו הופך את הפינה לתפוסה, והשורה הזאת
+   * עוצרת לפניה. בלי זה הארון האחרון בקיר עמד בפתח של הקיר הבא.
+   */
+  const cornerBusy = (wi: number): boolean => {
+    const next = wi + 1 < run.length ? run[wi + 1] : closed ? run[0] : null;
+    if (!corner || !next) return false;
+    return next.wall.features.some(
+      (f) => featureDef(f.kind).blocks && f.xMm < cornerStartMm,
+    );
+  };
   const areas = run.map((p, wi) => ({
     p,
-    spans: baseSpans(p, corner && (wi > 0 || closed) ? cornerStartMm : 0, p.wall.lengthMm, topMm),
+    spans: baseSpans(
+      p,
+      corner && (wi > 0 || closed) ? cornerStartMm : 0,
+      p.wall.lengthMm - (cornerBusy(wi) ? cornerStartMm : 0),
+      topMm,
+    ),
   }));
   const capacity = areas.reduce(
     (n, a) => n + a.spans.reduce((m, sp) => m + (sp.toMm - sp.fromMm), 0), 0,
@@ -335,9 +353,15 @@ function buildRoomProposal(
           const slot = queueLeft[i];
           const w = widthIn(slot.chosen.item, slot.chosen.want.pick, span.toMm - at, slot.wantMm)!;
           const band = bandOf(slot.chosen.item);
-          /* ארון תלוי אינו נכנס לתוך חלון; תחתונים כבר סוננו ב-`baseSpans` */
-          if (wallLevel && upperBlocked(p.wall, at, w)) {
-            at += w;
+          /*
+           * הסימונים שבקיר, מול הגובה שהיחידה הזאת באמת תופסת.
+           *
+           * עד כאן ארון תלוי נבדק מול גובה קבוע של 1,450 מ"מ ולא
+           * מול עצמו, ולכן ארון מראה שמתחיל ב-1,900 נפסל בגלל
+           * חלון שנגמר ב-1,900. הגובה של היחידה הוא מה שקובע.
+           */
+          if (wallBlocks(p.wall.features, at, w, band.bottomMm, band.topMm)) {
+            at += wallLevel ? w : MIN_BOX;
             continue;
           }
           /* ואינו נכנס לתוך מה שכבר עומד שם בגובה הזה */
