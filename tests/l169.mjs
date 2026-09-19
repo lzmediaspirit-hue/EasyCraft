@@ -142,6 +142,66 @@ ok('גם אחרי היישור ראש המשטח הוא מה שנקבע',
   (fBase?.h ?? 0) + (fBase?.counter ?? 0) === 920, String((fBase?.h ?? 0) + (fBase?.counter ?? 0)));
 ok('והעליון נשאר גם ביישור', fUpper?.y === 1500 && fUpper?.h === 720, JSON.stringify(fUpper));
 
+/* ------------------------------------------------------------------ */
+/* שורת המטבח בספרייה — ראש אחד, ולא חמישה                            */
+/* ------------------------------------------------------------------ */
+/*
+ * בספרייה שנבנתה ביד הצטברו בשורה אחת חמישה גבהים: גוף 87, 88
+ * ו-90, ומשטח 0, 2 ו-3 — כלומר ראש ב-87, 88, 90, 91 ו-93. שורת
+ * ארונות חייבת ראש אחד, אחרת המשטח מדלג מדרגות.
+ */
+const run = await page.evaluate(async () => {
+  const v = '?v=' + Date.now();
+  const { SHIPPED_LIBRARY } = await import('/src/catalog/shipped.ts' + v);
+  const { glyphDef } = await import('/src/catalog/glyphList.ts' + v);
+  /*
+   * מי שבשורה: עומד על רצפת המטבח בטווח גובה של שורת עבודה.
+   * מכשיר שנקנה שלם אינו בשורה — גובה המדיח הוא של היצרן, והוא
+   * מתכוונן על הרגליים שלו.
+   */
+  const band = SHIPPED_LIBRARY.filter(
+    (i) => i.level === 'floor' && (i.defaultYMm ?? 0) === 0 && i.rooms.includes('kitchen')
+      && i.defaultHeightMm >= 820 && i.defaultHeightMm <= 960
+      && !glyphDef(i.glyph).standalone,
+  );
+  return {
+    n: band.length,
+    bodies: [...new Set(band.map((i) => i.defaultHeightMm))].sort((a, b) => a - b),
+    tops: [...new Set(band.filter((i) => (i.counterMm ?? 0) > 0)
+      .map((i) => i.defaultHeightMm + i.counterMm))].sort((a, b) => a - b),
+    thick: [...new Set(band.filter((i) => (i.counterMm ?? 0) > 0)
+      .map((i) => i.counterMm))].sort((a, b) => a - b),
+  };
+});
+ok('כל שורת המטבח בגוף אחד', run.bodies.length === 1 && run.bodies[0] === 900,
+  JSON.stringify(run.bodies));
+ok('ובעובי משטח אחד', run.thick.length === 1 && run.thick[0] === 20, JSON.stringify(run.thick));
+ok('ולכן ראש אחד למשטח', run.tops.length === 1 && run.tops[0] === 920, JSON.stringify(run.tops));
+
+/*
+ * והמיגרציה מיישרת את מי שכבר התקין — אבל היא מזהה שורות לפי
+ * מזהה, ומזהה שהשתנה בספרייה הופך אותה לפעולה שקטה שלא עשתה דבר.
+ */
+const mig = await page.evaluate(async () => {
+  const v = '?v=' + Date.now();
+  const { SHIPPED_LIBRARY } = await import('/src/catalog/shipped.ts' + v);
+  /*
+   * הקוד נקרא כפי שהשרת מגיש אותו, ולכן הרשימה עשויה להיות
+   * מעוצבת אחרת ממה שכתוב בקובץ. מה שנחלץ הוא המחרוזות בתוך
+   * הרשימה עצמה, בלי להסתמך על רווחים או על סוג המרכאות.
+   */
+  const src = await (await fetch('/src/db/db.ts' + v)).text();
+  const at = src.indexOf('db.version(32)');
+  const block = src.slice(at, src.indexOf('];', at));
+  const ids = [...block.matchAll(/["']([^"']{6,})["']/g)]
+    .map((m) => m[1])
+    .filter((x) => !x.includes(' '));
+  const known = new Set(SHIPPED_LIBRARY.map((i) => i.id));
+  return { n: ids.length, missing: ids.filter((id) => !known.has(id)) };
+});
+ok('כל מזהה במיגרציה קיים בספרייה', mig.n > 0 && mig.missing.length === 0,
+  `${mig.n} מזהים, חסרים: ${mig.missing.join(',') || '—'}`);
+
 ok('בלי שגיאות בדפדפן', errs.length === 0, errs.slice(0, 2).join(' | '));
 
 await browser.close();
