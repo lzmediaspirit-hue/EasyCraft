@@ -1,4 +1,5 @@
 import { glyphDef } from '../../catalog/glyphList';
+import { featureDef } from '../projects/wallFeatures';
 import { blocked } from './collision';
 import { unitBox } from './placement';
 import { alongWallMm } from '../../db/types';
@@ -201,9 +202,12 @@ export interface Landing {
  *
  *   1. המקום שביקשו, אם הוא פנוי.
  *   2. אחרת — דוחפים את השורה. זה מה שנגר עושה בקיר מלא.
- *   3. ואם גם היא אינה זזה — מחליקים עד הדופן של השכן, כלומר
- *      עד המקום הקרוב ביותר שבו הארגז באמת נכנס.
+ *   3. ואם גם היא אינה זזה — מחליקים עד הדופן הקרובה, של שכן
+ *      או של פתח, כלומר עד המקום הקרוב ביותר שבו הארגז באמת
+ *      נכנס.
  *   4. ורק אז נשארים.
+ *
+ * והכול בתוך הקיר שנמסר: `wallLengthMm` הוא גבול ולא קישוט.
  *
  * ההחלקה אחרי הדחיפה ולא לפניה: "להישאר במקום" הוא תמיד מועמד
  * חוקי בהחלקה — הדופן של השכן היא בדיוק המקום שממנו יצאנו —
@@ -240,13 +244,24 @@ export function landOnWall(input: {
     return !!b && (stuck || !blocked(probe, b, others, plan));
   };
 
-  if (ok(xMm, yMm)) return { xMm, yMm, shifts: none };
+  /*
+   * הקיר שמקבל את הארגז הוא גם הגבול שלו.
+   *
+   * `wallLengthMm` נמסר ולא נקרא: המקום שביקשו הוחזר כפי שהוא,
+   * ולכן ארגז ברוחב 800 שביקשו לו 3,500 בקיר של 4,000 נחת עם
+   * 300 מ"מ באוויר. שני המסכים חתכו את המידה בעצמם לפני הקריאה,
+   * וזו בדיוק הכפילות שהפונקציה הזאת באה לבטל.
+   */
+  const reachMm = Math.max(wallLengthMm - alongWallMm(unit), 0);
+  const want = Math.round(Math.min(Math.max(xMm, 0), reachMm));
+
+  if (ok(want, yMm)) return { xMm: want, yMm, shifts: none };
   if (locked) return { xMm: unit.xMm, yMm: unit.yMm, shifts: none };
 
-  if (!stuck && xMm !== unit.xMm) {
+  if (!stuck && want !== unit.xMm) {
     const row = rowGivesWay({
       unit: { ...unit, wallId },
-      xMm,
+      xMm: want,
       yMm,
       mates,
       all,
@@ -262,15 +277,26 @@ export function landOnWall(input: {
    * המידה שנבחרת היא הקרובה ביותר שבה הוא באמת נכנס: זו בדיוק
    * הדופן של השכן, וזו גם התנועה שעושים בשטח — דוחפים עד שנוגע.
    */
-  const reach = Math.max(wallLengthMm - alongWallMm(unit), 0);
-  const stops = [xMm];
+  const stops = [want];
   for (const other of mates) {
     if (other.id === unit.id || other.level !== unit.level) continue;
     stops.push(other.xMm + alongWallMm(other), other.xMm - alongWallMm(unit));
   }
+  /*
+   * ודלת היא דופן.
+   *
+   * ההחלקה עצרה על ארגז שכן בלבד, ולכן ארגז שנגרר אל פתח לא זז
+   * כלל: המקום שביקשו היה תפוס, לא היה את מי לדחוף, ולא היה שום
+   * יעד קרוב שהוא באמת נכנס בו. בשטח דוחפים עד המשקוף ומשאירים
+   * שם — ולכן גם שפות הפתחים והעמודים הן יעד.
+   */
+  for (const f of plan.find((q) => q.wall.id === wallId)?.wall.features ?? []) {
+    if (!featureDef(f.kind).blocks) continue;
+    stops.push(f.xMm - alongWallMm(unit), f.xMm + f.widthMm);
+  }
   const near = stops
-    .map((v) => Math.round(Math.min(Math.max(v, 0), reach)))
-    .sort((a, b) => Math.abs(a - xMm) - Math.abs(b - xMm));
+    .map((v) => Math.round(Math.min(Math.max(v, 0), reachMm)))
+    .sort((a, b) => Math.abs(a - want) - Math.abs(b - want));
   const slid = near.find((v) => ok(v, yMm)) ?? near.find((v) => ok(v, unit.yMm));
 
   if (slid !== undefined && ok(slid, yMm)) return { xMm: slid, yMm, shifts: none };
