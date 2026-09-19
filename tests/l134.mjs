@@ -202,6 +202,30 @@ const hw = await page.evaluate(async () => {
 });
 ok('the supplier is stored', hw.supplier === 'בלום', String(hw.supplier));
 ok('the model too', hw.model === 'X-12', String(hw.model));
+
+/*
+ * ושוב, על שדות שכבר יש בהם ערך.
+ *
+ * הסבב הראשון עבר גם כשהיה באג, כי שני השדות היו ריקים והרינדור
+ * הספיק להיכנס ביניהם. מדידה של עשרה סבבים מצאה שמונה כשלונות:
+ * `patch` נשען על צילום שנלכד ברינדור, ולכן שתי עריכות שקרו
+ * לפני הרינדור הבא נשענו שתיהן על אותו צילום — הדגם נשמר והספק
+ * חזר לערכו הקודם. שלושה סבבים כאן הם מה שתופס את זה.
+ */
+const rounds = [];
+for (let i = 2; i <= 4; i++) {
+  await page.getByLabel('ספק').first().fill('ספק' + i);
+  await page.getByLabel('דגם').first().fill('דגם' + i);
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(700);
+  rounds.push(await page.evaluate(async () => {
+    const { db } = await import('/src/db/db.ts');
+    const r = ((await db.units.toArray())[0].hardware ?? [])[0] ?? {};
+    return `${r.supplier}/${r.model}`;
+  }));
+}
+ok('שתי עריכות ברצף — שתיהן נשמרות, בכל סבב',
+  rounds.every((v, i) => v === `ספק${i + 2}/דגם${i + 2}`), rounds.join(' , '));
 ok('and the replacement it prevents', hw.replaces === 'lift', String(hw.replaces));
 
 /*

@@ -50,7 +50,19 @@ export function HardwareRows({
    */
   const sent = useRef<Hardware[] | null>(null);
   if (sent.current && JSON.stringify(sent.current) === JSON.stringify(rows)) sent.current = null;
-  const base = sent.current ?? rows;
+  /*
+   * ומה שיצא אחרון נקרא ברגע הכתיבה, ולא ברגע הרינדור.
+   *
+   * `base` נלכד פעם אחת לכל רינדור, ושתי עריכות שקרו לפני
+   * הרינדור הבא נשענו שתיהן על אותו צילום: מילוי הספק, ומיד
+   * אחריו מעבר לשדה הדגם, נתן ערך אחד שנכתב ומיד נדרס — הדגם
+   * נשמר והספק חזר לערכו הקודם. שמונה מתוך עשרה סבבים במדידה.
+   *
+   * ההפרדה כאן היא בין מה שמצויר למה שנכתב: הציור צריך צילום
+   * יציב, הכתיבה צריכה את האחרון שיש.
+   */
+  const latest = () => sent.current ?? rows;
+  const base = latest();
 
   const write = (next: Hardware[]) => {
     sent.current = next;
@@ -58,7 +70,7 @@ export function HardwareRows({
   };
 
   const patch = (id: string, next: Partial<Hardware>) =>
-    write(base.map((r) => (r.id === id ? { ...r, ...next } : r)));
+    write(latest().map((r) => (r.id === id ? { ...r, ...next } : r)));
 
   return (
     <div className="mt-2 space-y-2">
@@ -88,7 +100,7 @@ export function HardwareRows({
                 ))}
               </select>
               <button
-                onClick={() => write(base.filter((r) => r.id !== row.id))}
+                onClick={() => write(latest().filter((r) => r.id !== row.id))}
                 aria-label={`מחיקת ${row.name}`}
                 className="rounded-lg p-1 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-600"
               >
@@ -215,7 +227,7 @@ export function HardwareRows({
               <button
                 key={spec.id}
                 onClick={() => {
-                  write([...base, fromSpec(spec)]);
+                  write([...latest(), fromSpec(spec)]);
                   setAdding(false);
                 }}
                 className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-stone-700 ring-1 ring-stone-200 transition-colors hover:ring-oak-400"
@@ -227,7 +239,7 @@ export function HardwareRows({
             <button
               onClick={() => {
                 write([
-                  ...base,
+                  ...latest(),
                   { id: crypto.randomUUID(), name: 'פרזול משלי', qty: 1, unit: 'יח׳' },
                 ]);
                 setAdding(false);

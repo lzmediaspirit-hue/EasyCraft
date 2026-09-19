@@ -158,7 +158,40 @@ const out = await page.evaluate(async () => {
   const reach = last.length ? Math.max(...last.map((u) => u.xMm + u.widthMm)) : 0;
   ok('הקיר האחרון עוצר לפני הפינה שיש בה דלת', reach <= 3000 - 400, `${reach}`);
 
-  /* 5. קיר שנחתך לפתחים קטנים אינו נשאר ריק */
+  /*
+   * 5. דרישה שמסומנת במסך — יש לה פריט בספרייה.
+   *
+   * "מגירות פנימיות" בחדר ארונות הייתה מסומנת כברירת מחדל,
+   * וביקשה מפלס `tall` בלבד. בספרייה יש בדיוק את הפריט —
+   * "יחידת מגירות", איור מגירות — במפלס `floor`, ולכן כל תכנון
+   * של חדר ארונות דיווח "אין בספרייה של החדר יחידה כזאת"
+   * והוריד ציון על משהו שקיים.
+   *
+   * החוסר שנשאר הוא של הספרייה ולא של הקוד: אין בחדר השירות אף
+   * ארגז שמצהיר על כיור. הוא רשום כאן בשמו, כדי שהיום שבו
+   * יתווסף ארגז כזה יסיר גם את השורה הזאת.
+   */
+  const KNOWN_GAPS = ['utility/ארון כיור'];
+  const unmetWants = [];
+  for (const prof of RP.ROOM_PROFILES) {
+    const mine = items.filter((i) => i.rooms.includes(prof.room));
+    for (const w of prof.wants) {
+      if (w.needs && !prof.options.find((o) => o.key === w.needs)?.on) continue;
+      const levels = Array.isArray(w.pick.level) ? w.pick.level : [w.pick.level];
+      const has = mine.some(
+        (i) =>
+          levels.includes(i.level) &&
+          (!w.pick.group || i.group === w.pick.group) &&
+          (!w.pick.glyphs || w.pick.glyphs.includes(i.glyph)),
+      );
+      if (!has) unmetWants.push(`${prof.room}/${w.label}`);
+    }
+  }
+  ok('לכל דרישה שמסומנת מראש יש פריט בספרייה',
+    unmetWants.every((k) => KNOWN_GAPS.includes(k)),
+    unmetWants.join(' ; '));
+
+  /* 6. קיר שנחתך לפתחים קטנים אינו נשאר ריק */
   const cutWalls = [wall('w1', 4000, [door(400), win(1800), pillar(3200)])];
   const cut = A.planKitchen({
     walls: cutWalls, plan: P.buildPlan(cutWalls, []), appliances: APP,

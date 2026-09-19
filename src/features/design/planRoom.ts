@@ -60,8 +60,9 @@ function choose(
   special: boolean,
   repeat: boolean,
 ): CatalogItem | undefined {
+  const levels = Array.isArray(pick.level) ? pick.level : [pick.level];
   const fits = items.filter((i) => {
-    if (i.level !== pick.level) return false;
+    if (!levels.includes(i.level)) return false;
     if (pick.group && i.group !== pick.group) return false;
     if (pick.glyphs && !pick.glyphs.includes(i.glyph)) return false;
     /* יחידה שכבר מילאה תפקיד אחר אינה ממלאת גם את זה */
@@ -94,7 +95,7 @@ function choose(
      * לתלוי בלבד: ארון תחתון שחוזר צריך דווקא את עומק הקו, ושם
      * קרבת הרוחב היא שמכריעה.
      */
-    if (repeat && pick.level === 'wall' && a.defaultDepthMm !== b.defaultDepthMm) {
+    if (repeat && levels.includes('wall') && a.defaultDepthMm !== b.defaultDepthMm) {
       return a.defaultDepthMm - b.defaultDepthMm;
     }
     return (

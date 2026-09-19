@@ -21,7 +21,16 @@ import { roomPlanKey } from '../../catalog/roomsRepo';
 
 /** מה שמזהה יחידה מתאימה בספרייה של החדר. */
 export interface Pick {
-  level: UnitLevel;
+  /**
+   * המפלס, או כמה מפלסים שכולם עונים על התפקיד.
+   *
+   * יחידת מגירות בחדר ארונות יכולה להיות עמודה עם מגירות פנימיות
+   * או שידה נמוכה — שתיהן מגירות. הדרישה נכתבה `tall` בלבד,
+   * ובספרייה יש בדיוק את הפריט הנכון במפלס `floor`, ולכן כל
+   * תכנון של חדר ארונות דיווח "מגירות — אין בספרייה של החדר
+   * יחידה כזאת" והוריד ציון על משהו שקיים.
+   */
+  level: UnitLevel | UnitLevel[];
   group?: CatalogGroup;
   /**
    * האיורים שמצהירים על היכולת.
@@ -77,6 +86,10 @@ export interface RoomProfile {
 const tall = (glyphs: string[], wantMm: number, minMm = 400): Pick => ({
   level: 'tall', glyphs, wantMm, minMm,
 });
+/** מה שעומד על הרצפה, בעמודה או בשידה — שניהם עונים על התפקיד. */
+const standing = (glyphs: string[], wantMm: number, minMm = 400): Pick => ({
+  level: ['tall', 'floor'], glyphs, wantMm, minMm,
+});
 const base = (glyphs: string[], wantMm: number, minMm = 350): Pick => ({
   level: 'floor', glyphs, wantMm, minMm,
 });
@@ -104,7 +117,7 @@ export const ROOM_PROFILES: RoomProfile[] = [
     wants: [
       { label: 'תלייה כפולה', role: 'hang', needs: 'double', pick: tall(['hangDouble'], 800, 600) },
       { label: 'תלייה ארוכה', role: 'hang', repeat: true, essential: true, pick: tall(['hang'], 600, 500) },
-      { label: 'מגירות', role: 'drawers', needs: 'drawers', pick: tall(['innerDrawers', 'drawers'], 600, 400) },
+      { label: 'מגירות', role: 'drawers', needs: 'drawers', pick: standing(['innerDrawers', 'drawers'], 600, 400) },
       { label: 'מדפים', role: 'shelving', repeat: true, pick: tall(['shelves'], 500, 400) },
       { label: 'נעליים', role: 'shoes', needs: 'shoes', pick: tall(['open', 'shoes'], 600, 400) },
     ],
