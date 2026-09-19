@@ -5,10 +5,72 @@ import { projectsRepo } from '../projects/projectsRepo';
 import { Sheet } from '../../ui/Sheet';
 import { cm, unitLabel } from '../../ui/units';
 import type { NestResult } from '../../costing/nesting';
-import type { PartGroup } from '../../costing/boards';
+import type { Part, PartGroup } from '../../costing/boards';
 
-/** צבע לכל סוג חלק, כדי לזהות אותו על הפלטה במבט אחד. */
-const TONES = ['#d9b483', '#a8c3d9', '#c4b5a0', '#b8d4b8', '#d9b8c4', '#c9c4a8'];
+/**
+ * הצבע על הפלטה אומר לאיזו משפחה החלק שייך.
+ *
+ * קודם הוא נגזר מהמקום של הסוג *בפלטה הזאת* — `labels.indexOf`
+ * על רשימה שנבנתה מחדש לכל פלטה — ולכן "צד" יצא כחול בפלטה אחת
+ * וירוק בשנייה, ומקרא כל פלטה סתר את זה שלפניה. הצבע לא אמר
+ * כלום, והעין למדה להתעלם ממנו.
+ *
+ * עכשיו הוא נקבע מהחלק עצמו, ולכן הוא זהה בכל פלטה, בכל גוון
+ * ובכל פרויקט. והוא לפי משפחה ולא לפי שם, כי זה מה שעושים עם
+ * הערימה שיוצאת מהמסור: מפרידים חזיתות מגוף וממגירות. שני סוגים
+ * מאותה משפחה חולקים צבע במכוון — השם המדויק כתוב במקרא, ולחיצה
+ * על חתיכה אומרת גם מאיזה ארגז היא.
+ */
+const FAMILY = {
+  front: '#d9b483',
+  carcass: '#a8c3d9',
+  shelf: '#b8d4b8',
+  drawer: '#d9b8c4',
+  back: '#c4b5a0',
+  rail: '#c9c4a8',
+} as const;
+
+/** השם שהחלק נולד איתו ב-`unitParts`, והמשפחה שהוא שייך לה. */
+const PART_FAMILY: Record<string, keyof typeof FAMILY> = {
+  'דלת': 'front',
+  'חזית מגירה': 'front',
+  'דופן זרה': 'front',
+  'דלת זכוכית': 'front',
+
+  'צד': 'carcass',
+  'תחתית ותקרה': 'carcass',
+  'חוצץ בין אזורים': 'carcass',
+
+  'מדף': 'shelf',
+
+  'תחתית מגירה': 'drawer',
+  'גב מגירה': 'drawer',
+  'דופן מגירה': 'drawer',
+
+  'גב': 'back',
+  'גב בעובי גוף': 'back',
+  'קושרת גב': 'back',
+
+  'קושרת': 'rail',
+  'קושרת עליונה': 'rail',
+};
+
+const TONES = Object.values(FAMILY);
+
+/**
+ * הצבע של סוג החלק.
+ *
+ * מה שאינו ברשימה הוא לוח בודד, ששמו הוא שם הפריט עצמו ואינו
+ * ידוע מראש. הוא מקבל צבע יציב מגיבוב השם — לא בהכרח המשפחה
+ * הנכונה, אבל אותו צבע בכל מקום, וזו הנקודה.
+ */
+export function toneOf(label: string): string {
+  const family = PART_FAMILY[label];
+  if (family) return FAMILY[family];
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
+  return TONES[h % TONES.length];
+}
 
 /**
  * ניסור: איך החלקים יושבים על הפלטות בפועל.
@@ -117,6 +179,7 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
                   <SheetPlan
                     key={sheet.index}
                     sheet={sheet}
+                    parts={group.parts}
                     sheetW={group.material.sheetWidthMm}
                     sheetH={group.material.sheetHeightMm}
                     showOffcuts={showOffcuts}
@@ -128,8 +191,8 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
         ))}
 
         <p className="text-[11px] leading-snug text-stone-400">
-          כל חתך חוצה את הלוח מקצה לקצה, והכרסום נגרע בקווי החיתוך
-          עצמם. חזיתות וצדדים נשמרים בכיוון הסיבים; מדפים, תחתיות
+          לחיצה על חתיכה אומרת מאיזה ארגז היא. כל חתך חוצה את הלוח
+          מקצה לקצה, והכרסום נגרע בקווי החיתוך עצמם. חזיתות וצדדים נשמרים בכיוון הסיבים; מדפים, תחתיות
           וגב מסובבים לניצול טוב יותר.
         </p>
       </div>
@@ -139,16 +202,30 @@ export function NestingSheet({ projectId, onClose }: { projectId: string; onClos
 
 function SheetPlan({
   sheet,
+  parts,
   sheetW,
   sheetH,
   showOffcuts,
 }: {
   sheet: NestResult['sheets'][number];
+  /** החלקים כפי שנכנסו לפריסה — `source` של כל חתיכה מצביע לכאן */
+  parts: Part[];
   sheetW: number;
   sheetH: number;
   showOffcuts: boolean;
 }) {
   const labels = [...new Set(sheet.parts.map((p) => p.label))];
+  /*
+   * החתיכה שנלחצה.
+   *
+   * על הפלטה מונחות חמש חתיכות באותה מידה ובאותו שם, והשאלה
+   * היחידה שיש לנגר עליהן היא לאיזה ארון כל אחת הולכת. התשובה
+   * נכתבת מתחת לציור ולא בבועה מרחפת: על טלפון אין ריחוף, ובועה
+   * שנפתחת מעל הפלטה מסתירה בדיוק את מה שרוצים לראות.
+   */
+  const [picked, setPicked] = useState<string | null>(null);
+  const chosen = sheet.parts.find((p) => p.id === picked) ?? null;
+  const from = chosen ? parts[chosen.source]?.from : undefined;
 
   /*
    * הפלטה מוצגת שוכבת. מסובבים רק את הקואורדינטות, ולא את הטקסט —
@@ -179,16 +256,33 @@ function SheetPlan({
       >
         {sheet.parts.map((p) => {
           const b = box(p.x, p.y, p.widthMm, p.heightMm);
+          const on = p.id === picked;
+          const owner = parts[p.source]?.from;
           return (
-            <g key={p.id}>
+            <g
+              key={p.id}
+              onClick={() => setPicked(on ? null : p.id)}
+              className="cursor-pointer"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setPicked(on ? null : p.id);
+                }
+              }}
+              aria-label={`${p.label}${owner ? ` — ${owner}` : ''}`}
+            >
+              {/* על מחשב די בריחוף; באצבע צריך לחיצה, וזו התשובה שמתחת */}
+              <title>{owner ? `${p.label} — ${owner}` : p.label}</title>
               <rect
                 x={b.x}
                 y={b.y}
                 width={b.w}
                 height={b.h}
-                fill={TONES[labels.indexOf(p.label) % TONES.length]}
-                stroke="#78716c"
-                strokeWidth={Math.max(sheetH / 400, 2)}
+                fill={toneOf(p.label)}
+                stroke={on ? '#1c1917' : '#78716c'}
+                strokeWidth={Math.max(sheetH / 400, 2) * (on ? 3 : 1)}
               />
               <text
                 x={b.x + b.w / 2}
@@ -241,6 +335,23 @@ function SheetPlan({
           })}
       </svg>
 
+      {/*
+        מה נלחץ: הארגז קודם, כי זו השאלה. הסוג והמידה אחריו, כדי
+        שלא צריך לחפש את החתיכה בעיניים כדי לוודא שנבחרה הנכונה.
+      */}
+      {chosen && (
+        <p className="mt-1.5 rounded-lg bg-stone-100 px-2 py-1.5 text-[11px] leading-snug text-stone-700">
+          <span className="font-semibold text-stone-900">{from ?? 'ארגז לא ידוע'}</span>
+          {' · '}
+          {chosen.label}
+          {' · '}
+          <span className="num">
+            {cm(chosen.widthMm)}×{cm(chosen.heightMm)} {unitLabel()}
+          </span>
+          {chosen.rotated && <span className="text-stone-400"> · מסובב</span>}
+        </p>
+      )}
+
       {showOffcuts && (
         <p className="mt-1.5 px-1 text-[10px] leading-relaxed text-emerald-700">
           {sheet.offcuts.length === 0 ? (
@@ -258,12 +369,12 @@ function SheetPlan({
       )}
 
       <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 px-1">
-        {labels.map((l, i) => (
+        {labels.map((l) => (
           <li key={l} className="flex items-center gap-1 text-[10px] text-stone-500">
             <span
               aria-hidden="true"
               className="size-2.5 rounded-sm"
-              style={{ background: TONES[i % TONES.length] }}
+              style={{ background: toneOf(l) }}
             />
             {l}
           </li>

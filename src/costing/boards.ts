@@ -55,6 +55,15 @@ export interface Part {
   widthMm: number;
   heightMm: number;
   qty: number;
+  /**
+   * הארגז שהחלק הזה נחתך בשבילו.
+   *
+   * `label` אומר *מה* החלק — "צד", "מדף", "דלת" — ולא בשביל מי.
+   * על הפלטה זו בדיוק השאלה שנשאלת: הנגר רואה חמישה צדדים באותה
+   * מידה ורוצה לדעת לאיזה ארון כל אחד הולך. השם נקבע כשהחלק
+   * מצטרף לשורה, כי שם עוד ידוע מאיזה ארגז הוא בא.
+   */
+  from?: string;
 }
 
 interface BoardLine {
@@ -815,7 +824,8 @@ export function projectCosting(
       const key = `${finishId ?? ''}:${materialId}`;
       const row = areaByKey.get(key) ?? { materialId, finishId, areaM2: 0, parts: [] };
       row.areaM2 += area * part.qty;
-      row.parts.push(part);
+      /* מכאן והלאה החלק מעורבב עם חלקי ארגזים אחרים, ולכן השם נוסע איתו */
+      row.parts.push({ ...part, from: u.name });
       areaByKey.set(key, row);
     }
     /*
