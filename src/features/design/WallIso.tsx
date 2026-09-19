@@ -171,6 +171,16 @@ export function WallIso({
      * והמרווח בין שני ארגזים גדל מ-1,300 ל-3,320 בכמה אירועי מגע.
      */
     mates: PlacedUnit[];
+    /**
+     * החדר כפי שהיה כשהאצבע ירדה.
+     *
+     * מאותה סיבה בדיוק: משהצטרפה דחיפת השורה, חישוב מול המקומות
+     * הנוכחיים היה מזין את עצמו — שכן שנדחף הופך למכשול חדש,
+     * והדרך חזרה נחסמת בידי מי שהגרירה עצמה הזיזה.
+     */
+    world: PlacedUnit[];
+    /** מי שהשורה הזיזה עד כה — כדי להחזיר את מי שכבר אינו נדחף */
+    pushed: Set<string>;
     /** היעד שכבר נבחר להנחה, כדי שהוא לא יקפוץ בין שני שכנים */
     onId?: string;
     startX: number;
@@ -442,7 +452,10 @@ export function WallIso({
         if (!orbit.current || orbit.current.moved) return;
         orbit.current = null;
         onGesture?.('start');
-        drag.current = { from: held, mates: [], startX: clientX, startY: clientY, moved: true };
+        drag.current = {
+          from: held, mates: [], startX: clientX, startY: clientY, moved: true,
+          world: units.map((u) => ({ ...u })), pushed: new Set<string>(),
+        };
         onSelect(held.id);
       }
       drag.current.armed = true;
@@ -487,7 +500,8 @@ export function WallIso({
       view: shown,
       plan,
       walls,
-      units,
+      /* החדר של נקודת המוצא — ראה `world` בהכרזת הגרירה */
+      units: d.world,
       pxPerUnit,
       snap,
       onId: d.onId,
@@ -508,7 +522,21 @@ export function WallIso({
     const dy = (next.patch.yMm ?? d.from.yMm) - d.from.yMm;
 
     /* ארגז בודד: כל מה שהפתרון מצא — מעבר קיר, הצמדה, הנחה על אחר */
-    if (!d.mates.length) return onMoveTo(d.from.id, next.patch);
+    if (!d.mates.length) {
+      /*
+       * ומי שהשורה הזיזה בשבילו, ומי שכבר אינה מזיזה: בלי ההחזרה
+       * שכן שנדחף בדרך החוצה היה נשאר דחוף גם אחרי שהאצבע חזרה.
+       */
+      const now = new Set((next.shifts ?? []).map((q) => q.id));
+      for (const id of d.pushed) {
+        if (now.has(id)) continue;
+        const back = d.world.find((u) => u.id === id);
+        if (back) onMoveTo(id, { xMm: back.xMm });
+      }
+      for (const q of next.shifts ?? []) onMoveTo(q.id, { xMm: q.xMm });
+      d.pushed = now;
+      return onMoveTo(d.from.id, next.patch);
+    }
     if (!dx && !dy) return;
 
     /*
@@ -577,6 +605,8 @@ export function WallIso({
               startX: e.clientX,
               startY: e.clientY,
               moved: false,
+              world: units.map((u) => ({ ...u })),
+              pushed: new Set<string>(),
             };
             armAxis(e.clientX, e.clientY, anchor);
             return;
@@ -597,6 +627,8 @@ export function WallIso({
               startX: e.clientX,
               startY: e.clientY,
               moved: false,
+              world: units.map((u) => ({ ...u })),
+              pushed: new Set<string>(),
             };
             armAxis(e.clientX, e.clientY, held);
           } else {

@@ -2,6 +2,7 @@ import { COS30 } from './isoMath';
 import { SNAP, SNAP_PX, snapX, snapY } from './snapping';
 import { stackSnap } from './stacking';
 import { blocked } from './collision';
+import { landOnWall } from './rowShift';
 import { rad, unitBox } from './placement';
 import { cornerZones } from './plan';
 import { alongWallMm } from '../../db/types';
@@ -9,6 +10,7 @@ import { clamp } from '../../ui/units';
 import type { IsoView } from './isoMath';
 import type { Axis } from './axisLock';
 import type { PlanWall } from './plan';
+import type { Shift } from './rowShift';
 import type { PlacedUnit, Wall } from '../../db/types';
 
 /**
@@ -55,6 +57,8 @@ export interface DragResult {
   patch: Partial<PlacedUnit>;
   /** הארגז שהוא הונח עליו — למחוון שמראה על מי */
   onId?: string;
+  /** השכנים שהשורה הזיזה כדי לפנות לו מקום */
+  shifts?: Shift[];
 }
 
 /** `null` = אין תשובה, והארגז נשאר איפה שהוא */
@@ -151,58 +155,31 @@ export function solveDrag(input: DragInput): DragResult | null {
       : snapY(rawY, from, mates, target.heightMm, tol, nx);
 
   /*
-   * חוקי הפיזיקה של החדר: נגיעה והכלה מותרות, חדירה חלקית לא.
-   * ארגז שכבר חודר במקום שהוא עומד בו הוא היוצא מן הכלל — דווקא
-   * ממנו צריך להיות אפשר לצאת.
-   */
-  const start = unitBox(from, plan);
-  const stuck = !!start && blocked(from, start, units, plan);
-  const ok = (px: number, py: number) => {
-    const probe = { ...from, wallId: target.id, xMm: px, yMm: py };
-    const b = unitBox(probe, plan);
-    return !!b && (stuck || !blocked(probe, b, units, plan));
-  };
-
-  /*
-   * בנעילה אין החלקה על שכן ואין נפילה לציר השני: יעד תפוס פירושו
-   * שהארגז נשאר, ולא שמשהו אחר בו זז במקומו.
-   */
-  if (axis) {
-    const [lx, ly] = ok(nx, ny) ? [nx, ny] : [from.xMm, from.yMm];
-    return { patch: { xMm: lx, yMm: ly, wallId: target.id } };
-  }
-
-  /*
-   * ארגז שנתקל בשכן נעצר עליו, ולא נשאר במקום.
+   * ומכאן — התשובה המשותפת לשני המסכים.
    *
-   * קודם הוא פשוט לא זז — מי שגרר לתוך ארון אחר קיבל ארגז שנתקע
-   * באוויר בלי סיבה נראית. עכשיו נבחרת המידה הקרובה ביותר שבה הוא
-   * באמת נכנס: זו בדיוק הדופן של השכן, וזו גם התנועה שהנגר עושה
-   * בשטח — דוחף עד שנוגע.
+   * חוקי הפיזיקה של החדר, ההחלקה עד המגע ודחיפת השורה חושבו כאן
+   * ובציור החזית בנפרד, והשניים נפרדו: מה שנוסף לאחד לא נוסף
+   * לשני, ואותה גרירה בדיוק הצליחה שם ונכשלה כאן.
    */
-  const stops = [nx];
-  for (const other of mates) {
-    if (other.id === from.id || other.level !== from.level) continue;
-    stops.push(other.xMm + alongWallMm(other), other.xMm - alongWallMm(from));
-  }
-  const reach = Math.max(target.lengthMm - alongWallMm(from), 0);
-  const near = stops
-    .map((v) => Math.round(clamp(v, 0, reach)))
-    .sort((a, b) => Math.abs(a - nx) - Math.abs(b - nx));
-  const slid = near.find((v) => ok(v, ny)) ?? near.find((v) => ok(v, from.yMm));
-
-  const [fx, fy] = ok(nx, ny)
-    ? [nx, ny]
-    : slid !== undefined && ok(slid, ny)
-      ? [slid, ny]
-      : slid !== undefined
-        ? [slid, from.yMm]
-        : ok(from.xMm, ny)
-          ? [from.xMm, ny]
-          : [from.xMm, from.yMm];
-  /* היעד מדווח רק כשבאמת נחתו עליו, ולא כשהתנגשות דחפה הצידה */
-  const landed = stack && fx === stack.xMm && fy === stack.yMm ? stack.onId : undefined;
-  return { patch: { xMm: fx, yMm: fy, wallId: target.id }, onId: landed };
+  const land = landOnWall({
+    unit: from,
+    wallId: target.id,
+    wallLengthMm: target.lengthMm,
+    xMm: nx,
+    yMm: ny,
+    mates,
+    all: units,
+    plan,
+    locked: !!axis,
+  });
+  /* היעד מדווח רק כשבאמת נחתו עליו, ולא כשהשורה או ההחלקה הזיזו */
+  const landed =
+    stack && land.xMm === stack.xMm && land.yMm === stack.yMm ? stack.onId : undefined;
+  return {
+    patch: { xMm: land.xMm, yMm: land.yMm, wallId: target.id },
+    onId: landed,
+    shifts: land.shifts,
+  };
 }
 
 /**

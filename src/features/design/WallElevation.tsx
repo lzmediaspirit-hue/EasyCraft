@@ -16,6 +16,7 @@ import { axesFor, longPress, pickAxis } from './axisLock';
 import type { GesturePhase } from './gesture';
 import type { Axis } from './axisLock';
 import { blocked } from './collision';
+import { landOnWall } from './rowShift';
 import { interiorCells } from './interior';
 import { rad, unitBox, unitOnWall } from './placement';
 import type { CornerZones, PlanWall } from './plan';
@@ -191,6 +192,18 @@ export function WallElevation({
     free?: { xMm: number; zMm: number };
     /* היעד שכבר נבחר להנחה — כדי שהוא לא יקפוץ בין שני שכנים */
     onId?: string;
+    /*
+     * החדר כפי שהיה כשהאצבע ירדה.
+     *
+     * הגרירה נמדדת מנקודת המוצא, ולכן גם החדר שהיא נמדדת בו הוא
+     * זה של נקודת המוצא: משהצטרפה דחיפת השורה, חישוב מול המקומות
+     * *הנוכחיים* היה מזין את עצמו — שכן שנדחף הפך למכשול חדש,
+     * והדרך חזרה כבר לא הייתה קיימת. כאן כל פריים נפתר מחדש מאותו
+     * מצב, ולכן גרירה הלוך ושוב מחזירה את כולם למקומם.
+     */
+    world: PlacedUnit[];
+    /* מי שהשורה הזיזה עד כה — כדי להחזיר את מי שכבר אינו נדחף */
+    pushed: Set<string>;
     /* לחיצה ארוכה נדלקה: הגרירה הזו מוגבלת לציר אחד */
     armed?: boolean;
     /* הציר שנעול. ריק אחרי הנעילה ולפני שהכיוון התברר */
@@ -259,6 +272,8 @@ export function WallElevation({
       scale: 1 / ctm.a,
       locked: !!unit.floorLocked,
       free: unit.free ? { xMm: unit.free.xMm, zMm: unit.free.zMm } : undefined,
+      world: allUnits.map((u) => ({ ...u })),
+      pushed: new Set<string>(),
     };
     /*
      * אצבע שנשארת במקום מבקשת דיוק, לא מקום חדש. אחרי חצי שנייה
@@ -312,6 +327,8 @@ export function WallElevation({
      */
     if (d.free && unit.free && here) {
       const a = rad(here.headingDeg);
+      /* גם כאן החדר של נקודת המוצא, ולא מה שכבר זז על המסך */
+      const was = d.world.find((u) => u.id === d.id) ?? unit;
       /* נעילה לגובה: המקום ברצפה הוא בדיוק מה שהיה, עד המ"מ */
       const next =
         axis === 'y'
@@ -323,9 +340,10 @@ export function WallElevation({
             };
       const y =
         d.locked || axis === 'along' ? d.originY : Math.max(Math.round(rawY), 0);
-      const probe = { ...unit, free: next, yMm: y };
+      const probe = { ...was, free: next, yMm: y };
       const box = unitBox(probe, plan);
-      if (box && !blocked(probe, box, allUnits, plan)) onMove(d.id, { free: next, yMm: y });
+      const others = d.world.filter((u) => u.id !== d.id);
+      if (box && !blocked(probe, box, others, plan)) onMove(d.id, { free: next, yMm: y });
       return;
     }
 
@@ -338,20 +356,29 @@ export function WallElevation({
     const tol = snap ? Math.max(SNAP, SNAP_PX * d.scale) : 0;
 
     /*
+     * הכול נפתר מול החדר של נקודת המוצא, ולא מול מה שעל המסך.
+     *
+     * עד שהשורה החלה לזוז זה היה אותו דבר. משהיא זזה — שכן שנדחף
+     * הפך ליעד הצמדה חדש ולמכשול חדש, והגרירה החלה להזין את
+     * עצמה: הדרך חזרה נחסמה בידי מי שהיא עצמה דחפה.
+     */
+    const start = d.world.find((u) => u.id === d.id) ?? unit;
+    const world = d.world;
+    const mates = world.filter((u) => u.wallId === wall.id);
+
+    /*
      * הנחה על ארגז אחר קודמת להצמדה הרגילה.
      *
      * כשמניחים ארגז על ארגז מבקשים פינה, ולא שני יעדים נפרדים
      * שבמקרה נפגשו: התחתית של העליון על הראש של התחתון, מיושרת
      * לתחילתו או לסופו. לכן שני הצירים נפתרים כאן יחד, ורק מי
      * שלא מצא פינה ממשיך להצמדה שפותרת כל ציר לבדו.
-     */
-    /*
-     * הנחה על ארגז פותרת שני צירים יחד, ולכן היא אינה קיימת
-     * כשנעולים לאחד: פינה שמיישרת גם את הגובה היא בדיוק מה שנעילת
-     * "לאורך הקיר" באה למנוע.
+     *
+     * והיא אינה קיימת כשנעולים לציר אחד: פינה שמיישרת גם את
+     * הגובה היא בדיוק מה שנעילת "לאורך הקיר" באה למנוע.
      */
     const stack = snap && !d.locked && !axis
-      ? stackSnap(unit, rawX, rawY, units, tol, d.onId, wall.lengthMm)
+      ? stackSnap(start, rawX, rawY, mates, tol, d.onId, wall.lengthMm)
       : null;
     d.onId = stack?.onId;
 
@@ -359,45 +386,49 @@ export function WallElevation({
       ? stack.xMm
       : axis === 'y'
         ? d.originX
-        : snapX(rawX, unit, units, wall.lengthMm, corners, tol);
+        : snapX(rawX, start, mates, wall.lengthMm, corners, tol);
     // הגובה נמדד ביחס למקום שאליו הארגז הולך, ולא למקום שממנו יצא
     const y = stack
       ? stack.yMm
       : d.locked || axis === 'along'
         ? d.originY
-        : snapY(rawY, unit, units, wall.heightMm, tol, x);
+        : snapY(rawY, start, mates, wall.heightMm, tol, x);
     /*
-     * שני ארגזים לא עומדים באותו מקום. כשהיעד תפוס מנסים קודם
-     * להזיז רק בציר אחד — כך גרירה לאורך קיר מלא עדיין זזה במקום
-     * להיתקע — ואם גם זה תפוס, הארגז נשאר איפה שהוא.
+     * ומכאן — התשובה המשותפת לשני המסכים.
      *
-     * ארגז שכבר חופף במקום שהוא עומד בו הוא היוצא מן הכלל: חסימה
-     * שם הייתה נועלת אותו שם לתמיד, ודווקא ממנו צריך לצאת.
+     * "לאן הארגז נוחת" חושב כאן ובתלת־ממד בקוד נפרד, והשניים
+     * נפרדו: ההחלקה עד המגע ודחיפת השורה היו במסך אחד ולא בשני,
+     * ולכן אותה גרירה בדיוק הצליחה שם ונכשלה כאן.
      */
-    const hereBox = unitBox(unit, plan);
-    const stuck = !!hereBox && blocked(unit, hereBox, allUnits, plan);
-    const at = (nx: number, ny: number) => {
-      const probe = { ...unit, xMm: nx, yMm: ny };
-      const b = unitBox(probe, plan);
-      return !!b && (stuck || !blocked(probe, b, allUnits, plan));
-    };
-    const landed = at(x, y);
+    const land = landOnWall({
+      unit: start,
+      wallId: wall.id,
+      wallLengthMm: wall.lengthMm,
+      xMm: x,
+      yMm: y,
+      mates,
+      all: world,
+      plan,
+      locked: !!axis,
+    });
+    const [fx, fy] = [land.xMm, land.yMm];
+
     /*
-     * כשנעולים לציר אחד אין נפילה לציר השני.
+     * מי שהשורה הזיזה, ומי שכבר אינה מזיזה.
      *
-     * שרשרת המילוט הרגילה מזיזה את מה שלא ביקשו להזיז כשהיעד תפוס
-     * — וזו בדיוק ההפתעה שהנעילה מונעת. ארגז שאין לו לאן ללכת
-     * בציר שלו פשוט נשאר.
+     * שניהם נחוצים: בלי ההחזרה, שכן שנדחף בדרך החוצה היה נשאר
+     * דחוף גם אחרי שהאצבע חזרה — והמחווה שלמה מתבטלת רק אם כל
+     * מי שהשתתף בה חוזר. הכול נכנס לאותה תצוגה מקדימה, ולכן זה
+     * גם נשמר יחד: תנועה אחת של היד היא צעד אחד לביטול.
      */
-    const [fx, fy] = landed
-      ? [x, y]
-      : axis
-        ? [d.axis === 'y' ? d.originX : unit.xMm, d.axis === 'y' ? unit.yMm : d.originY]
-        : at(x, unit.yMm)
-          ? [x, unit.yMm]
-          : at(unit.xMm, y)
-            ? [unit.xMm, y]
-            : [unit.xMm, unit.yMm];
+    const now = new Set(land.shifts.map((q) => q.id));
+    for (const id of d.pushed) {
+      if (now.has(id)) continue;
+      const back = world.find((u) => u.id === id);
+      if (back) onMove(id, { xMm: back.xMm });
+    }
+    for (const q of land.shifts) onMove(q.id, { xMm: q.xMm });
+    d.pushed = now;
     onMove(d.id, { xMm: fx, yMm: fy });
 
     /*
@@ -408,8 +439,9 @@ export function WallElevation({
      * עכשיו זה כתוב, יחד עם מה לעשות.
      */
     const lifting = !d.locked ? false : Math.abs(rawY - d.originY) > 60;
+    /* היעד מוצג רק כשבאמת נחתו עליו, ולא כשהשורה או ההחלקה הזיזו */
     setGuide(
-      stack && landed
+      stack && fx === stack.xMm && fy === stack.yMm
         ? {
             kind: 'stack',
             onId: stack.onId,
