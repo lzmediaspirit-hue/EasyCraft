@@ -64,7 +64,7 @@ const DEFAULT_SETTINGS: Settings = {
      * ברירת מחדל שסותרת את מה שהנגרייה עובדת בו הייתה משנה את
      * גובה כל ארגז חדש ביום שבו ההגדרה מתחילה לשלוט.
      */
-    counterTopMm: 920,
+    counterTopMm: 900,
     counterMm: 20,
     baseDepthMm: KITCHEN.baseDepth,
     upperDepthMm: KITCHEN.upperDepth,

@@ -120,7 +120,7 @@ ok('והעליון אינו משתנה', upper?.socle === 0 && upper?.y === 1500
 /* ------------------------------------------------------------------ */
 /* פרויקט שכבר נבנה: לא זז מאליו, וזז בכפתור                          */
 /* ------------------------------------------------------------------ */
-await setDefaults({ socleMm: 90, counterTopMm: 920, counterMm: 20 });
+await setDefaults({ socleMm: 90, counterTopMm: 900, counterMm: 20 });
 await page.waitForTimeout(500);
 const untouched = await units();
 ok('שינוי ההגדרות אינו נוגע במה שכבר עומד',
@@ -136,10 +136,11 @@ const fitted = await units();
 const fBase = fitted.find((u) => u.level === 'floor');
 const fUpper = fitted.find((u) => u.level === 'wall');
 ok('והכפתור מיישר את הפרויקט לתקן',
-  fBase?.socle === 90 && fBase?.counter === 20 && fBase?.h === 900,
+  fBase?.socle === 90 && fBase?.counter === 20 && fBase?.h === 880,
   JSON.stringify(fBase));
+/* תשעים הם הגובה הסופי: הגוף, הרגליים והמשטח יחד */
 ok('גם אחרי היישור ראש המשטח הוא מה שנקבע',
-  (fBase?.h ?? 0) + (fBase?.counter ?? 0) === 920, String((fBase?.h ?? 0) + (fBase?.counter ?? 0)));
+  (fBase?.h ?? 0) + (fBase?.counter ?? 0) === 900, String((fBase?.h ?? 0) + (fBase?.counter ?? 0)));
 ok('והעליון נשאר גם ביישור', fUpper?.y === 1500 && fUpper?.h === 720, JSON.stringify(fUpper));
 
 /* ------------------------------------------------------------------ */
@@ -166,17 +167,29 @@ const run = await page.evaluate(async () => {
   );
   return {
     n: band.length,
-    bodies: [...new Set(band.map((i) => i.defaultHeightMm))].sort((a, b) => a - b),
-    tops: [...new Set(band.filter((i) => (i.counterMm ?? 0) > 0)
-      .map((i) => i.defaultHeightMm + i.counterMm))].sort((a, b) => a - b),
+    /*
+     * הראש, ולא הגוף.
+     *
+     * מה שחייב להיות אחיד הוא הגובה שהיד נוגעת בו, ולא עובי
+     * הקופסה: ארגז שנושא משטח 2 ס"מ בנוי 88 כדי להגיע ל-90,
+     * וארגז פתוח בלי משטח בנוי 90. שניהם באותה שורה.
+     */
+    heads: [...new Set(band.map((i) => i.defaultHeightMm + (i.counterMm ?? 0)))].sort((a, b) => a - b),
+    bodies: [...new Set(band.filter((i) => (i.counterMm ?? 0) > 0)
+      .map((i) => i.defaultHeightMm))].sort((a, b) => a - b),
     thick: [...new Set(band.filter((i) => (i.counterMm ?? 0) > 0)
       .map((i) => i.counterMm))].sort((a, b) => a - b),
   };
 });
-ok('כל שורת המטבח בגוף אחד', run.bodies.length === 1 && run.bodies[0] === 900,
+/*
+ * תשעים, ולא תשעים ושתיים. הגובה שהבעלים קבע הוא הסופי — מהרצפה
+ * עד פני המשטח, כולל הרגליים וכולל עובי המשטח.
+ */
+ok('לכל שורת המטבח ראש אחד', run.heads.length === 1 && run.heads[0] === 900,
+  JSON.stringify(run.heads));
+ok('ומי שנושא משטח בנוי בגוף אחד', run.bodies.length === 1 && run.bodies[0] === 880,
   JSON.stringify(run.bodies));
 ok('ובעובי משטח אחד', run.thick.length === 1 && run.thick[0] === 20, JSON.stringify(run.thick));
-ok('ולכן ראש אחד למשטח', run.tops.length === 1 && run.tops[0] === 920, JSON.stringify(run.tops));
 
 /*
  * והמיגרציה מיישרת את מי שכבר התקין — אבל היא מזהה שורות לפי

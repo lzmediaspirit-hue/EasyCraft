@@ -913,3 +913,56 @@ db.version(32)
       });
     }
   });
+
+/*
+ * תשעים סנטימטר, וזה כולל הכול.
+ *
+ * גרסה 32 יישרה את שורת המטבח לגוף 90 ומשטח 2 — כלומר ראש ב-92.
+ * הבעלים קבע אחרת: תשעים הם הגובה הסופי, מהרצפה עד פני המשטח,
+ * כולל הרגליים וכולל עובי המשטח. הגוף יורד ל-88 והמשטח נשאר 2.
+ *
+ * זה גם מה שמחזיר את הנגרייה לאותו מספר שהתקן מחזיק
+ * (`KITCHEN.counterTopMm`), אחרי שהשניים נפרדו לגרסה אחת.
+ *
+ * שוב נקודתי ושוב מותנה: מי שכבר תיקן ארגז בעצמו, תיקן.
+ */
+db.version(33)
+  .stores(TABLES_V29)
+  .upgrade(async (tx) => {
+    /* כל מי שראשו 92: שורת המטבח, ועוד ארון הכיור של חדר השירות */
+    const HEADS = [
+      /* B-134 */ '0801ebf9-e3f5-43fb-9e87-4d4970295621',
+      /* B-137 */ '23342912-48fb-4b7a-9a24-6cf6af426132',
+      /* EC-032 */ 'd9dfe65e-fe80-4106-9123-9f5a3d23c7bc',
+      /* B-135 */ '41c6fa3f-2c9f-4091-bfc5-dbb76a42565e',
+      /* B-130 */ '728e94c4-f311-41a1-a65b-3a10bb9ea488',
+      /* B-106 */ 'k-base-mix',
+      /* I-101 */ 'product-island',
+      /* EC-053 */ '8363b7dd-63ca-480b-8f23-af7ce38f9d1e',
+      /* EC-055 */ 'da3651ef-cdff-4574-9b58-476081dd979a',
+      /* EC-056 */ '53c4697c-0d5f-4467-b6c1-5f24ede4ffd9',
+      /* EC-057 */ 'c30af3b7-e99e-48ed-b31e-028586b88dd0',
+      /* EC-081 */ '7c1f4a90-2d3e-4b86-9a51-0f6d8c2e4b17',
+    ];
+    for (const id of HEADS) {
+      const row = (await tx.table('catalog').get(id)) as
+        { defaultHeightMm?: number; counterMm?: number } | undefined;
+      if (!row) continue;
+      /* רק מי שעדיין מחזיק בדיוק 90 ועוד 2 */
+      if (row.defaultHeightMm !== 900 || row.counterMm !== 20) continue;
+      await tx.table('catalog').update(id, { defaultHeightMm: 880 });
+    }
+
+    const rows = (await tx.table('settings').toArray()) as {
+      id: string;
+      defaults?: { counterTopMm?: number; counterMm?: number };
+    }[];
+    for (const s of rows) {
+      const d = s.defaults;
+      if (!d) continue;
+      if (d.counterTopMm !== 920 || d.counterMm !== 20) continue;
+      await tx.table('settings').update(s.id, {
+        defaults: { ...d, counterTopMm: 900, counterMm: 20 },
+      });
+    }
+  });

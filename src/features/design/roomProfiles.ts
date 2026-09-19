@@ -217,13 +217,18 @@ export const ROOM_PROFILES: RoomProfile[] = [
     intro: 'עמודת מכונות, ארון כיור, ואחסון לאורך הקיר.',
     options: [
       { key: 'washer', label: 'עמודת מכונה ומייבש', on: true },
-      { key: 'sink', label: 'ארון כיור', on: true },
       { key: 'broom', label: 'עמודת מטאטא', on: true },
       { key: 'upper', label: 'ארונות עליונים', on: true },
     ],
     wants: [
       { label: 'עמודת מכונות', role: 'appliance', needs: 'washer', pick: tall(['open'], 650, 600) },
-      { label: 'ארון כיור', role: 'vanity', needs: 'sink', pick: base(['sink'], 600, 500) },
+      /*
+       * ארון הכיור ירד מכאן לבקשת הבעלים.
+       *
+       * אין בספרייה של חדר השירות יחידה שמצהירה על כיור, ולכן
+       * הדרישה חזרה בכל תכנון כ"לא נכנס" והורידה ציון על משהו
+       * שמעולם לא נתבקש. כיור בחדר שירות מונח ביד.
+       */
       { label: 'עמודת מטאטא', role: 'store', needs: 'broom', pick: tall(['doors'], 450, 400) },
       { label: 'עמודת מדפים', role: 'shelving', pick: tall(['shelves'], 600, 450) },
       { label: 'ארון תחתון', role: 'store', repeat: true, pick: base(['doors', 'drawers'], 600, 400) },

@@ -33,8 +33,8 @@ const out = await page.evaluate(async () => {
     ...PD.SHIPPED_PRODUCTS.filter((p) => !SH.SHIPPED_LIBRARY.some((i) => i.id === p.id)),
   ].map((i) => ({ ...i, workshopId: '', rev: 0, createdAt: 0, updatedAt: 0 }));
 
-  /* משטח 92 ס"מ — מה שהנגרייה עובדת בו, ולא 90 של התקן */
-  const COUNTER_TOP = 920;
+  /* תשעים סנטימטר עד פני המשטח — הגובה שהבעלים קבע */
+  const COUNTER_TOP = 900;
   const defaults = {
     drawerBox: 'metal', backKind: 'thin', socleMm: 100,
     counterTopMm: COUNTER_TOP, counterMm: 20,
@@ -109,7 +109,14 @@ const out = await page.evaluate(async () => {
 
   /* --- הבדיקות הנקודתיות, על הסיבות עצמן --- */
 
-  /* 1. חלון שסִפּוֹ בגובה המשטח: המתכנן מודד לפי המשטח של הנגרייה */
+  /*
+   * 1. המתכנן מודד לפי המשטח של הנגרייה, ולא לפי מספר קבוע.
+   *
+   * חלון שסִפּוֹ 90 ס"מ הוא החלון הנפוץ במטבח, והוא מותר מעל
+   * שורה שראשה 90 ואסור מעל שורה שראשה 92. כל עוד המתכנן ושער
+   * ההנחה קוראים את אותו מספר, שתי התשובות נכונות — וזה מה
+   * שנבדק כאן, ולא איזו מהן יוצאת היום.
+   */
   const winWall = [wall('w1', 4000, [win(1400)])];
   const winPlan = P.buildPlan(winWall, []);
   const spans90 = A.baseSpans(winPlan[0], 0, 4000, 900);
@@ -117,11 +124,14 @@ const out = await page.evaluate(async () => {
   ok('חלון בסף 900 אינו חוסם ארגז שמגיע ל-900', spans90.length === 1);
   ok('ואותו חלון כן חוסם ארגז שמגיע ל-920', spans92.length === 2,
     JSON.stringify(spans92));
+  /* ובנגרייה הזאת הראש הוא 90, ולכן תחתונים עוברים מתחת לחלון */
+  ok('הנגרייה עובדת בראש 90, ולכן החלון אינו חוסם',
+    A.baseSpans(winPlan[0], 0, 4000, COUNTER_TOP).length === 1, String(COUNTER_TOP));
 
   /* 2. עמודה אינה נכנסת מתחת לחלון */
   const k = A.planKitchen({
     walls: winWall, plan: winPlan, appliances: APP,
-    seating: false, finish: 'standard', counterTopMm: 920,
+    seating: false, finish: 'standard', counterTopMm: COUNTER_TOP,
   });
   const underWindow = k.flatMap((p) => p.units).filter(
     (u) => u.level === 'tall' && u.xMm < 2600 && u.xMm + u.widthMm > 1400,
@@ -136,7 +146,7 @@ const out = await page.evaluate(async () => {
   const cornerPlan = P.buildPlan(cornerWalls, []);
   const kc = A.planKitchen({
     walls: cornerWalls, plan: cornerPlan, appliances: APP,
-    seating: false, finish: 'standard', counterTopMm: 920,
+    seating: false, finish: 'standard', counterTopMm: COUNTER_TOP,
   });
   const onDoor = kc.flatMap((p) => p.units).filter(
     (u) => u.wallId === 'w1' && u.level !== 'wall' && u.xMm < 2300 && u.xMm + u.widthMm > 1400,
@@ -167,11 +177,12 @@ const out = await page.evaluate(async () => {
    * של חדר ארונות דיווח "אין בספרייה של החדר יחידה כזאת"
    * והוריד ציון על משהו שקיים.
    *
-   * החוסר שנשאר הוא של הספרייה ולא של הקוד: אין בחדר השירות אף
-   * ארגז שמצהיר על כיור. הוא רשום כאן בשמו, כדי שהיום שבו
-   * יתווסף ארגז כזה יסיר גם את השורה הזאת.
+   * ובחדר השירות ירד ארון הכיור מהפרופיל עצמו, לבקשת הבעלים:
+   * אין שם יחידה שמצהירה על כיור, והדרישה חזרה בכל תכנון כחוסר.
+   * הרשימה כאן ריקה במכוון — דרישה שאין לה מענה בספרייה אינה
+   * דרישה שמסמנים מראש.
    */
-  const KNOWN_GAPS = ['utility/ארון כיור'];
+  const KNOWN_GAPS = [];
   const unmetWants = [];
   for (const prof of RP.ROOM_PROFILES) {
     const mine = items.filter((i) => i.rooms.includes(prof.room));
@@ -191,11 +202,74 @@ const out = await page.evaluate(async () => {
     unmetWants.every((k) => KNOWN_GAPS.includes(k)),
     unmetWants.join(' ; '));
 
-  /* 6. קיר שנחתך לפתחים קטנים אינו נשאר ריק */
+  /*
+   * 6. חדר עם יותר מארבעה קירות.
+   *
+   * הפריסה `u` רצה על כל רצף הקירות השימושיים ולא על שלושה,
+   * ולכן חדר L סגור בן שישה קירות וחדר בן שמונה אמורים לעבוד —
+   * וזה מה שנבדק כאן, על מצולעים פשוטים בלבד. חדר שקירותיו
+   * חוצים זה את זה אינו חדר, והמנוע פוסל אותו בצדק.
+   */
+  const many = {
+    'חמישה פתוח': [wall('a', 4000), wall('b', 2500, [], 90), wall('c', 1500, [], 90),
+                    wall('d', 1500, [], -90), wall('e', 2500, [], 90)],
+    'שישה — L סגור': [wall('a', 4000), wall('b', 3000, [], 90), wall('c', 2000, [], 90),
+                       wall('d', 2000, [], -90), wall('e', 2000, [], 90), wall('f', 5000, [], 90)],
+    'שמונה — סגור': [wall('a', 5000), wall('b', 3000, [], 90), wall('c', 1500, [], 90),
+                      wall('d', 1500, [], -90), wall('e', 2000, [], 90), wall('f', 1500, [], 90),
+                      wall('g', 1500, [], -90), wall('h', 3000, [], 90)],
+  };
+  const manyBlocked = [];
+  let manyCases = 0;
+  let manyProposals = 0;
+  for (const [sn, mk] of Object.entries(many)) {
+    for (const marks of ['נקי', 'עם אובייקטים']) {
+      for (const room of rooms) {
+        manyCases++;
+        const walls = mk.map((w) => ({ ...w, features: [] }));
+        if (marks !== 'נקי') {
+          walls[0] = { ...walls[0], features: [door(400), win(2200, 1000)] };
+          const last = walls.length - 1;
+          walls[last] = { ...walls[last], features: [pillar(600)] };
+        }
+        const plan = P.buildPlan(walls, []);
+        const profile = RP.roomProfile(room);
+        const ps = profile
+          ? PR.planRoom({ room, walls, plan, items: items.filter((i) => i.rooms.includes(room)),
+              options: Object.fromEntries(profile.options.map((o) => [o.key, o.on])) })
+          : A.planKitchen({ walls, plan, appliances: APP, seating: false, finish: 'standard', counterTopMm: COUNTER_TOP });
+        if (!ps.length) { manyBlocked.push(`${sn}/${marks}/${room}: אין הצעות`); continue; }
+        for (const p of ps) {
+          manyProposals++;
+          const r = RES.resolvePlan({
+            placements: p.units, items, walls, defaults, room,
+            nameOf: (pl) => (profile ? PR.roomPlacementName(pl, items) : A.placementName(pl)),
+          });
+          if (r.issues.length) manyBlocked.push(`${sn}/${marks}/${room}/${p.key}: ${r.issues[0].text}`);
+        }
+      }
+    }
+  }
+  ok('חדר עם חמישה עד שמונה קירות — כל ההצעות ניתנות להנחה',
+    manyBlocked.length === 0, manyBlocked.slice(0, 3).join(' ; '));
+  ok('ונבדקו בו הצעות מכל החדרים', manyCases === Object.keys(many).length * 2 * rooms.length && manyProposals > 100,
+    `${manyCases} מקרים, ${manyProposals} הצעות`);
+
+  /* וחדר סגור בן שישה קירות מנוצל על כל קירותיו */
+  const sixWalls = many['שישה — L סגור'].map((w) => ({ ...w, features: [] }));
+  const sixPlan = P.buildPlan(sixWalls, []);
+  const six = A.planKitchen({
+    walls: sixWalls, plan: sixPlan, appliances: APP,
+    seating: false, finish: 'standard', counterTopMm: COUNTER_TOP,
+  });
+  const sixUsed = new Set(six[0].units.filter((u) => !u.free).map((u) => u.wallId)).size;
+  ok('ובחדר L סגור הפריסה רצה על כל ששת הקירות', sixUsed === 6, String(sixUsed));
+
+  /* 7. קיר שנחתך לפתחים קטנים אינו נשאר ריק */
   const cutWalls = [wall('w1', 4000, [door(400), win(1800), pillar(3200)])];
   const cut = A.planKitchen({
     walls: cutWalls, plan: P.buildPlan(cutWalls, []), appliances: APP,
-    seating: false, finish: 'standard', counterTopMm: 920,
+    seating: false, finish: 'standard', counterTopMm: COUNTER_TOP,
   });
   ok('קיר מחורר מקבל אחסון ולא כלום', cut.length > 0 && cut[0].units.length > 0,
     `${cut.length} הצעות`);
