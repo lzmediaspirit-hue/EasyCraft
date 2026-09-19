@@ -66,8 +66,15 @@ const trip = await page.evaluate(async () => {
   };
 });
 
+/*
+ * הוא נולד עם משטח ורגליים — של הנגרייה ולא של התבנית.
+ *
+ * התבנית נשמרה כאן עם משטח 3 ס״מ, ובשורת המטבח עובי המשטח הוא
+ * תקן אחד: מה שנקבע בהגדרות. מה שנבדק בהמשך הוא הכיבוי, והוא
+ * אינו תלוי במספר שממנו התחילו.
+ */
 ok('הארגז נולד עם משטח ורגליים',
-  trip.placed.counter === 30 && trip.placed.socle === 100, JSON.stringify(trip.placed));
+  trip.placed.counter === 20 && trip.placed.socle === 100, JSON.stringify(trip.placed));
 ok('הכיבוי נשמר על הארגז',
   trip.onUnit.counter === 0 && trip.onUnit.socle === 0, JSON.stringify(trip.onUnit));
 ok('והוא שורד את השמירה חזרה לספרייה',
