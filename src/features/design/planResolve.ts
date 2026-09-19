@@ -55,7 +55,10 @@ export interface ResolveInput {
   placements: Placement[];
   items: CatalogItem[];
   walls: Wall[];
-  defaults: Pick<ProjectDefaults, 'drawerBox' | 'backKind' | 'socleMm'>;
+  defaults: Pick<
+    ProjectDefaults,
+    'drawerBox' | 'backKind' | 'socleMm' | 'counterTopMm' | 'counterMm'
+  >;
   room?: RoomKind;
   /** הקשר החומר לבדיקת הבנייה. בלעדיו נבדק עובי התקן. */
   build?: BuildContext;
@@ -122,6 +125,7 @@ export function resolvePlan(input: ResolveInput): ResolvedPlan {
         xMm: p.xMm,
         widthMm: p.widthMm,
         free: p.free,
+        room,
       }, defaults),
       id: `plan-${units.length}`,
       workshopId: '',

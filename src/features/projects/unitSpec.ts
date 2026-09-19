@@ -1,6 +1,8 @@
 import { landsOnFloor } from '../../catalog/construction';
 import { reusableSpec } from '../../db/types';
-import type { CatalogItem, FreePlacement, PlacedUnit, ProjectDefaults } from '../../db/types';
+import type {
+  CatalogItem, FreePlacement, PlacedUnit, ProjectDefaults, RoomKind, UnitLevel,
+} from '../../db/types';
 
 /**
  * פריט ספרייה, כארגז שעומד על הקיר.
@@ -14,6 +16,52 @@ import type { CatalogItem, FreePlacement, PlacedUnit, ProjectDefaults } from '..
  * מה שחסר כאן הוא מה שמגיע מהמסד: מזהה, זמנים ובעלות. הפונקציה
  * טהורה במכוון — אפשר לקרוא לה על הצעה שלא נשמרה.
  */
+/** הגוף המינימלי שנשאר מעל הרגליים, כדי שההפרש לא ייתן ארגז שלילי */
+const MIN_BODY_MM = 100;
+
+/**
+ * מה שתקן הנגרייה קובע לארגז הזה.
+ *
+ * זו התשובה היחידה, ושני מסלולים שואלים אותה: ארגז שנולד עכשיו
+ * מהספרייה, וארגז שכבר עומד בפרויקט וש"החלת המידות" מיישרת אותו.
+ * שני חישובים נפרדים לאותו כלל היו נפרדים ביום שבו אחד מהם
+ * משתנה — ואז אותו ארגז היה נראה אחרת לפי הדרך שבה הגיע.
+ *
+ * שני כללים, ושניהם מותנים במה שהארגז *הוא*:
+ *
+ *   • גובה הרגליים הוא תקן של הנגרייה, אבל *האם* יש רגליים הוא
+ *     של הארגז. מדף בודד, דופן צד, שולחן ויחידת מגירות לחדר
+ *     ארונות עומדים על הרצפה בלי רגליים בכוונה — בספרייה הזאת הם
+ *     שלושים ואחד פריטים, ו"כל מה שעומד על הרצפה מקבל רגליים"
+ *     היה מדביק רגליים גם להם.
+ *
+ *   • גובה המשטח קובע את גובה הגוף, למי שיש לו משטח ובמטבח בלבד.
+ *     ארון כיור אמבטיה נבנה ל-67 ס״מ וזו לא טעות שצריך לתקן.
+ */
+export function workshopFit(
+  u: {
+    level: UnitLevel;
+    yMm: number;
+    heightMm: number;
+    socleMm?: number;
+    counterMm?: number;
+  },
+  defaults: Pick<ProjectDefaults, 'socleMm' | 'counterTopMm' | 'counterMm'>,
+  room?: RoomKind,
+): { socleMm: number; counterMm: number; heightMm: number } {
+  const onFloor = landsOnFloor(u.level, u.yMm);
+  const socleMm = onFloor && (u.socleMm ?? 0) > 0 ? defaults.socleMm : (u.socleMm ?? 0);
+
+  const worktop = (u.counterMm ?? 0) > 0 && onFloor && room === 'kitchen';
+  return {
+    socleMm,
+    counterMm: worktop ? defaults.counterMm : (u.counterMm ?? 0),
+    heightMm: worktop
+      ? Math.max(defaults.counterTopMm - defaults.counterMm, socleMm + MIN_BODY_MM)
+      : u.heightMm,
+  };
+}
+
 export function unitSpec(
   item: CatalogItem,
   at: {
@@ -22,9 +70,33 @@ export function unitSpec(
     xMm: number;
     widthMm?: number;
     free?: FreePlacement;
+    /**
+     * החדר של הפרויקט.
+     *
+     * גובה המשטח הוא תקן של מטבח: ארון כיור אמבטיה נבנה ל-67 ס״מ
+     * וזו לא טעות שצריך לתקן. בלי החדר ההגדרה הייתה מותחת גם אותו
+     * לגובה עבודה.
+     */
+    room?: RoomKind;
   },
-  defaults: Pick<ProjectDefaults, 'drawerBox' | 'backKind' | 'socleMm'>,
+  defaults: Pick<
+    ProjectDefaults,
+    'drawerBox' | 'backKind' | 'socleMm' | 'counterTopMm' | 'counterMm'
+  >,
 ): Omit<PlacedUnit, 'id' | 'createdAt' | 'updatedAt' | 'workshopId' | 'rev'> {
+  /* אותו תקן בדיוק שמיישר ארגז קיים — ראה `workshopFit` */
+  const fit = workshopFit(
+    {
+      level: item.level,
+      yMm: item.defaultYMm ?? 0,
+      heightMm: item.defaultHeightMm,
+      socleMm: item.socleMm,
+      counterMm: item.counterMm,
+    },
+    defaults,
+    at.room,
+  );
+
   return {
     /*
      * כל תיאור הבנייה שנשמר בפריט, מרשימה אחת משותפת עם השמירה
@@ -52,11 +124,10 @@ export function unitSpec(
      */
     yMm: item.defaultYMm ?? 0,
     widthMm: at.widthMm ?? item.defaultWidthMm,
-    heightMm: item.defaultHeightMm,
+    heightMm: fit.heightMm,
     depthMm: item.defaultDepthMm,
-    /* הרגליים כפי שנשמרו, וברירת המחדל של הנגרייה רק כשאין */
-    socleMm: item.socleMm ?? defaults.socleMm,
-    counterMm: item.counterMm,
+    socleMm: fit.socleMm,
+    counterMm: fit.counterMm,
     /* נעול לרצפה = באמת עומד עליה */
     floorLocked: landsOnFloor(item.level, item.defaultYMm),
     /* תבנית אי נוחתת בחדר; כל השאר נוחת על הקיר */

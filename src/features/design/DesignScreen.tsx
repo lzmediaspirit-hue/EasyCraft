@@ -28,6 +28,7 @@ import { BulkWorkSheet } from './BulkWorkSheet';
 import { ProjectFinishesSheet } from './ProjectFinishesSheet';
 import { FlowIcon } from '../../ui/icons';
 import { DepthSheet } from './DepthSheet';
+import { WorkshopFitSheet } from './WorkshopFitSheet';
 import { PlanView } from './PlanView';
 import { PresentSheet } from './PresentSheet';
 import { WallToolsSheet } from './WallToolsSheet';
@@ -1173,6 +1174,23 @@ export function DesignScreen({
           onClose={closeSheet}
           onApply={async (mm, onlyFloor) => {
             await unitsRepo.setDepthForProject(projectId, mm, onlyFloor);
+            closeSheet();
+          }}
+        />
+      )}
+
+      {/*
+        מידות התקן על פרויקט שכבר נבנה — פעולה מפורשת, ולא משהו
+        שקורה מאליו כשמשנים הגדרה במסך אחר.
+      */}
+      {sheet === 'workshopFit' && settings && (
+        <WorkshopFitSheet
+          defaults={settings.defaults}
+          roomKind={project.roomKind}
+          onClose={closeSheet}
+          onApply={async () => {
+            await history.capture(projectId, `fit:${Date.now()}`);
+            await unitsRepo.applyDefaultsToProject(projectId);
             closeSheet();
           }}
         />

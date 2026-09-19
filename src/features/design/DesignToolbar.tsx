@@ -425,6 +425,18 @@ export function DesignToolbar({
           label="גוון לכולם"
           title="גוון לכל החזיתות, הגופים או הדפנות"
         />
+        {/*
+          ברירות המחדל חלות על ארגז חדש בלבד, ופרויקט קיים אינו זז
+          מתחת לידיים. זו הדרך המפורשת לעדכן גם אותו.
+        */}
+        <Tool
+          active={sheet === 'workshopFit'}
+          disabled={units.length === 0}
+          onClick={() => onSheet('workshopFit')}
+          icon={<RulerIcon className="size-4" />}
+          label="מידות תקן"
+          title="החלת גובה הרגליים והמשטח שנקבעו בהגדרות על ארגזי הפרויקט"
+        />
       </div>
       )}
       </>

@@ -17,7 +17,7 @@ import { stagesRepo } from '../../workflow/workflowRepo';
 import { partsOf, projectCosting, type ProjectCosting } from '../../costing/boards';
 import { BuildError, bodyDepthMm, checkUnit } from '../../catalog/saveGate';
 import { glyphDef } from '../../catalog/glyphList';
-import { unitSpec } from './unitSpec';
+import { unitSpec, workshopFit } from './unitSpec';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
 import { releaseConsumption } from '../../materials/consumptionRepo';
 import { alongWallMm } from '../../db/types';
@@ -388,7 +388,10 @@ export const unitsRepo = {
     xMm: number,
   ): Promise<PlacedUnit[]> {
     const now = Date.now();
-    const settings = await settingsRepo.get();
+    const [settings, project] = await Promise.all([
+      settingsRepo.get(),
+      projectsRepo.get(projectId),
+    ]);
     const out: PlacedUnit[] = [];
     for (const [i, part] of (item.parts ?? []).entries()) {
       out.push({
@@ -400,7 +403,11 @@ export const unitsRepo = {
          * מחלקי הקבוצה: פינה שנשמרה עם משטח הונחה בלעדיו. מה
          * שהחלק אומר במפורש גובר, וזה כל ההבדל בינו לבין אחיו.
          */
-        ...unitSpec(item, { projectId, wallId, xMm: xMm + part.dxMm }, settings.defaults),
+        ...unitSpec(
+          item,
+          { projectId, wallId, xMm: xMm + part.dxMm, room: project?.roomKind },
+          settings.defaults,
+        ),
         ...part.unit,
         id: crypto.randomUUID(),
         catalogItemId: item.id,
@@ -448,10 +455,17 @@ export const unitsRepo = {
     free?: FreePlacement,
   ): Promise<PlacedUnit> {
     const now = Date.now();
-    const { defaults } = await settingsRepo.get();
+    const [{ defaults }, project] = await Promise.all([
+      settingsRepo.get(),
+      projectsRepo.get(projectId),
+    ]);
     /* התרגום מפריט ספרייה לארגז על הקיר יושב במקום אחד — `unitSpec` */
     const unit: PlacedUnit = {
-      ...unitSpec(item, { projectId, wallId, xMm, widthMm, free }, defaults),
+      ...unitSpec(
+        item,
+        { projectId, wallId, xMm, widthMm, free, room: project?.roomKind },
+        defaults,
+      ),
       id: crypto.randomUUID(),
       ...owned(),
       createdAt: now,
@@ -725,6 +739,53 @@ export const unitsRepo = {
       return !def.standalone && !def.noCarcass;
     });
     const next = targets.map((u) => ({ ...u, depthMm: bodyDepthMm(overallMm, u, ctx) }));
+    for (const u of next) {
+      const why = checkUnit(u, ctx);
+      if (why) throw new BuildError(`${u.name}: ${why}`);
+    }
+    await db.transaction('rw', db.units, async () => {
+      await db.units.bulkPut(bumped(next));
+    });
+    return { changed: next.length, skipped: rows.length - next.length };
+  },
+
+  /**
+   * מיישר את ארגזי הפרויקט לתקן הנגרייה.
+   *
+   * ברירות המחדל חלות על ארגז שנולד מכאן והלאה, ופרויקט שכבר נבנה
+   * אינו זז מתחת לידיים — מה שסוכם, סוכם. אבל יש גם את המקרה
+   * ההפוך: הנגרייה עברה ממשטח 2 ס״מ ל-3, והפרויקט שעל השולחן הוא
+   * בדיוק זה שצריך להתעדכן. לכן זו פעולה מפורשת ולא אוטומטית.
+   *
+   * החשבון הוא `workshopFit` עצמה — אותה פונקציה שקובעת לארגז חדש
+   * מה הוא מקבל. שני חישובים לאותו כלל היו נפרדים ביום שבו אחד
+   * מהם משתנה.
+   */
+  async applyDefaultsToProject(
+    projectId: string,
+  ): Promise<{ changed: number; skipped: number }> {
+    const [rows, { defaults }, project, ctx] = await Promise.all([
+      unitsRepo.listForProject(projectId),
+      settingsRepo.get(),
+      projectsRepo.get(projectId),
+      buildContext(projectId),
+    ]);
+    const next: PlacedUnit[] = [];
+    for (const u of rows) {
+      const fit = workshopFit(u, defaults, project?.roomKind);
+      if (
+        fit.socleMm === (u.socleMm ?? 0)
+        && fit.counterMm === (u.counterMm ?? 0)
+        && fit.heightMm === u.heightMm
+      ) continue;
+      next.push({ ...u, ...fit });
+    }
+    /*
+     * ארגז שאי אפשר לבנות במידה החדשה עוצר את הכול.
+     *
+     * חצי יישור הוא שורה של ארונות בשני גבהים, וזה גרוע ממה שהיה
+     * לפניו. השער נבדק על כולם לפני שנכתבת שורה אחת.
+     */
     for (const u of next) {
       const why = checkUnit(u, ctx);
       if (why) throw new BuildError(`${u.name}: ${why}`);

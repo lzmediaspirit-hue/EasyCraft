@@ -821,3 +821,35 @@ db.version(30)
       if (row) await tx.table('catalog').update(id, { group: 'appliance' });
     }
   });
+
+/*
+ * עובי המשטח נכנס כהגדרה, וגובה המשטח מתיישר עם הספרייה.
+ *
+ * עד כאן גובה המשטח נשמר ולא נקרא: הוא היה הבטחה על המסך בלבד.
+ * מהרגע שהוא מתחיל לשלוט, המספר שכתוב בו חייב להיות המספר
+ * שהנגרייה באמת עובדת בו — אחרת כל ארגז חדש היה מתקצר ביום
+ * העדכון. 90 ס״מ הוא התקן הישן של הזרע המובנה; הספרייה שנבנתה
+ * כאן היא גוף 90 ומשטח 3, כלומר ראש ב-93.
+ *
+ * מי שכבר שינה את המספר בעצמו שומר עליו: ההחלפה נוגעת רק בערך
+ * שאיש לא נגע בו.
+ */
+db.version(31)
+  .stores(TABLES_V29)
+  .upgrade(async (tx) => {
+    const rows = (await tx.table('settings').toArray()) as {
+      id: string;
+      defaults?: { counterTopMm?: number; counterMm?: number };
+    }[];
+    for (const row of rows) {
+      const d = row.defaults;
+      if (!d) continue;
+      const defaults = {
+        ...d,
+        /* העובי לא היה קיים, ולכן אין מה לשמר */
+        counterMm: d.counterMm ?? 30,
+        counterTopMm: d.counterTopMm === 900 ? 930 : (d.counterTopMm ?? 930),
+      };
+      await tx.table('settings').update(row.id, { defaults });
+    }
+  });

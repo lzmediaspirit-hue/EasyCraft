@@ -56,7 +56,17 @@ const DEFAULT_SETTINGS: Settings = {
    */
   defaults: {
     socleMm: KITCHEN.socleH,
-    counterTopMm: KITCHEN.counterTop,
+    /*
+     * גובה המשטח ועוביו — כפי שהספרייה שהנגרייה בנתה עובדת בפועל.
+     *
+     * `KITCHEN.counterTop` הוא 90 ס״מ, התקן שהזרע הישן נבנה לפיו.
+     * הספרייה החדשה בנויה אחרת: רוב הארגזים התחתונים בה הם גוף 90
+     * ומשטח 3, כלומר ראש ב-93. ברירת מחדל שסותרת את הספרייה הייתה
+     * מקצרת כל ארגז חדש בשלושה סנטימטרים ביום שבו ההגדרה מתחילה
+     * לשלוט, ולכן היא נלקחת מהספרייה ולא מהקבוע.
+     */
+    counterTopMm: 930,
+    counterMm: 30,
     baseDepthMm: KITCHEN.baseDepth,
     upperDepthMm: KITCHEN.upperDepth,
     upperBottomMm: KITCHEN.upperBottom,

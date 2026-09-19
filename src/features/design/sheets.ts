@@ -18,4 +18,5 @@ export type SheetName =
   | 'wallTools'
   | 'bulk'
   | 'finishes'
+  | 'workshopFit'
   | 'warnings';
