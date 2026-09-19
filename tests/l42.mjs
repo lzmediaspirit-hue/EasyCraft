@@ -26,8 +26,15 @@ const gear = page.getByRole('button', { name: 'ברירות מחדל לפרוי�
 ok(await gear.count() === 1, 'כפתור ברירות מחדל בדף הבית');
 await gear.click(); await page.waitForTimeout(1200);
 const body = await page.innerText('body');
-for (const f of ['גובה רגליים', 'גובה משטח', 'עומק תחתונים', 'תחתית עליון', 'אורך קיר', 'גובה קיר', 'סוג הגב', 'תיבת מגירה'])
+for (const f of ['גובה רגליים', 'גובה משטח', 'עובי משטח', 'אורך קיר', 'גובה קיר', 'סוג הגב', 'תיבת מגירה'])
   ok(body.includes(f), `הגדרה מוצגת: ${f}`);
+/*
+ * ומה שאינו שולט אינו מוצג. עומק ותחתית עליון נשמרו כאן ואיש לא
+ * קרא אותם — בספרייה ההבדלים שם מכוונים, ותקן אחד היה מוחק אותם.
+ * הגדרה שאינה עושה דבר גרועה מהגדרה שאינה קיימת.
+ */
+for (const f of ['עומק תחתונים', 'עומק עליונים', 'תחתית עליון'])
+  ok(!body.includes(f), `הגדרה מתה ירדה: ${f}`);
 await page.screenshot({ path: SP + '/L42-1-defaults.png' });
 
 /* משנים: רגליים 12, קיר 350x280 */
@@ -76,19 +83,22 @@ if (await dlg().getByRole('button', { name: /^מטבח/ }).count())
 await dlg().locator('div.relative > button').filter({ hasText: /\S/ }).nth(0).click();
 await page.waitForTimeout(900);
 /*
- * ברירת המחדל היא תשובה לשאלה שלא נענתה, ולא דריסה של תשובה שכן.
+ * גובה הרגליים הוא תקן של הנגרייה.
  *
- * כאן היא דרסה: ארגז ספרייה עם רגליים משלו קיבל את גובה העסק,
- * והגובה השמור הוא גוף ועוד רגליים — כך שהחלפת 100 ב-120 לא
- * שינתה רגליים אלא קיצרה את הגוף בשני ס״מ, בשקט. ארגז ששתק
- * מקבל את ברירת המחדל; ארגז שאמר, נשמע.
+ * קודם הוא היה תשובה לשאלה שלא נענתה בלבד — `item.socleMm ??
+ * defaults.socleMm` — וכל פריט בספרייה נושא רגליים משלו, ולכן
+ * ההגדרה לא חלה על אחד מהם. מי שמשנה אותה מצפה שהארגז הבא יקבל
+ * אותה, וזה מה שקורה עכשיו.
+ *
+ * מה שנשאר של התבנית הוא הגובה הכולל: 120 במקום 100 אינו מקצר
+ * את הגוף בשקט, הוא רק מרים אותו על רגליים אחרות.
  */
 let u = (await table('units'))[0];
 const own = await page.evaluate(async (id) => {
   const { catalogRepo } = await import('/src/catalog/catalogRepo.ts?v=' + Date.now());
   return (await catalogRepo.get(id))?.socleMm ?? null;
 }, u.catalogItemId);
-ok(u.socleMm === own, 'הרגליים של הארגז הן שלו, ולא של ברירת המחדל', `${u.socleMm} מול ${own}`);
+ok(u.socleMm === 120, 'הרגליים נלקחות מהתקן של הנגרייה', `${u.socleMm}, בתבנית ${own}`);
 
 /* וארגז שאין לו רגליים משלו כן מקבל את מה שהוגדר בעסק */
 const silent = await page.evaluate(async () => {
@@ -110,8 +120,8 @@ u = (await table('units'))[0];
 ok(u.socleMm === 0 && !u.floorLocked, 'ביטול ההצמדה מאפס רגליים', `${u.socleMm}/${u.floorLocked}`);
 await page.getByRole('button', { name: /הצמדה לרצפה/ }).click(); await page.waitForTimeout(700);
 u = (await table('units'))[0];
-/* בדיוק מה שהוסר, ולא גובה ברירת המחדל: המתג הפיך */
-ok(u.socleMm === own && u.floorLocked, 'החזרת ההצמדה מחזירה בדיוק את הרגליים שהיו', `${u.socleMm}/${u.floorLocked}`);
+/* בדיוק מה שהוסר, ולא מספר אחר: המתג הפיך */
+ok(u.socleMm === 120 && u.floorLocked, 'החזרת ההצמדה מחזירה בדיוק את הרגליים שהיו', `${u.socleMm}/${u.floorLocked}`);
 
 /* --- סוג הגב יצא מההדמיה --- */
 await page.getByRole('button', { name: /הסתרת חזיתות/ }).click(); await page.waitForTimeout(700);

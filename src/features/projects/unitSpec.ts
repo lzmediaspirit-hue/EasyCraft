@@ -49,15 +49,38 @@ export function workshopFit(
   defaults: Pick<ProjectDefaults, 'socleMm' | 'counterTopMm' | 'counterMm'>,
   room?: RoomKind,
 ): { socleMm: number; counterMm: number; heightMm: number } {
-  const onFloor = landsOnFloor(u.level, u.yMm);
-  const socleMm = onFloor && (u.socleMm ?? 0) > 0 ? defaults.socleMm : (u.socleMm ?? 0);
+  /*
+   * תקן שאינו מספר אינו תקן.
+   *
+   * הקוראים אינם רק המסך: יש קריאות שמרכיבות ביד את ההגדרות שהן
+   * מעבירות, ואחת כזאת שהחסירה שדה נתנה `undefined` בחיסור —
+   * כלומר `NaN` בגובה, שנכתב אל תוך ארגז ונעצר רק בשער הבנייה
+   * ב"גובה אינו מספר". מה שאינו מספר פשוט אינו חל.
+   */
+  const num = (v: number | undefined): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
 
-  const worktop = (u.counterMm ?? 0) > 0 && onFloor && room === 'kitchen';
+  const onFloor = landsOnFloor(u.level, u.yMm);
+  const stdSocle = num(defaults.socleMm);
+  /*
+   * גובה הרגליים הוא של הנגרייה; *האם* יש רגליים הוא של הארגז.
+   * ושתיקה אינה "אין": תבנית שלא נאמר בה דבר מקבלת את התקן, ורק
+   * אפס מפורש הוא החלטה שאין רגליים.
+   */
+  const socleMm =
+    onFloor && stdSocle !== null && (u.socleMm === undefined || u.socleMm > 0)
+      ? stdSocle
+      : (u.socleMm ?? 0);
+
+  const top = num(defaults.counterTopMm);
+  const thick = num(defaults.counterMm);
+  const worktop =
+    (u.counterMm ?? 0) > 0 && onFloor && room === 'kitchen' && top !== null && thick !== null;
   return {
     socleMm,
-    counterMm: worktop ? defaults.counterMm : (u.counterMm ?? 0),
+    counterMm: worktop ? thick! : (u.counterMm ?? 0),
     heightMm: worktop
-      ? Math.max(defaults.counterTopMm - defaults.counterMm, socleMm + MIN_BODY_MM)
+      ? Math.max(top! - thick!, socleMm + MIN_BODY_MM)
       : u.heightMm,
   };
 }

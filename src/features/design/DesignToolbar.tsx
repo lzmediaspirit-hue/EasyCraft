@@ -435,7 +435,7 @@ export function DesignToolbar({
           onClick={() => onSheet('workshopFit')}
           icon={<RulerIcon className="size-4" />}
           label="מידות תקן"
-          title="החלת גובה הרגליים והמשטח שנקבעו בהגדרות על ארגזי הפרויקט"
+          title="מיישר את ארגזי הפרויקט למידות שנקבעו בהגדרות"
         />
       </div>
       )}
