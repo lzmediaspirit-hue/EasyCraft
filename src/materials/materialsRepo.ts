@@ -57,15 +57,12 @@ const DEFAULT_SETTINGS: Settings = {
   defaults: {
     socleMm: KITCHEN.socleH,
     /*
-     * גובה המשטח ועוביו — התקן של הנגרייה, כפי שהבעלים קבע אותו.
-     *
-     * גוף 90 ומשטח 2, כלומר ראש ב-92. `KITCHEN.counterTop` הוא 90,
-     * התקן שהזרע הישן נבנה לפיו, והוא נשאר שם בשביל אותו זרע —
-     * ברירת מחדל שסותרת את מה שהנגרייה עובדת בו הייתה משנה את
-     * גובה כל ארגז חדש ביום שבו ההגדרה מתחילה לשלוט.
+     * גובה המשטח ועוביו — תשעים ס"מ מהרצפה עד פני המשטח, כולל
+     * הרגליים וכולל המשטח, כפי שהבעלים קבע. זה התקן עצמו, ולכן
+     * הוא נקרא ממנו ולא נכתב כאן שוב.
      */
-    counterTopMm: 900,
-    counterMm: 20,
+    counterTopMm: KITCHEN.counterTop,
+    counterMm: KITCHEN.counterH,
     baseDepthMm: KITCHEN.baseDepth,
     upperDepthMm: KITCHEN.upperDepth,
     upperBottomMm: KITCHEN.upperBottom,

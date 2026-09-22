@@ -577,7 +577,24 @@ export function DesignScreen({
       : null;
   }
 
-  async function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
+  /*
+   * עריכות נכתבות בסדר שבו נעשו.
+   *
+   * העריכה הראשונה לארגז מצלמת את הפרויקט לפני שהיא כותבת — קריאה
+   * של המסד, שאורכה משתנה — והשנייה, באותו תג ובתוך חלון האיחוד,
+   * מדלגת על הצילום וכותבת מיד. כשהצילום איטי מהפער בין השתיים,
+   * הישנה נחתה אחרונה ודרסה את החדשה: ספק ומיד אחריו דגם בפרזול,
+   * והדגם נעלם. התור הוא מה שמבטיח שהאחרונה שנעשתה היא האחרונה
+   * שנכתבת.
+   */
+  const writes = useRef<Promise<unknown>>(Promise.resolve());
+  function patchUnit(id: string, patch: Partial<PlacedUnit>, tag = `edit:${id}`) {
+    const next = writes.current.then(() => writeUnit(id, patch, tag));
+    writes.current = next.catch(() => {});
+    return next;
+  }
+
+  async function writeUnit(id: string, patch: Partial<PlacedUnit>, tag: string) {
     const workOnly = Object.keys(patch).every((k) => k === 'work');
     if (!editable && !workOnly) return;
     await history.capture(projectId, tag);

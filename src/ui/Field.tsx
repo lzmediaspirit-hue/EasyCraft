@@ -144,20 +144,25 @@ export function Chip({
   active,
   onClick,
   children,
+  small,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  /** שבב צפוף, לשורת פרטים בתוך כרטיס */
+  small?: boolean;
 }) {
+  const size = small ? 'rounded-lg px-2.5 py-1 text-xs' : 'rounded-full px-3.5 py-1.5 text-sm';
+  const idle = small
+    ? 'bg-white text-stone-600 ring-1 ring-stone-200'
+    : 'bg-stone-100 text-stone-600 hover:bg-stone-200';
   return (
     <button
       type="button"
       onClick={onClick}
       /* השבב הוא מתג, ובלי aria-pressed מי שמקשיב למסך לא שומע אם הוא דלוק */
       aria-pressed={active}
-      className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-        active ? 'bg-oak-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-      }`}
+      className={`${size} font-medium transition-colors ${active ? 'bg-oak-600 text-white' : idle}`}
     >
       {children}
     </button>

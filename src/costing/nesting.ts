@@ -248,7 +248,7 @@ export function nestParts(parts: NestInputPart[], opts: NestOptions): NestResult
     if (!Number.isInteger(p.qty)) {
       throw new RangeError(`כמות חייבת להיות מספר שלם: "${p.label}" הגיע בכמות ${p.qty}`);
     }
-    const grain: PartGrain = opts.hasGrain ? (p.grain ?? defaultGrain(p.role)) : 'free';
+    const grain = grainOf(p, opts);
     const orientations = allowedOrientations(p.widthMm, p.heightMm, grain, grainAxis);
 
     if (!orientations.some((o) => fitsIn(o, usable))) {
@@ -302,6 +302,17 @@ export function nestParts(parts: NestInputPart[], opts: NestOptions): NestResult
  */
 function defaultGrain(role: PartRole | undefined): PartGrain {
   return role === 'back' ? 'free' : 'height';
+}
+
+/**
+ * כיוון הסיבים של חלק בפועל — מה שנאמר עליו, או ברירת המחדל לפי
+ * תפקידו, ובלוח בלי סיבים תמיד חופשי.
+ *
+ * זה חלק מהחוזה של הקלט ולא מהשיטה, ולכן גם המאמת קורא אותו מכאן:
+ * מאמת שקרא "חסר = עוקב סיבים" פסל גב שהמנוע, בצדק, סובב.
+ */
+export function grainOf(p: Pick<NestInputPart, 'grain' | 'role'>, opts: Pick<NestOptions, 'hasGrain'>): PartGrain {
+  return opts.hasGrain ? (p.grain ?? defaultGrain(p.role)) : 'free';
 }
 
 /**

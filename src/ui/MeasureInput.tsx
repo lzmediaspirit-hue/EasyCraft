@@ -56,6 +56,7 @@ export function MeasureInput({
     const lo = Math.max(mm, minMm);
     return maxMm === undefined ? lo : Math.min(lo, maxMm);
   }
+  const inRange = (mm: number) => mm >= minMm && (maxMm === undefined || mm <= maxMm);
 
   return (
     <input
@@ -75,9 +76,17 @@ export function MeasureInput({
         setDraft(raw);
         const n = Number(raw);
         stop();
-        // שדה ריק או חצי מוקלד נשאר על המסך, אבל לא נשמר
-        if (raw.trim() !== '' && Number.isFinite(n)) {
-          settle.current = setTimeout(() => onChange(parse(n)), SETTLE_MS);
+        /*
+         * שדה ריק או חצי מוקלד נשאר על המסך, אבל לא נשמר.
+         *
+         * וגם מספר שמחוץ לטווח: "5" בדרך ל-"500" באורך קיר הוא 5 ס"מ,
+         * מתחת למינימום של הקיר. הוא נשמר עד כה כפי שהוא, והגבול נאכף
+         * רק ביציאה מהשדה — ומגירה שנסגרה ב-Escape לא יצאה מהשדה
+         * בכלל, ולכן הקיר נשאר באורך שאף אחד לא התכוון אליו.
+         */
+        const mm = raw.trim() !== '' && Number.isFinite(n) ? parse(n) : null;
+        if (mm !== null && inRange(mm)) {
+          settle.current = setTimeout(() => onChange(mm), SETTLE_MS);
         }
       }}
       onBlur={() => {

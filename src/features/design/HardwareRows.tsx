@@ -8,6 +8,7 @@ import {
   missingFacts,
 } from '../../catalog/hardware';
 import { ChevronIcon, TrashIcon } from '../../ui/icons';
+import { Chip } from '../../ui/Field';
 import type { Hardware, Settings } from '../../db/types';
 
 /**
@@ -188,6 +189,7 @@ export function HardwareRows({
                   <p className="text-[11px] text-stone-500">במקום הספירה האוטומטית של</p>
                   <div className="mt-1 flex flex-wrap gap-1">
                     <Chip
+                      small
                       active={!row.replaces}
                       onClick={() => patch(row.id, { replaces: undefined })}
                     >
@@ -195,6 +197,7 @@ export function HardwareRows({
                     </Chip>
                     {HARDWARE_REPLACES.map((r) => (
                       <Chip
+                        small
                         key={r.key}
                         active={row.replaces === r.key}
                         onClick={() => patch(row.id, { replaces: r.key })}
@@ -344,25 +347,3 @@ function Text({
   );
 }
 
-/** בחירה אחת מתוך כמה, בשורה קצרה. */
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-        active ? 'bg-oak-600 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}

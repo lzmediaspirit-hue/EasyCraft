@@ -1,4 +1,4 @@
-import type { NestInputPart, NestOptions, NestResult } from './nesting';
+import { grainOf, type NestInputPart, type NestOptions, type NestResult } from './nesting';
 
 /**
  * מאמת פריסה, בנפרד מהאלגוריתם שיצר אותה.
@@ -149,16 +149,19 @@ export function checkNesting(
     for (const p of sheet.parts) {
       if (!p.rotated) continue;
       const src = parts[p.source];
-      const grain = opts.hasGrain ? (src?.grain ?? 'height') : 'free';
-      if (grain === 'free') continue;
+      if (!src) continue;
+      const grain = grainOf(src, opts);
+      if (grain === 'free' || src.widthMm === src.heightMm) continue;
       /*
        * סיבוב מותר גם לחלק עם סיבים, כשהוא מיישר אותם לציר
        * הפלטה — מה שאסור הוא שהתוצאה תניח אותם לרוחב.
+       *
+       * הציר נגזר מהסיבוב עצמו ולא מהשוואת הצלעות: חלק שסובב נושא
+       * את סיביו על הציר השני. השוואה של "הצלע הארוכה" טעתה בחלק
+       * שהוזמן רחב מגבוה.
        */
-      const along = p.widthMm >= p.heightMm ? 'width' : 'height';
-      const need = grain === 'height' ? 'height' : 'width';
-      if (src.widthMm === src.heightMm) continue;
-      if (along !== need && grainAlong === need) {
+      const carried = grain === 'height' ? 'width' : 'height';
+      if (carried !== grainAlong) {
         out.push({
           kind: 'grain',
           sheet: sheet.index,
@@ -210,12 +213,22 @@ function replayCuts(
 ): NestProblem[] {
   const out: NestProblem[] = [];
   let rects: Box[] = [{ ...usable }];
+  /*
+   * החתך חייב להיות בתוך המלבן — אבל לא רחוק מהשפה.
+   *
+   * חתך שמשאיר 0.2 מ"מ מול להב של 4.2 הוא חתך אמיתי: הוא מביא את
+   * החלק למידתו, והשארית הופכת לנסורת. המנוע מתעד את זה במפורש.
+   * הסובלנות הנדיבה של מידות חלקים נכונה לשאלה "האם החתך מכסה את
+   * המלבן", ולא לשאלה "האם הוא בתוכו" — שם היא פסלה בדיוק את
+   * החתכים האלה, בכל לוח שרוחבו אינו כפולה מדויקת של החלקים.
+   */
+  const IN = 1e-6;
   for (const c of cuts) {
     const i = rects.findIndex((r) =>
       c.axis === 'x'
-        ? c.at > r.x + EPS && c.at < r.x + r.w - EPS &&
+        ? c.at > r.x + IN && c.at < r.x + r.w - IN &&
           c.from <= r.y + EPS && c.to >= r.y + r.h - EPS
-        : c.at > r.y + EPS && c.at < r.y + r.h - EPS &&
+        : c.at > r.y + IN && c.at < r.y + r.h - IN &&
           c.from <= r.x + EPS && c.to >= r.x + r.w - EPS,
     );
     if (i < 0) {

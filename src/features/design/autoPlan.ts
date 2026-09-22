@@ -539,7 +539,7 @@ export function baseSpans(
   p: PlanWall,
   fromMm: number,
   toMm: number,
-  topMm = KITCHEN.counterTopMm,
+  topMm: number = KITCHEN.counterTopMm,
 ): Span[] {
   const blocks = p.wall.features
     .filter(

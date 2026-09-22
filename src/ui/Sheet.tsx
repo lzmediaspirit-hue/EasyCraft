@@ -40,6 +40,20 @@ type Props = {
  */
 export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack }: Props) {
   const box = useRef<HTMLDivElement>(null);
+  /*
+   * הסגירה העדכנית, בלי שהיא תהיה תלות של הפתיחה.
+   *
+   * הפתיחה — רישום המגירה, הכנסת המיקוד, ההחזרה שלו בסגירה — רצה
+   * על כל זהות חדשה של `onClose`. רוב הקוראים מעבירים פונקציה
+   * שנוצרת מחדש בכל רינדור, ושדה שנשמר תוך כדי הקלדה מרנדר את
+   * המסך. לכן אחרי 180 מ"ש של שקט המגירה "נפתחה מחדש": המיקוד
+   * חזר לכפתור שמאחור ומשם לכפתור הסגירה, והמשך ההקלדה הלך לאיבוד.
+   * בשדה אורך הקיר, "500" נשמר כ-300 מ"מ; בטלפון גם המקלדת נסגרה.
+   */
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
 
   useEffect(() => {
     const me = Symbol('sheet');
@@ -59,7 +73,7 @@ export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack
       if (open[open.length - 1] !== me || !box.current) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        close.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -86,7 +100,7 @@ export function Sheet({ title, onClose, children, footer, tall, onSubmit, onBack
       if (i >= 0) open.splice(i, 1);
       opener?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
 
   const Body = onSubmit ? 'form' : 'div';

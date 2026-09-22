@@ -15,7 +15,7 @@ import {
 import { db } from '../../db/db';
 import { stagesRepo } from '../../workflow/workflowRepo';
 import { partsOf, projectCosting, type ProjectCosting } from '../../costing/boards';
-import { BuildError, bodyDepthMm, checkUnit } from '../../catalog/saveGate';
+import { BuildError, bodyDepthMm, checkUnit, type BuildContext } from '../../catalog/saveGate';
 import { glyphDef } from '../../catalog/glyphList';
 import { unitSpec, workshopFit } from './unitSpec';
 import { finishesRepo, materialsRepo, projectPricesRepo, settingsRepo } from '../../materials/materialsRepo';
@@ -739,13 +739,7 @@ export const unitsRepo = {
       return !def.standalone && !def.noCarcass;
     });
     const next = targets.map((u) => ({ ...u, depthMm: bodyDepthMm(overallMm, u, ctx) }));
-    for (const u of next) {
-      const why = checkUnit(u, ctx);
-      if (why) throw new BuildError(`${u.name}: ${why}`);
-    }
-    await db.transaction('rw', db.units, async () => {
-      await db.units.bulkPut(bumped(next));
-    });
+    await putAllOrNone(next, ctx);
     return { changed: next.length, skipped: rows.length - next.length };
   },
 
@@ -780,19 +774,24 @@ export const unitsRepo = {
       ) continue;
       next.push({ ...u, ...fit });
     }
-    /*
-     * ארגז שאי אפשר לבנות במידה החדשה עוצר את הכול.
-     *
-     * חצי יישור הוא שורה של ארונות בשני גבהים, וזה גרוע ממה שהיה
-     * לפניו. השער נבדק על כולם לפני שנכתבת שורה אחת.
-     */
-    for (const u of next) {
-      const why = checkUnit(u, ctx);
-      if (why) throw new BuildError(`${u.name}: ${why}`);
-    }
-    await db.transaction('rw', db.units, async () => {
-      await db.units.bulkPut(bumped(next));
-    });
+    await putAllOrNone(next, ctx);
     return { changed: next.length, skipped: rows.length - next.length };
   },
 };
+
+/**
+ * כתיבה של כמה ארגזים יחד — כולם, או אף אחד.
+ *
+ * ארגז שאי אפשר לבנות במידה החדשה עוצר את הכול. חצי יישור הוא
+ * שורה של ארונות בשני גבהים, וזה גרוע ממה שהיה לפניו; ולכן השער
+ * נבדק על כולם לפני שנכתבת שורה אחת.
+ */
+async function putAllOrNone(next: PlacedUnit[], ctx: BuildContext): Promise<void> {
+  for (const u of next) {
+    const why = checkUnit(u, ctx);
+    if (why) throw new BuildError(`${u.name}: ${why}`);
+  }
+  await db.transaction('rw', db.units, async () => {
+    await db.units.bulkPut(bumped(next));
+  });
+}
